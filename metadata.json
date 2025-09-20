@@ -1,0 +1,5 @@
+{
+  "name": "Canva Banana 🍌",
+  "description": "An infinite canvas application that allows users to upload images, annotate or create inpainting masks, and leverage the Gemini 'nano banana' model to generate powerful image edits based on text prompts.",
+  "requestFramePermissions": []
+}
