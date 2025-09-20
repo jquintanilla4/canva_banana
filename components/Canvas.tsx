@@ -197,7 +197,6 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!canvas) return;
 
     const isFirstImage = images.length === 1 && prevImagesLength.current === 0;
-    const isNewImageAdded = images.length > prevImagesLength.current;
 
     if (isFirstImage) {
         const image = images[0];
@@ -209,20 +208,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         const newPanX = (canvas.width - image.width * newScale) / 2;
         const newPanY = (canvas.height - image.height * newScale) / 2;
         setPan({ x: newPanX, y: newPanY });
-
-    } else if (isNewImageAdded) {
-        const newImage = images[images.length - 1];
-        
-        const targetX = newImage.x + newImage.width / 2;
-        const targetY = newImage.y + newImage.height / 2;
-        
-        const newPanX = -targetX * scale + canvas.width / 2;
-        const newPanY = -targetY * scale + canvas.height / 2;
-        setPan({ x: newPanX, y: newPanY });
     }
 
     prevImagesLength.current = images.length;
-  }, [images, scale]);
+  }, [images]);
 
   useEffect(() => {
     if (containerRef.current) {
