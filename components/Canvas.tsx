@@ -42,6 +42,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Dragging state
   const [isDragging, setIsDragging] = useState(false);
+  const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
   const [dragStartPoint, setDragStartPoint] = useState<Point | null>(null);
   const [dragStartImagePosition, setDragStartImagePosition] = useState<Point | null>(null);
   const prevZoomToFitTrigger = useRef(zoomToFitTrigger);
@@ -240,8 +241,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (tool === Tool.SELECTION) {
         const image = getImageAtPoint(point);
         onImageSelect(image ? image.id : null, e.shiftKey);
-        if (image) {
+        
+        // Only start dragging if not shift-clicking, and if we clicked on an image.
+        if (image && !e.shiftKey) {
             setIsDragging(true);
+            setDraggedImageId(image.id);
             setDragStartPoint({ x: e.clientX, y: e.clientY });
             setDragStartImagePosition({ x: image.x, y: image.y });
         }
@@ -268,8 +272,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
     
-    if (isDragging && tool === Tool.SELECTION && selectedImageId && dragStartPoint && dragStartImagePosition) {
-        const draggedImageIndex = images.findIndex(img => img.id === selectedImageId);
+    if (isDragging && tool === Tool.SELECTION && draggedImageId && dragStartPoint && dragStartImagePosition) {
+        const draggedImageIndex = images.findIndex(img => img.id === draggedImageId);
         if (draggedImageIndex === -1) return;
 
         const dx = (e.clientX - dragStartPoint.x) / scale;
@@ -307,6 +311,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     setIsDragging(false);
     setDragStartPoint(null);
     setDragStartImagePosition(null);
+    setDraggedImageId(null);
 
     if (wasDrawingOrDragging) {
       onCommit();
