@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tool, InpaintMode } from '../types';
-import { SelectionIcon, PanIcon, AnnotateIcon, InpaintIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon } from './Icons';
+import { SelectionIcon, PanIcon, AnnotateIcon, InpaintIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon } from './Icons';
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -19,6 +19,7 @@ interface ToolbarProps {
   canRedo: boolean;
   onDownload: () => void;
   isImageSelected: boolean;
+  isObjectSelected: boolean;
   onDelete: () => void;
 }
 
@@ -76,6 +77,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   canRedo,
   onDownload,
   isImageSelected,
+  isObjectSelected,
   onDelete,
 }) => {
   return (
@@ -89,6 +91,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </ToolButton>
         <ToolButton label="Pan (H)" isActive={activeTool === Tool.PAN} onClick={() => onToolChange(Tool.PAN)}>
           <PanIcon className="w-5 h-5" />
+        </ToolButton>
+         <ToolButton label="Note (N)" isActive={activeTool === Tool.NOTE} onClick={() => onToolChange(Tool.NOTE)}>
+          <NoteIcon className="w-5 h-5" />
         </ToolButton>
         <ToolButton label="Annotate (B)" isActive={activeTool === Tool.ANNOTATE} onClick={() => onToolChange(Tool.ANNOTATE)}>
           <AnnotateIcon className="w-5 h-5" />
@@ -162,9 +167,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </ToolButton>
         <button
           onClick={onDelete}
-          disabled={!isImageSelected}
+          disabled={!isObjectSelected}
           className="p-2 rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Delete Selected Image (Delete/Backspace)"
+          title="Delete Selected Object (Delete/Backspace)"
         >
           <DeleteIcon className="w-5 h-5" />
         </button>

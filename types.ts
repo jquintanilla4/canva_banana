@@ -4,6 +4,7 @@ export enum Tool {
   ANNOTATE = 'ANNOTATE',
   INPAINT = 'INPAINT',
   FREE_SELECTION = 'FREE_SELECTION',
+  NOTE = 'NOTE',
 }
 
 export type InpaintMode = 'STRICT' | 'CREATIVE';
@@ -32,4 +33,14 @@ export interface CanvasImage {
   width: number;
   height: number;
   file: File;
+}
+
+export interface CanvasNote {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  backgroundColor: string;
 }

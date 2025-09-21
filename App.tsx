@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
-import { Tool, Path, CanvasImage, InpaintMode, Point } from './types';
+import { Tool, Path, CanvasImage, InpaintMode, Point, CanvasNote } from './types';
 import { generateImageEdit } from './services/geminiService';
 import { ZoomToFitIcon } from './components/Icons';
 
@@ -29,10 +29,22 @@ const ViewToolbar: React.FC<ViewToolbarProps> = ({ onZoomToFit, disabled }) => {
 const MAX_HISTORY_SIZE = 30;
 const MAX_REFERENCE_IMAGES = 2;
 
-const getStateSignature = (state: { images: CanvasImage[], paths: Path[] }): string => {
+type AppState = { images: CanvasImage[], paths: Path[], notes: CanvasNote[] };
+
+const getStateSignature = (state: AppState): string => {
   const imageSignature = state.images.map(img => `${img.id},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height}`).join(';');
   const pathSignature = state.paths.map(p => p.points.length).join(',');
-  return `${imageSignature}|${pathSignature}`;
+  const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length}`).join(';');
+  return `${imageSignature}|${pathSignature}|${noteSignature}`;
+};
+
+const isOverlapping = (img1: CanvasImage, img2: CanvasImage): boolean => {
+    return !(
+        img1.x > img2.x + img2.width ||
+        img1.x + img1.width < img2.x ||
+        img1.y > img2.y + img2.height ||
+        img1.y + img1.height < img2.y
+    );
 };
 
 export default function App() {
@@ -43,31 +55,36 @@ export default function App() {
   const [inpaintMode, setInpaintMode] = useState<InpaintMode>('STRICT');
   
   const [historyState, setHistoryState] = useState<{
-    history: { images: CanvasImage[], paths: Path[] }[],
+    history: AppState[],
     index: number,
   }>({
-    history: [{ images: [], paths: [] }],
+    history: [{ images: [], paths: [], notes: [] }],
     index: 0,
   });
 
   const { history, index: historyIndex } = historyState;
-  const { images, paths } = history[historyIndex];
+  const { images, paths, notes } = history[historyIndex];
 
   const [liveImages, setLiveImages] = useState<CanvasImage[] | null>(null);
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
+  const [liveNotes, setLiveNotes] = useState<CanvasNote[] | null>(null);
 
   const displayedImages = liveImages ?? images;
   const displayedPaths = livePaths ?? paths;
+  const displayedNotes = liveNotes ?? notes;
 
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [referenceImageIds, setReferenceImageIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevDisplayedNotesLength = useRef(displayedNotes.length);
 
-  const setState = useCallback((updater: (prevState: {images: CanvasImage[], paths: Path[]}) => {images: CanvasImage[], paths: Path[]}) => {
+  const setState = useCallback((updater: (prevState: AppState) => AppState) => {
     setHistoryState(currentState => {
       const { history: prevHistory, index: prevIndex } = currentState;
       const prevState = prevHistory[prevIndex];
@@ -92,19 +109,84 @@ export default function App() {
   }, []);
 
   const handleDelete = useCallback(() => {
-    if (!selectedImageId) return;
-
-    setState(prevState => ({
-      images: prevState.images.filter(img => img.id !== selectedImageId),
-      paths: prevState.paths,
-    }));
-    setSelectedImageId(null);
-    setReferenceImageIds([]);
-  }, [selectedImageId, setState]);
+    if (selectedImageId) {
+      setState(prevState => ({
+        ...prevState,
+        images: prevState.images.filter(img => img.id !== selectedImageId),
+      }));
+      setSelectedImageId(null);
+      setReferenceImageIds([]);
+    }
+    if (selectedNoteId) {
+      setState(prevState => ({
+        ...prevState,
+        notes: prevState.notes.filter(note => note.id !== selectedNoteId),
+      }));
+      setSelectedNoteId(null);
+    }
+  }, [selectedImageId, selectedNoteId, setState]);
 
   const handleZoomToFit = useCallback(() => {
     setZoomToFitTrigger(c => c + 1);
   }, []);
+
+  const handleImageOrderChange = useCallback((imageId: string, direction: 'up' | 'down') => {
+    setState(prevState => {
+        const newImages = [...prevState.images];
+        const index = newImages.findIndex(img => img.id === imageId);
+        
+        if (direction === 'up' && index < newImages.length - 1) {
+            [newImages[index], newImages[index + 1]] = [newImages[index + 1], newImages[index]];
+        } else if (direction === 'down' && index > 0) {
+            [newImages[index], newImages[index - 1]] = [newImages[index - 1], newImages[index]];
+        }
+        
+        return { ...prevState, images: newImages };
+    });
+  }, [setState]);
+
+  const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{ element: HTMLImageElement; x: number; y: number; file: File; }> => {
+    return new Promise((resolve, reject) => {
+      if (imagesToCompose.length === 0) {
+        return reject(new Error("No images to rasterize."));
+      }
+  
+      const minX = Math.min(...imagesToCompose.map(img => img.x));
+      const minY = Math.min(...imagesToCompose.map(img => img.y));
+      const maxX = Math.max(...imagesToCompose.map(img => img.x + img.width));
+      const maxY = Math.max(...imagesToCompose.map(img => img.y + img.height));
+  
+      const width = maxX - minX;
+      const height = maxY - minY;
+  
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+  
+      if (!ctx) {
+        return reject(new Error("Could not create canvas context for rasterization."));
+      }
+  
+      imagesToCompose.forEach(img => {
+        ctx.drawImage(img.element, img.x - minX, img.y - minY, img.width, img.height);
+      });
+  
+      const newImg = new Image();
+      newImg.onload = async () => {
+        try {
+          // FIX: Await the fetch call before calling .blob()
+          const blob = await (await fetch(newImg.src)).blob();
+          const newFile = new File([blob], 'composite.png', { type: 'image/png' });
+          resolve({ element: newImg, x: minX, y: minY, file: newFile });
+        } catch (e) {
+          reject(e);
+        }
+      };
+      newImg.onerror = (err) => reject(err);
+      newImg.src = canvas.toDataURL('image/png');
+    });
+  };
 
   const handleGenerate = useCallback(async () => {
     if (!selectedImageId) {
@@ -112,16 +194,6 @@ export default function App() {
       return;
     }
     
-    const sourceImage = images.find(img => img.id === selectedImageId);
-    const referenceImageElements = referenceImageIds
-      .map(id => images.find(img => img.id === id)?.element)
-      .filter((el): el is HTMLImageElement => !!el);
-    
-    if (!sourceImage) {
-      setError("Selected image not found. Please select another image.");
-      return;
-    }
-
     if (!prompt) {
       setError("Please write a prompt to describe your edit.");
       return;
@@ -131,32 +203,69 @@ export default function App() {
       setError("Please use the Select, Annotate, or Inpaint tool to generate an image.");
       return;
     }
+
+    const primaryImage = images.find(img => img.id === selectedImageId);
+    if (!primaryImage) {
+      setError("Selected image not found. Please select another image.");
+      return;
+    }
     
     if ((tool === Tool.ANNOTATE || tool === Tool.INPAINT) && paths.length === 0) {
       setError("Please draw on the selected image before generating.");
       return;
     }
-
+    
     setIsLoading(true);
     setError(null);
+
     try {
+      const referenceCanvasImages = referenceImageIds
+        .map(id => images.find(img => img.id === id))
+        .filter((img): img is CanvasImage => !!img);
+      
+      const allSelectedImages = [primaryImage, ...referenceCanvasImages];
+
+      const shouldCompose = referenceCanvasImages.length > 0 && 
+                            referenceCanvasImages.some(refImg => isOverlapping(primaryImage, refImg));
+      
+      let sourceImageForAPI: { 
+        element: HTMLImageElement; 
+        x: number; 
+        y: number; 
+        width: number; 
+        height: number; 
+        file: File;
+      };
+      let referenceImagesForAPI: HTMLImageElement[] = [];
+
+      if (shouldCompose) {
+          const imageIdsToCompose = allSelectedImages.map(img => img.id);
+          const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
+          const { element, x, y, file } = await rasterizeImages(imagesToCompose);
+          sourceImageForAPI = { element, x, y, width: element.width, height: element.height, file };
+          referenceImagesForAPI = [];
+      } else {
+          sourceImageForAPI = primaryImage;
+          referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
+      }
+      
       const translatedPaths = paths.map(path => ({
         ...path,
         points: path.points.map(point => ({
-          x: point.x - sourceImage.x,
-          y: point.y - sourceImage.y,
+          x: point.x - sourceImageForAPI.x,
+          y: point.y - sourceImageForAPI.y,
         })),
       }));
 
       const { imageBase64 } = await generateImageEdit({
         prompt,
-        image: sourceImage.element,
+        image: sourceImageForAPI.element,
         tool,
         paths: translatedPaths,
-        imageDimensions: { width: sourceImage.width, height: sourceImage.height },
-        mimeType: sourceImage.file.type,
+        imageDimensions: { width: sourceImageForAPI.width, height: sourceImageForAPI.height },
+        mimeType: sourceImageForAPI.file.type,
         inpaintMode,
-        referenceImages: referenceImageElements,
+        referenceImages: referenceImagesForAPI,
       });
 
       const newImg = new Image();
@@ -166,15 +275,15 @@ export default function App() {
           const newCanvasImage: CanvasImage = {
             id: crypto.randomUUID(),
             element: newImg,
-            x: sourceImage.x + sourceImage.width + 20, // 20px padding
-            y: sourceImage.y,
+            x: sourceImageForAPI.x + sourceImageForAPI.width + 20, // 20px padding
+            y: sourceImageForAPI.y,
             width: newImg.width,
             height: newImg.height,
             file: newFile,
           };
           setState(prevState => ({
+            ...prevState,
             images: [...prevState.images, newCanvasImage],
-            paths: prevState.paths,
           }));
           setSelectedImageId(newCanvasImage.id);
           setReferenceImageIds([]);
@@ -191,7 +300,18 @@ export default function App() {
   }, [prompt, tool, paths, images, selectedImageId, referenceImageIds, inpaintMode, setState]);
 
   useEffect(() => {
+    // When a new note is added using the Note tool, switch to the free selection tool
+    // to prevent accidental creation of multiple notes.
+    if (tool === Tool.NOTE && displayedNotes.length > prevDisplayedNotesLength.current) {
+        setTool(Tool.FREE_SELECTION);
+    }
+    // Update the ref for the next render.
+    prevDisplayedNotesLength.current = displayedNotes.length;
+  }, [displayedNotes, tool]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (editingNoteId) return; // Don't handle shortcuts while editing a note
       const activeEl = document.activeElement;
       if (
         activeEl instanceof HTMLInputElement ||
@@ -201,28 +321,24 @@ export default function App() {
         return;
       }
 
+      if (e.key.toLowerCase() === 'escape' && tool === Tool.NOTE) {
+        setTool(Tool.FREE_SELECTION);
+        return;
+      }
+
       switch (e.key.toLowerCase()) {
-        case 'v':
-          setTool(Tool.SELECTION);
-          break;
-        case 'f':
-          setTool(Tool.FREE_SELECTION);
-          break;
-        case 'h':
-          setTool(Tool.PAN);
-          break;
-        case 'b':
-          setTool(Tool.ANNOTATE);
-          break;
-        case 'p':
-          setTool(Tool.INPAINT);
-          break;
+        case 'v': setTool(Tool.SELECTION); break;
+        case 'f': setTool(Tool.FREE_SELECTION); break;
+        case 'h': setTool(Tool.PAN); break;
+        case 'b': setTool(Tool.ANNOTATE); break;
+        case 'p': setTool(Tool.INPAINT); break;
+        case 'n': setTool(Tool.NOTE); break;
         case 'delete':
         case 'backspace':
           handleDelete();
           break;
         case '.':
-          if (images.length > 0) {
+          if (images.length > 0 || notes.length > 0) {
             handleZoomToFit();
           }
           break;
@@ -232,11 +348,8 @@ export default function App() {
     };
 
     window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [handleDelete, handleZoomToFit, images]);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool]);
   
   useEffect(() => {
     const handleGlobalSubmit = (e: KeyboardEvent) => {
@@ -268,6 +381,7 @@ export default function App() {
     if (canUndo) {
       setLiveImages(null);
       setLivePaths(null);
+      setLiveNotes(null);
       setHistoryState(prev => ({ ...prev, index: prev.index - 1 }));
     }
   }, [canUndo]);
@@ -276,6 +390,7 @@ export default function App() {
     if (canRedo) {
       setLiveImages(null);
       setLivePaths(null);
+      setLiveNotes(null);
       setHistoryState(prev => ({ ...prev, index: prev.index + 1 }));
     }
   }, [canRedo]);
@@ -307,8 +422,10 @@ export default function App() {
               file: file,
             };
             setSelectedImageId(newCanvasImage.id);
+            setSelectedNoteId(null);
             setReferenceImageIds([]);
             return {
+              ...prevState,
               images: [...prevState.images, newCanvasImage],
               paths: [],
             };
@@ -338,7 +455,6 @@ export default function App() {
                 const newCanvasImage: CanvasImage = {
                     id: crypto.randomUUID(),
                     element: img,
-                    // Center the image on the drop point and stagger multiple images
                     x: point.x - (img.width / 2) + (index * 20),
                     y: point.y - (img.height / 2) + (index * 20),
                     width: img.width,
@@ -349,13 +465,14 @@ export default function App() {
                 lastAddedImageId = newCanvasImage.id;
                 imagesProcessed++;
                 
-                // When the last image is processed, update the state
                 if (imagesProcessed === imageFiles.length) {
                     setState(prevState => ({
+                        ...prevState,
                         images: [...prevState.images, ...newImages],
-                        paths: [], // Clear paths on new uploads
+                        paths: [], 
                     }));
                     setSelectedImageId(lastAddedImageId);
+                    setSelectedNoteId(null);
                     setReferenceImageIds([]);
                     setTool(Tool.SELECTION);
                 }
@@ -375,15 +492,17 @@ export default function App() {
   }
 
   const handleCommit = useCallback(() => {
-    if (liveImages !== null || livePaths !== null) {
+    if (liveImages !== null || livePaths !== null || liveNotes !== null) {
       setState(prevState => ({
         images: liveImages ?? prevState.images,
         paths: livePaths ?? prevState.paths,
+        notes: liveNotes ?? prevState.notes,
       }));
       setLiveImages(null);
       setLivePaths(null);
+      setLiveNotes(null);
     }
-  }, [liveImages, livePaths, setState]);
+  }, [liveImages, livePaths, liveNotes, setState]);
 
   const handleDownload = useCallback(() => {
     if (!selectedImageId) return;
@@ -401,35 +520,48 @@ export default function App() {
   const handleImageSelection = useCallback((imageId: string | null, isShiftClick: boolean) => {
     if (!imageId) { // Clicked on canvas background
         setSelectedImageId(null);
+        setSelectedNoteId(null);
         setReferenceImageIds([]);
         return;
     }
+    setSelectedNoteId(null);
 
     if (isShiftClick) {
         if (selectedImageId && imageId !== selectedImageId) {
             setReferenceImageIds(prevIds => {
-                if (prevIds.includes(imageId)) {
-                    // Remove if already a reference
-                    return prevIds.filter(id => id !== imageId);
-                }
-                if (prevIds.length < MAX_REFERENCE_IMAGES) {
-                    // Add if there's space
-                    return [...prevIds, imageId];
-                }
-                // Do nothing if full
+                if (prevIds.includes(imageId)) return prevIds.filter(id => id !== imageId);
+                if (prevIds.length < MAX_REFERENCE_IMAGES) return [...prevIds, imageId];
                 return prevIds;
             });
         }
     } else {
-        // Normal click
         if (selectedImageId !== imageId) {
-            // If clicking a new image, make it primary and clear all references.
             setSelectedImageId(imageId);
             setReferenceImageIds([]);
         }
-        // If clicking the current primary, do nothing.
     }
   }, [selectedImageId]);
+
+  const handleNoteSelection = useCallback((noteId: string | null) => {
+      setSelectedNoteId(noteId);
+      setSelectedImageId(null);
+      setReferenceImageIds([]);
+  }, []);
+
+  const handleNoteTextChange = useCallback((noteId: string, text: string) => {
+    const targetNotes = liveNotes ?? displayedNotes;
+    const noteIndex = targetNotes.findIndex(n => n.id === noteId);
+    if (noteIndex === -1) return;
+
+    const newNotes = [...targetNotes];
+    newNotes[noteIndex] = { ...newNotes[noteIndex], text };
+    setLiveNotes(newNotes);
+  }, [liveNotes, displayedNotes]);
+
+  const selectedImageIndex = images.findIndex(img => img.id === selectedImageId);
+  const isImageOverlapping = selectedImageId && selectedImageIndex !== -1 ? images.some(other => other.id !== selectedImageId && isOverlapping(images[selectedImageIndex], other)) : false;
+  const canMoveUp = selectedImageIndex > -1 && selectedImageIndex < images.length - 1;
+  const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
@@ -437,7 +569,13 @@ export default function App() {
       
       <Toolbar
         activeTool={tool}
-        onToolChange={setTool}
+        onToolChange={(newTool) => {
+          setTool(newTool);
+          if (editingNoteId) {
+            setEditingNoteId(null);
+            handleCommit();
+          }
+        }}
         brushSize={brushSize}
         onBrushSizeChange={setBrushSize}
         brushColor={brushColor}
@@ -452,6 +590,7 @@ export default function App() {
         canRedo={canRedo}
         onDownload={handleDownload}
         isImageSelected={!!selectedImageId}
+        isObjectSelected={!!selectedImageId || !!selectedNoteId}
         onDelete={handleDelete}
       />
       
@@ -459,19 +598,31 @@ export default function App() {
         <Canvas
           images={displayedImages}
           onImagesChange={setLiveImages}
+          notes={displayedNotes}
+          onNotesChange={setLiveNotes}
           tool={tool}
           paths={displayedPaths}
           onPathsChange={setLivePaths}
           brushSize={brushSize}
           brushColor={brushColor}
           selectedImageId={selectedImageId}
+          selectedNoteId={selectedNoteId}
           referenceImageIds={referenceImageIds}
           onImageSelect={handleImageSelection}
+          onNoteSelect={handleNoteSelection}
           onCommit={handleCommit}
           onFilesDrop={handleFilesDrop}
           zoomToFitTrigger={zoomToFitTrigger}
+          editingNoteId={editingNoteId}
+          onNoteDoubleClick={setEditingNoteId}
+          onNoteTextChange={handleNoteTextChange}
+          onNoteEditEnd={() => setEditingNoteId(null)}
+          onImageOrderChange={handleImageOrderChange}
+          isImageOverlapping={isImageOverlapping}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
         />
-        <ViewToolbar onZoomToFit={handleZoomToFit} disabled={images.length === 0} />
+        <ViewToolbar onZoomToFit={handleZoomToFit} disabled={images.length === 0 && notes.length === 0} />
       </main>
       
       {error && (
