@@ -14,6 +14,7 @@ interface CanvasProps {
   onImageSelect: (id: string | null, isShiftClick: boolean) => void;
   onCommit: () => void;
   zoomToFitTrigger: number;
+  onFilesDrop: (files: FileList, point: Point) => void;
 }
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -29,6 +30,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onImageSelect,
   onCommit,
   zoomToFitTrigger,
+  onFilesDrop,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,6 +41,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [scale, setScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Dragging state
   const [isDragging, setIsDragging] = useState(false);
@@ -221,6 +224,9 @@ export const Canvas: React.FC<CanvasProps> = ({
             case Tool.PAN:
                 cursor = isPanning ? 'grabbing' : 'grab';
                 break;
+            case Tool.FREE_SELECTION:
+                cursor = isPanning || isDragging ? 'grabbing' : 'grab';
+                break;
             case Tool.ANNOTATE:
             case Tool.INPAINT:
                 cursor = 'crosshair';
@@ -252,6 +258,25 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
+    if (tool === Tool.FREE_SELECTION) {
+        const image = getImageAtPoint(point);
+        if (image) {
+            // Clicked on an image: select and prepare for dragging
+            onImageSelect(image.id, e.shiftKey);
+            if (!e.shiftKey) {
+                setIsDragging(true);
+                setDraggedImageId(image.id);
+                setDragStartPoint({ x: e.clientX, y: e.clientY });
+                setDragStartImagePosition({ x: image.x, y: image.y });
+            }
+        } else {
+            // Clicked on background: start panning
+            setIsPanning(true);
+            setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+        }
+        return;
+    }
+
     if (tool === Tool.PAN) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -272,7 +297,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
     
-    if (isDragging && tool === Tool.SELECTION && draggedImageId && dragStartPoint && dragStartImagePosition) {
+    if (isDragging && (tool === Tool.SELECTION || tool === Tool.FREE_SELECTION) && draggedImageId && dragStartPoint && dragStartImagePosition) {
         const draggedImageIndex = images.findIndex(img => img.id === draggedImageId);
         if (draggedImageIndex === -1) return;
 
@@ -289,10 +314,14 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
-    if (tool === Tool.SELECTION && containerRef.current) {
+    if ((tool === Tool.SELECTION || tool === Tool.FREE_SELECTION) && containerRef.current && !isDragging) {
         const point = getTransformedPoint(e.clientX, e.clientY);
         const imageOnPoint = getImageAtPoint(point);
-        containerRef.current.style.cursor = imageOnPoint ? 'pointer' : 'default';
+        if (imageOnPoint) {
+          containerRef.current.style.cursor = 'pointer';
+        } else {
+          containerRef.current.style.cursor = tool === Tool.SELECTION ? 'default' : 'grab';
+        }
     }
 
     if (!isDrawing) return;
@@ -343,10 +372,33 @@ export const Canvas: React.FC<CanvasProps> = ({
     setPan({ x: newPanX, y: newPanY });
   };
   
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingOver) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const point = getTransformedPoint(e.clientX, e.clientY);
+      onFilesDrop(e.dataTransfer.files, point);
+    }
+  };
+
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-black overflow-hidden"
+      className="w-full h-full bg-black overflow-hidden relative"
       style={{
         backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.2) 1px, transparent 1px)',
         backgroundSize: '25px 25px',
@@ -356,13 +408,24 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onWheel={handleWheel}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       <canvas ref={canvasRef} />
-      {images.length === 0 && (
+      {images.length === 0 && !isDraggingOver && (
          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center p-8 bg-black/30 rounded-lg">
                 <h2 className="text-2xl font-bold text-white">Welcome to the Infinite Canvas</h2>
-                <p className="text-gray-300 mt-2">Click "Upload Image" to start your creation.</p>
+                <p className="text-gray-300 mt-2">Click "Upload Image" or drag & drop to start your creation.</p>
+            </div>
+        </div>
+      )}
+      {isDraggingOver && (
+        <div className="absolute inset-0 bg-sky-500/30 border-4 border-dashed border-sky-300 rounded-2xl flex items-center justify-center pointer-events-none z-20 m-4">
+            <div className="text-center p-8 bg-black/50 rounded-lg">
+                <h2 className="text-3xl font-bold text-white">Drop to Upload</h2>
+                <p className="text-gray-200 mt-2">Release your images to add them to the canvas.</p>
             </div>
         </div>
       )}

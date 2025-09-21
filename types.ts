@@ -3,6 +3,7 @@ export enum Tool {
   PAN = 'PAN',
   ANNOTATE = 'ANNOTATE',
   INPAINT = 'INPAINT',
+  FREE_SELECTION = 'FREE_SELECTION',
 }
 
 export type InpaintMode = 'STRICT' | 'CREATIVE';

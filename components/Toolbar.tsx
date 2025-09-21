@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tool, InpaintMode } from '../types';
-import { SelectionIcon, PanIcon, AnnotateIcon, InpaintIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon } from './Icons';
+import { SelectionIcon, PanIcon, AnnotateIcon, InpaintIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon } from './Icons';
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -83,6 +83,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <div className="flex items-center space-x-2 border-r border-gray-600 pr-4">
         <ToolButton label="Select (V)" isActive={activeTool === Tool.SELECTION} onClick={() => onToolChange(Tool.SELECTION)}>
           <SelectionIcon className="w-5 h-5" />
+        </ToolButton>
+        <ToolButton label="Free Select (F)" isActive={activeTool === Tool.FREE_SELECTION} onClick={() => onToolChange(Tool.FREE_SELECTION)}>
+          <FreeSelectionIcon className="w-5 h-5" />
         </ToolButton>
         <ToolButton label="Pan (H)" isActive={activeTool === Tool.PAN} onClick={() => onToolChange(Tool.PAN)}>
           <PanIcon className="w-5 h-5" />

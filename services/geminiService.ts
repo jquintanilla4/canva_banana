@@ -49,7 +49,7 @@ export const generateImageEdit = async ({
 
   const parts: Part[] = [];
 
-  if (tool === Tool.SELECTION) {
+  if (tool === Tool.SELECTION || tool === Tool.FREE_SELECTION) {
     const originalImageCanvas = document.createElement('canvas');
     originalImageCanvas.width = imageDimensions.width;
     originalImageCanvas.height = imageDimensions.height;
@@ -111,7 +111,7 @@ export const generateImageEdit = async ({
     parts.push({ inlineData: { data: originalData, mimeType: originalMimeType } });
     parts.push({ inlineData: { data: maskData, mimeType: maskMimeType } });
 
-    const finalPrompt = inpaintMode === 'CREATIVE' ? `[INPAINT] ${prompt}` : `[INPAINT][PRESERVE_IMAGE] ${prompt}`;
+    const finalPrompt = inpaintMode === 'CREATIVE' ? `[INPAINT] ${prompt}` : `[INPAINT][REPLACE_ONLY_MASKED_REGION] ${prompt}`;
     parts.push({ text: finalPrompt });
 
   } else {

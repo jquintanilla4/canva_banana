@@ -11,6 +11,7 @@ interface PromptBarProps {
 
 export const PromptBar: React.FC<PromptBarProps> = ({ prompt, onPromptChange, onSubmit, isLoading, inputDisabled, submitDisabled }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wasLoading = useRef(isLoading);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -21,13 +22,15 @@ export const PromptBar: React.FC<PromptBarProps> = ({ prompt, onPromptChange, on
     }
   }, [prompt]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Submit on Enter, but allow new lines with Shift+Enter
-    if (e.key === 'Enter' && !e.shiftKey && !isLoading && !submitDisabled) {
-      e.preventDefault();
-      onSubmit();
+  useEffect(() => {
+    // When a generation finishes (isLoading goes from true to false),
+    // refocus the textarea so the user can immediately type their next prompt.
+    // This also ensures keyboard shortcuts continue to work.
+    if (wasLoading.current && !isLoading && !inputDisabled) {
+        textareaRef.current?.focus();
     }
-  };
+    wasLoading.current = isLoading;
+  }, [isLoading, inputDisabled]);
 
   return (
     <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-4 p-2 w-full max-w-2xl">
@@ -36,8 +39,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({ prompt, onPromptChange, on
           ref={textareaRef}
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={inputDisabled ? "Upload or select an image to begin editing..." : "Describe your edit, e.g., 'add a futuristic city in the background'"}
+          placeholder={inputDisabled ? "Upload or select an image to begin editing..." : "Describe your edit... (Cmd/Ctrl + Enter to generate)"}
           disabled={inputDisabled || isLoading}
           rows={1}
           className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none px-2 resize-none overflow-y-auto"

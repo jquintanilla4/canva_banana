@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
-import { Tool, Path, CanvasImage, InpaintMode } from './types';
+import { Tool, Path, CanvasImage, InpaintMode, Point } from './types';
 import { generateImageEdit } from './services/geminiService';
 import { ZoomToFitIcon } from './components/Icons';
 
@@ -28,6 +28,12 @@ const ViewToolbar: React.FC<ViewToolbarProps> = ({ onZoomToFit, disabled }) => {
 
 const MAX_HISTORY_SIZE = 30;
 const MAX_REFERENCE_IMAGES = 2;
+
+const getStateSignature = (state: { images: CanvasImage[], paths: Path[] }): string => {
+  const imageSignature = state.images.map(img => `${img.id},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height}`).join(';');
+  const pathSignature = state.paths.map(p => p.points.length).join(',');
+  return `${imageSignature}|${pathSignature}`;
+};
 
 export default function App() {
   const [tool, setTool] = useState<Tool>(Tool.PAN);
@@ -67,7 +73,7 @@ export default function App() {
       const prevState = prevHistory[prevIndex];
       const newState = updater(prevState);
       
-      if (JSON.stringify(newState) === JSON.stringify(prevState)) {
+      if (getStateSignature(newState) === getStateSignature(prevState)) {
           return currentState;
       }
 
@@ -100,12 +106,97 @@ export default function App() {
     setZoomToFitTrigger(c => c + 1);
   }, []);
 
+  const handleGenerate = useCallback(async () => {
+    if (!selectedImageId) {
+      setError("Please select an image to edit.");
+      return;
+    }
+    
+    const sourceImage = images.find(img => img.id === selectedImageId);
+    const referenceImageElements = referenceImageIds
+      .map(id => images.find(img => img.id === id)?.element)
+      .filter((el): el is HTMLImageElement => !!el);
+    
+    if (!sourceImage) {
+      setError("Selected image not found. Please select another image.");
+      return;
+    }
+
+    if (!prompt) {
+      setError("Please write a prompt to describe your edit.");
+      return;
+    }
+
+    if (tool !== Tool.SELECTION && tool !== Tool.ANNOTATE && tool !== Tool.INPAINT && tool !== Tool.FREE_SELECTION) {
+      setError("Please use the Select, Annotate, or Inpaint tool to generate an image.");
+      return;
+    }
+    
+    if ((tool === Tool.ANNOTATE || tool === Tool.INPAINT) && paths.length === 0) {
+      setError("Please draw on the selected image before generating.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const translatedPaths = paths.map(path => ({
+        ...path,
+        points: path.points.map(point => ({
+          x: point.x - sourceImage.x,
+          y: point.y - sourceImage.y,
+        })),
+      }));
+
+      const { imageBase64 } = await generateImageEdit({
+        prompt,
+        image: sourceImage.element,
+        tool,
+        paths: translatedPaths,
+        imageDimensions: { width: sourceImage.width, height: sourceImage.height },
+        mimeType: sourceImage.file.type,
+        inpaintMode,
+        referenceImages: referenceImageElements,
+      });
+
+      const newImg = new Image();
+      newImg.onload = async () => {
+          const blob = await (await fetch(newImg.src)).blob();
+          const newFile = new File([blob], "generated_image.png", { type: "image/png" });
+          const newCanvasImage: CanvasImage = {
+            id: crypto.randomUUID(),
+            element: newImg,
+            x: sourceImage.x + sourceImage.width + 20, // 20px padding
+            y: sourceImage.y,
+            width: newImg.width,
+            height: newImg.height,
+            file: newFile,
+          };
+          setState(prevState => ({
+            images: [...prevState.images, newCanvasImage],
+            paths: prevState.paths,
+          }));
+          setSelectedImageId(newCanvasImage.id);
+          setReferenceImageIds([]);
+          setTool(Tool.SELECTION);
+      }
+      newImg.src = `data:image/png;base64,${imageBase64}`;
+
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [prompt, tool, paths, images, selectedImageId, referenceImageIds, inpaintMode, setState]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
       if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        e.target instanceof HTMLSelectElement
+        activeEl instanceof HTMLInputElement ||
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl instanceof HTMLSelectElement
       ) {
         return;
       }
@@ -113,6 +204,9 @@ export default function App() {
       switch (e.key.toLowerCase()) {
         case 'v':
           setTool(Tool.SELECTION);
+          break;
+        case 'f':
+          setTool(Tool.FREE_SELECTION);
           break;
         case 'h':
           setTool(Tool.PAN);
@@ -143,6 +237,29 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleDelete, handleZoomToFit, images]);
+  
+  useEffect(() => {
+    const handleGlobalSubmit = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+
+        const isSubmitAllowed =
+          !isLoading &&
+          !!selectedImageId &&
+          prompt.trim().length > 0 &&
+          [Tool.SELECTION, Tool.ANNOTATE, Tool.INPAINT, Tool.FREE_SELECTION].includes(tool);
+        
+        if (isSubmitAllowed) {
+          handleGenerate();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalSubmit);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalSubmit);
+    };
+  }, [isLoading, selectedImageId, prompt, tool, handleGenerate]);
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
@@ -204,6 +321,50 @@ export default function App() {
       e.target.value = ''; // Reset file input
     }
   };
+
+  const handleFilesDrop = useCallback((files: FileList, point: Point) => {
+    const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    let lastAddedImageId: string | null = null;
+    const newImages: CanvasImage[] = [];
+    let imagesProcessed = 0;
+
+    imageFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const newCanvasImage: CanvasImage = {
+                    id: crypto.randomUUID(),
+                    element: img,
+                    // Center the image on the drop point and stagger multiple images
+                    x: point.x - (img.width / 2) + (index * 20),
+                    y: point.y - (img.height / 2) + (index * 20),
+                    width: img.width,
+                    height: img.height,
+                    file: file,
+                };
+                newImages.push(newCanvasImage);
+                lastAddedImageId = newCanvasImage.id;
+                imagesProcessed++;
+                
+                // When the last image is processed, update the state
+                if (imagesProcessed === imageFiles.length) {
+                    setState(prevState => ({
+                        images: [...prevState.images, ...newImages],
+                        paths: [], // Clear paths on new uploads
+                    }));
+                    setSelectedImageId(lastAddedImageId);
+                    setReferenceImageIds([]);
+                    setTool(Tool.SELECTION);
+                }
+            };
+            img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+    });
+  }, [setState]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -270,90 +431,6 @@ export default function App() {
     }
   }, [selectedImageId]);
 
-  const handleGenerate = useCallback(async () => {
-    if (!selectedImageId) {
-      setError("Please select an image to edit.");
-      return;
-    }
-    
-    const sourceImage = images.find(img => img.id === selectedImageId);
-    const referenceImageElements = referenceImageIds
-      .map(id => images.find(img => img.id === id)?.element)
-      .filter((el): el is HTMLImageElement => !!el);
-    
-    if (!sourceImage) {
-      setError("Selected image not found. Please select another image.");
-      return;
-    }
-
-    if (!prompt) {
-      setError("Please write a prompt to describe your edit.");
-      return;
-    }
-
-    if (tool !== Tool.SELECTION && tool !== Tool.ANNOTATE && tool !== Tool.INPAINT) {
-      setError("Please use the Select, Annotate, or Inpaint tool to generate an image.");
-      return;
-    }
-    
-    if ((tool === Tool.ANNOTATE || tool === Tool.INPAINT) && paths.length === 0) {
-      setError("Please draw on the selected image before generating.");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const translatedPaths = paths.map(path => ({
-        ...path,
-        points: path.points.map(point => ({
-          x: point.x - sourceImage.x,
-          y: point.y - sourceImage.y,
-        })),
-      }));
-
-      const { imageBase64 } = await generateImageEdit({
-        prompt,
-        image: sourceImage.element,
-        tool,
-        paths: translatedPaths,
-        imageDimensions: { width: sourceImage.width, height: sourceImage.height },
-        mimeType: sourceImage.file.type,
-        inpaintMode,
-        referenceImages: referenceImageElements,
-      });
-
-      const newImg = new Image();
-      newImg.onload = async () => {
-          const blob = await (await fetch(newImg.src)).blob();
-          const newFile = new File([blob], "generated_image.png", { type: "image/png" });
-          const newCanvasImage: CanvasImage = {
-            id: crypto.randomUUID(),
-            element: newImg,
-            x: sourceImage.x + sourceImage.width + 20, // 20px padding
-            y: sourceImage.y,
-            width: newImg.width,
-            height: newImg.height,
-            file: newFile,
-          };
-          setState(prevState => ({
-            images: [...prevState.images, newCanvasImage],
-            paths: [],
-          }));
-          setSelectedImageId(newCanvasImage.id);
-          setReferenceImageIds([]);
-          setTool(Tool.SELECTION);
-      }
-      newImg.src = `data:image/png;base64,${imageBase64}`;
-
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [prompt, tool, paths, images, selectedImageId, referenceImageIds, inpaintMode, setState]);
-
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
@@ -391,6 +468,7 @@ export default function App() {
           referenceImageIds={referenceImageIds}
           onImageSelect={handleImageSelection}
           onCommit={handleCommit}
+          onFilesDrop={handleFilesDrop}
           zoomToFitTrigger={zoomToFitTrigger}
         />
         <ViewToolbar onZoomToFit={handleZoomToFit} disabled={images.length === 0} />
@@ -409,7 +487,7 @@ export default function App() {
         onSubmit={handleGenerate}
         isLoading={isLoading}
         inputDisabled={!selectedImageId}
-        submitDisabled={!selectedImageId || (tool !== Tool.SELECTION && tool !== Tool.ANNOTATE && tool !== Tool.INPAINT)}
+        submitDisabled={!selectedImageId || (tool !== Tool.SELECTION && tool !== Tool.ANNOTATE && tool !== Tool.INPAINT && tool !== Tool.FREE_SELECTION)}
       />
     </div>
   );
