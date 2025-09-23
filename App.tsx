@@ -188,6 +188,27 @@ export default function App() {
     });
   };
 
+  const handleCommit = useCallback(() => {
+    if (liveImages !== null || livePaths !== null || liveNotes !== null) {
+      setState(prevState => ({
+        images: liveImages ?? prevState.images,
+        paths: livePaths ?? prevState.paths,
+        notes: liveNotes ?? prevState.notes,
+      }));
+      setLiveImages(null);
+      setLivePaths(null);
+      setLiveNotes(null);
+    }
+  }, [liveImages, livePaths, liveNotes, setState]);
+
+  const handleToolChange = useCallback((newTool: Tool) => {
+      setTool(newTool);
+      if (editingNoteId) {
+          setEditingNoteId(null);
+          handleCommit();
+      }
+  }, [editingNoteId, handleCommit]);
+
   const handleGenerate = useCallback(async () => {
     if (!selectedImageId) {
       setError("Please select an image to edit.");
@@ -303,11 +324,11 @@ export default function App() {
     // When a new note is added using the Note tool, switch to the free selection tool
     // to prevent accidental creation of multiple notes.
     if (tool === Tool.NOTE && displayedNotes.length > prevDisplayedNotesLength.current) {
-        setTool(Tool.FREE_SELECTION);
+        handleToolChange(Tool.FREE_SELECTION);
     }
     // Update the ref for the next render.
     prevDisplayedNotesLength.current = displayedNotes.length;
-  }, [displayedNotes, tool]);
+  }, [displayedNotes, tool, handleToolChange]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -322,17 +343,17 @@ export default function App() {
       }
 
       if (e.key.toLowerCase() === 'escape' && tool === Tool.NOTE) {
-        setTool(Tool.FREE_SELECTION);
+        handleToolChange(Tool.SELECTION);
         return;
       }
 
       switch (e.key.toLowerCase()) {
-        case 'v': setTool(Tool.SELECTION); break;
-        case 'f': setTool(Tool.FREE_SELECTION); break;
-        case 'h': setTool(Tool.PAN); break;
-        case 'b': setTool(Tool.ANNOTATE); break;
-        case 'p': setTool(Tool.INPAINT); break;
-        case 'n': setTool(Tool.NOTE); break;
+        case 'v': handleToolChange(Tool.SELECTION); break;
+        case 'f': handleToolChange(Tool.FREE_SELECTION); break;
+        case 'h': handleToolChange(Tool.PAN); break;
+        case 'b': handleToolChange(Tool.ANNOTATE); break;
+        case 'p': handleToolChange(Tool.INPAINT); break;
+        case 'n': handleToolChange(Tool.NOTE); break;
         case 'delete':
         case 'backspace':
           handleDelete();
@@ -349,7 +370,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool]);
+  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool, handleToolChange]);
   
   useEffect(() => {
     const handleGlobalSubmit = (e: KeyboardEvent) => {
@@ -491,19 +512,6 @@ export default function App() {
       setState(prevState => ({...prevState, paths: [] }));
   }
 
-  const handleCommit = useCallback(() => {
-    if (liveImages !== null || livePaths !== null || liveNotes !== null) {
-      setState(prevState => ({
-        images: liveImages ?? prevState.images,
-        paths: livePaths ?? prevState.paths,
-        notes: liveNotes ?? prevState.notes,
-      }));
-      setLiveImages(null);
-      setLivePaths(null);
-      setLiveNotes(null);
-    }
-  }, [liveImages, livePaths, liveNotes, setState]);
-
   const handleDownload = useCallback(() => {
     if (!selectedImageId) return;
     const imageToDownload = images.find(img => img.id === selectedImageId);
@@ -569,13 +577,7 @@ export default function App() {
       
       <Toolbar
         activeTool={tool}
-        onToolChange={(newTool) => {
-          setTool(newTool);
-          if (editingNoteId) {
-            setEditingNoteId(null);
-            handleCommit();
-          }
-        }}
+        onToolChange={handleToolChange}
         brushSize={brushSize}
         onBrushSizeChange={setBrushSize}
         brushColor={brushColor}
