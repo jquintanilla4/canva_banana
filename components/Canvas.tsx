@@ -164,6 +164,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     const ctx = getCanvasContext();
     if (!canvas || !ctx) return;
 
+    // --- 1. Draw scene (images, notes, selections) ---
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(pan.x, pan.y);
@@ -210,10 +211,8 @@ export const Canvas: React.FC<CanvasProps> = ({
           ctx.fillRect(note.x + note.width - handleSize / 2, note.y + note.height - handleSize / 2, handleSize, handleSize);
       }
       
-      // Save context to isolate clipping
       ctx.save();
       
-      // Define a clipping region to prevent text from overflowing.
       const textPadding = 10 / scale;
       ctx.beginPath();
       ctx.rect(
@@ -227,29 +226,55 @@ export const Canvas: React.FC<CanvasProps> = ({
       ctx.fillStyle = '#e5e7eb'; // light gray
       const fontSize = 16 / scale;
       ctx.font = `${fontSize}px sans-serif`;
-      // Use consistent padding for drawing the text.
       wrapText(ctx, note.text, note.x + textPadding, note.y + textPadding + fontSize, note.width - (2 * textPadding), fontSize * 1.2);
       
-      // Restore context to remove clipping for subsequent drawings.
       ctx.restore();
     });
 
-    // Draw paths (annotations/masks)
-    paths.forEach(path => {
-      ctx.strokeStyle = tool === Tool.INPAINT ? 'rgba(255, 0, 255, 0.5)' : path.color;
-      ctx.lineWidth = path.size;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      path.points.forEach((point, index) => {
-        if (index === 0) ctx.moveTo(point.x, point.y);
-        else ctx.lineTo(point.x, point.y);
-      });
-      ctx.stroke();
-    });
+    ctx.restore(); // Restore main context transform
 
-    ctx.restore();
-  }, [images, notes, paths, pan, scale, tool, selectedImageId, selectedNoteId, referenceImageIds]);
+    // --- 2. Draw path overlay ---
+    if (paths.length > 0) {
+        const pathCanvas = document.createElement('canvas');
+        pathCanvas.width = canvas.width;
+        pathCanvas.height = canvas.height;
+        const pathCtx = pathCanvas.getContext('2d');
+
+        if (pathCtx) {
+            // Apply same transform to the path canvas
+            pathCtx.translate(pan.x, pan.y);
+            pathCtx.scale(scale, scale);
+
+            // Process all paths in order to respect drawing/erasing sequence
+            paths.forEach(path => {
+                if (path.tool === Tool.ERASE) {
+                    pathCtx.globalCompositeOperation = 'destination-out';
+                    // For destination-out, color doesn't matter, but alpha must be 1.
+                    pathCtx.strokeStyle = 'rgba(0,0,0,1)';
+                } else {
+                    pathCtx.globalCompositeOperation = 'source-over';
+                    pathCtx.strokeStyle = path.tool === Tool.INPAINT ? 'rgba(255, 0, 255, 0.5)' : path.color;
+                }
+                
+                pathCtx.lineWidth = path.size;
+                pathCtx.lineCap = 'round';
+                pathCtx.lineJoin = 'round';
+                pathCtx.beginPath();
+                path.points.forEach((point, index) => {
+                    if (index === 0) pathCtx.moveTo(point.x, point.y);
+                    else pathCtx.lineTo(point.x, point.y);
+                });
+                pathCtx.stroke();
+            });
+
+            // Reset composite operation for safety before drawing to main canvas
+            pathCtx.globalCompositeOperation = 'source-over';
+
+            // Draw the path canvas onto the main canvas
+            ctx.drawImage(pathCanvas, 0, 0);
+        }
+    }
+  }, [images, notes, paths, pan, scale, selectedImageId, selectedNoteId, referenceImageIds]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;
@@ -358,7 +383,9 @@ export const Canvas: React.FC<CanvasProps> = ({
                 case Tool.FREE_SELECTION: cursor = isPanning || isDragging ? 'grabbing' : 'grab'; break;
                 case Tool.NOTE: cursor = 'cell'; break;
                 case Tool.ANNOTATE:
-                case Tool.INPAINT: cursor = 'crosshair'; break;
+                case Tool.INPAINT:
+                case Tool.ERASE:
+                    cursor = 'crosshair'; break;
                 case Tool.SELECTION: cursor = isDragging ? 'grabbing' : 'default'; break;
                 default: cursor = 'default';
             }
@@ -464,12 +491,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (tool === Tool.PAN) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    } else if (tool === Tool.ANNOTATE || tool === Tool.INPAINT) {
+    } else if (tool === Tool.ANNOTATE || tool === Tool.INPAINT || tool === Tool.ERASE) {
       setIsDrawing(true);
       const newPath: Path = {
         points: [point],
         color: brushColor,
         size: brushSize / scale,
+        tool: tool,
       };
       onPathsChange([...paths, newPath]);
     }

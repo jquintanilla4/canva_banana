@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tool, InpaintMode } from '../types';
-import { SelectionIcon, PanIcon, AnnotateIcon, InpaintIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon } from './Icons';
+import { SelectionIcon, PanIcon, AnnotateIcon, InpaintIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon } from './Icons';
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -101,6 +101,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <ToolButton label="Inpaint (P)" isActive={activeTool === Tool.INPAINT} onClick={() => onToolChange(Tool.INPAINT)}>
           <InpaintIcon className="w-5 h-5" />
         </ToolButton>
+        <ToolButton label="Erase (E)" isActive={activeTool === Tool.ERASE} onClick={() => onToolChange(Tool.ERASE)}>
+          <EraseIcon className="w-5 h-5" />
+        </ToolButton>
         <button
           onClick={onClear}
           className="p-2 bg-red-600 hover:bg-red-500 rounded-md transition-colors"
@@ -129,7 +132,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </ToolButton>
       </div>
 
-      {(activeTool === Tool.ANNOTATE || activeTool === Tool.INPAINT) && (
+      {(activeTool === Tool.ANNOTATE || activeTool === Tool.INPAINT || activeTool === Tool.ERASE) && (
         <div className="flex items-center space-x-4 border-r border-gray-600 pr-4">
           <div className="flex items-center space-x-2">
             <label htmlFor="brushSize" className="text-xs text-gray-300">Size</label>

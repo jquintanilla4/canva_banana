@@ -33,7 +33,7 @@ type AppState = { images: CanvasImage[], paths: Path[], notes: CanvasNote[] };
 
 const getStateSignature = (state: AppState): string => {
   const imageSignature = state.images.map(img => `${img.id},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height}`).join(';');
-  const pathSignature = state.paths.map(p => p.points.length).join(',');
+  const pathSignature = state.paths.map(p => `${p.points.length},${p.tool}`).join(',');
   const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length}`).join(';');
   return `${imageSignature}|${pathSignature}|${noteSignature}`;
 };
@@ -353,6 +353,7 @@ export default function App() {
         case 'h': handleToolChange(Tool.PAN); break;
         case 'b': handleToolChange(Tool.ANNOTATE); break;
         case 'p': handleToolChange(Tool.INPAINT); break;
+        case 'e': handleToolChange(Tool.ERASE); break;
         case 'n': handleToolChange(Tool.NOTE); break;
         case 'delete':
         case 'backspace':

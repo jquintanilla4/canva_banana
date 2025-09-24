@@ -5,6 +5,7 @@ export enum Tool {
   INPAINT = 'INPAINT',
   FREE_SELECTION = 'FREE_SELECTION',
   NOTE = 'NOTE',
+  ERASE = 'ERASE',
 }
 
 export type InpaintMode = 'STRICT' | 'CREATIVE';
@@ -18,6 +19,7 @@ export interface Path {
   points: Point[];
   color: string;
   size: number;
+  tool: Tool;
 }
 
 export interface ImageDimensions {

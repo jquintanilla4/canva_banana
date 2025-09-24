@@ -61,22 +61,39 @@ export const generateImageEdit = async ({
     parts.push({ text: prompt });
 
   } else if (tool === Tool.ANNOTATE) {
-    ctx.drawImage(image, 0, 0, imageDimensions.width, imageDimensions.height);
+    const annotationCanvas = document.createElement('canvas');
+    annotationCanvas.width = imageDimensions.width;
+    annotationCanvas.height = imageDimensions.height;
+    const annotationCtx = annotationCanvas.getContext('2d');
+    if (!annotationCtx) throw new Error('Could not create annotation canvas context');
+
     paths.forEach(path => {
-      ctx.strokeStyle = path.color;
-      ctx.lineWidth = path.size;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
+      if (path.tool === Tool.ERASE) {
+        annotationCtx.globalCompositeOperation = 'destination-out';
+        annotationCtx.strokeStyle = 'rgba(0,0,0,1)';
+      } else { 
+        annotationCtx.globalCompositeOperation = 'source-over';
+        annotationCtx.strokeStyle = path.color;
+      }
+      
+      annotationCtx.lineWidth = path.size;
+      annotationCtx.lineCap = 'round';
+      annotationCtx.lineJoin = 'round';
+      annotationCtx.beginPath();
       path.points.forEach((point, index) => {
         if (index === 0) {
-          ctx.moveTo(point.x, point.y);
+          annotationCtx.moveTo(point.x, point.y);
         } else {
-          ctx.lineTo(point.x, point.y);
+          annotationCtx.lineTo(point.x, point.y);
         }
       });
-      ctx.stroke();
+      annotationCtx.stroke();
     });
+    annotationCtx.globalCompositeOperation = 'source-over';
+
+    ctx.drawImage(image, 0, 0, imageDimensions.width, imageDimensions.height);
+    
+    ctx.drawImage(annotationCanvas, 0, 0);
 
     const { data: rasterizedData, mimeType: rasterizedMimeType } = getBase64FromCanvas(offscreenCanvas);
     parts.push({ inlineData: { data: rasterizedData, mimeType: rasterizedMimeType } });
@@ -93,18 +110,27 @@ export const generateImageEdit = async ({
 
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+
     paths.forEach(path => {
-      ctx.strokeStyle = 'white';
+      if (path.tool === Tool.ERASE) {
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.strokeStyle = 'rgba(0,0,0,1)';
+      } else {
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.strokeStyle = 'white';
+      }
+      
       ctx.lineWidth = path.size;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
       path.points.forEach((point, index) => {
-        if (index === 0) ctx.moveTo(point.x, point.y);
-        else ctx.lineTo(point.x, point.y);
+          if (index === 0) ctx.moveTo(point.x, point.y);
+          else ctx.lineTo(point.x, point.y);
       });
       ctx.stroke();
     });
+    ctx.globalCompositeOperation = 'source-over';
     
     const { data: maskData, mimeType: maskMimeType } = getBase64FromCanvas(offscreenCanvas);
     
@@ -119,7 +145,6 @@ export const generateImageEdit = async ({
   }
 
   if (referenceImages && referenceImages.length > 0) {
-    // The text part is always last. Pop it, add reference images, then push it back.
     const textPart = parts.pop();
 
     for (const refImage of referenceImages) {
