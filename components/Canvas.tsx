@@ -89,6 +89,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [temporaryTool, setTemporaryTool] = useState<Tool | null>(null);
 
   // Dragging & Resizing state
   const [isDragging, setIsDragging] = useState(false);
@@ -102,6 +103,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   const prevZoomToFitTrigger = useRef(zoomToFitTrigger);
   const prevImagesLength = useRef(images.length);
+  
+  const currentTool = temporaryTool || tool;
 
   const getCanvasContext = () => canvasRef.current?.getContext('2d');
 
@@ -378,7 +381,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         if(isResizing) {
             cursor = 'nwse-resize';
         } else {
-            switch (tool) {
+            switch (currentTool) {
                 case Tool.PAN: cursor = isPanning ? 'grabbing' : 'grab'; break;
                 case Tool.FREE_SELECTION: cursor = isPanning || isDragging ? 'grabbing' : 'grab'; break;
                 case Tool.NOTE: cursor = 'cell'; break;
@@ -392,7 +395,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
         containerRef.current.style.cursor = cursor;
     }
-  }, [tool, isPanning, isDragging, isResizing]);
+  }, [currentTool, isPanning, isDragging, isResizing]);
   
   useEffect(() => {
     if (editingNoteId && textareaRef.current) {
@@ -404,9 +407,17 @@ export const Canvas: React.FC<CanvasProps> = ({
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button')) return;
     if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
+
+    let activeTool = tool;
+    if (e.button === 1) { // Middle mouse button
+        e.preventDefault();
+        activeTool = Tool.FREE_SELECTION;
+        setTemporaryTool(Tool.FREE_SELECTION);
+    }
+    
     const point = getTransformedPoint(e.clientX, e.clientY);
     
-    if (tool === Tool.NOTE) {
+    if (activeTool === Tool.NOTE) {
       const newNote: CanvasNote = {
         id: crypto.randomUUID(),
         x: point.x - 100,
@@ -422,7 +433,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
     
-    if (tool === Tool.SELECTION || tool === Tool.FREE_SELECTION) {
+    if (activeTool === Tool.SELECTION || activeTool === Tool.FREE_SELECTION) {
       const selectedNote = notes.find(n => n.id === selectedNoteId);
       if (selectedNote) {
         const handleSize = RESIZE_HANDLE_SIZE / scale;
@@ -439,7 +450,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
     }
     
-    if (tool === Tool.SELECTION) {
+    if (activeTool === Tool.SELECTION) {
         const note = getNoteAtPoint(point);
         if (note) {
           onNoteSelect(note.id);
@@ -462,7 +473,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
-    if (tool === Tool.FREE_SELECTION) {
+    if (activeTool === Tool.FREE_SELECTION) {
         const note = getNoteAtPoint(point);
         const image = getImageAtPoint(point);
         const object = note || image;
@@ -488,16 +499,16 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
-    if (tool === Tool.PAN) {
+    if (activeTool === Tool.PAN) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    } else if (tool === Tool.ANNOTATE || tool === Tool.INPAINT || tool === Tool.ERASE) {
+    } else if (activeTool === Tool.ANNOTATE || activeTool === Tool.INPAINT || activeTool === Tool.ERASE) {
       setIsDrawing(true);
       const newPath: Path = {
         points: [point],
         color: brushColor,
         size: brushSize / scale,
-        tool: tool,
+        tool: activeTool,
       };
       onPathsChange([...paths, newPath]);
     }
@@ -525,7 +536,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
     
-    if (isDragging && (tool === Tool.SELECTION || tool === Tool.FREE_SELECTION) && dragStartPoint) {
+    if (isDragging && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && dragStartPoint) {
         const dx = (e.clientX - dragStartPoint.x) / scale;
         const dy = (e.clientY - dragStartPoint.y) / scale;
         
@@ -545,7 +556,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
-    if ((tool === Tool.SELECTION || tool === Tool.FREE_SELECTION) && containerRef.current && !isDragging && !isPanning && !isResizing) {
+    if ((currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && containerRef.current && !isDragging && !isPanning && !isResizing) {
         const point = getTransformedPoint(e.clientX, e.clientY);
         const selectedNote = notes.find(n => n.id === selectedNoteId);
         let onResizeHandle = false;
@@ -564,7 +575,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             containerRef.current.style.cursor = 'nwse-resize';
         } else {
             const objectOnPoint = getImageAtPoint(point) || getNoteAtPoint(point);
-            const baseCursor = tool === Tool.SELECTION ? 'default' : 'grab';
+            const baseCursor = currentTool === Tool.SELECTION ? 'default' : 'grab';
             containerRef.current.style.cursor = objectOnPoint ? 'pointer' : baseCursor;
         }
     }
@@ -577,19 +588,52 @@ export const Canvas: React.FC<CanvasProps> = ({
     onPathsChange(newPaths);
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    // If we're releasing the middle mouse button, we're ending a temporary tool action.
+    // This is handled separately to prevent it from interfering with an ongoing left-mouse-button action.
+    if (e.button === 1) {
+      if (temporaryTool) {
+        setTemporaryTool(null);
+      }
+      // The temporary tool can either pan or drag. Reset these states and commit if dragging occurred.
+      if (isPanning) {
+        setIsPanning(false);
+      }
+      if (isDragging) {
+        onCommit();
+        setIsDragging(false);
+        setDragStartPoint(null);
+        setDragStartImagePosition(null);
+        setDraggedImageId(null);
+        setDragStartNotePosition(null);
+        setDraggedNoteId(null);
+      }
+      return; // IMPORTANT: Stop processing to not affect other actions.
+    }
+
+    // For any other mouse up (e.g., left button) or mouse leave, run the generic state reset.
+    if (temporaryTool && e.type === 'mouseleave') {
+      setTemporaryTool(null);
+    }
+  
     const wasActive = isDrawing || isDragging || isResizing;
+  
+    // Reset all primary action states.
     setIsDrawing(false);
-    setIsPanning(false);
+    setIsPanning(false); // For the main PAN tool
     setIsDragging(false);
     setIsResizing(false);
+  
     setDragStartPoint(null);
     setDragStartImagePosition(null);
     setDraggedImageId(null);
     setDragStartNotePosition(null);
     setDraggedNoteId(null);
     setResizeStartDimensions(null);
-    if (wasActive) onCommit();
+    
+    if (wasActive) {
+      onCommit();
+    }
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {

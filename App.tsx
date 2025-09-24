@@ -308,7 +308,6 @@ export default function App() {
           }));
           setSelectedImageId(newCanvasImage.id);
           setReferenceImageIds([]);
-          setTool(Tool.SELECTION);
       }
       newImg.src = `data:image/png;base64,${imageBase64}`;
 
@@ -593,6 +592,7 @@ export default function App() {
         canRedo={canRedo}
         onDownload={handleDownload}
         isImageSelected={!!selectedImageId}
+        // Fix: Use selectedNoteId state variable instead of undefined noteId
         isObjectSelected={!!selectedImageId || !!selectedNoteId}
         onDelete={handleDelete}
       />
