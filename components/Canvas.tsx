@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote } from '../types';
-import { LayerUpIcon, LayerDownIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon } from './Icons';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -28,11 +28,19 @@ interface CanvasProps {
   isImageOverlapping: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  cropMode: { imageId: string; rect: { x: number; y: number; width: number; height: number; }; } | null;
+  onCropRectChange: (rect: { x: number; y: number; width: number; height: number; }) => void;
+  onStartCrop: (imageId: string) => void;
+  onConfirmCrop: () => void;
+  onCancelCrop: () => void;
 }
 
 const RESIZE_HANDLE_SIZE = 12;
+const CROP_HANDLE_SIZE = 10;
 const MIN_NOTE_WIDTH = 100;
 const MIN_NOTE_HEIGHT = 50;
+
+type CropAction = 'move' | 'resize-tl' | 'resize-t' | 'resize-tr' | 'resize-r' | 'resize-br' | 'resize-b' | 'resize-bl';
 
 const LayerButton: React.FC<{
   onClick: () => void;
@@ -77,6 +85,11 @@ export const Canvas: React.FC<CanvasProps> = ({
   isImageOverlapping,
   canMoveUp,
   canMoveDown,
+  cropMode,
+  onCropRectChange,
+  onStartCrop,
+  onConfirmCrop,
+  onCancelCrop,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,6 +113,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
   const [dragStartNotePosition, setDragStartNotePosition] = useState<Point | null>(null);
   const [resizeStartDimensions, setResizeStartDimensions] = useState<{width: number, height: number} | null>(null);
+
+  // Crop state
+  const [cropAction, setCropAction] = useState<CropAction | null>(null);
+  const [cropDragStart, setCropDragStart] = useState<{point: Point, rect: { x: number; y: number; width: number; height: number; }} | null>(null);
 
   const prevZoomToFitTrigger = useRef(zoomToFitTrigger);
   const prevImagesLength = useRef(images.length);
@@ -192,6 +209,55 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
     });
 
+    if (cropMode) {
+      const imageToCrop = images.find(img => img.id === cropMode.imageId);
+      if (imageToCrop) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        const cropAbsX = imageToCrop.x + cropMode.rect.x;
+        const cropAbsY = imageToCrop.y + cropMode.rect.y;
+
+        // Overlay outside the crop rect, within the image bounds
+        ctx.fillRect(imageToCrop.x, imageToCrop.y, imageToCrop.width, cropMode.rect.y); // Top
+        ctx.fillRect(imageToCrop.x, cropAbsY + cropMode.rect.height, imageToCrop.width, imageToCrop.height - (cropMode.rect.y + cropMode.rect.height)); // Bottom
+        ctx.fillRect(imageToCrop.x, cropAbsY, cropMode.rect.x, cropMode.rect.height); // Left
+        ctx.fillRect(cropAbsX + cropMode.rect.width, cropAbsY, imageToCrop.width - (cropMode.rect.x + cropMode.rect.width), cropMode.rect.height); // Right
+
+        // Crop rect border
+        ctx.strokeStyle = '#0ea5e9';
+        ctx.lineWidth = 2 / scale;
+        ctx.strokeRect(cropAbsX, cropAbsY, cropMode.rect.width, cropMode.rect.height);
+
+        // Grid lines
+        ctx.lineWidth = 1 / scale;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.moveTo(cropAbsX + cropMode.rect.width / 3, cropAbsY);
+        ctx.lineTo(cropAbsX + cropMode.rect.width / 3, cropAbsY + cropMode.rect.height);
+        ctx.moveTo(cropAbsX + 2 * cropMode.rect.width / 3, cropAbsY);
+        ctx.lineTo(cropAbsX + 2 * cropMode.rect.width / 3, cropAbsY + cropMode.rect.height);
+        ctx.moveTo(cropAbsX, cropAbsY + cropMode.rect.height / 3);
+        ctx.lineTo(cropAbsX + cropMode.rect.width, cropAbsY + cropMode.rect.height / 3);
+        ctx.moveTo(cropAbsX, cropAbsY + 2 * cropMode.rect.height / 3);
+        ctx.lineTo(cropAbsX + cropMode.rect.width, cropAbsY + 2 * cropMode.rect.height / 3);
+        ctx.stroke();
+
+        // Handles
+        const handleSize = CROP_HANDLE_SIZE / scale;
+        ctx.fillStyle = '#0ea5e9';
+        const handles = [
+          { x: cropAbsX, y: cropAbsY }, // TL
+          { x: cropAbsX + cropMode.rect.width / 2, y: cropAbsY }, // T
+          { x: cropAbsX + cropMode.rect.width, y: cropAbsY }, // TR
+          { x: cropAbsX + cropMode.rect.width, y: cropAbsY + cropMode.rect.height / 2 }, // R
+          { x: cropAbsX + cropMode.rect.width, y: cropAbsY + cropMode.rect.height }, // BR
+          { x: cropAbsX + cropMode.rect.width / 2, y: cropAbsY + cropMode.rect.height }, // B
+          { x: cropAbsX, y: cropAbsY + cropMode.rect.height }, // BL
+          { x: cropAbsX, y: cropAbsY + cropMode.rect.height / 2 }, // L
+        ];
+        handles.forEach(p => ctx.fillRect(p.x - handleSize/2, p.y - handleSize/2, handleSize, handleSize));
+      }
+    }
+
     // Draw notes
     notes.forEach(note => {
       ctx.fillStyle = note.backgroundColor;
@@ -277,7 +343,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             ctx.drawImage(pathCanvas, 0, 0);
         }
     }
-  }, [images, notes, paths, pan, scale, selectedImageId, selectedNoteId, referenceImageIds]);
+  }, [images, notes, paths, pan, scale, selectedImageId, selectedNoteId, referenceImageIds, cropMode]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;
@@ -326,6 +392,28 @@ export const Canvas: React.FC<CanvasProps> = ({
     setScale(Math.max(0.1, Math.min(newScale, 10)));
     setPan({ x: newPanX, y: newPanY });
   }, [images, notes]);
+
+  const getCropActionForPoint = useCallback((point: Point, image: CanvasImage, rect: { x: number, y: number, width: number, height: number }): CropAction | null => {
+      const handleSize = CROP_HANDLE_SIZE / scale;
+      const absX = image.x + rect.x;
+      const absY = image.y + rect.y;
+
+      const checkHandle = (px: number, py: number, hx: number, hy: number) => 
+        px >= hx - handleSize / 2 && px <= hx + handleSize / 2 &&
+        py >= hy - handleSize / 2 && py <= hy + handleSize / 2;
+
+      if (checkHandle(point.x, point.y, absX, absY)) return 'resize-tl';
+      if (checkHandle(point.x, point.y, absX + rect.width, absY)) return 'resize-tr';
+      if (checkHandle(point.x, point.y, absX, absY + rect.height)) return 'resize-bl';
+      if (checkHandle(point.x, point.y, absX + rect.width, absY + rect.height)) return 'resize-br';
+      if (checkHandle(point.x, point.y, absX + rect.width / 2, absY)) return 'resize-t';
+      if (checkHandle(point.x, point.y, absX + rect.width, absY + rect.height / 2)) return 'resize-r';
+      if (checkHandle(point.x, point.y, absX + rect.width / 2, absY + rect.height)) return 'resize-b';
+      if (checkHandle(point.x, point.y, absX, absY + rect.height / 2)) return 'resize-bl';
+      if (point.x > absX && point.x < absX + rect.width && point.y > absY && point.y < absY + rect.height) return 'move';
+      
+      return null;
+  }, [scale]);
 
   useEffect(() => {
     if (zoomToFitTrigger > prevZoomToFitTrigger.current) {
@@ -378,7 +466,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   useEffect(() => {
     if (containerRef.current) {
         let cursor;
-        if(isResizing) {
+        if (cropMode) {
+          cursor = 'crosshair'; // Default for crop mode
+        } else if(isResizing) {
             cursor = 'nwse-resize';
         } else {
             switch (currentTool) {
@@ -395,7 +485,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
         containerRef.current.style.cursor = cursor;
     }
-  }, [currentTool, isPanning, isDragging, isResizing]);
+  }, [currentTool, isPanning, isDragging, isResizing, cropMode]);
   
   useEffect(() => {
     if (editingNoteId && textareaRef.current) {
@@ -405,6 +495,19 @@ export const Canvas: React.FC<CanvasProps> = ({
 
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (cropMode) {
+      const point = getTransformedPoint(e.clientX, e.clientY);
+      const imageToCrop = images.find(img => img.id === cropMode.imageId);
+      if (!imageToCrop) return;
+
+      const action = getCropActionForPoint(point, imageToCrop, cropMode.rect);
+      if (action) {
+        setCropAction(action);
+        setCropDragStart({ point, rect: cropMode.rect });
+      }
+      return;
+    }
+
     if ((e.target as HTMLElement).closest('button')) return;
     if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
@@ -515,6 +618,59 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (cropMode && cropAction && cropDragStart) {
+        const point = getTransformedPoint(e.clientX, e.clientY);
+        const imageToCrop = images.find(img => img.id === cropMode.imageId);
+        if (!imageToCrop) return;
+
+        const dx = point.x - cropDragStart.point.x;
+        const dy = point.y - cropDragStart.point.y;
+        const startRect = cropDragStart.rect;
+        let newRect = { ...startRect };
+
+        switch(cropAction) {
+          case 'move':
+            newRect.x += dx;
+            newRect.y += dy;
+            break;
+          case 'resize-tl':
+            newRect.x += dx; newRect.y += dy; newRect.width -= dx; newRect.height -= dy;
+            break;
+          case 'resize-t':
+            newRect.y += dy; newRect.height -= dy;
+            break;
+          case 'resize-tr':
+            newRect.y += dy; newRect.width += dx; newRect.height -= dy;
+            break;
+          case 'resize-r':
+            newRect.width += dx;
+            break;
+          case 'resize-br':
+            newRect.width += dx; newRect.height += dy;
+            break;
+          case 'resize-b':
+            newRect.height += dy;
+            break;
+          case 'resize-bl':
+            newRect.x += dx; newRect.width -= dx; newRect.height += dy;
+            break;
+        }
+
+        // Ensure width/height are positive
+        if (newRect.width < 0) { newRect.x += newRect.width; newRect.width *= -1; }
+        if (newRect.height < 0) { newRect.y += newRect.height; newRect.height *= -1; }
+
+        // Clamp to image boundaries
+        newRect.x = Math.max(0, newRect.x);
+        newRect.y = Math.max(0, newRect.y);
+        if (newRect.x + newRect.width > imageToCrop.width) { newRect.width = imageToCrop.width - newRect.x; }
+        if (newRect.y + newRect.height > imageToCrop.height) { newRect.height = imageToCrop.height - newRect.y; }
+        
+        onCropRectChange(newRect);
+        return;
+    }
+
+
     if (isResizing && draggedNoteId && dragStartPoint && resizeStartDimensions) {
         const dx = (e.clientX - dragStartPoint.x) / scale;
         const dy = (e.clientY - dragStartPoint.y) / scale;
@@ -556,29 +712,46 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
     }
 
-    if ((currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && containerRef.current && !isDragging && !isPanning && !isResizing) {
+    if(containerRef.current) {
         const point = getTransformedPoint(e.clientX, e.clientY);
-        const selectedNote = notes.find(n => n.id === selectedNoteId);
-        let onResizeHandle = false;
-        
-        if (selectedNote) {
-            const handleSize = RESIZE_HANDLE_SIZE / scale;
-            const resizeHandleX = selectedNote.x + selectedNote.width - handleSize;
-            const resizeHandleY = selectedNote.y + selectedNote.height - handleSize;
-            if (point.x >= resizeHandleX && point.x <= selectedNote.x + selectedNote.width && 
-                point.y >= resizeHandleY && point.y <= selectedNote.y + selectedNote.height) {
-                onResizeHandle = true;
+        let cursor = containerRef.current.style.cursor; // default
+
+        if (cropMode) {
+          const imageToCrop = images.find(img => img.id === cropMode.imageId);
+          const action = imageToCrop ? getCropActionForPoint(point, imageToCrop, cropMode.rect) : null;
+          switch (action) {
+              case 'move': cursor = 'move'; break;
+              case 'resize-tl': case 'resize-br': cursor = 'nwse-resize'; break;
+              case 'resize-tr': case 'resize-bl': cursor = 'nesw-resize'; break;
+              case 'resize-t': case 'resize-b': cursor = 'ns-resize'; break;
+              case 'resize-r': case 'resize-l': cursor = 'ew-resize'; break;
+              default: cursor = 'default';
+          }
+        } else if ((currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && !isDragging && !isPanning && !isResizing) {
+            const selectedNote = notes.find(n => n.id === selectedNoteId);
+            let onResizeHandle = false;
+            
+            if (selectedNote) {
+                const handleSize = RESIZE_HANDLE_SIZE / scale;
+                const resizeHandleX = selectedNote.x + selectedNote.width - handleSize;
+                const resizeHandleY = selectedNote.y + selectedNote.height - handleSize;
+                if (point.x >= resizeHandleX && point.x <= selectedNote.x + selectedNote.width && 
+                    point.y >= resizeHandleY && point.y <= selectedNote.y + selectedNote.height) {
+                    onResizeHandle = true;
+                }
+            }
+            
+            if (onResizeHandle) {
+                cursor = 'nwse-resize';
+            } else {
+                const objectOnPoint = getImageAtPoint(point) || getNoteAtPoint(point);
+                const baseCursor = currentTool === Tool.SELECTION ? 'default' : 'grab';
+                cursor = objectOnPoint ? 'pointer' : baseCursor;
             }
         }
-        
-        if (onResizeHandle) {
-            containerRef.current.style.cursor = 'nwse-resize';
-        } else {
-            const objectOnPoint = getImageAtPoint(point) || getNoteAtPoint(point);
-            const baseCursor = currentTool === Tool.SELECTION ? 'default' : 'grab';
-            containerRef.current.style.cursor = objectOnPoint ? 'pointer' : baseCursor;
-        }
+        containerRef.current.style.cursor = cursor;
     }
+    
 
     if (!isDrawing) return;
 
@@ -589,6 +762,12 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (cropMode && cropAction) {
+      setCropAction(null);
+      setCropDragStart(null);
+      return;
+    }
+
     // If we're releasing the middle mouse button, we're ending a temporary tool action.
     // This is handled separately to prevent it from interfering with an ongoing left-mouse-button action.
     if (e.button === 1) {
@@ -637,6 +816,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (cropMode) return;
       const point = getTransformedPoint(e.clientX, e.clientY);
       const note = getNoteAtPoint(point);
       if (note) {
@@ -699,6 +879,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   const editingNote = editingNoteId ? notes.find(n => n.id === editingNoteId) : null;
   const selectedImage = useMemo(() => images.find(img => img.id === selectedImageId), [images, selectedImageId]);
+  const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
 
   return (
     <div
@@ -749,7 +930,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           }}
         />
       )}
-       {selectedImage && isImageOverlapping && (
+      {selectedImage && !cropMode && (
         <div
           className="flex items-center space-x-2"
           style={{
@@ -760,13 +941,47 @@ export const Canvas: React.FC<CanvasProps> = ({
             zIndex: 100,
           }}
         >
-          <LayerButton onClick={() => onImageOrderChange(selectedImage.id, 'down')} disabled={!canMoveDown} title="Move Down (Layer Back)">
-            <LayerDownIcon className="w-4 h-4" />
-          </LayerButton>
-          <LayerButton onClick={() => onImageOrderChange(selectedImage.id, 'up')} disabled={!canMoveUp} title="Move Up (Layer Forward)">
-            <LayerUpIcon className="w-4 h-4" />
+          {isImageOverlapping && (
+            <>
+            <LayerButton onClick={() => onImageOrderChange(selectedImage.id, 'down')} disabled={!canMoveDown} title="Move Down (Layer Back)">
+              <LayerDownIcon className="w-4 h-4" />
+            </LayerButton>
+            <LayerButton onClick={() => onImageOrderChange(selectedImage.id, 'up')} disabled={!canMoveUp} title="Move Up (Layer Forward)">
+              <LayerUpIcon className="w-4 h-4" />
+            </LayerButton>
+            </>
+          )}
+          <LayerButton onClick={() => onStartCrop(selectedImage.id)} disabled={false} title="Crop Image">
+            <CropIcon className="w-4 h-4" />
           </LayerButton>
         </div>
+      )}
+      {imageBeingCropped && (
+          <div
+            className="flex items-center space-x-2"
+            style={{
+              position: 'absolute',
+              left: `${(imageBeingCropped.x + imageBeingCropped.width / 2) * scale + pan.x}px`,
+              top: `${(imageBeingCropped.y + imageBeingCropped.height) * scale + pan.y + 10}px`,
+              transform: 'translateX(-50%)',
+              zIndex: 100,
+            }}
+          >
+            <button
+              onClick={onCancelCrop}
+              title="Cancel Crop (Esc)"
+              className="p-2 rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 text-white shadow-lg"
+            >
+              <CancelIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onConfirmCrop}
+              title="Confirm Crop (Enter)"
+              className="p-2 rounded-md transition-colors duration-200 bg-green-600 hover:bg-green-500 text-white shadow-lg"
+            >
+              <ConfirmIcon className="w-4 h-4" />
+            </button>
+          </div>
       )}
       {images.length === 0 && notes.length === 0 && !isDraggingOver && (
          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

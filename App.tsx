@@ -30,6 +30,7 @@ const MAX_HISTORY_SIZE = 30;
 const MAX_REFERENCE_IMAGES = 2;
 
 type AppState = { images: CanvasImage[], paths: Path[], notes: CanvasNote[] };
+type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
 
 const getStateSignature = (state: AppState): string => {
   const imageSignature = state.images.map(img => `${img.id},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height}`).join(';');
@@ -80,6 +81,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
+  const [cropMode, setCropMode] = useState<CropModeState | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevDisplayedNotesLength = useRef(displayedNotes.length);
@@ -207,7 +209,10 @@ export default function App() {
           setEditingNoteId(null);
           handleCommit();
       }
-  }, [editingNoteId, handleCommit]);
+      if(cropMode) {
+        setCropMode(null);
+      }
+  }, [editingNoteId, handleCommit, cropMode]);
 
   const handleGenerate = useCallback(async () => {
     if (!selectedImageId) {
@@ -319,6 +324,75 @@ export default function App() {
     }
   }, [prompt, tool, paths, images, selectedImageId, referenceImageIds, inpaintMode, setState]);
 
+  // Crop handlers
+  const handleStartCrop = useCallback((imageId: string) => {
+    const imageToCrop = displayedImages.find(img => img.id === imageId);
+    if (!imageToCrop) return;
+    setCropMode({
+      imageId: imageId,
+      rect: { x: 0, y: 0, width: imageToCrop.width, height: imageToCrop.height },
+    });
+  }, [displayedImages]);
+
+  const handleCropRectChange = useCallback((rect: { x: number; y: number; width: number; height: number; }) => {
+    setCropMode(prev => prev ? { ...prev, rect } : null);
+  }, []);
+
+  const handleCancelCrop = useCallback(() => {
+    setCropMode(null);
+  }, []);
+
+  const handleConfirmCrop = useCallback(async () => {
+    if (!cropMode) return;
+
+    const originalImage = history[historyIndex].images.find(img => img.id === cropMode.imageId);
+    if (!originalImage) return;
+
+    const { rect } = cropMode;
+    if (rect.width <= 0 || rect.height <= 0) {
+      handleCancelCrop();
+      return;
+    }
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = rect.width;
+    tempCanvas.height = rect.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(
+      originalImage.element,
+      rect.x, rect.y, rect.width, rect.height,
+      0, 0, rect.width, rect.height
+    );
+
+    const croppedImageURL = tempCanvas.toDataURL('image/png');
+    const newImg = new Image();
+    newImg.onload = async () => {
+        const blob = await (await fetch(newImg.src)).blob();
+        const newFile = new File([blob], "cropped_image.png", { type: "image/png" });
+        
+        const updatedImage: CanvasImage = {
+          ...originalImage,
+          element: newImg,
+          x: originalImage.x + rect.x,
+          y: originalImage.y + rect.y,
+          width: newImg.width,
+          height: newImg.height,
+          file: newFile,
+        };
+
+        setState(prevState => ({
+            ...prevState,
+            images: prevState.images.map(img => img.id === originalImage.id ? updatedImage : img),
+        }));
+        setSelectedImageId(originalImage.id);
+        setCropMode(null);
+    };
+    newImg.src = croppedImageURL;
+
+  }, [cropMode, history, historyIndex, setState, handleCancelCrop]);
+
   useEffect(() => {
     // When a new note is added using the Note tool, switch to the free selection tool
     // to prevent accidental creation of multiple notes.
@@ -331,6 +405,11 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (cropMode) {
+        if (e.key === 'Enter') handleConfirmCrop();
+        if (e.key === 'Escape') handleCancelCrop();
+        return;
+      }
       if (editingNoteId) return; // Don't handle shortcuts while editing a note
       const activeEl = document.activeElement;
       if (
@@ -370,10 +449,11 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool, handleToolChange]);
+  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool, handleToolChange, cropMode, handleConfirmCrop, handleCancelCrop]);
   
   useEffect(() => {
     const handleGlobalSubmit = (e: KeyboardEvent) => {
+      if (cropMode) return;
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
 
@@ -393,7 +473,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleGlobalSubmit);
     };
-  }, [isLoading, selectedImageId, prompt, tool, handleGenerate]);
+  }, [isLoading, selectedImageId, prompt, tool, handleGenerate, cropMode]);
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
@@ -575,27 +655,28 @@ export default function App() {
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
       
-      <Toolbar
-        activeTool={tool}
-        onToolChange={handleToolChange}
-        brushSize={brushSize}
-        onBrushSizeChange={setBrushSize}
-        brushColor={brushColor}
-        onBrushColorChange={setBrushColor}
-        onClear={handleClear}
-        onUploadClick={handleUploadClick}
-        inpaintMode={inpaintMode}
-        onInpaintModeChange={setInpaintMode}
-        onUndo={undo}
-        onRedo={redo}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onDownload={handleDownload}
-        isImageSelected={!!selectedImageId}
-        // Fix: Use selectedNoteId state variable instead of undefined noteId
-        isObjectSelected={!!selectedImageId || !!selectedNoteId}
-        onDelete={handleDelete}
-      />
+      {!cropMode && (
+        <Toolbar
+          activeTool={tool}
+          onToolChange={handleToolChange}
+          brushSize={brushSize}
+          onBrushSizeChange={setBrushSize}
+          brushColor={brushColor}
+          onBrushColorChange={setBrushColor}
+          onClear={handleClear}
+          onUploadClick={handleUploadClick}
+          inpaintMode={inpaintMode}
+          onInpaintModeChange={setInpaintMode}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onDownload={handleDownload}
+          isImageSelected={!!selectedImageId}
+          isObjectSelected={!!selectedImageId || !!selectedNoteId}
+          onDelete={handleDelete}
+        />
+      )}
       
       <main className="flex-1 relative">
         <Canvas
@@ -613,6 +694,7 @@ export default function App() {
           referenceImageIds={referenceImageIds}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}
+  
           onCommit={handleCommit}
           onFilesDrop={handleFilesDrop}
           zoomToFitTrigger={zoomToFitTrigger}
@@ -624,6 +706,11 @@ export default function App() {
           isImageOverlapping={isImageOverlapping}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
+          cropMode={cropMode}
+          onStartCrop={handleStartCrop}
+          onCropRectChange={handleCropRectChange}
+          onConfirmCrop={handleConfirmCrop}
+          onCancelCrop={handleCancelCrop}
         />
         <ViewToolbar onZoomToFit={handleZoomToFit} disabled={images.length === 0 && notes.length === 0} />
       </main>
@@ -634,15 +721,17 @@ export default function App() {
             <button onClick={() => setError(null)} className="absolute -top-1 -right-1 text-2xl font-bold bg-red-700 rounded-full h-6 w-6 flex items-center justify-center leading-none">&times;</button>
         </div>
       )}
-
-      <PromptBar
-        prompt={prompt}
-        onPromptChange={setPrompt}
-        onSubmit={handleGenerate}
-        isLoading={isLoading}
-        inputDisabled={!selectedImageId}
-        submitDisabled={!selectedImageId || (tool !== Tool.SELECTION && tool !== Tool.ANNOTATE && tool !== Tool.INPAINT && tool !== Tool.FREE_SELECTION)}
-      />
+      
+      {!cropMode && (
+        <PromptBar
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={handleGenerate}
+          isLoading={isLoading}
+          inputDisabled={!selectedImageId}
+          submitDisabled={!selectedImageId || (tool !== Tool.SELECTION && tool !== Tool.ANNOTATE && tool !== Tool.INPAINT && tool !== Tool.FREE_SELECTION)}
+        />
+      )}
     </div>
   );
 }
