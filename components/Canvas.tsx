@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote } from '../types';
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon } from './Icons';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -33,6 +33,7 @@ interface CanvasProps {
   onStartCrop: (imageId: string) => void;
   onConfirmCrop: () => void;
   onCancelCrop: () => void;
+  onNoteCopy: (noteId: string) => void;
 }
 
 const RESIZE_HANDLE_SIZE = 12;
@@ -42,7 +43,7 @@ const MIN_NOTE_HEIGHT = 50;
 
 type CropAction = 'move' | 'resize-tl' | 'resize-t' | 'resize-tr' | 'resize-r' | 'resize-br' | 'resize-b' | 'resize-bl';
 
-const LayerButton: React.FC<{
+const ActionButton: React.FC<{
   onClick: () => void;
   disabled: boolean;
   title: string;
@@ -52,7 +53,7 @@ const LayerButton: React.FC<{
     onClick={onClick}
     disabled={disabled}
     title={title}
-    className="p-2 rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+    className="p-2.5 rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
   >
     {children}
   </button>
@@ -90,6 +91,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onStartCrop,
   onConfirmCrop,
   onCancelCrop,
+  onNoteCopy,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -877,7 +879,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     onNoteEditEnd();
   }, [onCommit, onNoteEditEnd]);
 
-  const editingNote = editingNoteId ? notes.find(n => n.id === editingNoteId) : null;
+  const editingNote = useMemo(() => editingNoteId ? notes.find(n => n.id === editingNoteId) : null, [notes, editingNoteId]);
+  const selectedNote = useMemo(() => editingNoteId ? null : notes.find(n => n.id === selectedNoteId), [notes, selectedNoteId, editingNoteId]);
   const selectedImage = useMemo(() => images.find(img => img.id === selectedImageId), [images, selectedImageId]);
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
 
@@ -930,30 +933,50 @@ export const Canvas: React.FC<CanvasProps> = ({
           }}
         />
       )}
+      {selectedNote && (
+        <div
+          className="flex items-center space-x-2"
+          style={{
+            position: 'absolute',
+            left: `${(selectedNote.x + selectedNote.width / 2) * scale + pan.x}px`,
+            top: `${(selectedNote.y + selectedNote.height) * scale + pan.y + 14}px`,
+            transform: 'translateX(-50%)',
+            zIndex: 100,
+          }}
+        >
+          <ActionButton
+            onClick={() => onNoteCopy(selectedNote.id)}
+            disabled={!selectedNote.text}
+            title="Copy Text"
+          >
+            <CopyIcon className="w-4 h-4" />
+          </ActionButton>
+        </div>
+      )}
       {selectedImage && !cropMode && (
         <div
           className="flex items-center space-x-2"
           style={{
             position: 'absolute',
             left: `${(selectedImage.x + selectedImage.width / 2) * scale + pan.x}px`,
-            top: `${(selectedImage.y + selectedImage.height) * scale + pan.y + (10)}px`,
+            top: `${(selectedImage.y + selectedImage.height) * scale + pan.y + 14}px`,
             transform: 'translateX(-50%)',
             zIndex: 100,
           }}
         >
           {isImageOverlapping && (
             <>
-            <LayerButton onClick={() => onImageOrderChange(selectedImage.id, 'down')} disabled={!canMoveDown} title="Move Down (Layer Back)">
+            <ActionButton onClick={() => onImageOrderChange(selectedImage.id, 'down')} disabled={!canMoveDown} title="Move Down (Layer Back)">
               <LayerDownIcon className="w-4 h-4" />
-            </LayerButton>
-            <LayerButton onClick={() => onImageOrderChange(selectedImage.id, 'up')} disabled={!canMoveUp} title="Move Up (Layer Forward)">
+            </ActionButton>
+            <ActionButton onClick={() => onImageOrderChange(selectedImage.id, 'up')} disabled={!canMoveUp} title="Move Up (Layer Forward)">
               <LayerUpIcon className="w-4 h-4" />
-            </LayerButton>
+            </ActionButton>
             </>
           )}
-          <LayerButton onClick={() => onStartCrop(selectedImage.id)} disabled={false} title="Crop Image">
+          <ActionButton onClick={() => onStartCrop(selectedImage.id)} disabled={false} title="Crop Image">
             <CropIcon className="w-4 h-4" />
-          </LayerButton>
+          </ActionButton>
         </div>
       )}
       {imageBeingCropped && (
@@ -962,7 +985,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             style={{
               position: 'absolute',
               left: `${(imageBeingCropped.x + imageBeingCropped.width / 2) * scale + pan.x}px`,
-              top: `${(imageBeingCropped.y + imageBeingCropped.height) * scale + pan.y + 10}px`,
+              top: `${(imageBeingCropped.y + imageBeingCropped.height) * scale + pan.y + 14}px`,
               transform: 'translateX(-50%)',
               zIndex: 100,
             }}
@@ -970,14 +993,14 @@ export const Canvas: React.FC<CanvasProps> = ({
             <button
               onClick={onCancelCrop}
               title="Cancel Crop (Esc)"
-              className="p-2 rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 text-white shadow-lg"
+              className="p-2.5 rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 text-white shadow-lg"
             >
               <CancelIcon className="w-4 h-4" />
             </button>
             <button
               onClick={onConfirmCrop}
               title="Confirm Crop (Enter)"
-              className="p-2 rounded-md transition-colors duration-200 bg-green-600 hover:bg-green-500 text-white shadow-lg"
+              className="p-2.5 rounded-md transition-colors duration-200 bg-green-600 hover:bg-green-500 text-white shadow-lg"
             >
               <ConfirmIcon className="w-4 h-4" />
             </button>

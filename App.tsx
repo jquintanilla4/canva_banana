@@ -82,6 +82,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
   const [cropMode, setCropMode] = useState<CropModeState | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevDisplayedNotesLength = useRef(displayedNotes.length);
@@ -146,6 +147,22 @@ export default function App() {
         return { ...prevState, images: newImages };
     });
   }, [setState]);
+
+  const handleNoteCopy = useCallback((noteId: string) => {
+    const note = displayedNotes.find(n => n.id === noteId);
+    if (note && note.text) {
+        navigator.clipboard.writeText(note.text)
+            .then(() => {
+                setToastMessage("Copied to clipboard!");
+                setTimeout(() => setToastMessage(null), 2000);
+            })
+            .catch(err => {
+                console.error('Failed to copy text: ', err);
+                setToastMessage("Failed to copy text.");
+                setTimeout(() => setToastMessage(null), 2000);
+            });
+    }
+  }, [displayedNotes]);
 
   const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{ element: HTMLImageElement; x: number; y: number; file: File; }> => {
     return new Promise((resolve, reject) => {
@@ -711,6 +728,7 @@ export default function App() {
           onCropRectChange={handleCropRectChange}
           onConfirmCrop={handleConfirmCrop}
           onCancelCrop={handleCancelCrop}
+          onNoteCopy={handleNoteCopy}
         />
         <ViewToolbar onZoomToFit={handleZoomToFit} disabled={images.length === 0 && notes.length === 0} />
       </main>
@@ -719,6 +737,12 @@ export default function App() {
         <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-500 text-white p-3 rounded-md shadow-lg z-20 max-w-md text-center">
             <p>{error}</p>
             <button onClick={() => setError(null)} className="absolute -top-1 -right-1 text-2xl font-bold bg-red-700 rounded-full h-6 w-6 flex items-center justify-center leading-none">&times;</button>
+        </div>
+      )}
+      
+      {toastMessage && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-green-500 text-white p-3 rounded-md shadow-lg z-20 max-w-md text-center">
+            <p>{toastMessage}</p>
         </div>
       )}
       

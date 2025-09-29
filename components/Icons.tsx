@@ -1,4 +1,4 @@
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy } from 'react-icons/fa';
 import { IoNuclear } from 'react-icons/io5';
 import { RxCursorArrow } from 'react-icons/rx';
 
@@ -20,3 +20,4 @@ export const LayerUpIcon = FaArrowUp;
 export const LayerDownIcon = FaArrowDown;
 export const ConfirmIcon = FaCheck;
 export const CancelIcon = FaTimes;
+export const CopyIcon = FaCopy;
