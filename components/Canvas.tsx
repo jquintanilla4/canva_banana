@@ -2,12 +2,15 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { Tool, Path, Point, CanvasImage, CanvasNote } from '../types';
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon } from './Icons';
 
+type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
+
 interface CanvasProps {
   images: CanvasImage[];
   onImagesChange: (images: CanvasImage[]) => void;
   notes: CanvasNote[];
   onNotesChange: (notes: CanvasNote[]) => void;
   tool: Tool;
+  appMode: AppMode;
   paths: Path[];
   onPathsChange: (paths: Path[]) => void;
   brushSize: number;
@@ -41,7 +44,8 @@ const CROP_HANDLE_SIZE = 10;
 const MIN_NOTE_WIDTH = 100;
 const MIN_NOTE_HEIGHT = 50;
 
-type CropAction = 'move' | 'resize-tl' | 'resize-t' | 'resize-tr' | 'resize-r' | 'resize-br' | 'resize-b' | 'resize-bl';
+// FIX: Added 'resize-l' to the CropAction type to support left-side cropping and fix a type error.
+type CropAction = 'move' | 'resize-tl' | 'resize-t' | 'resize-tr' | 'resize-r' | 'resize-br' | 'resize-b' | 'resize-bl' | 'resize-l';
 
 const ActionButton: React.FC<{
   onClick: () => void;
@@ -66,6 +70,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   notes,
   onNotesChange,
   tool,
+  appMode,
   paths,
   onPathsChange,
   brushSize,
@@ -411,7 +416,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (checkHandle(point.x, point.y, absX + rect.width / 2, absY)) return 'resize-t';
       if (checkHandle(point.x, point.y, absX + rect.width, absY + rect.height / 2)) return 'resize-r';
       if (checkHandle(point.x, point.y, absX + rect.width / 2, absY + rect.height)) return 'resize-b';
-      if (checkHandle(point.x, point.y, absX, absY + rect.height / 2)) return 'resize-bl';
+      // FIX: The left crop handle was incorrectly returning 'resize-bl'. It now correctly returns 'resize-l'.
+      if (checkHandle(point.x, point.y, absX, absY + rect.height / 2)) return 'resize-l';
       if (point.x > absX && point.x < absX + rect.width && point.y > absY && point.y < absY + rect.height) return 'move';
       
       return null;
@@ -477,8 +483,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 case Tool.PAN: cursor = isPanning ? 'grabbing' : 'grab'; break;
                 case Tool.FREE_SELECTION: cursor = isPanning || isDragging ? 'grabbing' : 'grab'; break;
                 case Tool.NOTE: cursor = 'cell'; break;
-                case Tool.ANNOTATE:
-                case Tool.INPAINT:
+                case Tool.BRUSH:
                 case Tool.ERASE:
                     cursor = 'crosshair'; break;
                 case Tool.SELECTION: cursor = isDragging ? 'grabbing' : 'default'; break;
@@ -607,13 +612,27 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (activeTool === Tool.PAN) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    } else if (activeTool === Tool.ANNOTATE || activeTool === Tool.INPAINT || activeTool === Tool.ERASE) {
+    } else if (activeTool === Tool.BRUSH || activeTool === Tool.ERASE) {
       setIsDrawing(true);
+
+      // FIX: Explicitly type `pathTool` as `Tool` to prevent a type error when assigning
+      // `Tool.ANNOTATE` or `Tool.INPAINT`, which are not part of the inferred `Tool.BRUSH | Tool.ERASE` type.
+      let pathTool: Tool = activeTool;
+      if (activeTool === Tool.BRUSH) {
+        if (appMode === 'ANNOTATE') {
+          pathTool = Tool.ANNOTATE;
+        } else if (appMode === 'INPAINT') {
+          pathTool = Tool.INPAINT;
+        } else {
+          return; // Should not be able to draw with brush in canvas mode.
+        }
+      }
+
       const newPath: Path = {
         points: [point],
         color: brushColor,
         size: brushSize / scale,
-        tool: activeTool,
+        tool: pathTool,
       };
       onPathsChange([...paths, newPath]);
     }
@@ -655,6 +674,10 @@ export const Canvas: React.FC<CanvasProps> = ({
             break;
           case 'resize-bl':
             newRect.x += dx; newRect.width -= dx; newRect.height += dy;
+            break;
+          // FIX: Added missing resize logic for the left crop handle.
+          case 'resize-l':
+            newRect.x += dx; newRect.width -= dx;
             break;
         }
 

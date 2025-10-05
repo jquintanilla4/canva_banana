@@ -3,6 +3,7 @@ export enum Tool {
   PAN = 'PAN',
   ANNOTATE = 'ANNOTATE',
   INPAINT = 'INPAINT',
+  BRUSH = 'BRUSH',
   FREE_SELECTION = 'FREE_SELECTION',
   NOTE = 'NOTE',
   ERASE = 'ERASE',

@@ -36,7 +36,7 @@ export const generateImageEdit = async ({
   inpaintMode,
   referenceImages,
 }: GenerateImageEditParams): Promise<{ imageBase64: string, text: string }> => {
-  const model = 'gemini-2.5-flash-image-preview';
+  const model = 'gemini-2.5-flash-image';
 
   const offscreenCanvas = document.createElement('canvas');
   offscreenCanvas.width = imageDimensions.width;

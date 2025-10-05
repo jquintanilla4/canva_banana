@@ -29,6 +29,7 @@ const ViewToolbar: React.FC<ViewToolbarProps> = ({ onZoomToFit, disabled }) => {
 const MAX_HISTORY_SIZE = 30;
 const MAX_REFERENCE_IMAGES = 2;
 
+type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 type AppState = { images: CanvasImage[], paths: Path[], notes: CanvasNote[] };
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
 
@@ -49,6 +50,7 @@ const isOverlapping = (img1: CanvasImage, img2: CanvasImage): boolean => {
 };
 
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>('CANVAS');
   const [tool, setTool] = useState<Tool>(Tool.PAN);
   const [brushSize, setBrushSize] = useState(20);
   const [brushColor, setBrushColor] = useState('#ff0000');
@@ -110,6 +112,22 @@ export default function App() {
       };
     });
   }, []);
+
+  const handleClear = useCallback(() => {
+    setState(prevState => ({...prevState, paths: [] }));
+  }, [setState]);
+
+  const handleModeChange = useCallback((newMode: AppMode) => {
+    if (newMode === appMode) return;
+
+    setAppMode(newMode);
+    handleClear();
+    if (newMode === 'CANVAS') {
+        setTool(Tool.PAN);
+    } else { // ANNOTATE or INPAINT
+        setTool(Tool.BRUSH);
+    }
+  }, [appMode, handleClear]);
 
   const handleDelete = useCallback(() => {
     if (selectedImageId) {
@@ -242,8 +260,8 @@ export default function App() {
       return;
     }
 
-    if (tool !== Tool.SELECTION && tool !== Tool.ANNOTATE && tool !== Tool.INPAINT && tool !== Tool.FREE_SELECTION) {
-      setError("Please use the Select, Annotate, or Inpaint tool to generate an image.");
+    if (appMode === 'CANVAS' && tool !== Tool.SELECTION && tool !== Tool.FREE_SELECTION) {
+      setError("In Canvas Mode, please use the Select tool to perform a general image edit.");
       return;
     }
 
@@ -253,8 +271,8 @@ export default function App() {
       return;
     }
     
-    if ((tool === Tool.ANNOTATE || tool === Tool.INPAINT) && paths.length === 0) {
-      setError("Please draw on the selected image before generating.");
+    if ((appMode === 'ANNOTATE' || appMode === 'INPAINT') && paths.length === 0) {
+      setError(`Please use the Brush tool to draw ${appMode === 'ANNOTATE' ? 'annotations' : 'an inpaint mask'} before generating.`);
       return;
     }
     
@@ -300,10 +318,12 @@ export default function App() {
         })),
       }));
 
+      const toolForApi = appMode === 'ANNOTATE' ? Tool.ANNOTATE : appMode === 'INPAINT' ? Tool.INPAINT : tool;
+
       const { imageBase64 } = await generateImageEdit({
         prompt,
         image: sourceImageForAPI.element,
-        tool,
+        tool: toolForApi,
         paths: translatedPaths,
         imageDimensions: { width: sourceImageForAPI.width, height: sourceImageForAPI.height },
         mimeType: sourceImageForAPI.file.type,
@@ -339,7 +359,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, tool, paths, images, selectedImageId, referenceImageIds, inpaintMode, setState]);
+  }, [prompt, tool, appMode, paths, images, selectedImageId, referenceImageIds, inpaintMode, setState, handleClear]);
 
   // Crop handlers
   const handleStartCrop = useCallback((imageId: string) => {
@@ -446,8 +466,7 @@ export default function App() {
         case 'v': handleToolChange(Tool.SELECTION); break;
         case 'f': handleToolChange(Tool.FREE_SELECTION); break;
         case 'h': handleToolChange(Tool.PAN); break;
-        case 'b': handleToolChange(Tool.ANNOTATE); break;
-        case 'p': handleToolChange(Tool.INPAINT); break;
+        case 'b': if (appMode !== 'CANVAS') handleToolChange(Tool.BRUSH); break;
         case 'e': handleToolChange(Tool.ERASE); break;
         case 'n': handleToolChange(Tool.NOTE); break;
         case 'delete':
@@ -466,21 +485,22 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool, handleToolChange, cropMode, handleConfirmCrop, handleCancelCrop]);
+  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool, handleToolChange, appMode, cropMode, handleConfirmCrop, handleCancelCrop]);
   
   useEffect(() => {
     const handleGlobalSubmit = (e: KeyboardEvent) => {
       if (cropMode) return;
+
+      const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
+      const submitDisabled = !selectedImageId || 
+        (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
+        (appMode === 'ANNOTATE' && paths.length === 0) ||
+        (appMode === 'INPAINT' && paths.length === 0);
+
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-
-        const isSubmitAllowed =
-          !isLoading &&
-          !!selectedImageId &&
-          prompt.trim().length > 0 &&
-          [Tool.SELECTION, Tool.ANNOTATE, Tool.INPAINT, Tool.FREE_SELECTION].includes(tool);
         
-        if (isSubmitAllowed) {
+        if (!isLoading && !submitDisabled) {
           handleGenerate();
         }
       }
@@ -490,7 +510,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleGlobalSubmit);
     };
-  }, [isLoading, selectedImageId, prompt, tool, handleGenerate, cropMode]);
+  }, [isLoading, selectedImageId, prompt, tool, appMode, paths, handleGenerate, cropMode]);
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
@@ -605,10 +625,6 @@ export default function App() {
     fileInputRef.current?.click();
   };
   
-  const handleClear = () => {
-      setState(prevState => ({...prevState, paths: [] }));
-  }
-
   const handleDownload = useCallback(() => {
     if (!selectedImageId) return;
     const imageToDownload = images.find(img => img.id === selectedImageId);
@@ -668,6 +684,12 @@ export default function App() {
   const canMoveUp = selectedImageIndex > -1 && selectedImageIndex < images.length - 1;
   const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
+  const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
+  const submitDisabled = !selectedImageId || 
+    (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
+    (appMode === 'ANNOTATE' && paths.length === 0) ||
+    (appMode === 'INPAINT' && paths.length === 0);
+
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
@@ -676,6 +698,8 @@ export default function App() {
         <Toolbar
           activeTool={tool}
           onToolChange={handleToolChange}
+          appMode={appMode}
+          onModeChange={handleModeChange}
           brushSize={brushSize}
           onBrushSizeChange={setBrushSize}
           brushColor={brushColor}
@@ -702,6 +726,7 @@ export default function App() {
           notes={displayedNotes}
           onNotesChange={setLiveNotes}
           tool={tool}
+          appMode={appMode}
           paths={displayedPaths}
           onPathsChange={setLivePaths}
           brushSize={brushSize}
@@ -753,7 +778,7 @@ export default function App() {
           onSubmit={handleGenerate}
           isLoading={isLoading}
           inputDisabled={!selectedImageId}
-          submitDisabled={!selectedImageId || (tool !== Tool.SELECTION && tool !== Tool.ANNOTATE && tool !== Tool.INPAINT && tool !== Tool.FREE_SELECTION)}
+          submitDisabled={submitDisabled}
         />
       )}
     </div>
