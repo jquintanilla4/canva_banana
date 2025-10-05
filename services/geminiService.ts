@@ -1,11 +1,18 @@
 import { GoogleGenAI, Modality, Part } from "@google/genai";
 import { Tool, Path, ImageDimensions, InpaintMode } from '../types';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable is not set");
-}
+let cachedClient: GoogleGenAI | null = null;
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ensureClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY environment variable is not set");
+  }
+  if (!cachedClient) {
+    cachedClient = new GoogleGenAI({ apiKey });
+  }
+  return cachedClient;
+};
 
 interface GenerateImageEditParams {
   prompt: string;
@@ -166,7 +173,9 @@ export const generateImageEdit = async ({
     }
   }
 
-  const response = await ai.models.generateContent({
+  const client = ensureClient();
+
+  const response = await client.models.generateContent({
     model,
     contents: { parts },
     config: {

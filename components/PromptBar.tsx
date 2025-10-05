@@ -7,9 +7,20 @@ interface PromptBarProps {
   isLoading: boolean;
   inputDisabled: boolean;
   submitDisabled: boolean;
+  selectedProvider: 'google' | 'fal';
+  onProviderChange: (provider: 'google' | 'fal') => void;
 }
 
-export const PromptBar: React.FC<PromptBarProps> = ({ prompt, onPromptChange, onSubmit, isLoading, inputDisabled, submitDisabled }) => {
+export const PromptBar: React.FC<PromptBarProps> = ({
+  prompt,
+  onPromptChange,
+  onSubmit,
+  isLoading,
+  inputDisabled,
+  submitDisabled,
+  selectedProvider,
+  onProviderChange,
+}) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);
 
@@ -46,6 +57,23 @@ export const PromptBar: React.FC<PromptBarProps> = ({ prompt, onPromptChange, on
           style={{ maxHeight: '200px' }}
           aria-label="Prompt input"
         />
+        <div className="flex items-center space-x-2 pr-2">
+          {(['google', 'fal'] as const).map((provider) => {
+            const isActive = selectedProvider === provider;
+            return (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => onProviderChange(provider)}
+                disabled={isLoading}
+                aria-pressed={isActive}
+                className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors duration-200 ${isActive ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'} disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed`}
+              >
+                {provider === 'google' ? 'Google' : 'FAL'}
+              </button>
+            );
+          })}
+        </div>
         <button
           onClick={onSubmit}
           disabled={isLoading || submitDisabled}

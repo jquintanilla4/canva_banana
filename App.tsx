@@ -3,7 +3,8 @@ import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
 import { Tool, Path, CanvasImage, InpaintMode, Point, CanvasNote } from './types';
-import { generateImageEdit } from './services/geminiService';
+import { generateImageEdit as generateGoogleImageEdit } from './services/geminiService';
+import { generateImageEdit as generateFalImageEdit } from './services/falService';
 import { ZoomToFitIcon } from './components/Icons';
 
 interface ViewToolbarProps {
@@ -85,6 +86,7 @@ export default function App() {
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
   const [cropMode, setCropMode] = useState<CropModeState | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [apiProvider, setApiProvider] = useState<'google' | 'fal'>('google');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevDisplayedNotesLength = useRef(displayedNotes.length);
@@ -320,13 +322,14 @@ export default function App() {
 
       const toolForApi = appMode === 'ANNOTATE' ? Tool.ANNOTATE : appMode === 'INPAINT' ? Tool.INPAINT : tool;
 
-      const { imageBase64 } = await generateImageEdit({
+      const selectedGenerator = apiProvider === 'google' ? generateGoogleImageEdit : generateFalImageEdit;
+
+      const { imageBase64 } = await selectedGenerator({
         prompt,
         image: sourceImageForAPI.element,
         tool: toolForApi,
         paths: translatedPaths,
         imageDimensions: { width: sourceImageForAPI.width, height: sourceImageForAPI.height },
-        mimeType: sourceImageForAPI.file.type,
         inpaintMode,
         referenceImages: referenceImagesForAPI,
       });
@@ -779,6 +782,8 @@ export default function App() {
           isLoading={isLoading}
           inputDisabled={!selectedImageId}
           submitDisabled={submitDisabled}
+          selectedProvider={apiProvider}
+          onProviderChange={setApiProvider}
         />
       )}
     </div>
