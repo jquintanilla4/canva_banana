@@ -1,3 +1,4 @@
+import { fal } from '@fal-ai/client';
 import { Tool, Path, ImageDimensions, InpaintMode } from '../types';
 
 interface GenerateImageEditParams {
@@ -18,11 +19,39 @@ const ensureFalApiKey = () => {
   return key;
 };
 
-const canvasToDataUrl = (canvas: HTMLCanvasElement, mimeType: string = 'image/png'): string => {
-  return canvas.toDataURL(mimeType);
+type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED';
+
+export interface FalQueueUpdate {
+  requestId: string;
+  status: FalQueueStatus;
+  position?: number;
+  eta?: number;
+  logs?: Array<{ message?: string }>;
+  [key: string]: unknown;
+}
+
+interface GenerateImageEditOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+}
+
+const FAL_MODEL_ID = process.env.FAL_MODEL_ID || 'fal-ai/nano-banana/edit';
+
+let falConfigured = false;
+
+const ensureFalClientConfigured = () => {
+  const key = ensureFalApiKey();
+  if (!falConfigured) {
+    const proxyUrl = process.env.FAL_API_URL;
+    fal.config({
+      credentials: key,
+      suppressLocalCredentialsWarning: true,
+      ...(proxyUrl ? { proxyUrl } : {}),
+    });
+    falConfigured = true;
+  }
 };
 
-const imageToDataUrl = (image: HTMLImageElement): string => {
+const imageToCanvas = (image: HTMLImageElement): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
   canvas.width = image.width;
   canvas.height = image.height;
@@ -31,7 +60,29 @@ const imageToDataUrl = (image: HTMLImageElement): string => {
     throw new Error('Unable to create canvas context');
   }
   ctx.drawImage(image, 0, 0);
-  return canvasToDataUrl(canvas);
+  return canvas;
+};
+
+const canvasToBlob = (canvas: HTMLCanvasElement, mimeType: string = 'image/png'): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) {
+        reject(new Error('Failed to convert canvas to Blob.'));
+        return;
+      }
+      resolve(blob);
+    }, mimeType);
+  });
+};
+
+const uploadCanvasToFal = async (canvas: HTMLCanvasElement): Promise<string> => {
+  const blob = await canvasToBlob(canvas);
+  return fal.storage.upload(blob);
+};
+
+const uploadImageElementToFal = async (image: HTMLImageElement): Promise<string> => {
+  const canvas = imageToCanvas(image);
+  return uploadCanvasToFal(canvas);
 };
 
 const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimensions: ImageDimensions) => {
@@ -116,15 +167,8 @@ const buildMaskCanvas = (paths: Path[], dimensions: ImageDimensions) => {
   return canvas;
 };
 
-const resolveFalEndpoint = () => {
-  if (process.env.FAL_API_URL) {
-    return process.env.FAL_API_URL;
-  }
-  return 'https://fal.run/fal-ai/nano-banana/edit';
-};
-
-const collectReferenceDataUrls = (referenceImages: HTMLImageElement[] = []) => {
-  return referenceImages.map(img => imageToDataUrl(img));
+const collectReferenceUploadUrls = async (referenceImages: HTMLImageElement[] = []) => {
+  return Promise.all(referenceImages.map(img => uploadImageElementToFal(img)));
 };
 
 const extractInlineData = async (url: string): Promise<string> => {
@@ -159,28 +203,29 @@ export const generateImageEdit = async ({
   imageDimensions,
   inpaintMode,
   referenceImages,
-}: GenerateImageEditParams): Promise<{ imageBase64: string; text: string }> => {
-  const apiKey = ensureFalApiKey();
+}: GenerateImageEditParams, options: GenerateImageEditOptions = {}): Promise<{ imageBase64: string; text: string; requestId?: string }> => {
+  ensureFalClientConfigured();
 
-  const baseImageDataUrl = imageToDataUrl(image);
-  const imageUrls: string[] = [baseImageDataUrl];
+  const imageUrls: string[] = [];
+
+  const baseImageUrl = await uploadImageElementToFal(image);
+  imageUrls.push(baseImageUrl);
 
   if (tool === Tool.ANNOTATE) {
     const annotationCanvas = buildAnnotationCanvas(image, paths, imageDimensions);
-    imageUrls.push(canvasToDataUrl(annotationCanvas));
+    imageUrls.push(await uploadCanvasToFal(annotationCanvas));
   } else if (tool === Tool.INPAINT) {
     const maskCanvas = buildMaskCanvas(paths, imageDimensions);
-    const maskDataUrl = canvasToDataUrl(maskCanvas);
+    const maskUrl = await uploadCanvasToFal(maskCanvas);
     const modePrefix = inpaintMode === 'STRICT' ? '[REPLACE_ONLY_MASKED_REGION] ' : '';
     prompt = `${modePrefix}${prompt}`;
-    imageUrls.push(maskDataUrl);
+    imageUrls.push(maskUrl);
   }
 
   if (referenceImages && referenceImages.length > 0) {
-    imageUrls.push(...collectReferenceDataUrls(referenceImages));
+    const referenceUrls = await collectReferenceUploadUrls(referenceImages);
+    imageUrls.push(...referenceUrls);
   }
-
-  const endpoint = resolveFalEndpoint();
 
   const body = {
     prompt,
@@ -189,23 +234,25 @@ export const generateImageEdit = async ({
     sync_mode: true,
   };
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Key ${apiKey}`,
-      'Content-Type': 'application/json',
+  let latestRequestId: string | undefined;
+
+  const result = await fal.subscribe(FAL_MODEL_ID, {
+    input: body,
+    logs: true,
+    onQueueUpdate: update => {
+      const queueUpdate = update as FalQueueUpdate;
+      if (queueUpdate.requestId) {
+        latestRequestId = queueUpdate.requestId;
+      }
+      options.onQueueUpdate?.({
+        ...queueUpdate,
+        requestId: queueUpdate.requestId || latestRequestId || '',
+      });
     },
-    body: JSON.stringify(body),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`FAL API error: ${errorText || response.statusText}`);
-  }
-
-  const result = await response.json();
-
-  const images: Array<{ url: string }> | undefined = result?.images;
+  const data = result?.data as { images?: Array<{ url: string }>; description?: string } | undefined;
+  const images = data?.images;
   if (!images || images.length === 0) {
     throw new Error('Fal.ai API did not return an image.');
   }
@@ -216,7 +263,9 @@ export const generateImageEdit = async ({
     throw new Error('Failed to extract image data from Fal.ai response.');
   }
 
-  const description: string = typeof result?.description === 'string' ? result.description : '';
+  const description: string = typeof data?.description === 'string' ? data.description : '';
 
-  return { imageBase64: base64, text: description };
+  const requestId = result?.requestId || latestRequestId;
+
+  return { imageBase64: base64, text: description, requestId };
 };

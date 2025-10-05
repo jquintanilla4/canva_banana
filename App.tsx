@@ -4,7 +4,9 @@ import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
 import { Tool, Path, CanvasImage, InpaintMode, Point, CanvasNote } from './types';
 import { generateImageEdit as generateGoogleImageEdit } from './services/geminiService';
-import { generateImageEdit as generateFalImageEdit } from './services/falService';
+import { generateImageEdit as generateFalImageEdit, type FalQueueUpdate } from './services/falService';
+import { FalQueuePanel } from './components/FalQueuePanel';
+import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon } from './components/Icons';
 
 interface ViewToolbarProps {
@@ -14,11 +16,11 @@ interface ViewToolbarProps {
 
 const ViewToolbar: React.FC<ViewToolbarProps> = ({ onZoomToFit, disabled }) => {
   return (
-    <div className="absolute bottom-4 right-4 z-10 p-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex flex-col items-center space-y-2">
+    <div className="absolute bottom-4 right-4 z-10 flex flex-col items-center space-y-2">
       <button
         onClick={onZoomToFit}
         disabled={disabled}
-        className="p-2 rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        className="p-2 rounded-md border-none outline-none focus:outline-none focus:ring-0 shadow-none transition-colors duration-200 bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
         title="Zoom to Fit (.)"
       >
         <ZoomToFitIcon className="w-5 h-5" />
@@ -48,6 +50,36 @@ const isOverlapping = (img1: CanvasImage, img2: CanvasImage): boolean => {
         img1.y > img2.y + img2.height ||
         img1.y + img1.height < img2.y
     );
+};
+
+const mapFalStatusToJobStatus = (status: FalQueueUpdate['status'] | undefined): FalJobStatus => {
+  switch (status) {
+    case 'IN_PROGRESS':
+      return 'IN_PROGRESS';
+    case 'COMPLETED':
+      return 'COMPLETED';
+    case 'FAILED':
+    case 'CANCELLED':
+    case 'CANCELED':
+      return 'FAILED';
+    default:
+      return 'IN_QUEUE';
+  }
+};
+
+const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['logs']): string[] => {
+  if (!updateLogs || updateLogs.length === 0) {
+    return existing;
+  }
+
+  const next = [...existing];
+  updateLogs.forEach(log => {
+    const message = typeof log?.message === 'string' ? log.message.trim() : '';
+    if (message && !next.includes(message)) {
+      next.push(message);
+    }
+  });
+  return next;
 };
 
 export default function App() {
@@ -87,6 +119,7 @@ export default function App() {
   const [cropMode, setCropMode] = useState<CropModeState | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [apiProvider, setApiProvider] = useState<'google' | 'fal'>('google');
+  const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevDisplayedNotesLength = useRef(displayedNotes.length);
@@ -184,6 +217,10 @@ export default function App() {
     }
   }, [displayedNotes]);
 
+  const handleDismissFalJob = useCallback((jobId: string) => {
+    setFalJobs(prev => prev.filter(job => job.id !== jobId));
+  }, []);
+
   const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{ element: HTMLImageElement; x: number; y: number; file: File; }> => {
     return new Promise((resolve, reject) => {
       if (imagesToCompose.length === 0) {
@@ -253,65 +290,81 @@ export default function App() {
 
   const handleGenerate = useCallback(async () => {
     if (!selectedImageId) {
-      setError("Please select an image to edit.");
+      setError('Please select an image to edit.');
       return;
     }
-    
+
     if (!prompt) {
-      setError("Please write a prompt to describe your edit.");
+      setError('Please write a prompt to describe your edit.');
       return;
     }
 
     if (appMode === 'CANVAS' && tool !== Tool.SELECTION && tool !== Tool.FREE_SELECTION) {
-      setError("In Canvas Mode, please use the Select tool to perform a general image edit.");
+      setError('In Canvas Mode, please use the Select tool to perform a general image edit.');
       return;
     }
 
     const primaryImage = images.find(img => img.id === selectedImageId);
     if (!primaryImage) {
-      setError("Selected image not found. Please select another image.");
+      setError('Selected image not found. Please select another image.');
       return;
     }
-    
+
     if ((appMode === 'ANNOTATE' || appMode === 'INPAINT') && paths.length === 0) {
       setError(`Please use the Brush tool to draw ${appMode === 'ANNOTATE' ? 'annotations' : 'an inpaint mask'} before generating.`);
       return;
     }
-    
-    setIsLoading(true);
+
+    const usingFal = apiProvider === 'fal';
+    const falJobId = usingFal ? crypto.randomUUID() : null;
+
+    if (usingFal && falJobId) {
+      const newJob: FalQueueJob = {
+        id: falJobId,
+        prompt,
+        status: 'IN_QUEUE',
+        logs: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setFalJobs(prev => [...prev.slice(-9), newJob]);
+    } else {
+      setIsLoading(true);
+    }
+
     setError(null);
 
     try {
       const referenceCanvasImages = referenceImageIds
         .map(id => images.find(img => img.id === id))
         .filter((img): img is CanvasImage => !!img);
-      
+
       const allSelectedImages = [primaryImage, ...referenceCanvasImages];
 
-      const shouldCompose = referenceCanvasImages.length > 0 && 
-                            referenceCanvasImages.some(refImg => isOverlapping(primaryImage, refImg));
-      
-      let sourceImageForAPI: { 
-        element: HTMLImageElement; 
-        x: number; 
-        y: number; 
-        width: number; 
-        height: number; 
+      const shouldCompose = referenceCanvasImages.length > 0 &&
+        referenceCanvasImages.some(refImg => isOverlapping(primaryImage, refImg));
+
+      let sourceImageForAPI: {
+        element: HTMLImageElement;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
         file: File;
       };
       let referenceImagesForAPI: HTMLImageElement[] = [];
 
       if (shouldCompose) {
-          const imageIdsToCompose = allSelectedImages.map(img => img.id);
-          const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
-          const { element, x, y, file } = await rasterizeImages(imagesToCompose);
-          sourceImageForAPI = { element, x, y, width: element.width, height: element.height, file };
-          referenceImagesForAPI = [];
+        const imageIdsToCompose = allSelectedImages.map(img => img.id);
+        const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
+        const { element, x, y, file } = await rasterizeImages(imagesToCompose);
+        sourceImageForAPI = { element, x, y, width: element.width, height: element.height, file };
+        referenceImagesForAPI = [];
       } else {
-          sourceImageForAPI = primaryImage;
-          referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
+        sourceImageForAPI = primaryImage;
+        referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
       }
-      
+
       const translatedPaths = paths.map(path => ({
         ...path,
         points: path.points.map(point => ({
@@ -322,9 +375,7 @@ export default function App() {
 
       const toolForApi = appMode === 'ANNOTATE' ? Tool.ANNOTATE : appMode === 'INPAINT' ? Tool.INPAINT : tool;
 
-      const selectedGenerator = apiProvider === 'google' ? generateGoogleImageEdit : generateFalImageEdit;
-
-      const { imageBase64 } = await selectedGenerator({
+      const basePayload = {
         prompt,
         image: sourceImageForAPI.element,
         tool: toolForApi,
@@ -332,37 +383,105 @@ export default function App() {
         imageDimensions: { width: sourceImageForAPI.width, height: sourceImageForAPI.height },
         inpaintMode,
         referenceImages: referenceImagesForAPI,
-      });
+      } as const;
+
+      let generationResult: { imageBase64: string; text: string; requestId?: string };
+
+      if (usingFal) {
+        if (!falJobId) {
+          throw new Error('Unable to create Fal job identifier.');
+        }
+
+        const falResult = await generateFalImageEdit(basePayload, {
+          onQueueUpdate: (update) => {
+            setFalJobs(prev => prev.map(job => {
+              if (job.id !== falJobId) {
+                return job;
+              }
+
+              const status = mapFalStatusToJobStatus(update.status);
+              return {
+                ...job,
+                status,
+                requestId: update.requestId || job.requestId,
+                logs: mergeFalLogMessages(job.logs, update.logs),
+                updatedAt: Date.now(),
+              };
+            }));
+          },
+        });
+
+        generationResult = falResult;
+
+        setFalJobs(prev => prev.map(job => {
+          if (job.id !== falJobId) {
+            return job;
+          }
+          if (job.status === 'FAILED') {
+            return job;
+          }
+          return {
+            ...job,
+            status: 'COMPLETED',
+            requestId: falResult.requestId || job.requestId,
+            description: falResult.text,
+            updatedAt: Date.now(),
+          };
+        }));
+      } else {
+        generationResult = await generateGoogleImageEdit({
+          ...basePayload,
+          mimeType: sourceImageForAPI.file.type || 'image/png',
+        });
+      }
 
       const newImg = new Image();
       newImg.onload = async () => {
-          const blob = await (await fetch(newImg.src)).blob();
-          const newFile = new File([blob], "generated_image.png", { type: "image/png" });
-          const newCanvasImage: CanvasImage = {
-            id: crypto.randomUUID(),
-            element: newImg,
-            x: sourceImageForAPI.x + sourceImageForAPI.width + 20, // 20px padding
-            y: sourceImageForAPI.y,
-            width: newImg.width,
-            height: newImg.height,
-            file: newFile,
-          };
-          setState(prevState => ({
-            ...prevState,
-            images: [...prevState.images, newCanvasImage],
-          }));
-          setSelectedImageId(newCanvasImage.id);
-          setReferenceImageIds([]);
-      }
-      newImg.src = `data:image/png;base64,${imageBase64}`;
+        const blob = await (await fetch(newImg.src)).blob();
+        const newFile = new File([blob], 'generated_image.png', { type: 'image/png' });
+        const newCanvasImage: CanvasImage = {
+          id: crypto.randomUUID(),
+          element: newImg,
+          x: sourceImageForAPI.x + sourceImageForAPI.width + 20,
+          y: sourceImageForAPI.y,
+          width: newImg.width,
+          height: newImg.height,
+          file: newFile,
+        };
+        setState(prevState => ({
+          ...prevState,
+          images: [...prevState.images, newCanvasImage],
+        }));
+        setSelectedImageId(newCanvasImage.id);
+        setReferenceImageIds([]);
+      };
+      newImg.src = `data:image/png;base64,${generationResult.imageBase64}`;
 
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      const message = err instanceof Error ? err.message : 'An unknown error occurred.';
+
+      if (usingFal && falJobId) {
+        setFalJobs(prev => prev.map(job => {
+          if (job.id !== falJobId) {
+            return job;
+          }
+          return {
+            ...job,
+            status: 'FAILED',
+            error: message,
+            updatedAt: Date.now(),
+          };
+        }));
+      }
+
+      setError(message);
     } finally {
-      setIsLoading(false);
+      if (!usingFal) {
+        setIsLoading(false);
+      }
     }
-  }, [prompt, tool, appMode, paths, images, selectedImageId, referenceImageIds, inpaintMode, setState, handleClear]);
+  }, [selectedImageId, prompt, appMode, tool, images, referenceImageIds, paths, apiProvider, inpaintMode, setState]);
 
   // Crop handlers
   const handleStartCrop = useCallback((imageId: string) => {
@@ -773,6 +892,26 @@ export default function App() {
             <p>{toastMessage}</p>
         </div>
       )}
+
+      <FalQueuePanel jobs={falJobs} onDismiss={handleDismissFalJob} />
+
+      <div className="absolute bottom-4 left-4 z-20 flex items-center space-x-2">
+        {(['google', 'fal'] as const).map((provider) => {
+          const isActive = apiProvider === provider;
+          return (
+            <button
+              key={provider}
+              type="button"
+              onClick={() => setApiProvider(provider)}
+              disabled={isLoading}
+              aria-pressed={isActive}
+              className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors duration-200 ${isActive ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'} disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed`}
+            >
+              {provider === 'google' ? 'Google' : 'FAL'}
+            </button>
+          );
+        })}
+      </div>
       
       {!cropMode && (
         <PromptBar
@@ -782,8 +921,6 @@ export default function App() {
           isLoading={isLoading}
           inputDisabled={!selectedImageId}
           submitDisabled={submitDisabled}
-          selectedProvider={apiProvider}
-          onProviderChange={setApiProvider}
         />
       )}
     </div>

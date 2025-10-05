@@ -1,24 +1,31 @@
+import React from 'react';
 import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush } from 'react-icons/fa';
 import { IoNuclear } from 'react-icons/io5';
 import { RxCursorArrow } from 'react-icons/rx';
+import type { IconBaseProps } from 'react-icons';
 
-export const SelectionIcon = FaMousePointer;
-export const PanIcon = FaHandPaper;
-export const FreeSelectionIcon = RxCursorArrow;
-export const AnnotateIcon = FaPencilAlt;
-export const InpaintIcon = FaMagic;
-export const EraseIcon = FaEraser;
-export const NoteIcon = FaStickyNote;
-export const BrushIcon = FaPaintBrush;
-export const CropIcon = FaCropAlt;
-export const ClearIcon = IoNuclear;
-export const UndoIcon = FaUndo;
-export const RedoIcon = FaRedo;
-export const DownloadIcon = FaDownload;
-export const DeleteIcon = FaTrash;
-export const ZoomToFitIcon = FaExpandAlt;
-export const LayerUpIcon = FaArrowUp;
-export const LayerDownIcon = FaArrowDown;
-export const ConfirmIcon = FaCheck;
-export const CancelIcon = FaTimes;
-export const CopyIcon = FaCopy;
+// Extend IconBaseProps to include className
+interface IconProps extends IconBaseProps {
+  className?: string;
+}
+
+export const SelectionIcon = FaMousePointer as React.FC<IconProps>;
+export const PanIcon = FaHandPaper as React.FC<IconProps>;
+export const FreeSelectionIcon = RxCursorArrow as React.FC<IconProps>;
+export const AnnotateIcon = FaPencilAlt as React.FC<IconProps>;
+export const InpaintIcon = FaMagic as React.FC<IconProps>;
+export const EraseIcon = FaEraser as React.FC<IconProps>;
+export const NoteIcon = FaStickyNote as React.FC<IconProps>;
+export const BrushIcon = FaPaintBrush as React.FC<IconProps>;
+export const CropIcon = FaCropAlt as React.FC<IconProps>;
+export const ClearIcon = IoNuclear as React.FC<IconProps>;
+export const UndoIcon = FaUndo as React.FC<IconProps>;
+export const RedoIcon = FaRedo as React.FC<IconProps>;
+export const DownloadIcon = FaDownload as React.FC<IconProps>;
+export const DeleteIcon = FaTrash as React.FC<IconProps>;
+export const ZoomToFitIcon = FaExpandAlt as React.FC<IconProps>;
+export const LayerUpIcon = FaArrowUp as React.FC<IconProps>;
+export const LayerDownIcon = FaArrowDown as React.FC<IconProps>;
+export const ConfirmIcon = FaCheck as React.FC<IconProps>;
+export const CancelIcon = FaTimes as React.FC<IconProps>;
+export const CopyIcon = FaCopy as React.FC<IconProps>;

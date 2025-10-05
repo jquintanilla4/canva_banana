@@ -47,3 +47,17 @@ export interface CanvasNote {
   text: string;
   backgroundColor: string;
 }
+
+export type FalJobStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+
+export interface FalQueueJob {
+  id: string;
+  prompt: string;
+  status: FalJobStatus;
+  requestId?: string;
+  logs: string[];
+  description?: string;
+  error?: string;
+  createdAt: number;
+  updatedAt: number;
+}

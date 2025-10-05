@@ -1,5 +1,5 @@
 {
-  "name": "canva-banana-🍌",
+  "name": "canva-banana-\ud83c\udf4c",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,6 +12,7 @@
     "react-dom": "^19.1.1",
     "react": "^19.1.1",
     "@google/genai": "^1.20.0",
+    "@fal-ai/client": "^1.6.2",
     "react-icons": "^5.2.1"
   },
   "devDependencies": {
