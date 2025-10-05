@@ -32,9 +32,11 @@ export interface FalQueueUpdate {
 
 interface GenerateImageEditOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
+  modelId?: string;
 }
 
 const FAL_MODEL_ID = process.env.FAL_MODEL_ID || 'fal-ai/nano-banana/edit';
+const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit';
 
 let falConfigured = false;
 
@@ -227,7 +229,13 @@ export const generateImageEdit = async ({
     imageUrls.push(...referenceUrls);
   }
 
-  const body = {
+  const body: {
+    prompt: string;
+    image_urls: string[];
+    output_format: 'png';
+    sync_mode: true;
+    image_size?: { width: number; height: number };
+  } = {
     prompt,
     image_urls: imageUrls,
     output_format: 'png' as const,
@@ -236,7 +244,16 @@ export const generateImageEdit = async ({
 
   let latestRequestId: string | undefined;
 
-  const result = await fal.subscribe(FAL_MODEL_ID, {
+  const modelId = options.modelId || FAL_MODEL_ID;
+
+  if (modelId === SEEDREAM_MODEL_ID) {
+    body.image_size = {
+      width: imageDimensions.width,
+      height: imageDimensions.height,
+    };
+  }
+
+  const result = await fal.subscribe(modelId, {
     input: body,
     logs: true,
     onQueueUpdate: update => {

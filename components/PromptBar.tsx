@@ -1,4 +1,10 @@
 import React, { useRef, useEffect } from 'react';
+import { ChevronDownIcon } from './Icons';
+
+interface ModelOption {
+  value: string;
+  label: string;
+}
 
 interface PromptBarProps {
   prompt: string;
@@ -7,6 +13,10 @@ interface PromptBarProps {
   isLoading: boolean;
   inputDisabled: boolean;
   submitDisabled: boolean;
+  modelOptions: ModelOption[];
+  selectedModel: string;
+  onModelChange: (modelId: string) => void;
+  modelSelectDisabled: boolean;
 }
 
 export const PromptBar: React.FC<PromptBarProps> = ({
@@ -16,6 +26,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   isLoading,
   inputDisabled,
   submitDisabled,
+  modelOptions,
+  selectedModel,
+  onModelChange,
+  modelSelectDisabled,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);
@@ -40,8 +54,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   }, [isLoading, inputDisabled]);
 
   return (
-    <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-4 p-2 w-full max-w-4xl">
-      <div className="relative bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex items-center space-x-2 py-2 pl-2 pr-3">
+    <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-4 p-2 w-full max-w-[64rem]">
+      <div className="relative bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex items-center py-2 pl-2 pr-3">
         <textarea
           ref={textareaRef}
           value={prompt}
@@ -49,10 +63,30 @@ export const PromptBar: React.FC<PromptBarProps> = ({
           placeholder={inputDisabled ? "Upload or select an image to begin editing..." : "Describe your edit... (Cmd/Ctrl + Enter to generate)"}
           disabled={inputDisabled || isLoading}
           rows={3}
-          className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none px-2 resize-none overflow-y-auto"
+          className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-2 mr-12 resize-none overflow-y-auto"
           style={{ maxHeight: '200px' }}
           aria-label="Prompt input"
         />
+        <div className="relative flex items-center mr-[10px]">
+          <label className="sr-only" htmlFor="model-select">
+            Select image edit model
+          </label>
+          <select
+            id="model-select"
+            value={selectedModel}
+            onChange={(e) => onModelChange(e.target.value)}
+            disabled={modelSelectDisabled}
+            className="bg-transparent text-white px-1 pr-6 py-1 text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
+            aria-label="Select image edit model"
+          >
+            {modelOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon className="pointer-events-none absolute right-0 text-white/80" aria-hidden="true" />
+        </div>
         <button
           onClick={onSubmit}
           disabled={isLoading || submitDisabled}

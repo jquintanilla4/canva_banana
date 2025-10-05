@@ -9,6 +9,21 @@ import { FalQueuePanel } from './components/FalQueuePanel';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon } from './components/Icons';
 
+const FAL_MODEL_OPTIONS = [
+  { value: 'fal-ai/nano-banana/edit', label: 'Nano Banana' },
+  { value: 'fal-ai/bytedance/seedream/v4/edit', label: 'Seedream v4' },
+] as const;
+
+type FalModelId = typeof FAL_MODEL_OPTIONS[number]['value'];
+
+const isFalModelId = (value: string | undefined): value is FalModelId => {
+  return typeof value === 'string' && FAL_MODEL_OPTIONS.some(option => option.value === value);
+};
+
+const DEFAULT_FAL_MODEL_ID: FalModelId = isFalModelId(process.env.FAL_MODEL_ID)
+  ? process.env.FAL_MODEL_ID
+  : 'fal-ai/nano-banana/edit';
+
 interface ViewToolbarProps {
   onZoomToFit: () => void;
   disabled: boolean;
@@ -120,6 +135,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [apiProvider, setApiProvider] = useState<'google' | 'fal'>('google');
   const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
+  const [falModelId, setFalModelId] = useState<FalModelId>(DEFAULT_FAL_MODEL_ID);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevDisplayedNotesLength = useRef(displayedNotes.length);
@@ -393,6 +409,7 @@ export default function App() {
         }
 
         const falResult = await generateFalImageEdit(basePayload, {
+          modelId: falModelId,
           onQueueUpdate: (update) => {
             setFalJobs(prev => prev.map(job => {
               if (job.id !== falJobId) {
@@ -921,6 +938,14 @@ export default function App() {
           isLoading={isLoading}
           inputDisabled={!selectedImageId}
           submitDisabled={submitDisabled}
+          modelOptions={FAL_MODEL_OPTIONS}
+          selectedModel={falModelId}
+          onModelChange={(modelId) => {
+            if (isFalModelId(modelId)) {
+              setFalModelId(modelId);
+            }
+          }}
+          modelSelectDisabled={apiProvider !== 'fal' || isLoading}
         />
       )}
     </div>
