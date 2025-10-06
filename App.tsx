@@ -190,6 +190,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [apiProvider, setApiProvider] = useState<'google' | 'fal'>('google');
   const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
+  const falAutoDismissTimeouts = useRef<Map<string, number>>(new Map());
   const [falModelId, setFalModelId] = useState<FalModelId>(DEFAULT_FAL_MODEL_ID);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('default');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
@@ -313,7 +314,51 @@ export default function App() {
   }, [displayedNotes]);
 
   const handleDismissFalJob = useCallback((jobId: string) => {
+    const timeoutId = falAutoDismissTimeouts.current.get(jobId);
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+      falAutoDismissTimeouts.current.delete(jobId);
+    }
+
     setFalJobs(prev => prev.filter(job => job.id !== jobId));
+  }, [setFalJobs]);
+
+  useEffect(() => {
+    const timeoutMap = falAutoDismissTimeouts.current;
+
+    timeoutMap.forEach((timeoutId, jobId) => {
+      const job = falJobs.find(j => j.id === jobId);
+      if (!job || job.status !== 'COMPLETED') {
+        window.clearTimeout(timeoutId);
+        timeoutMap.delete(jobId);
+      }
+    });
+
+    falJobs.forEach(job => {
+      if (job.status !== 'COMPLETED') {
+        return;
+      }
+
+      if (timeoutMap.has(job.id)) {
+        return;
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        timeoutMap.delete(job.id);
+        setFalJobs(prev => prev.filter(j => j.id !== job.id));
+      }, 1000);
+
+      timeoutMap.set(job.id, timeoutId);
+    });
+  }, [falJobs, setFalJobs]);
+
+  useEffect(() => {
+    return () => {
+      falAutoDismissTimeouts.current.forEach(timeoutId => {
+        window.clearTimeout(timeoutId);
+      });
+      falAutoDismissTimeouts.current.clear();
+    };
   }, []);
 
   const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{ element: HTMLImageElement; x: number; y: number; file: File; }> => {
@@ -500,7 +545,7 @@ export default function App() {
           throw new Error('Unable to create Fal job identifier.');
         }
 
-        const falResult = await generateFalImageEdit(basePayload, {
+          const falResult = await generateFalImageEdit(basePayload, {
           modelId: falModelId,
           onQueueUpdate: (update) => {
             setFalJobs(prev => prev.map(job => {
@@ -620,6 +665,7 @@ export default function App() {
             updatedAt: Date.now(),
           };
         }));
+
       }
 
       setError(message);

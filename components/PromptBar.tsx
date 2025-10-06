@@ -66,8 +66,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   }, [isLoading, inputDisabled]);
 
   return (
-    <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.2rem] p-[0.72rem] w-full max-w-[69.1rem]">
-      <div className="relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex items-end gap-[1.1rem] py-[0.95rem] pl-[0.83rem] pr-[1.15rem]">
+    <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.02rem] p-[0.61rem] w-full max-w-[69.1rem]">
+      <div className="relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex items-end gap-[1.1rem] py-[0.81rem] pl-[0.83rem] pr-[1.15rem]">
         <div className="flex flex-1 flex-col">
           <textarea
             ref={textareaRef}
@@ -76,11 +76,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             placeholder={inputDisabled ? "Upload or select an image to begin editing..." : "Describe your edit... (Cmd/Ctrl + Enter to generate)"}
             disabled={inputDisabled || isLoading}
             rows={3}
-            className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.4rem] resize-none overflow-y-auto"
-            style={{ minHeight: '108px', maxHeight: '317px' }}
+            className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto"
+            style={{ minHeight: '92px', maxHeight: '269px' }}
             aria-label="Prompt input"
           />
-          <div className="flex flex-col gap-2 mt-[0.55rem] ml-[0.5rem]">
+          <div className="flex flex-col gap-2 mt-[0.47rem] ml-[0.5rem]">
             <div className="relative flex flex-wrap items-center gap-3">
               <div className="relative">
                 <label className="sr-only" htmlFor="model-select">
@@ -91,7 +91,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                   value={selectedModel}
                   onChange={(e) => onModelChange(e.target.value)}
                   disabled={modelSelectDisabled}
-                  className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.4rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
+                  className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
                   aria-label="Select image edit model"
                 >
                   {modelOptions.map(option => (
@@ -112,7 +112,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     value={control.value}
                     onChange={(e) => control.onChange(e.target.value)}
                     disabled={control.disabled}
-                    className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.4rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
+                    className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
                     aria-label={control.ariaLabel}
                   >
                     {control.options.map(option => (
@@ -137,15 +137,15 @@ export const PromptBar: React.FC<PromptBarProps> = ({
           aria-label="Generate"
           onClick={onSubmit}
           disabled={isLoading || submitDisabled}
-          className="h-[3.1rem] w-[3.1rem] bg-green-600 text-white font-semibold rounded-full transition-all duration-200 ease-in-out disabled:bg-gray-500 disabled:cursor-not-allowed hover:bg-green-500 flex items-center justify-center"
+          className="h-[2.64rem] w-[2.64rem] bg-green-600 text-white font-semibold rounded-full transition-all duration-200 ease-in-out disabled:bg-gray-500 disabled:cursor-not-allowed hover:bg-green-500 flex items-center justify-center"
         >
           {isLoading ? (
-            <svg className="animate-spin h-[1.3rem] w-[1.3rem] text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin h-[1.1rem] w-[1.1rem] text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
           ) : (
-            <LayerUpIcon className="h-[1.3rem] w-[1.3rem] text-white" aria-hidden="true" />
+            <LayerUpIcon className="h-[1.1rem] w-[1.1rem] text-white" aria-hidden="true" />
           )}
         </button>
       </div>
