@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tool, InpaintMode } from '../types';
-import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon } from './Icons';
+import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon } from './Icons';
 
 type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 
@@ -25,6 +25,9 @@ interface ToolbarProps {
   isImageSelected: boolean;
   isObjectSelected: boolean;
   onDelete: () => void;
+  onRemoveBackground: () => void;
+  isBackgroundRemovalDisabled: boolean;
+  isBackgroundRemovalLoading: boolean;
 }
 
 const ToolButton: React.FC<{
@@ -102,6 +105,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isImageSelected,
   isObjectSelected,
   onDelete,
+  onRemoveBackground,
+  isBackgroundRemovalDisabled,
+  isBackgroundRemovalLoading,
 }) => {
   return (
     <header className="absolute top-0 left-1/2 -translate-x-1/2 z-10 mt-4 p-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex items-center space-x-4">
@@ -190,6 +196,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <div className="flex items-center space-x-2">
         <button onClick={onUploadClick} className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-md transition-colors">
           Upload Image
+        </button>
+        <button
+          onClick={onRemoveBackground}
+          disabled={isBackgroundRemovalDisabled}
+          className="p-2 rounded-md transition-colors duration-200 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
+          title="Remove Background"
+          aria-label="Remove Background"
+        >
+          {isBackgroundRemovalLoading ? (
+            <svg className="h-5 w-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          ) : (
+            <RemoveBackgroundIcon className="w-5 h-5" />
+          )}
         </button>
         <ToolButton label="Download Selected Image" onClick={onDownload} disabled={!isImageSelected} isActive={false}>
           <DownloadIcon className="w-5 h-5" />

@@ -325,3 +325,52 @@ export const generateImageEdit = async ({
 
   return { imageBase64: primaryBase64, imagesBase64: base64List, text: description, requestId };
 };
+
+interface RemoveBackgroundOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+}
+
+export const removeBackground = async (
+  image: HTMLImageElement,
+  options: RemoveBackgroundOptions = {},
+): Promise<{ imageBase64: string; requestId?: string }> => {
+  ensureFalClientConfigured();
+
+  const imageUrl = await uploadImageElementToFal(image);
+
+  let latestRequestId: string | undefined;
+
+  const result = await fal.subscribe('fal-ai/bria/background/remove', {
+    input: {
+      image_url: imageUrl,
+      sync_mode: true,
+    },
+    logs: true,
+    onQueueUpdate: update => {
+      const queueUpdate = update as FalQueueUpdate;
+      if (queueUpdate.requestId) {
+        latestRequestId = queueUpdate.requestId;
+      }
+      options.onQueueUpdate?.({
+        ...queueUpdate,
+        requestId: queueUpdate.requestId || latestRequestId || '',
+      });
+    },
+  });
+
+  const data = result?.data as { image?: { url?: string } } | undefined;
+  const outputUrl = data?.image?.url;
+  if (!outputUrl) {
+    throw new Error('Fal.ai background removal API did not return an image.');
+  }
+
+  const inlineData = await extractInlineData(outputUrl);
+  const base64 = inlineData.split(',')[1];
+  if (!base64) {
+    throw new Error('Failed to extract image data from background removal response.');
+  }
+
+  const requestId = result?.requestId || latestRequestId;
+
+  return { imageBase64: base64, requestId };
+};

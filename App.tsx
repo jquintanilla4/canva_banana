@@ -13,7 +13,7 @@ import {
   FalAspectRatioOption,
 } from './types';
 import { generateImageEdit as generateGoogleImageEdit } from './services/geminiService';
-import { generateImageEdit as generateFalImageEdit, type FalQueueUpdate } from './services/falService';
+import { generateImageEdit as generateFalImageEdit, removeBackground as removeFalBackground, type FalQueueUpdate } from './services/falService';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon } from './components/Icons';
@@ -152,6 +152,15 @@ const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['lo
   return next;
 };
 
+const loadImageFromDataUrl = (dataUrl: string): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image.'));
+    img.src = dataUrl;
+  });
+};
+
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('CANVAS');
   const [tool, setTool] = useState<Tool>(Tool.PAN);
@@ -184,6 +193,7 @@ export default function App() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [referenceImageIds, setReferenceImageIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
   const [cropMode, setCropMode] = useState<CropModeState | null>(null);
@@ -602,15 +612,6 @@ export default function App() {
         });
       }
 
-      const loadImageFromDataUrl = (dataUrl: string): Promise<HTMLImageElement> => {
-        return new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error('Failed to load generated image.'));
-          img.src = dataUrl;
-        });
-      };
-
       const generatedBase64Images = generationResult.imagesBase64.length > 0
         ? generationResult.imagesBase64
         : [generationResult.imageBase64];
@@ -690,6 +691,85 @@ export default function App() {
     falAspectRatioSelection,
     falNumImages,
     primaryImage,
+  ]);
+
+  const handleBackgroundRemoval = useCallback(async () => {
+    if (!selectedImageId) {
+      setError('Please select an image to remove the background.');
+      return;
+    }
+
+    if (!primaryImage) {
+      setError('Selected image not found. Please select another image.');
+      return;
+    }
+
+    setError(null);
+    setIsRemovingBackground(true);
+
+    try {
+      const removalResult = await removeFalBackground(primaryImage.element);
+      const dataUrl = `data:image/png;base64,${removalResult.imageBase64}`;
+      const element = await loadImageFromDataUrl(dataUrl);
+      const blob = await (await fetch(dataUrl)).blob();
+
+      const originalName = primaryImage.file?.name || 'image.png';
+      const baseName = originalName.includes('.')
+        ? originalName.slice(0, originalName.lastIndexOf('.'))
+        : originalName;
+      const fileName = `${baseName || 'image'}_no_bg.png`;
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      const targetX = primaryImage.x + primaryImage.width + 20;
+      const spacing = 20;
+      const existingImages = displayedImages;
+      let offsetMultiplier = 0;
+      let placementY = primaryImage.y;
+      const maxAttempts = existingImages.length + 10;
+
+      const createCandidate = (y: number): CanvasImage => ({
+        id: 'candidate',
+        element,
+        x: targetX,
+        y,
+        width: element.width,
+        height: element.height,
+        file,
+      });
+
+      while (
+        offsetMultiplier <= maxAttempts &&
+        existingImages.some(img => isOverlapping(img, createCandidate(placementY)))
+      ) {
+        offsetMultiplier += 1;
+        placementY = primaryImage.y + offsetMultiplier * (element.height + spacing);
+      }
+
+      const newImage: CanvasImage = {
+        ...createCandidate(placementY),
+        id: crypto.randomUUID(),
+      };
+
+      setState(prevState => ({
+        ...prevState,
+        images: [...prevState.images, newImage],
+      }));
+
+      setSelectedImageId(newImage.id);
+      setSelectedNoteId(null);
+      setReferenceImageIds([]);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Failed to remove background.';
+      setError(message);
+    } finally {
+      setIsRemovingBackground(false);
+    }
+  }, [
+    selectedImageId,
+    primaryImage,
+    displayedImages,
+    setState,
   ]);
 
   // Crop handlers
@@ -1112,6 +1192,9 @@ export default function App() {
           isImageSelected={!!selectedImageId}
           isObjectSelected={!!selectedImageId || !!selectedNoteId}
           onDelete={handleDelete}
+          onRemoveBackground={handleBackgroundRemoval}
+          isBackgroundRemovalDisabled={!selectedImageId || isRemovingBackground || isLoading}
+          isBackgroundRemovalLoading={isRemovingBackground}
         />
       )}
       
