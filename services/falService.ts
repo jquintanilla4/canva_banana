@@ -216,7 +216,7 @@ export const generateImageEdit = async ({
   imageDimensions,
   inpaintMode,
   referenceImages,
-}: GenerateImageEditParams, options: GenerateImageEditOptions = {}): Promise<{ imageBase64: string; text: string; requestId?: string }> => {
+}: GenerateImageEditParams, options: GenerateImageEditOptions = {}): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => {
   ensureFalClientConfigured();
 
   const imageUrls: string[] = [];
@@ -305,9 +305,17 @@ export const generateImageEdit = async ({
     throw new Error('Fal.ai API did not return an image.');
   }
 
-  const inlineData = await extractInlineData(images[0].url);
-  const base64 = inlineData.split(',')[1];
-  if (!base64) {
+  const inlineDataList = await Promise.all(images.map(image => extractInlineData(image.url)));
+  const base64List = inlineDataList.map(dataUrl => {
+    const base64 = dataUrl.split(',')[1];
+    if (!base64) {
+      throw new Error('Failed to extract image data from Fal.ai response.');
+    }
+    return base64;
+  });
+
+  const [primaryBase64] = base64List;
+  if (!primaryBase64) {
     throw new Error('Failed to extract image data from Fal.ai response.');
   }
 
@@ -315,5 +323,5 @@ export const generateImageEdit = async ({
 
   const requestId = result?.requestId || latestRequestId;
 
-  return { imageBase64: base64, text: description, requestId };
+  return { imageBase64: primaryBase64, imagesBase64: base64List, text: description, requestId };
 };

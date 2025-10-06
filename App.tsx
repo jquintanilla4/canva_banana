@@ -493,7 +493,7 @@ export default function App() {
         referenceImages: referenceImagesForAPI,
       } as const;
 
-      let generationResult: { imageBase64: string; text: string; requestId?: string };
+      let generationResult: { imageBase64: string; imagesBase64: string[]; text: string; requestId?: string };
 
       if (usingFal) {
         if (!falJobId) {
@@ -557,27 +557,52 @@ export default function App() {
         });
       }
 
-      const newImg = new Image();
-      newImg.onload = async () => {
-        const blob = await (await fetch(newImg.src)).blob();
-        const newFile = new File([blob], 'generated_image.png', { type: 'image/png' });
-        const newCanvasImage: CanvasImage = {
+      const loadImageFromDataUrl = (dataUrl: string): Promise<HTMLImageElement> => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('Failed to load generated image.'));
+          img.src = dataUrl;
+        });
+      };
+
+      const generatedBase64Images = generationResult.imagesBase64.length > 0
+        ? generationResult.imagesBase64
+        : [generationResult.imageBase64];
+
+      const generatedCanvasImages: CanvasImage[] = [];
+      let yOffset = 0;
+      const targetX = sourceImageForAPI.x + sourceImageForAPI.width + 20;
+
+      for (let index = 0; index < generatedBase64Images.length; index += 1) {
+        const base64 = generatedBase64Images[index];
+        const dataUrl = `data:image/png;base64,${base64}`;
+        const element = await loadImageFromDataUrl(dataUrl);
+        const blob = await (await fetch(dataUrl)).blob();
+        const fileSuffix = generatedBase64Images.length === 1 ? '' : `_${index + 1}`;
+        const file = new File([blob], `generated_image${fileSuffix}.png`, { type: 'image/png' });
+
+        generatedCanvasImages.push({
           id: crypto.randomUUID(),
-          element: newImg,
-          x: sourceImageForAPI.x + sourceImageForAPI.width + 20,
-          y: sourceImageForAPI.y,
-          width: newImg.width,
-          height: newImg.height,
-          file: newFile,
-        };
+          element,
+          x: targetX,
+          y: sourceImageForAPI.y + yOffset,
+          width: element.width,
+          height: element.height,
+          file,
+        });
+
+        yOffset += element.height + 20;
+      }
+
+      if (generatedCanvasImages.length > 0) {
         setState(prevState => ({
           ...prevState,
-          images: [...prevState.images, newCanvasImage],
+          images: [...prevState.images, ...generatedCanvasImages],
         }));
-        setSelectedImageId(newCanvasImage.id);
-        setReferenceImageIds([]);
-      };
-      newImg.src = `data:image/png;base64,${generationResult.imageBase64}`;
+        setSelectedImageId(generatedCanvasImages[0].id);
+      }
+      setReferenceImageIds([]);
 
     } catch (err) {
       console.error(err);

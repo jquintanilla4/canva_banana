@@ -42,7 +42,7 @@ export const generateImageEdit = async ({
   mimeType,
   inpaintMode,
   referenceImages,
-}: GenerateImageEditParams): Promise<{ imageBase64: string, text: string }> => {
+}: GenerateImageEditParams): Promise<{ imageBase64: string; imagesBase64: string[]; text: string }> => {
   const model = 'gemini-2.5-flash-image';
 
   const offscreenCanvas = document.createElement('canvas');
@@ -198,5 +198,5 @@ export const generateImageEdit = async ({
     throw new Error("API did not return an image.");
   }
 
-  return { imageBase64: resultImageBase64, text: resultText };
+  return { imageBase64: resultImageBase64, imagesBase64: [resultImageBase64], text: resultText };
 };
