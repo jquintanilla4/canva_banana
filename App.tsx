@@ -1,20 +1,75 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
-import { Tool, Path, CanvasImage, InpaintMode, Point, CanvasNote } from './types';
+import {
+  Tool,
+  Path,
+  CanvasImage,
+  InpaintMode,
+  Point,
+  CanvasNote,
+  FalImageSizePreset,
+  FalAspectRatioOption,
+} from './types';
 import { generateImageEdit as generateGoogleImageEdit } from './services/geminiService';
 import { generateImageEdit as generateFalImageEdit, type FalQueueUpdate } from './services/falService';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon } from './components/Icons';
 
+const NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
+const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
+
 const FAL_MODEL_OPTIONS = [
-  { value: 'fal-ai/nano-banana/edit', label: 'Nano Banana' },
-  { value: 'fal-ai/bytedance/seedream/v4/edit', label: 'Seedream v4' },
+  { value: NANO_BANANA_MODEL_ID, label: 'Nano Banana' },
+  { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
+] as const;
+
+type FalImageSizeSelectionValue = 'default' | FalImageSizePreset;
+
+type FalAspectRatioSelectionValue = FalAspectRatioOption;
+
+const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
+  { value: 'default', label: 'Match Source' },
+  { value: 'square_hd', label: 'Square HD' },
+  { value: 'square', label: 'Square' },
+  { value: 'portrait_4_3', label: 'Portrait 4:3' },
+  { value: 'portrait_16_9', label: 'Portrait 16:9' },
+  { value: 'landscape_4_3', label: 'Landscape 4:3' },
+  { value: 'landscape_16_9', label: 'Landscape 16:9' },
+  { value: 'auto', label: 'Auto' },
+  { value: 'auto_2K', label: 'Auto 2K' },
+  { value: 'auto_4K', label: 'Auto 4K' },
+] as const;
+
+const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
+
+const FAL_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+  { value: 'default', label: 'Match Source' },
+  { value: '21:9', label: '21:9' },
+  { value: '1:1', label: '1:1' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:2', label: '3:2' },
+  { value: '2:3', label: '2:3' },
+  { value: '5:4', label: '5:4' },
+  { value: '4:5', label: '4:5' },
+  { value: '3:4', label: '3:4' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
 ] as const;
 
 type FalModelId = typeof FAL_MODEL_OPTIONS[number]['value'];
+
+type PromptBarModelControl = {
+  id: string;
+  ariaLabel: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  errorMessage?: string;
+};
 
 const isFalModelId = (value: string | undefined): value is FalModelId => {
   return typeof value === 'string' && FAL_MODEL_OPTIONS.some(option => option.value === value);
@@ -22,7 +77,7 @@ const isFalModelId = (value: string | undefined): value is FalModelId => {
 
 const DEFAULT_FAL_MODEL_ID: FalModelId = isFalModelId(process.env.FAL_MODEL_ID)
   ? process.env.FAL_MODEL_ID
-  : 'fal-ai/nano-banana/edit';
+  : NANO_BANANA_MODEL_ID;
 
 interface ViewToolbarProps {
   onZoomToFit: () => void;
@@ -136,6 +191,30 @@ export default function App() {
   const [apiProvider, setApiProvider] = useState<'google' | 'fal'>('google');
   const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
   const [falModelId, setFalModelId] = useState<FalModelId>(DEFAULT_FAL_MODEL_ID);
+  const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('default');
+  const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
+  const [falNumImages, setFalNumImages] = useState(1);
+
+  const primaryImage = useMemo(() => {
+    return images.find(img => img.id === selectedImageId) || null;
+  }, [images, selectedImageId]);
+
+  const handleFalImageSizeChange = useCallback((value: string) => {
+    setFalImageSizeSelection(value as FalImageSizeSelectionValue);
+  }, []);
+
+  const handleFalAspectRatioChange = useCallback((value: string) => {
+    setFalAspectRatioSelection(value as FalAspectRatioSelectionValue);
+  }, []);
+
+  const handleFalNumImagesChange = useCallback((value: number) => {
+    if (!Number.isFinite(value)) {
+      setFalNumImages(1);
+      return;
+    }
+    const clamped = Math.min(4, Math.max(1, Math.floor(value)));
+    setFalNumImages(clamped);
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevDisplayedNotesLength = useRef(displayedNotes.length);
@@ -320,10 +399,23 @@ export default function App() {
       return;
     }
 
-    const primaryImage = images.find(img => img.id === selectedImageId);
     if (!primaryImage) {
       setError('Selected image not found. Please select another image.');
       return;
+    }
+
+    const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
+    const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
+    const isNumImagesInvalid =
+      !Number.isFinite(falNumImages) ||
+      falNumImages < 1 ||
+      falNumImages > 4;
+
+    if (apiProvider === 'fal' && (isSeedreamModel || isNanoModel)) {
+      if (isNumImagesInvalid) {
+        setError('Number of images must be between 1 and 4.');
+        return;
+      }
     }
 
     if ((appMode === 'ANNOTATE' || appMode === 'INPAINT') && paths.length === 0) {
@@ -426,6 +518,19 @@ export default function App() {
               };
             }));
           },
+          ...(isSeedreamModel
+            ? {
+                imageSize: falImageSizeSelection === 'default'
+                  ? 'default'
+                  : falImageSizeSelection,
+              }
+            : {}),
+          ...(isNanoModel
+            ? {
+                aspectRatio: falAspectRatioSelection,
+              }
+            : {}),
+          numImages: Math.min(4, Math.max(1, Math.floor(falNumImages))),
         });
 
         generationResult = falResult;
@@ -498,7 +603,23 @@ export default function App() {
         setIsLoading(false);
       }
     }
-  }, [selectedImageId, prompt, appMode, tool, images, referenceImageIds, paths, apiProvider, inpaintMode, setState]);
+  }, [
+    selectedImageId,
+    prompt,
+    appMode,
+    tool,
+    images,
+    referenceImageIds,
+    paths,
+    apiProvider,
+    inpaintMode,
+    setState,
+    falModelId,
+    falImageSizeSelection,
+    falAspectRatioSelection,
+    falNumImages,
+    primaryImage,
+  ]);
 
   // Crop handlers
   const handleStartCrop = useCallback((imageId: string) => {
@@ -631,10 +752,19 @@ export default function App() {
       if (cropMode) return;
 
       const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
+      const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
+      const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
+      const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isNanoModel);
+      const isNumImagesInvalid =
+        !Number.isFinite(falNumImages) ||
+        falNumImages < 1 ||
+        falNumImages > 4;
+
       const submitDisabled = !selectedImageId || 
         (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
         (appMode === 'ANNOTATE' && paths.length === 0) ||
-        (appMode === 'INPAINT' && paths.length === 0);
+        (appMode === 'INPAINT' && paths.length === 0) ||
+        (shouldValidateFalOptions && isNumImagesInvalid);
 
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -649,7 +779,18 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleGlobalSubmit);
     };
-  }, [isLoading, selectedImageId, prompt, tool, appMode, paths, handleGenerate, cropMode]);
+  }, [
+    isLoading,
+    selectedImageId,
+    tool,
+    appMode,
+    paths,
+    handleGenerate,
+    cropMode,
+    apiProvider,
+    falModelId,
+    falNumImages,
+  ]);
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
@@ -824,10 +965,55 @@ export default function App() {
   const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
   const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
+  const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
+  const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
+  const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isNanoModel);
+  const isNumImagesInvalid =
+    !Number.isFinite(falNumImages) ||
+    falNumImages < 1 ||
+    falNumImages > 4;
+
   const submitDisabled = !selectedImageId || 
     (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
     (appMode === 'ANNOTATE' && paths.length === 0) ||
-    (appMode === 'INPAINT' && paths.length === 0);
+    (appMode === 'INPAINT' && paths.length === 0) ||
+    (shouldValidateFalOptions && isNumImagesInvalid);
+
+  const disableFalModelInputs = isLoading || apiProvider !== 'fal';
+
+  const falModelControls: ReadonlyArray<PromptBarModelControl> | undefined = (isSeedreamModel || isNanoModel)
+    ? [
+        ...(isSeedreamModel
+          ? [{
+              id: 'fal-image-size-select',
+              ariaLabel: 'Select Seedream image size',
+              options: FAL_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+              value: falImageSizeSelection,
+              onChange: handleFalImageSizeChange,
+              disabled: disableFalModelInputs,
+            }]
+          : []),
+        ...(isNanoModel
+          ? [{
+              id: 'fal-aspect-ratio-select',
+              ariaLabel: 'Select Nano Banana aspect ratio',
+              options: FAL_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+              value: falAspectRatioSelection,
+              onChange: handleFalAspectRatioChange,
+              disabled: disableFalModelInputs,
+            }]
+          : []),
+        {
+          id: 'fal-num-images-select',
+          ariaLabel: 'Select number of images to generate',
+          options: FAL_NUM_IMAGE_OPTIONS.map(option => ({ value: `${option}`, label: `${option}` })),
+          value: falNumImages.toString(),
+          onChange: (value: string) => handleFalNumImagesChange(Number(value)),
+          disabled: disableFalModelInputs,
+          errorMessage: shouldValidateFalOptions && isNumImagesInvalid ? 'Num images must be between 1 and 4.' : undefined,
+        },
+      ]
+    : undefined;
 
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
@@ -912,23 +1098,25 @@ export default function App() {
 
       <FalQueuePanel jobs={falJobs} onDismiss={handleDismissFalJob} />
 
-      <div className="absolute bottom-4 left-4 z-20 flex items-center space-x-2">
-        {(['google', 'fal'] as const).map((provider) => {
-          const isActive = apiProvider === provider;
-          return (
-            <button
-              key={provider}
-              type="button"
-              onClick={() => setApiProvider(provider)}
-              disabled={isLoading}
-              aria-pressed={isActive}
-              className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors duration-200 ${isActive ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'} disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed`}
-            >
-              {provider === 'google' ? 'Google' : 'FAL'}
-            </button>
-          );
-        })}
-      </div>
+      {!cropMode && (
+        <div className="absolute bottom-4 left-4 z-20 flex items-center space-x-2">
+          {(['google', 'fal'] as const).map((provider) => {
+            const isActive = apiProvider === provider;
+            return (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => setApiProvider(provider)}
+                disabled={isLoading}
+                aria-pressed={isActive}
+                className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors duration-200 ${isActive ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'} disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed`}
+              >
+                {provider === 'google' ? 'Google' : 'FAL'}
+              </button>
+            );
+          })}
+        </div>
+      )}
       
       {!cropMode && (
         <PromptBar
@@ -946,6 +1134,7 @@ export default function App() {
             }
           }}
           modelSelectDisabled={apiProvider !== 'fal' || isLoading}
+          modelControls={falModelControls}
         />
       )}
     </div>

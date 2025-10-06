@@ -28,6 +28,33 @@ export interface ImageDimensions {
   height: number;
 }
 
+export type FalImageSizePreset =
+  | 'square_hd'
+  | 'square'
+  | 'portrait_4_3'
+  | 'portrait_16_9'
+  | 'landscape_4_3'
+  | 'landscape_16_9'
+  | 'auto'
+  | 'auto_2K'
+  | 'auto_4K';
+
+export type FalImageSizeOption = 'default' | FalImageSizePreset;
+
+export type FalAspectRatioPreset =
+  | '21:9'
+  | '1:1'
+  | '4:3'
+  | '3:2'
+  | '2:3'
+  | '5:4'
+  | '4:5'
+  | '3:4'
+  | '16:9'
+  | '9:16';
+
+export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
+
 export interface CanvasImage {
   id: string;
   element: HTMLImageElement;

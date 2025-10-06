@@ -1,5 +1,12 @@
 import { fal } from '@fal-ai/client';
-import { Tool, Path, ImageDimensions, InpaintMode } from '../types';
+import {
+  Tool,
+  Path,
+  ImageDimensions,
+  InpaintMode,
+  FalImageSizeOption,
+  FalAspectRatioOption,
+} from '../types';
 
 interface GenerateImageEditParams {
   prompt: string;
@@ -33,10 +40,14 @@ export interface FalQueueUpdate {
 interface GenerateImageEditOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
   modelId?: string;
+  imageSize?: FalImageSizeOption;
+  aspectRatio?: FalAspectRatioOption;
+  numImages?: number;
 }
 
 const FAL_MODEL_ID = process.env.FAL_MODEL_ID || 'fal-ai/nano-banana/edit';
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit';
+const NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit';
 
 let falConfigured = false;
 
@@ -234,7 +245,9 @@ export const generateImageEdit = async ({
     image_urls: string[];
     output_format: 'png';
     sync_mode: true;
-    image_size?: { width: number; height: number };
+    image_size?: { width: number; height: number } | string;
+    num_images?: number;
+    aspect_ratio?: string;
   } = {
     prompt,
     image_urls: imageUrls,
@@ -245,12 +258,30 @@ export const generateImageEdit = async ({
   let latestRequestId: string | undefined;
 
   const modelId = options.modelId || FAL_MODEL_ID;
+  const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
+  const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
+  const numImagesOption = options.numImages;
 
   if (modelId === SEEDREAM_MODEL_ID) {
-    body.image_size = {
-      width: imageDimensions.width,
-      height: imageDimensions.height,
-    };
+    if (imageSizeOption === 'default') {
+      body.image_size = {
+        width: imageDimensions.width,
+        height: imageDimensions.height,
+      };
+    } else {
+      body.image_size = imageSizeOption;
+    }
+  } else if (modelId === NANO_BANANA_MODEL_ID) {
+    if (aspectRatioOption !== 'default') {
+      body.aspect_ratio = aspectRatioOption;
+    }
+  }
+
+  if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+    const normalized = Math.min(4, Math.max(1, Math.floor(numImagesOption)));
+    if (normalized >= 1) {
+      body.num_images = normalized;
+    }
   }
 
   const result = await fal.subscribe(modelId, {
