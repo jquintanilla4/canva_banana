@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload } from 'react-icons/fa';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
 import { RxCursorArrow } from 'react-icons/rx';
 import type { IconBaseProps } from 'react-icons';
@@ -31,3 +31,4 @@ export const CancelIcon = FaTimes as React.FC<IconProps>;
 export const CopyIcon = FaCopy as React.FC<IconProps>;
 export const ChevronDownIcon = FaChevronDown as React.FC<IconProps>;
 export const RemoveBackgroundIcon = IoSparkles as React.FC<IconProps>;
+export const UploadIcon = FaUpload as React.FC<IconProps>;

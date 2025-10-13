@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tool, InpaintMode } from '../types';
-import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon } from './Icons';
+import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon } from './Icons';
 
 type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 
@@ -39,7 +39,7 @@ const ToolButton: React.FC<{
 }> = ({ label, isActive, onClick, children, disabled }) => (
   <button
     onClick={onClick}
-    className={`p-2 rounded-md transition-colors duration-200 ${
+    className={`flex h-10 w-10 items-center justify-center rounded-md transition-colors duration-200 ${
       isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
     } disabled:opacity-50 disabled:cursor-not-allowed`}
     title={label}
@@ -57,7 +57,7 @@ const ModeButton: React.FC<{
 }> = ({ label, isActive, onClick, children }) => (
   <button
     onClick={onClick}
-    className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors duration-200 ${
+    className={`flex h-10 items-center px-4 text-sm font-semibold rounded-md transition-colors duration-200 ${
       isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
     }`}
     title={label}
@@ -74,7 +74,7 @@ const ToggleButton: React.FC<{
 }> = ({ label, isActive, onClick, children }) => (
   <button
     onClick={onClick}
-    className={`px-3 py-1 text-xs rounded-md transition-colors duration-200 ${
+    className={`flex h-8 items-center px-3 text-xs rounded-md transition-colors duration-200 ${
       isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
     }`}
     title={label}
@@ -110,14 +110,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isBackgroundRemovalLoading,
 }) => {
   return (
-    <header className="absolute top-0 left-1/2 -translate-x-1/2 z-10 mt-4 p-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex items-center space-x-4">
-      <div className="flex items-center space-x-2 border-r border-gray-600 pr-4">
+    <header className="absolute top-0 left-1/2 -translate-x-1/2 z-10 mt-4 px-3 py-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex h-14 items-center space-x-4">
+      <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
         <ModeButton label="Canvas Mode" isActive={appMode === 'CANVAS'} onClick={() => onModeChange('CANVAS')}>Canvas</ModeButton>
         <ModeButton label="Annotate Mode" isActive={appMode === 'ANNOTATE'} onClick={() => onModeChange('ANNOTATE')}>Annotate</ModeButton>
         <ModeButton label="Inpaint Mode" isActive={appMode === 'INPAINT'} onClick={() => onModeChange('INPAINT')}>Inpaint</ModeButton>
       </div>
 
-      <div className="flex items-center space-x-2 border-r border-gray-600 pr-4">
+      <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
         <ToolButton label="Select (V)" isActive={activeTool === Tool.SELECTION} onClick={() => onToolChange(Tool.SELECTION)}>
           <SelectionIcon className="w-5 h-5" />
         </ToolButton>
@@ -138,13 +138,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </ToolButton>
         <button
           onClick={onClear}
-          className="p-2 bg-red-600 hover:bg-red-500 rounded-md transition-colors"
+          className="flex h-10 w-10 items-center justify-center bg-red-600 hover:bg-red-500 rounded-md transition-colors"
           title="Clear Drawings"
         >
           <ClearIcon className="w-5 h-5" />
         </button>
         {appMode === 'INPAINT' && (
-            <div className="flex items-center space-x-1 pl-2 border-l border-gray-700">
+            <div className="flex h-full items-center space-x-1 pl-2 border-l border-gray-700">
                 <ToggleButton label="Strict Mode" isActive={inpaintMode === 'STRICT'} onClick={() => onInpaintModeChange('STRICT')}>
                     S
                 </ToggleButton>
@@ -155,7 +155,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         )}
       </div>
 
-      <div className="flex items-center space-x-2 border-r border-gray-600 pr-4">
+      <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
           <ToolButton label="Undo" onClick={onUndo} disabled={!canUndo} isActive={false}>
               <UndoIcon className="w-5 h-5" />
           </ToolButton>
@@ -165,8 +165,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       {(activeTool === Tool.BRUSH || activeTool === Tool.ERASE) && (
-        <div className="flex items-center space-x-4 border-r border-gray-600 pr-4">
-          <div className="flex items-center space-x-2">
+        <div className="flex h-full items-center space-x-4 border-r border-gray-600 pr-4">
+          <div className="flex h-full items-center space-x-2">
             <label htmlFor="brushSize" className="text-xs text-gray-300">Size</label>
             <input
               id="brushSize"
@@ -175,32 +175,29 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               max="100"
               value={brushSize}
               onChange={(e) => onBrushSizeChange(Number(e.target.value))}
-              className="w-24 accent-blue-500"
+              className="w-24 h-2 accent-blue-500"
             />
           </div>
           {activeTool === Tool.BRUSH && appMode === 'ANNOTATE' && (
-            <div className="flex items-center space-x-2">
+            <div className="flex h-full items-center space-x-2">
               <label htmlFor="brushColor" className="text-xs text-gray-300">Color</label>
               <input
                 id="brushColor"
                 type="color"
                 value={brushColor}
                 onChange={(e) => onBrushColorChange(e.target.value)}
-                className="w-8 h-8 p-0 border-none rounded-md bg-transparent cursor-pointer"
+                className="w-10 h-10 p-0 border-none rounded-md bg-transparent cursor-pointer"
               />
             </div>
           )}
         </div>
       )}
       
-      <div className="flex items-center space-x-2">
-        <button onClick={onUploadClick} className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-md transition-colors">
-          Upload Image
-        </button>
+      <div className="flex h-full items-center space-x-2">
         <button
           onClick={onRemoveBackground}
           disabled={isBackgroundRemovalDisabled}
-          className="p-2 rounded-md transition-colors duration-200 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
+          className="flex h-10 w-10 items-center justify-center rounded-md transition-colors duration-200 bg-purple-600 hover:bg-purple-500 text-white disabled:bg-gray-700 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
           title="Remove Background"
           aria-label="Remove Background"
         >
@@ -213,13 +210,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <RemoveBackgroundIcon className="w-5 h-5" />
           )}
         </button>
+        <button
+          onClick={onUploadClick}
+          className="flex h-10 w-10 items-center justify-center rounded-md transition-colors duration-200 bg-blue-600 hover:bg-blue-500 text-white"
+          title="Upload Image"
+          aria-label="Upload Image"
+        >
+          <UploadIcon className="w-5 h-5" />
+        </button>
         <ToolButton label="Download Selected Image" onClick={onDownload} disabled={!isImageSelected} isActive={false}>
           <DownloadIcon className="w-5 h-5" />
         </ToolButton>
         <button
           onClick={onDelete}
           disabled={!isObjectSelected}
-          className="p-2 rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex h-10 w-10 items-center justify-center rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
           title="Delete Selected Object (Delete/Backspace)"
         >
           <DeleteIcon className="w-5 h-5" />
