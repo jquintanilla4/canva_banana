@@ -127,6 +127,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   const prevZoomToFitTrigger = useRef(zoomToFitTrigger);
   const prevImagesLength = useRef(images.length);
+  const scaleRef = useRef(scale);
+  const panRef = useRef(pan);
   
   const currentTool = temporaryTool || tool;
 
@@ -429,6 +431,55 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
     prevZoomToFitTrigger.current = zoomToFitTrigger;
   }, [zoomToFitTrigger, zoomToFit]);
+
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+
+      const rect = container.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      const scaleFactor = 1.1;
+      const currentScale = scaleRef.current;
+      const currentPan = panRef.current;
+
+      const nextScale = event.deltaY < 0 ? currentScale * scaleFactor : currentScale / scaleFactor;
+      const clampedScale = Math.max(0.1, Math.min(nextScale, 10));
+      const scaleRatio = currentScale === 0 ? 1 : clampedScale / currentScale;
+
+      const updatedPan = {
+        x: mouseX - (mouseX - currentPan.x) * scaleRatio,
+        y: mouseY - (mouseY - currentPan.y) * scaleRatio,
+      };
+
+      scaleRef.current = clampedScale;
+      panRef.current = updatedPan;
+
+      setScale(clampedScale);
+      setPan(updatedPan);
+    };
+
+    // Attach a non-passive wheel listener so we can prevent the browser's default scroll.
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -849,31 +900,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
   };
 
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if(!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const scaleFactor = 1.1;
-    let newScale;
-    if (e.deltaY < 0) {
-      newScale = scale * scaleFactor;
-    } else {
-      newScale = scale / scaleFactor;
-    }
-    newScale = Math.max(0.1, Math.min(newScale, 10));
-
-    const newPanX = mouseX - (mouseX - pan.x) * (newScale / scale);
-    const newPanY = mouseY - (mouseY - pan.y) * (newScale / scale);
-
-    setScale(newScale);
-    setPan({ x: newPanX, y: newPanY });
-  };
-  
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -920,7 +946,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onDoubleClick={handleDoubleClick}
-      onWheel={handleWheel}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

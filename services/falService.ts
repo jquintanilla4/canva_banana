@@ -240,27 +240,30 @@ export const generateImageEdit = async ({
     imageUrls.push(...referenceUrls);
   }
 
+  const modelId = options.modelId || FAL_MODEL_ID;
+  const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
+  const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
+  const numImagesOption = options.numImages;
+
   const body: {
     prompt: string;
     image_urls: string[];
-    output_format: 'png';
-    sync_mode: true;
+    output_format?: 'png';
+    sync_mode: boolean;
     image_size?: { width: number; height: number } | string;
     num_images?: number;
     aspect_ratio?: string;
   } = {
     prompt,
     image_urls: imageUrls,
-    output_format: 'png' as const,
-    sync_mode: true,
+    sync_mode: modelId !== SEEDREAM_MODEL_ID,
   };
 
-  let latestRequestId: string | undefined;
+  if (modelId !== SEEDREAM_MODEL_ID) {
+    body.output_format = 'png';
+  }
 
-  const modelId = options.modelId || FAL_MODEL_ID;
-  const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
-  const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
-  const numImagesOption = options.numImages;
+  let latestRequestId: string | undefined;
 
   if (modelId === SEEDREAM_MODEL_ID) {
     if (imageSizeOption === 'default') {
