@@ -43,6 +43,8 @@ const RESIZE_HANDLE_SIZE = 12;
 const CROP_HANDLE_SIZE = 10;
 const MIN_NOTE_WIDTH = 100;
 const MIN_NOTE_HEIGHT = 50;
+const MIN_SCALE = 0.001; // allow zooming far out to keep huge layouts visible
+const MAX_SCALE = 10;
 
 // FIX: Added 'resize-l' to the CropAction type to support left-side cropping and fix a type error.
 type CropAction = 'move' | 'resize-tl' | 'resize-t' | 'resize-tr' | 'resize-r' | 'resize-br' | 'resize-b' | 'resize-bl' | 'resize-l';
@@ -208,6 +210,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       currentY += lineHeight;
     });
   };
+
+  const setPanSmoothly = useCallback((nextPan: Point) => {
+    panRef.current = nextPan;
+    setPan(nextPan);
+    return nextPan;
+  }, []);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -421,9 +429,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     const newPanX = canvasWidth / 2 - bboxCenterX * newScale;
     const newPanY = canvasHeight / 2 - bboxCenterY * newScale;
 
-    setScale(Math.max(0.1, Math.min(newScale, 10)));
-    setPan({ x: newPanX, y: newPanY });
-  }, [images, notes]);
+    const clampedScale = Math.max(MIN_SCALE, Math.min(newScale, MAX_SCALE));
+    scaleRef.current = clampedScale;
+    setScale(clampedScale);
+    setPanSmoothly({ x: newPanX, y: newPanY });
+  }, [images, notes, setPanSmoothly]);
 
   const getCropActionForPoint = useCallback((point: Point, image: CanvasImage, rect: { x: number, y: number, width: number, height: number }): CropAction | null => {
       const handleSize = CROP_HANDLE_SIZE / scale;
@@ -481,7 +491,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       const currentPan = panRef.current;
 
       const nextScale = event.deltaY < 0 ? currentScale * scaleFactor : currentScale / scaleFactor;
-      const clampedScale = Math.max(0.1, Math.min(nextScale, 10));
+      const clampedScale = Math.max(MIN_SCALE, Math.min(nextScale, MAX_SCALE));
       const scaleRatio = currentScale === 0 ? 1 : clampedScale / currentScale;
 
       const updatedPan = {
@@ -490,10 +500,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       };
 
       scaleRef.current = clampedScale;
-      panRef.current = updatedPan;
-
       setScale(clampedScale);
-      setPan(updatedPan);
+      setPanSmoothly(updatedPan);
     };
 
     // Attach a non-passive wheel listener so we can prevent the browser's default scroll.
@@ -502,7 +510,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, []);
+  }, [setPanSmoothly]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -510,8 +518,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!canvas || !container) return;
 
     const resizeCanvas = () => {
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      canvas.width = width;
+      canvas.height = height;
       draw();
     };
 
@@ -535,15 +545,17 @@ export const Canvas: React.FC<CanvasProps> = ({
         const hRatio = canvas.width / image.width;
         const vRatio = canvas.height / image.height;
         const newScale = Math.min(hRatio, vRatio) * 0.9;
-        setScale(newScale);
+        const clampedScale = Math.max(MIN_SCALE, Math.min(newScale, MAX_SCALE));
+        scaleRef.current = clampedScale;
+        setScale(clampedScale);
 
-        const newPanX = (canvas.width - image.width * newScale) / 2;
-        const newPanY = (canvas.height - image.height * newScale) / 2;
-        setPan({ x: newPanX, y: newPanY });
+        const newPanX = (canvas.width - image.width * clampedScale) / 2;
+        const newPanY = (canvas.height - image.height * clampedScale) / 2;
+        setPanSmoothly({ x: newPanX, y: newPanY });
     }
 
     prevImagesLength.current = images.length;
-  }, [images]);
+  }, [images, setPanSmoothly]);
 
   useEffect(() => {
     if (containerRef.current) {
@@ -839,7 +851,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
     
     if (isPanning) {
-      setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
+      setPanSmoothly({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
       return;
     }
     
@@ -852,7 +864,9 @@ export const Canvas: React.FC<CanvasProps> = ({
               if (!draggedImageIds.includes(image.id)) return image;
               const startPosition = dragStartImagePositions[image.id];
               if (!startPosition) return image;
-              return { ...image, x: startPosition.x + dx, y: startPosition.y + dy };
+              const nextX = startPosition.x + dx;
+              const nextY = startPosition.y + dy;
+              return { ...image, x: nextX, y: nextY };
             });
             onImagesChange(updatedImages);
         }
@@ -862,7 +876,9 @@ export const Canvas: React.FC<CanvasProps> = ({
               if (!draggedNoteIds.includes(noteItem.id)) return noteItem;
               const startPosition = dragStartNotePositions[noteItem.id];
               if (!startPosition) return noteItem;
-              return { ...noteItem, x: startPosition.x + dx, y: startPosition.y + dy };
+              const nextX = startPosition.x + dx;
+              const nextY = startPosition.y + dy;
+              return { ...noteItem, x: nextX, y: nextY };
             });
             onNotesChange(updatedNotes);
         }
