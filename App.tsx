@@ -16,7 +16,7 @@ import { generateImageEdit as generateGoogleImageEdit } from './services/geminiS
 import { generateImageEdit as generateFalImageEdit, removeBackground as removeFalBackground, type FalQueueUpdate } from './services/falService';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import type { FalQueueJob, FalJobStatus } from './types';
-import { ZoomToFitIcon } from './components/Icons';
+import { ZoomToFitIcon, HamburgerIcon } from './components/Icons';
 
 const NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
@@ -60,6 +60,11 @@ const FAL_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionVa
 ] as const;
 
 type FalModelId = typeof FAL_MODEL_OPTIONS[number]['value'];
+const isFalImageSizeSelectionValue = (value: unknown): value is FalImageSizeSelectionValue =>
+  typeof value === 'string' && FAL_IMAGE_SIZE_OPTIONS.some(option => option.value === value);
+
+const isFalAspectRatioSelectionValue = (value: unknown): value is FalAspectRatioSelectionValue =>
+  typeof value === 'string' && FAL_ASPECT_RATIO_OPTIONS.some(option => option.value === value);
 
 type PromptBarModelControl = {
   id: string;
@@ -101,6 +106,69 @@ const ViewToolbar: React.FC<ViewToolbarProps> = ({ onZoomToFit, disabled }) => {
 
 const MAX_HISTORY_SIZE = 30;
 const MAX_REFERENCE_IMAGES = 2;
+const DEFAULT_NOTE_BACKGROUND = '#1f2937';
+
+type SerializedCanvasImage = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fileName: string;
+  fileType: string;
+  dataUrl: string;
+};
+
+type SerializedSnapshot = {
+  version: 1;
+  createdAt: string;
+  state: {
+    images: SerializedCanvasImage[];
+    notes: CanvasNote[];
+    paths: Path[];
+    meta?: {
+      appMode: AppMode;
+      tool: Tool;
+      brushSize: number;
+      brushColor: string;
+      prompt: string;
+      inpaintMode: InpaintMode;
+      apiProvider: 'google' | 'fal';
+      falModelId: FalModelId;
+      falImageSizeSelection: FalImageSizeSelectionValue;
+      falAspectRatioSelection: FalAspectRatioSelectionValue;
+      falNumImages: number;
+      selectedImageIds: string[];
+      selectedNoteIds: string[];
+      referenceImageIds: string[];
+    };
+  };
+};
+
+const fileToDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : null;
+      if (!result) {
+        reject(new Error('Failed to read file.'));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => {
+      reject(new Error('Failed to read file.'));
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+const dataUrlToFile = async (dataUrl: string, fileName: string, fileType: string): Promise<File> => {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  const type = fileType || blob.type || 'application/octet-stream';
+  return new File([blob], fileName, { type });
+};
 
 type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 type AppState = { images: CanvasImage[], paths: Path[], notes: CanvasNote[] };
@@ -208,6 +276,8 @@ export default function App() {
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('default');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
   const [falNumImages, setFalNumImages] = useState(1);
+  const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
+  const fileMenuRef = useRef<HTMLDivElement>(null);
 
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
@@ -232,6 +302,7 @@ export default function App() {
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const snapshotInputRef = useRef<HTMLInputElement>(null);
   const prevDisplayedNotesLength = useRef(displayedNotes.length);
 
   const setState = useCallback((updater: (prevState: AppState) => AppState) => {
@@ -332,6 +403,374 @@ export default function App() {
             });
     }
   }, [displayedNotes]);
+
+  const buildSnapshot = useCallback(async (): Promise<SerializedSnapshot> => {
+    const serializedImages = await Promise.all(
+      displayedImages.map(async (img) => {
+        try {
+          const dataUrl = await fileToDataUrl(img.file);
+          return {
+            id: img.id,
+            x: img.x,
+            y: img.y,
+            width: img.width,
+            height: img.height,
+            fileName: img.file.name,
+            fileType: img.file.type,
+            dataUrl,
+          };
+        } catch (err) {
+          console.error(err);
+          throw new Error(`Unable to serialize image "${img.file?.name ?? img.id}".`);
+        }
+      })
+    );
+
+    const snapshot: SerializedSnapshot = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      state: {
+        images: serializedImages,
+        notes: displayedNotes.map(note => ({ ...note })),
+        paths: displayedPaths.map(path => ({
+          ...path,
+          points: path.points.map(point => ({ ...point })),
+        })),
+        meta: {
+          appMode,
+          tool,
+          brushSize,
+          brushColor,
+          prompt,
+          inpaintMode,
+          apiProvider,
+          falModelId,
+          falImageSizeSelection,
+          falAspectRatioSelection,
+          falNumImages,
+          selectedImageIds: [...selectedImageIds],
+          selectedNoteIds: [...selectedNoteIds],
+          referenceImageIds: [...referenceImageIds],
+        },
+      },
+    };
+
+    return snapshot;
+  }, [
+    displayedImages,
+    displayedNotes,
+    displayedPaths,
+    appMode,
+    tool,
+    brushSize,
+    brushColor,
+    prompt,
+    inpaintMode,
+    apiProvider,
+    falModelId,
+    falImageSizeSelection,
+    falAspectRatioSelection,
+    falNumImages,
+    selectedImageIds,
+    selectedNoteIds,
+    referenceImageIds,
+  ]);
+
+  const handleExportSnapshot = useCallback(async () => {
+    try {
+      const snapshot = await buildSnapshot();
+      const contents = JSON.stringify(snapshot, null, 2);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const suggestedName = `banana-canvas-snapshot-${timestamp}.json`;
+
+      const win = window as unknown as { showSaveFilePicker?: (options?: unknown) => Promise<any> };
+      if (typeof win.showSaveFilePicker === 'function') {
+        const saveHandle = await win.showSaveFilePicker({
+          suggestedName,
+          types: [
+            {
+              description: 'Canvas Snapshot',
+              accept: { 'application/json': ['.json'] },
+            },
+          ],
+        });
+        const writable = await saveHandle.createWritable();
+        await writable.write(contents);
+        await writable.close();
+      } else {
+        const blob = new Blob([contents], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = suggestedName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      setError(null);
+      setToastMessage('Snapshot exported');
+      setTimeout(() => setToastMessage(null), 2000);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Failed to export snapshot.';
+      setError(message);
+    } finally {
+      setIsFileMenuOpen(false);
+    }
+  }, [buildSnapshot]);
+
+  const handleImportSnapshotFromFile = useCallback(async (file: File) => {
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw) as Partial<SerializedSnapshot>;
+      if (!parsed || typeof parsed !== 'object' || !parsed.state) {
+        throw new Error('Snapshot file is invalid.');
+      }
+
+      const { images = [], notes = [], paths = [], meta } = parsed.state;
+
+      if (!Array.isArray(images) || !Array.isArray(notes) || !Array.isArray(paths)) {
+        throw new Error('Snapshot data is incomplete.');
+      }
+
+      const restoredImages: CanvasImage[] = await Promise.all(
+        images.map(async (img, index) => {
+          if (!img || typeof img !== 'object' || typeof img.dataUrl !== 'string') {
+            throw new Error(`Snapshot image at index ${index} is invalid.`);
+          }
+
+          const element = await loadImageFromDataUrl(img.dataUrl);
+          const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
+            ? img.fileName
+            : `snapshot-image-${index + 1}.png`;
+          const fileType = typeof img.fileType === 'string' && img.fileType.length > 0
+            ? img.fileType
+            : 'image/png';
+          const snapshotFile = await dataUrlToFile(img.dataUrl, fileName, fileType);
+
+          return {
+            id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
+            element,
+            x: typeof img.x === 'number' ? img.x : 0,
+            y: typeof img.y === 'number' ? img.y : 0,
+            width: typeof img.width === 'number' ? img.width : element.width,
+            height: typeof img.height === 'number' ? img.height : element.height,
+            file: snapshotFile,
+          };
+        })
+      );
+
+      const sanitizedNotes: CanvasNote[] = notes.map(note => ({
+        id: typeof note?.id === 'string' && note.id.length > 0 ? note.id : crypto.randomUUID(),
+        x: typeof note?.x === 'number' ? note.x : 0,
+        y: typeof note?.y === 'number' ? note.y : 0,
+        width: typeof note?.width === 'number' ? note.width : 200,
+        height: typeof note?.height === 'number' ? note.height : 120,
+        text: typeof note?.text === 'string' ? note.text : '',
+        backgroundColor: typeof note?.backgroundColor === 'string' && note.backgroundColor.length > 0
+          ? note.backgroundColor
+          : DEFAULT_NOTE_BACKGROUND,
+      }));
+
+      const sanitizedPaths: Path[] = paths.map(path => {
+        const rawPoints = Array.isArray(path?.points) ? path.points : [];
+        const points: Point[] = rawPoints
+          .map(point => (point && typeof point === 'object' ? point : null))
+          .filter((point): point is Point => point !== null && typeof point.x === 'number' && typeof point.y === 'number')
+          .map(point => ({ x: point.x, y: point.y }));
+
+        const fallbackTool = Tool.BRUSH;
+        const toolValue = Object.values(Tool).includes(path?.tool as Tool)
+          ? (path?.tool as Tool)
+          : fallbackTool;
+
+        return {
+          points,
+          color: typeof path?.color === 'string' && path.color.length > 0 ? path.color : brushColor,
+          size: typeof path?.size === 'number' ? path.size : brushSize,
+          tool: toolValue,
+        };
+      });
+
+      const nextState: AppState = {
+        images: restoredImages,
+        paths: sanitizedPaths,
+        notes: sanitizedNotes,
+      };
+
+      setLiveImages(null);
+      setLivePaths(null);
+      setLiveNotes(null);
+      setHistoryState({ history: [nextState], index: 0 });
+
+      if (meta) {
+        const validAppMode: AppMode =
+          meta.appMode === 'CANVAS' || meta.appMode === 'ANNOTATE' || meta.appMode === 'INPAINT'
+            ? meta.appMode
+            : 'CANVAS';
+        setAppMode(validAppMode);
+
+        const validTool = Object.values(Tool).includes(meta.tool) ? meta.tool : Tool.PAN;
+        setTool(validTool);
+
+        if (typeof meta.brushSize === 'number' && Number.isFinite(meta.brushSize) && meta.brushSize > 0) {
+          setBrushSize(meta.brushSize);
+        }
+        if (typeof meta.brushColor === 'string' && meta.brushColor.length > 0) {
+          setBrushColor(meta.brushColor);
+        }
+        if (typeof meta.prompt === 'string') {
+          setPrompt(meta.prompt);
+        }
+        if (meta.inpaintMode === 'STRICT' || meta.inpaintMode === 'CREATIVE') {
+          setInpaintMode(meta.inpaintMode);
+        }
+        if (meta.apiProvider === 'google' || meta.apiProvider === 'fal') {
+          setApiProvider(meta.apiProvider);
+        }
+        if (isFalModelId(meta.falModelId)) {
+          setFalModelId(meta.falModelId);
+        }
+        if (isFalImageSizeSelectionValue(meta.falImageSizeSelection)) {
+          setFalImageSizeSelection(meta.falImageSizeSelection);
+        }
+        if (isFalAspectRatioSelectionValue(meta.falAspectRatioSelection)) {
+          setFalAspectRatioSelection(meta.falAspectRatioSelection);
+        }
+        if (typeof meta.falNumImages === 'number') {
+          setFalNumImages(Math.min(4, Math.max(1, Math.floor(meta.falNumImages))));
+        }
+        setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
+        setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
+        setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
+      } else {
+        setSelectedImageIds([]);
+        setSelectedNoteIds([]);
+        setReferenceImageIds([]);
+      }
+
+      setError(null);
+      setToastMessage('Snapshot imported');
+      setTimeout(() => setToastMessage(null), 2000);
+    } catch (err) {
+      console.error(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to import snapshot.');
+      }
+    } finally {
+      setIsFileMenuOpen(false);
+    }
+  }, [
+    brushColor,
+    brushSize,
+    setLiveImages,
+    setLivePaths,
+    setLiveNotes,
+    setHistoryState,
+    setAppMode,
+    setTool,
+    setBrushSize,
+    setBrushColor,
+    setPrompt,
+    setInpaintMode,
+    setApiProvider,
+    setFalModelId,
+    setFalImageSizeSelection,
+    setFalAspectRatioSelection,
+    setFalNumImages,
+    setSelectedImageIds,
+    setSelectedNoteIds,
+    setReferenceImageIds,
+    setError,
+    setToastMessage,
+  ]);
+
+  const handleSnapshotFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleImportSnapshotFromFile(file).catch(err => {
+        console.error(err);
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('Failed to import snapshot.');
+        }
+      });
+    }
+    e.target.value = '';
+  }, [handleImportSnapshotFromFile, setError]);
+
+  const closeFileMenu = useCallback(() => {
+    setIsFileMenuOpen(false);
+  }, []);
+
+  const toggleFileMenu = useCallback(() => {
+    setIsFileMenuOpen(prev => !prev);
+  }, []);
+
+  const handleImportSnapshot = useCallback(async () => {
+    const win = window as unknown as { showOpenFilePicker?: (options?: unknown) => Promise<any[]> };
+    if (typeof win.showOpenFilePicker === 'function') {
+      try {
+        const [fileHandle] = await win.showOpenFilePicker({
+          multiple: false,
+          types: [
+            {
+              description: 'Canvas Snapshot',
+              accept: { 'application/json': ['.json'] },
+            },
+          ],
+        });
+        if (fileHandle) {
+          const file = await fileHandle.getFile();
+          await handleImportSnapshotFromFile(file);
+        }
+      } catch (err) {
+        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
+          return;
+        }
+        console.error(err);
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('Failed to import snapshot.');
+        }
+      }
+    } else {
+      closeFileMenu();
+      snapshotInputRef.current?.click();
+    }
+  }, [closeFileMenu, handleImportSnapshotFromFile, setError]);
+
+  useEffect(() => {
+    if (!isFileMenuOpen) {
+      return;
+    }
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (fileMenuRef.current && !fileMenuRef.current.contains(event.target as Node)) {
+        closeFileMenu();
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeFileMenu();
+      }
+    };
+
+    document.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [closeFileMenu, isFileMenuOpen]);
 
   const handleDismissFalJob = useCallback((jobId: string) => {
     const timeoutId = falAutoDismissTimeouts.current.get(jobId);
@@ -1236,6 +1675,48 @@ export default function App() {
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+      <input
+        type="file"
+        ref={snapshotInputRef}
+        onChange={handleSnapshotFileChange}
+        accept="application/json"
+        className="hidden"
+      />
+      <div ref={fileMenuRef} className="absolute top-4 left-4 z-30">
+        <button
+          type="button"
+          onClick={toggleFileMenu}
+          aria-haspopup="menu"
+          aria-expanded={isFileMenuOpen}
+          aria-label="Snapshot menu"
+          className="p-2 text-white bg-transparent hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-md transition-colors"
+        >
+          <HamburgerIcon className="w-6 h-6" />
+        </button>
+        {isFileMenuOpen && (
+          <div
+            role="menu"
+            className="mt-2 w-40 rounded-md border border-gray-700 bg-gray-900/95 shadow-lg overflow-hidden"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleImportSnapshot}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+            >
+              Import Snapshot
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleExportSnapshot}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+            >
+              Export Snapshot
+            </button>
+          </div>
+        )}
+      </div>
       
       {!cropMode && (
         <Toolbar
