@@ -542,6 +542,8 @@ export default function App() {
           }
 
           const element = await loadImageFromDataUrl(img.dataUrl);
+          const naturalWidth = element.naturalWidth || element.width || 1;
+          const naturalHeight = element.naturalHeight || element.height || 1;
           const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
             ? img.fileName
             : `snapshot-image-${index + 1}.png`;
@@ -549,14 +551,18 @@ export default function App() {
             ? img.fileType
             : 'image/png';
           const snapshotFile = await dataUrlToFile(img.dataUrl, fileName, fileType);
+          const width = typeof img.width === 'number' ? img.width : naturalWidth;
+          const height = typeof img.height === 'number' ? img.height : naturalHeight;
 
           return {
             id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
             element,
             x: typeof img.x === 'number' ? img.x : 0,
             y: typeof img.y === 'number' ? img.y : 0,
-            width: typeof img.width === 'number' ? img.width : element.width,
-            height: typeof img.height === 'number' ? img.height : element.height,
+            width,
+            height,
+            naturalWidth,
+            naturalHeight,
             file: snapshotFile,
           };
         })
@@ -820,7 +826,16 @@ export default function App() {
     };
   }, []);
 
-  const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{ element: HTMLImageElement; x: number; y: number; file: File; }> => {
+  const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{
+    element: HTMLImageElement;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    naturalWidth: number;
+    naturalHeight: number;
+    file: File;
+  }> => {
     return new Promise((resolve, reject) => {
       if (imagesToCompose.length === 0) {
         return reject(new Error("No images to rasterize."));
@@ -853,7 +868,20 @@ export default function App() {
           // FIX: Await the fetch call before calling .blob()
           const blob = await (await fetch(newImg.src)).blob();
           const newFile = new File([blob], 'composite.png', { type: 'image/png' });
-          resolve({ element: newImg, x: minX, y: minY, file: newFile });
+          const naturalWidth = newImg.naturalWidth || newImg.width || width;
+          const naturalHeight = newImg.naturalHeight || newImg.height || height;
+          const displayWidth = newImg.width || naturalWidth;
+          const displayHeight = newImg.height || naturalHeight;
+          resolve({
+            element: newImg,
+            x: minX,
+            y: minY,
+            width: displayWidth,
+            height: displayHeight,
+            naturalWidth,
+            naturalHeight,
+            file: newFile,
+          });
         } catch (e) {
           reject(e);
         }
@@ -962,6 +990,8 @@ export default function App() {
         y: number;
         width: number;
         height: number;
+        naturalWidth: number;
+        naturalHeight: number;
         file: File;
       };
       let referenceImagesForAPI: HTMLImageElement[] = [];
@@ -969,11 +999,20 @@ export default function App() {
       if (shouldCompose) {
         const imageIdsToCompose = allSelectedImages.map(img => img.id);
         const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
-        const { element, x, y, file } = await rasterizeImages(imagesToCompose);
-        sourceImageForAPI = { element, x, y, width: element.width, height: element.height, file };
+        const { element, x, y, width, height, naturalWidth, naturalHeight, file } = await rasterizeImages(imagesToCompose);
+        sourceImageForAPI = { element, x, y, width, height, naturalWidth, naturalHeight, file };
         referenceImagesForAPI = [];
       } else {
-        sourceImageForAPI = primaryImage;
+        sourceImageForAPI = {
+          element: primaryImage.element,
+          x: primaryImage.x,
+          y: primaryImage.y,
+          width: primaryImage.width,
+          height: primaryImage.height,
+          naturalWidth: primaryImage.naturalWidth,
+          naturalHeight: primaryImage.naturalHeight,
+          file: primaryImage.file,
+        };
         referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
       }
 
@@ -985,14 +1024,28 @@ export default function App() {
         })),
       }));
 
+      const naturalWidth = sourceImageForAPI.naturalWidth || sourceImageForAPI.element.naturalWidth || sourceImageForAPI.width;
+      const naturalHeight = sourceImageForAPI.naturalHeight || sourceImageForAPI.element.naturalHeight || sourceImageForAPI.height;
+      const scaleX = sourceImageForAPI.width === 0 ? 1 : naturalWidth / sourceImageForAPI.width;
+      const scaleY = sourceImageForAPI.height === 0 ? 1 : naturalHeight / sourceImageForAPI.height;
+
+      const scaledPaths = translatedPaths.map(path => ({
+        ...path,
+        size: path.size * scaleX,
+        points: path.points.map(point => ({
+          x: point.x * scaleX,
+          y: point.y * scaleY,
+        })),
+      }));
+
       const toolForApi = appMode === 'ANNOTATE' ? Tool.ANNOTATE : appMode === 'INPAINT' ? Tool.INPAINT : tool;
 
       const basePayload = {
         prompt,
         image: sourceImageForAPI.element,
         tool: toolForApi,
-        paths: translatedPaths,
-        imageDimensions: { width: sourceImageForAPI.width, height: sourceImageForAPI.height },
+        paths: scaledPaths,
+        imageDimensions: { width: naturalWidth, height: naturalHeight },
         inpaintMode,
         referenceImages: referenceImagesForAPI,
       } as const;
@@ -1074,6 +1127,10 @@ export default function App() {
         const dataUrl = `data:image/png;base64,${base64}`;
         const element = await loadImageFromDataUrl(dataUrl);
         const blob = await (await fetch(dataUrl)).blob();
+        const naturalWidth = element.naturalWidth || element.width || 1;
+        const naturalHeight = element.naturalHeight || element.height || 1;
+        const displayWidth = element.width || naturalWidth;
+        const displayHeight = element.height || naturalHeight;
         const fileSuffix = generatedBase64Images.length === 1 ? '' : `_${index + 1}`;
         const file = new File([blob], `generated_image${fileSuffix}.png`, { type: 'image/png' });
 
@@ -1082,12 +1139,14 @@ export default function App() {
           element,
           x: targetX,
           y: sourceImageForAPI.y + yOffset,
-          width: element.width,
-          height: element.height,
+          width: displayWidth,
+          height: displayHeight,
+          naturalWidth,
+          naturalHeight,
           file,
         });
 
-        yOffset += element.height + 20;
+        yOffset += displayHeight + 20;
       }
 
       if (generatedCanvasImages.length > 0) {
@@ -1162,6 +1221,10 @@ export default function App() {
       const dataUrl = `data:image/png;base64,${removalResult.imageBase64}`;
       const element = await loadImageFromDataUrl(dataUrl);
       const blob = await (await fetch(dataUrl)).blob();
+      const naturalWidth = element.naturalWidth || element.width || 1;
+      const naturalHeight = element.naturalHeight || element.height || 1;
+      const displayWidth = element.width || naturalWidth;
+      const displayHeight = element.height || naturalHeight;
 
       const originalName = primaryImage.file?.name || 'image.png';
       const baseName = originalName.includes('.')
@@ -1182,8 +1245,10 @@ export default function App() {
         element,
         x: targetX,
         y,
-        width: element.width,
-        height: element.height,
+        width: displayWidth,
+        height: displayHeight,
+        naturalWidth,
+        naturalHeight,
         file,
       });
 
@@ -1270,14 +1335,20 @@ export default function App() {
     newImg.onload = async () => {
         const blob = await (await fetch(newImg.src)).blob();
         const newFile = new File([blob], "cropped_image.png", { type: "image/png" });
+        const naturalWidth = newImg.naturalWidth || newImg.width || 1;
+        const naturalHeight = newImg.naturalHeight || newImg.height || 1;
+        const displayWidth = newImg.width || naturalWidth;
+        const displayHeight = newImg.height || naturalHeight;
         
         const updatedImage: CanvasImage = {
           ...originalImage,
           element: newImg,
           x: originalImage.x + rect.x,
           y: originalImage.y + rect.y,
-          width: newImg.width,
-          height: newImg.height,
+          width: displayWidth,
+          height: displayHeight,
+          naturalWidth,
+          naturalHeight,
           file: newFile,
         };
 
@@ -1423,6 +1494,10 @@ export default function App() {
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
+          const naturalWidth = img.naturalWidth || img.width || 1;
+          const naturalHeight = img.naturalHeight || img.height || 1;
+          const displayWidth = img.width || naturalWidth;
+          const displayHeight = img.height || naturalHeight;
           setState(prevState => {
             let newX = 0;
             let newY = 0;
@@ -1437,8 +1512,10 @@ export default function App() {
               element: img,
               x: newX,
               y: newY,
-              width: img.width,
-              height: img.height,
+              width: displayWidth,
+              height: displayHeight,
+              naturalWidth,
+              naturalHeight,
               file: file,
             };
             setSelectedImageIds([newCanvasImage.id]);
@@ -1472,13 +1549,19 @@ export default function App() {
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
+                const naturalWidth = img.naturalWidth || img.width || 1;
+                const naturalHeight = img.naturalHeight || img.height || 1;
+                const displayWidth = img.width || naturalWidth;
+                const displayHeight = img.height || naturalHeight;
                 const newCanvasImage: CanvasImage = {
                     id: crypto.randomUUID(),
                     element: img,
-                    x: point.x - (img.width / 2) + (index * 20),
-                    y: point.y - (img.height / 2) + (index * 20),
-                    width: img.width,
-                    height: img.height,
+                    x: point.x - (displayWidth / 2) + (index * 20),
+                    y: point.y - (displayHeight / 2) + (index * 20),
+                    width: displayWidth,
+                    height: displayHeight,
+                    naturalWidth,
+                    naturalHeight,
                     file: file,
                 };
                 newImages.push(newCanvasImage);

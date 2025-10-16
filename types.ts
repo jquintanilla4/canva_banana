@@ -62,6 +62,8 @@ export interface CanvasImage {
   y: number;
   width: number;
   height: number;
+  naturalWidth: number;
+  naturalHeight: number;
   file: File;
 }
 

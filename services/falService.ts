@@ -66,13 +66,15 @@ const ensureFalClientConfigured = () => {
 
 const imageToCanvas = (image: HTMLImageElement): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
-  canvas.width = image.width;
-  canvas.height = image.height;
+  const width = image.naturalWidth || image.width || 1;
+  const height = image.naturalHeight || image.height || 1;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     throw new Error('Unable to create canvas context');
   }
-  ctx.drawImage(image, 0, 0);
+  ctx.drawImage(image, 0, 0, width, height);
   return canvas;
 };
 
@@ -100,14 +102,18 @@ const uploadImageElementToFal = async (image: HTMLImageElement): Promise<string>
 
 const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimensions: ImageDimensions) => {
   const canvas = document.createElement('canvas');
-  canvas.width = dimensions.width;
-  canvas.height = dimensions.height;
+  const width = dimensions.width || baseImage.naturalWidth || baseImage.width || 1;
+  const height = dimensions.height || baseImage.naturalHeight || baseImage.height || 1;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     throw new Error('Unable to create annotation canvas context');
   }
 
-  ctx.drawImage(baseImage, 0, 0, dimensions.width, dimensions.height);
+  const baseWidth = baseImage.naturalWidth || baseImage.width || width;
+  const baseHeight = baseImage.naturalHeight || baseImage.height || height;
+  ctx.drawImage(baseImage, 0, 0, baseWidth, baseHeight);
 
   paths.forEach(path => {
     if (path.points.length === 0) return;
@@ -141,8 +147,10 @@ const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimen
 
 const buildMaskCanvas = (paths: Path[], dimensions: ImageDimensions) => {
   const canvas = document.createElement('canvas');
-  canvas.width = dimensions.width;
-  canvas.height = dimensions.height;
+  const width = dimensions.width || 1;
+  const height = dimensions.height || 1;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     throw new Error('Unable to create mask canvas context');
