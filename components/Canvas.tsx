@@ -45,6 +45,12 @@ const MIN_NOTE_WIDTH = 100;
 const MIN_NOTE_HEIGHT = 50;
 const MIN_SCALE = 0.001; // allow zooming far out to keep huge layouts visible
 const MAX_SCALE = 10;
+const GRID_BASE_SIZE = 100;
+const GRID_MIN_SIZE = 8;
+const GRID_MAX_SIZE = 120;
+const DOT_BASE_SIZE = 2;
+const DOT_MIN_SIZE = 0.8;
+const DOT_MAX_SIZE = 3.5;
 
 // FIX: Added 'resize-l' to the CropAction type to support left-side cropping and fix a type error.
 type CropAction = 'move' | 'resize-tl' | 'resize-t' | 'resize-tr' | 'resize-r' | 'resize-br' | 'resize-b' | 'resize-bl' | 'resize-l';
@@ -1106,13 +1112,28 @@ export const Canvas: React.FC<CanvasProps> = ({
     };
   }, [isMarqueeSelecting, marqueeStart, marqueeCurrent, scale, pan]);
 
+  const gridSpacing = useMemo(() => {
+    const size = GRID_BASE_SIZE * Math.max(scale * 0.25, MIN_SCALE);
+    return Math.max(GRID_MIN_SIZE, Math.min(GRID_MAX_SIZE, size));
+  }, [scale]);
+
+  const dotRadius = useMemo(() => {
+    const scaled = DOT_BASE_SIZE * Math.sqrt(scale);
+    return Math.max(DOT_MIN_SIZE, Math.min(DOT_MAX_SIZE, scaled));
+  }, [scale]);
+
+  const backgroundImage = useMemo(
+    () => `radial-gradient(circle, rgba(255,255,255,0.2) ${dotRadius}px, transparent ${dotRadius}px)`,
+    [dotRadius],
+  );
+
   return (
     <div
       ref={containerRef}
       className="w-full h-full bg-black overflow-hidden relative"
       style={{
-        backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.2) 1px, transparent 1px)',
-        backgroundSize: '25px 25px',
+        backgroundImage,
+        backgroundSize: `${gridSpacing}px ${gridSpacing}px`,
       }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
