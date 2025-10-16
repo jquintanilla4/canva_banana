@@ -120,6 +120,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [dragStartImagePositions, setDragStartImagePositions] = useState<Record<string, Point> | null>(null);
   const [dragStartNotePositions, setDragStartNotePositions] = useState<Record<string, Point> | null>(null);
   const [resizeStartDimensions, setResizeStartDimensions] = useState<{width: number, height: number} | null>(null);
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
+  const [marqueeStart, setMarqueeStart] = useState<Point | null>(null);
+  const [marqueeCurrent, setMarqueeCurrent] = useState<Point | null>(null);
 
   // Crop state
   const [cropAction, setCropAction] = useState<CropAction | null>(null);
@@ -547,8 +550,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         let cursor;
         if (cropMode) {
           cursor = 'crosshair'; // Default for crop mode
-        } else if(isResizing) {
+        } else if (isResizing) {
             cursor = 'nwse-resize';
+        } else if (isMarqueeSelecting) {
+            cursor = 'crosshair';
         } else {
             switch (currentTool) {
                 case Tool.PAN: cursor = isPanning ? 'grabbing' : 'grab'; break;
@@ -563,7 +568,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
         containerRef.current.style.cursor = cursor;
     }
-  }, [currentTool, isPanning, isDragging, isResizing, cropMode]);
+  }, [currentTool, isPanning, isDragging, isResizing, cropMode, isMarqueeSelecting]);
   
   useEffect(() => {
     if (editingNoteId && textareaRef.current) {
@@ -709,6 +714,12 @@ export const Canvas: React.FC<CanvasProps> = ({
           onImageSelect(null);
           onNoteSelect(null);
         }
+        if (isMultiSelectKey) {
+          setIsMarqueeSelecting(true);
+          setMarqueeStart(point);
+          setMarqueeCurrent(point);
+          return;
+        }
 
         if (activeTool === Tool.FREE_SELECTION) {
           setIsPanning(true);
@@ -747,6 +758,12 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isMarqueeSelecting) {
+        const point = getTransformedPoint(e.clientX, e.clientY);
+        setMarqueeCurrent(point);
+        return;
+    }
+
     if (cropMode && cropAction && cropDragStart) {
         const point = getTransformedPoint(e.clientX, e.clientY);
         const imageToCrop = images.find(img => img.id === cropMode.imageId);
@@ -910,6 +927,55 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
+    if (isMarqueeSelecting && marqueeStart) {
+      const finalPoint = getTransformedPoint(e.clientX, e.clientY);
+      const currentPoint = marqueeCurrent ?? finalPoint;
+
+      const bounds = {
+        minX: Math.min(marqueeStart.x, currentPoint.x),
+        maxX: Math.max(marqueeStart.x, currentPoint.x),
+        minY: Math.min(marqueeStart.y, currentPoint.y),
+        maxY: Math.max(marqueeStart.y, currentPoint.y),
+      };
+
+      const pixelWidth = Math.abs(currentPoint.x - marqueeStart.x) * scale;
+      const pixelHeight = Math.abs(currentPoint.y - marqueeStart.y) * scale;
+      const isSignificant = Math.max(pixelWidth, pixelHeight) > 3;
+
+      if (isSignificant) {
+        const imageIdsInBounds = images
+          .filter(img =>
+            img.x < bounds.maxX &&
+            img.x + img.width > bounds.minX &&
+            img.y < bounds.maxY &&
+            img.y + img.height > bounds.minY
+          )
+          .map(img => img.id);
+
+        const noteIdsInBounds = notes
+          .filter(note =>
+            note.x < bounds.maxX &&
+            note.x + note.width > bounds.minX &&
+            note.y < bounds.maxY &&
+            note.y + note.height > bounds.minY
+          )
+          .map(note => note.id);
+
+        if (imageIdsInBounds.length || noteIdsInBounds.length) {
+          onImageSelect(null);
+          onNoteSelect(null);
+          imageIdsInBounds.forEach(id => onImageSelect(id, { multi: true }));
+          noteIdsInBounds.forEach(id => onNoteSelect(id, { multi: true }));
+        }
+      }
+    }
+
+    if (isMarqueeSelecting) {
+      setIsMarqueeSelecting(false);
+      setMarqueeStart(null);
+      setMarqueeCurrent(null);
+    }
+
     // If we're releasing the middle mouse button, we're ending a temporary tool action.
     // This is handled separately to prevent it from interfering with an ongoing left-mouse-button action.
     if (e.button === 1) {
@@ -1009,6 +1075,20 @@ export const Canvas: React.FC<CanvasProps> = ({
     return images.find(img => img.id === targetId) || null;
   }, [images, primarySelectedImageId, selectedImageIds.length]);
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
+  const marqueeRect = useMemo(() => {
+    if ((!isMarqueeSelecting && !marqueeStart) || !marqueeStart || !marqueeCurrent) return null;
+    const current = marqueeCurrent;
+    const minX = Math.min(marqueeStart.x, current.x);
+    const minY = Math.min(marqueeStart.y, current.y);
+    const width = Math.abs(current.x - marqueeStart.x);
+    const height = Math.abs(current.y - marqueeStart.y);
+    return {
+      left: minX * scale + pan.x,
+      top: minY * scale + pan.y,
+      width: width * scale,
+      height: height * scale,
+    };
+  }, [isMarqueeSelecting, marqueeStart, marqueeCurrent, scale, pan]);
 
   return (
     <div
@@ -1028,6 +1108,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       onDrop={handleDrop}
     >
       <canvas ref={canvasRef} />
+      {marqueeRect && (
+        <div
+          className="absolute border border-sky-500/80 bg-sky-500/10 pointer-events-none"
+          style={{
+            left: `${marqueeRect.left}px`,
+            top: `${marqueeRect.top}px`,
+            width: `${marqueeRect.width}px`,
+            height: `${marqueeRect.height}px`,
+            zIndex: 40,
+          }}
+        />
+      )}
       {editingNote && (
         <textarea
           ref={textareaRef}
