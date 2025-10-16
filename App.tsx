@@ -188,8 +188,11 @@ export default function App() {
   const displayedPaths = livePaths ?? paths;
   const displayedNotes = liveNotes ?? notes;
 
-  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
+  const primaryImageId = selectedImageIds[0] ?? null;
+  const primaryNoteId = selectedNoteIds[0] ?? null;
+  const hasSingleImageSelected = selectedImageIds.length === 1;
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [referenceImageIds, setReferenceImageIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -207,8 +210,9 @@ export default function App() {
   const [falNumImages, setFalNumImages] = useState(1);
 
   const primaryImage = useMemo(() => {
-    return images.find(img => img.id === selectedImageId) || null;
-  }, [images, selectedImageId]);
+    if (!primaryImageId) return null;
+    return images.find(img => img.id === primaryImageId) || null;
+  }, [images, primaryImageId]);
 
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
@@ -271,22 +275,28 @@ export default function App() {
   }, [appMode, handleClear]);
 
   const handleDelete = useCallback(() => {
-    if (selectedImageId) {
-      setState(prevState => ({
-        ...prevState,
-        images: prevState.images.filter(img => img.id !== selectedImageId),
-      }));
-      setSelectedImageId(null);
+    if (selectedImageIds.length === 0 && selectedNoteIds.length === 0) {
+      return;
+    }
+
+    setState(prevState => ({
+      ...prevState,
+      images: selectedImageIds.length
+        ? prevState.images.filter(img => !selectedImageIds.includes(img.id))
+        : prevState.images,
+      notes: selectedNoteIds.length
+        ? prevState.notes.filter(note => !selectedNoteIds.includes(note.id))
+        : prevState.notes,
+    }));
+
+    if (selectedImageIds.length) {
+      setSelectedImageIds([]);
       setReferenceImageIds([]);
     }
-    if (selectedNoteId) {
-      setState(prevState => ({
-        ...prevState,
-        notes: prevState.notes.filter(note => note.id !== selectedNoteId),
-      }));
-      setSelectedNoteId(null);
+    if (selectedNoteIds.length) {
+      setSelectedNoteIds([]);
     }
-  }, [selectedImageId, selectedNoteId, setState]);
+  }, [selectedImageIds, selectedNoteIds, setState]);
 
   const handleZoomToFit = useCallback(() => {
     setZoomToFitTrigger(c => c + 1);
@@ -439,7 +449,7 @@ export default function App() {
   }, [editingNoteId, handleCommit, cropMode]);
 
   const handleGenerate = useCallback(async () => {
-    if (!selectedImageId) {
+    if (!primaryImageId) {
       setError('Please select an image to edit.');
       return;
     }
@@ -646,7 +656,8 @@ export default function App() {
           ...prevState,
           images: [...prevState.images, ...generatedCanvasImages],
         }));
-        setSelectedImageId(generatedCanvasImages[0].id);
+        setSelectedImageIds([generatedCanvasImages[0].id]);
+        setSelectedNoteIds([]);
       }
       setReferenceImageIds([]);
 
@@ -676,7 +687,7 @@ export default function App() {
       }
     }
   }, [
-    selectedImageId,
+    primaryImageId,
     prompt,
     appMode,
     tool,
@@ -694,7 +705,7 @@ export default function App() {
   ]);
 
   const handleBackgroundRemoval = useCallback(async () => {
-    if (!selectedImageId) {
+    if (!hasSingleImageSelected || !primaryImageId) {
       setError('Please select an image to remove the background.');
       return;
     }
@@ -755,8 +766,8 @@ export default function App() {
         images: [...prevState.images, newImage],
       }));
 
-      setSelectedImageId(newImage.id);
-      setSelectedNoteId(null);
+      setSelectedImageIds([newImage.id]);
+      setSelectedNoteIds([]);
       setReferenceImageIds([]);
     } catch (err) {
       console.error(err);
@@ -766,7 +777,8 @@ export default function App() {
       setIsRemovingBackground(false);
     }
   }, [
-    selectedImageId,
+    hasSingleImageSelected,
+    primaryImageId,
     primaryImage,
     displayedImages,
     setState,
@@ -911,7 +923,7 @@ export default function App() {
         falNumImages < 1 ||
         falNumImages > 4;
 
-      const submitDisabled = !selectedImageId || 
+      const submitDisabled = !primaryImageId || 
         (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
         (appMode === 'ANNOTATE' && paths.length === 0) ||
         (appMode === 'INPAINT' && paths.length === 0) ||
@@ -932,7 +944,7 @@ export default function App() {
     };
   }, [
     isLoading,
-    selectedImageId,
+    primaryImageId,
     tool,
     appMode,
     paths,
@@ -990,8 +1002,8 @@ export default function App() {
               height: img.height,
               file: file,
             };
-            setSelectedImageId(newCanvasImage.id);
-            setSelectedNoteId(null);
+            setSelectedImageIds([newCanvasImage.id]);
+            setSelectedNoteIds([]);
             setReferenceImageIds([]);
             return {
               ...prevState,
@@ -1040,8 +1052,8 @@ export default function App() {
                         images: [...prevState.images, ...newImages],
                         paths: [], 
                     }));
-                    setSelectedImageId(lastAddedImageId);
-                    setSelectedNoteId(null);
+                    setSelectedImageIds(lastAddedImageId ? [lastAddedImageId] : []);
+                    setSelectedNoteIds([]);
                     setReferenceImageIds([]);
                     setTool(Tool.SELECTION);
                 }
@@ -1057,8 +1069,8 @@ export default function App() {
   };
   
   const handleDownload = useCallback(() => {
-    if (!selectedImageId) return;
-    const imageToDownload = images.find(img => img.id === selectedImageId);
+    if (!hasSingleImageSelected || !primaryImageId) return;
+    const imageToDownload = images.find(img => img.id === primaryImageId);
     if (!imageToDownload) return;
 
     const link = document.createElement('a');
@@ -1067,38 +1079,93 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [selectedImageId, images]);
+  }, [hasSingleImageSelected, primaryImageId, images]);
   
-  const handleImageSelection = useCallback((imageId: string | null, isShiftClick: boolean) => {
-    if (!imageId) { // Clicked on canvas background
-        setSelectedImageId(null);
-        setSelectedNoteId(null);
+  const handleImageSelection = useCallback((
+    imageId: string | null,
+    options: { multi?: boolean; reference?: boolean } = {},
+  ) => {
+    const { multi = false, reference = false } = options;
+
+    if (!imageId) {
+      if (!multi) {
+        setSelectedImageIds([]);
+        setSelectedNoteIds([]);
+        setReferenceImageIds([]);
+      }
+      return;
+    }
+
+    if (reference && primaryImageId && imageId !== primaryImageId) {
+      setReferenceImageIds(prevIds => {
+        if (prevIds.includes(imageId)) {
+          return prevIds.filter(id => id !== imageId);
+        }
+        if (prevIds.length < MAX_REFERENCE_IMAGES) {
+          return [...prevIds, imageId];
+        }
+        return prevIds;
+      });
+      return;
+    }
+
+    if (multi) {
+      setReferenceImageIds([]);
+      setSelectedImageIds(prevIds => {
+        if (prevIds.includes(imageId)) {
+          return prevIds.filter(id => id !== imageId);
+        }
+        return [...prevIds, imageId];
+      });
+      return;
+    }
+
+    if (primaryImageId === imageId && selectedImageIds.length === 1) {
+      setSelectedNoteIds([]);
+      setReferenceImageIds([]);
+      return;
+    }
+
+    setSelectedImageIds([imageId]);
+    setSelectedNoteIds([]);
+    setReferenceImageIds([]);
+  }, [primaryImageId, selectedImageIds.length]);
+
+  const handleNoteSelection = useCallback((
+    noteId: string | null,
+    options: { multi?: boolean } = {},
+  ) => {
+      const { multi = false } = options;
+
+      if (!noteId) {
+        if (!multi) {
+          setSelectedNoteIds([]);
+          setSelectedImageIds([]);
+          setReferenceImageIds([]);
+        }
+        return;
+      }
+
+      if (multi) {
+        setSelectedNoteIds(prevIds => {
+          if (prevIds.includes(noteId)) {
+            return prevIds.filter(id => id !== noteId);
+          }
+          return [...prevIds, noteId];
+        });
+        return;
+      }
+
+      if (primaryNoteId === noteId && selectedNoteIds.length === 1) {
+        setSelectedImageIds([]);
         setReferenceImageIds([]);
         return;
-    }
-    setSelectedNoteId(null);
+      }
 
-    if (isShiftClick) {
-        if (selectedImageId && imageId !== selectedImageId) {
-            setReferenceImageIds(prevIds => {
-                if (prevIds.includes(imageId)) return prevIds.filter(id => id !== imageId);
-                if (prevIds.length < MAX_REFERENCE_IMAGES) return [...prevIds, imageId];
-                return prevIds;
-            });
-        }
-    } else {
-        if (selectedImageId !== imageId) {
-            setSelectedImageId(imageId);
-            setReferenceImageIds([]);
-        }
-    }
-  }, [selectedImageId]);
-
-  const handleNoteSelection = useCallback((noteId: string | null) => {
-      setSelectedNoteId(noteId);
-      setSelectedImageId(null);
+      setSelectedNoteIds([noteId]);
+      setSelectedImageIds([]);
       setReferenceImageIds([]);
-  }, []);
+  }, [primaryNoteId, selectedNoteIds.length]);
 
   const handleNoteTextChange = useCallback((noteId: string, text: string) => {
     const targetNotes = liveNotes ?? displayedNotes;
@@ -1110,8 +1177,8 @@ export default function App() {
     setLiveNotes(newNotes);
   }, [liveNotes, displayedNotes]);
 
-  const selectedImageIndex = images.findIndex(img => img.id === selectedImageId);
-  const isImageOverlapping = selectedImageId && selectedImageIndex !== -1 ? images.some(other => other.id !== selectedImageId && isOverlapping(images[selectedImageIndex], other)) : false;
+  const selectedImageIndex = primaryImageId ? images.findIndex(img => img.id === primaryImageId) : -1;
+  const isImageOverlapping = primaryImageId && selectedImageIndex !== -1 ? images.some(other => other.id !== primaryImageId && isOverlapping(images[selectedImageIndex], other)) : false;
   const canMoveUp = selectedImageIndex > -1 && selectedImageIndex < images.length - 1;
   const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
@@ -1124,7 +1191,7 @@ export default function App() {
     falNumImages < 1 ||
     falNumImages > 4;
 
-  const submitDisabled = !selectedImageId || 
+  const submitDisabled = !primaryImageId || 
     (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
     (appMode === 'ANNOTATE' && paths.length === 0) ||
     (appMode === 'INPAINT' && paths.length === 0) ||
@@ -1189,11 +1256,11 @@ export default function App() {
           canUndo={canUndo}
           canRedo={canRedo}
           onDownload={handleDownload}
-          isImageSelected={!!selectedImageId}
-          isObjectSelected={!!selectedImageId || !!selectedNoteId}
+          isImageSelected={hasSingleImageSelected}
+          isObjectSelected={selectedImageIds.length > 0 || selectedNoteIds.length > 0}
           onDelete={handleDelete}
           onRemoveBackground={handleBackgroundRemoval}
-          isBackgroundRemovalDisabled={!selectedImageId || isRemovingBackground || isLoading}
+          isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
           isBackgroundRemovalLoading={isRemovingBackground}
         />
       )}
@@ -1210,8 +1277,8 @@ export default function App() {
           onPathsChange={setLivePaths}
           brushSize={brushSize}
           brushColor={brushColor}
-          selectedImageId={selectedImageId}
-          selectedNoteId={selectedNoteId}
+          selectedImageIds={selectedImageIds}
+          selectedNoteIds={selectedNoteIds}
           referenceImageIds={referenceImageIds}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}
@@ -1278,7 +1345,7 @@ export default function App() {
           onPromptChange={setPrompt}
           onSubmit={handleGenerate}
           isLoading={isLoading}
-          inputDisabled={!selectedImageId}
+          inputDisabled={!primaryImageId}
           submitDisabled={submitDisabled}
           modelOptions={FAL_MODEL_OPTIONS}
           selectedModel={falModelId}

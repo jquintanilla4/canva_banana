@@ -15,11 +15,11 @@ interface CanvasProps {
   onPathsChange: (paths: Path[]) => void;
   brushSize: number;
   brushColor: string;
-  selectedImageId: string | null;
-  selectedNoteId: string | null;
+  selectedImageIds: string[];
+  selectedNoteIds: string[];
   referenceImageIds: string[];
-  onImageSelect: (id: string | null, isShiftClick: boolean) => void;
-  onNoteSelect: (id: string | null) => void;
+  onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean }) => void;
+  onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
   onCommit: () => void;
   zoomToFitTrigger: number;
   onFilesDrop: (files: FileList, point: Point) => void;
@@ -75,8 +75,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   onPathsChange,
   brushSize,
   brushColor,
-  selectedImageId,
-  selectedNoteId,
+  selectedImageIds,
+  selectedNoteIds,
   referenceImageIds,
   onImageSelect,
   onNoteSelect,
@@ -114,11 +114,11 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Dragging & Resizing state
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
-  const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
+  const [draggedImageIds, setDraggedImageIds] = useState<string[]>([]);
+  const [draggedNoteIds, setDraggedNoteIds] = useState<string[]>([]);
   const [dragStartPoint, setDragStartPoint] = useState<Point | null>(null);
-  const [dragStartImagePosition, setDragStartImagePosition] = useState<Point | null>(null);
-  const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
-  const [dragStartNotePosition, setDragStartNotePosition] = useState<Point | null>(null);
+  const [dragStartImagePositions, setDragStartImagePositions] = useState<Record<string, Point> | null>(null);
+  const [dragStartNotePositions, setDragStartNotePositions] = useState<Record<string, Point> | null>(null);
   const [resizeStartDimensions, setResizeStartDimensions] = useState<{width: number, height: number} | null>(null);
 
   // Crop state
@@ -131,6 +131,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const panRef = useRef(pan);
   
   const currentTool = temporaryTool || tool;
+  const primarySelectedImageId = selectedImageIds[0] ?? null;
+  const primarySelectedNoteId = selectedNoteIds[0] ?? null;
 
   const getCanvasContext = () => canvasRef.current?.getContext('2d');
 
@@ -171,21 +173,37 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [pan, scale]);
 
   const wrapText = (context: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) => {
-    const words = text.split(' ');
-    let line = '';
-    for(let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = context.measureText(testLine);
-        const testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) {
-            context.fillText(line, x, y);
-            line = words[n] + ' ';
-            y += lineHeight;
+    const paragraphs = text.split(/\r?\n/);
+    let currentY = y;
+
+    paragraphs.forEach(paragraph => {
+      if (paragraph === '') {
+        currentY += lineHeight;
+        return;
+      }
+
+      const words = paragraph.split(' ');
+      let line = '';
+
+      words.forEach(word => {
+        const appendWord = word === '' ? ' ' : `${word} `;
+        const testLine = line + appendWord;
+        const testWidth = context.measureText(testLine).width;
+
+        if (testWidth > maxWidth && line) {
+          context.fillText(line.trimEnd(), x, currentY);
+          line = appendWord;
+          currentY += lineHeight;
         } else {
-            line = testLine;
+          line = testLine;
         }
-    }
-    context.fillText(line, x, y);
+      });
+
+      if (line) {
+        context.fillText(line.trimEnd(), x, currentY);
+      }
+      currentY += lineHeight;
+    });
   };
 
   const draw = useCallback(() => {
@@ -203,7 +221,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     images.forEach(image => {
         ctx.drawImage(image.element, image.x, image.y, image.width, image.height);
         const padding = 5 / scale;
-        if (image.id === selectedImageId) {
+        if (selectedImageIds.includes(image.id)) {
             ctx.strokeStyle = '#0ea5e9'; // sky-500
             ctx.lineWidth = 2 / scale;
             ctx.setLineDash([6 / scale, 4 / scale]);
@@ -277,16 +295,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       ctx.fillRect(note.x, note.y, note.width, note.height);
       ctx.shadowColor = 'transparent'; // Reset shadow for text and border
 
-      if (note.id === selectedNoteId) {
+      if (selectedNoteIds.includes(note.id)) {
           const padding = 5 / scale;
           ctx.strokeStyle = '#0ea5e9'; // sky-500
           ctx.lineWidth = 2 / scale;
           ctx.strokeRect(note.x - padding, note.y - padding, note.width + padding * 2, note.height + padding * 2);
           
-          // Draw resize handle
-          const handleSize = RESIZE_HANDLE_SIZE / scale;
-          ctx.fillStyle = '#0ea5e9';
-          ctx.fillRect(note.x + note.width - handleSize / 2, note.y + note.height - handleSize / 2, handleSize, handleSize);
+          if (selectedNoteIds.length === 1 && primarySelectedNoteId === note.id) {
+            // Draw resize handle for single-note selection
+            const handleSize = RESIZE_HANDLE_SIZE / scale;
+            ctx.fillStyle = '#0ea5e9';
+            ctx.fillRect(note.x + note.width - handleSize / 2, note.y + note.height - handleSize / 2, handleSize, handleSize);
+          }
       }
       
       ctx.save();
@@ -352,7 +372,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             ctx.drawImage(pathCanvas, 0, 0);
         }
     }
-  }, [images, notes, paths, pan, scale, selectedImageId, selectedNoteId, referenceImageIds, cropMode]);
+  }, [images, notes, paths, pan, scale, selectedImageIds, selectedNoteIds, referenceImageIds, cropMode]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;
@@ -593,69 +613,106 @@ export const Canvas: React.FC<CanvasProps> = ({
       onNoteDoubleClick(newNote.id);
       return;
     }
+
+    const isMultiSelectKey = e.metaKey || e.ctrlKey;
+    const isReferenceToggle = !isMultiSelectKey && e.shiftKey;
+
+    const beginDrag = (imageIdsToDrag: string[], noteIdsToDrag: string[]) => {
+      const imagePositions: Record<string, Point> = {};
+      imageIdsToDrag.forEach(id => {
+        const img = images.find(image => image.id === id);
+        if (img) {
+          imagePositions[id] = { x: img.x, y: img.y };
+        }
+      });
+
+      const notePositions: Record<string, Point> = {};
+      noteIdsToDrag.forEach(id => {
+        const noteItem = notes.find(n => n.id === id);
+        if (noteItem) {
+          notePositions[id] = { x: noteItem.x, y: noteItem.y };
+        }
+      });
+
+      setIsDragging(true);
+      setDragStartPoint({ x: e.clientX, y: e.clientY });
+      setDraggedImageIds(imageIdsToDrag);
+      setDraggedNoteIds(noteIdsToDrag);
+      setDragStartImagePositions(Object.keys(imagePositions).length ? imagePositions : null);
+      setDragStartNotePositions(Object.keys(notePositions).length ? notePositions : null);
+    };
     
     if (activeTool === Tool.SELECTION || activeTool === Tool.FREE_SELECTION) {
-      const selectedNote = notes.find(n => n.id === selectedNoteId);
-      if (selectedNote) {
+      const resizableNote = selectedNoteIds.length === 1
+        ? notes.find(n => n.id === primarySelectedNoteId)
+        : null;
+      if (resizableNote) {
         const handleSize = RESIZE_HANDLE_SIZE / scale;
-        const resizeHandleX = selectedNote.x + selectedNote.width - handleSize;
-        const resizeHandleY = selectedNote.y + selectedNote.height - handleSize;
+        const resizeHandleX = resizableNote.x + resizableNote.width - handleSize;
+        const resizeHandleY = resizableNote.y + resizableNote.height - handleSize;
 
         if (point.x >= resizeHandleX && point.y >= resizeHandleY) {
             setIsResizing(true);
-            setDraggedNoteId(selectedNote.id);
+            setDraggedNoteIds([resizableNote.id]);
             setDragStartPoint({ x: e.clientX, y: e.clientY });
-            setResizeStartDimensions({ width: selectedNote.width, height: selectedNote.height });
+            setResizeStartDimensions({ width: resizableNote.width, height: resizableNote.height });
             return;
         }
       }
     }
     
-    if (activeTool === Tool.SELECTION) {
+    if (activeTool === Tool.SELECTION || activeTool === Tool.FREE_SELECTION) {
         const note = getNoteAtPoint(point);
         if (note) {
-          onNoteSelect(note.id);
-          setIsDragging(true);
-          setDraggedNoteId(note.id);
-          setDragStartPoint({ x: e.clientX, y: e.clientY });
-          setDragStartNotePosition({ x: note.x, y: note.y });
+          const wantsNoteMultiSelect = isMultiSelectKey || e.shiftKey;
+          if (wantsNoteMultiSelect) {
+            onNoteSelect(note.id, { multi: true });
+            return;
+          }
+
+          const noteAlreadySelected = selectedNoteIds.includes(note.id);
+          if (!noteAlreadySelected) {
+            onNoteSelect(note.id);
+          }
+
+          const noteIdsToDrag = noteAlreadySelected ? selectedNoteIds : [note.id];
+          const imageIdsToDrag = noteAlreadySelected ? selectedImageIds : [];
+
+          beginDrag(imageIdsToDrag, noteIdsToDrag);
           return;
         }
 
         const image = getImageAtPoint(point);
-        onImageSelect(image ? image.id : null, e.shiftKey);
-        
-        if (image && !e.shiftKey) {
-            setIsDragging(true);
-            setDraggedImageId(image.id);
-            setDragStartPoint({ x: e.clientX, y: e.clientY });
-            setDragStartImagePosition({ x: image.x, y: image.y });
+        if (image) {
+          if (isReferenceToggle) {
+            onImageSelect(image.id, { reference: true });
+            return;
+          }
+          if (isMultiSelectKey) {
+            onImageSelect(image.id, { multi: true });
+            return;
+          }
+
+          const imageAlreadySelected = selectedImageIds.includes(image.id);
+          if (!imageAlreadySelected) {
+            onImageSelect(image.id);
+          }
+
+          const imageIdsToDrag = imageAlreadySelected ? selectedImageIds : [image.id];
+          const noteIdsToDrag = imageAlreadySelected ? selectedNoteIds : [];
+          
+          beginDrag(imageIdsToDrag, noteIdsToDrag);
+          return;
         }
-        return;
-    }
 
-    if (activeTool === Tool.FREE_SELECTION) {
-        const note = getNoteAtPoint(point);
-        const image = getImageAtPoint(point);
-        const object = note || image;
+        if (!isMultiSelectKey) {
+          onImageSelect(null);
+          onNoteSelect(null);
+        }
 
-        if (object) {
-            if (note) onNoteSelect(note.id); else if (image) onImageSelect(image.id, e.shiftKey);
-            
-            if (!e.shiftKey) {
-              setIsDragging(true);
-              setDragStartPoint({ x: e.clientX, y: e.clientY });
-              if (note) {
-                  setDraggedNoteId(note.id);
-                  setDragStartNotePosition({ x: note.x, y: note.y });
-              } else if(image) {
-                  setDraggedImageId(image.id);
-                  setDragStartImagePosition({ x: image.x, y: image.y });
-              }
-            }
-        } else {
-            setIsPanning(true);
-            setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+        if (activeTool === Tool.FREE_SELECTION) {
+          setIsPanning(true);
+          setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
         }
         return;
     }
@@ -747,14 +804,15 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
 
-    if (isResizing && draggedNoteId && dragStartPoint && resizeStartDimensions) {
+    if (isResizing && draggedNoteIds.length === 1 && dragStartPoint && resizeStartDimensions) {
+        const noteId = draggedNoteIds[0];
         const dx = (e.clientX - dragStartPoint.x) / scale;
         const dy = (e.clientY - dragStartPoint.y) / scale;
 
         const newWidth = Math.max(MIN_NOTE_WIDTH, resizeStartDimensions.width + dx);
         const newHeight = Math.max(MIN_NOTE_HEIGHT, resizeStartDimensions.height + dy);
-        
-        const noteIndex = notes.findIndex(n => n.id === draggedNoteId);
+
+        const noteIndex = notes.findIndex(n => n.id === noteId);
         if (noteIndex === -1) return;
         
         const newNotes = [...notes];
@@ -772,18 +830,24 @@ export const Canvas: React.FC<CanvasProps> = ({
         const dx = (e.clientX - dragStartPoint.x) / scale;
         const dy = (e.clientY - dragStartPoint.y) / scale;
         
-        if (draggedImageId && dragStartImagePosition) {
-            const draggedImageIndex = images.findIndex(img => img.id === draggedImageId);
-            if (draggedImageIndex === -1) return;
-            const newImages = [...images];
-            newImages[draggedImageIndex] = { ...newImages[draggedImageIndex], x: dragStartImagePosition.x + dx, y: dragStartImagePosition.y + dy };
-            onImagesChange(newImages);
-        } else if (draggedNoteId && dragStartNotePosition) {
-            const draggedNoteIndex = notes.findIndex(n => n.id === draggedNoteId);
-            if (draggedNoteIndex === -1) return;
-            const newNotes = [...notes];
-            newNotes[draggedNoteIndex] = { ...newNotes[draggedNoteIndex], x: dragStartNotePosition.x + dx, y: dragStartNotePosition.y + dy };
-            onNotesChange(newNotes);
+        if (draggedImageIds.length && dragStartImagePositions) {
+            const updatedImages = images.map(image => {
+              if (!draggedImageIds.includes(image.id)) return image;
+              const startPosition = dragStartImagePositions[image.id];
+              if (!startPosition) return image;
+              return { ...image, x: startPosition.x + dx, y: startPosition.y + dy };
+            });
+            onImagesChange(updatedImages);
+        }
+
+        if (draggedNoteIds.length && dragStartNotePositions) {
+            const updatedNotes = notes.map(noteItem => {
+              if (!draggedNoteIds.includes(noteItem.id)) return noteItem;
+              const startPosition = dragStartNotePositions[noteItem.id];
+              if (!startPosition) return noteItem;
+              return { ...noteItem, x: startPosition.x + dx, y: startPosition.y + dy };
+            });
+            onNotesChange(updatedNotes);
         }
         return;
     }
@@ -804,7 +868,9 @@ export const Canvas: React.FC<CanvasProps> = ({
               default: cursor = 'default';
           }
         } else if ((currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && !isDragging && !isPanning && !isResizing) {
-            const selectedNote = notes.find(n => n.id === selectedNoteId);
+            const selectedNote = selectedNoteIds.length === 1
+              ? notes.find(n => n.id === primarySelectedNoteId)
+              : null;
             let onResizeHandle = false;
             
             if (selectedNote) {
@@ -858,10 +924,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         onCommit();
         setIsDragging(false);
         setDragStartPoint(null);
-        setDragStartImagePosition(null);
-        setDraggedImageId(null);
-        setDragStartNotePosition(null);
-        setDraggedNoteId(null);
+        setDragStartImagePositions(null);
+        setDraggedImageIds([]);
+        setDragStartNotePositions(null);
+        setDraggedNoteIds([]);
       }
       return; // IMPORTANT: Stop processing to not affect other actions.
     }
@@ -880,10 +946,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     setIsResizing(false);
   
     setDragStartPoint(null);
-    setDragStartImagePosition(null);
-    setDraggedImageId(null);
-    setDragStartNotePosition(null);
-    setDraggedNoteId(null);
+    setDragStartImagePositions(null);
+    setDraggedImageIds([]);
+    setDragStartNotePositions(null);
+    setDraggedNoteIds([]);
     setResizeStartDimensions(null);
     
     if (wasActive) {
@@ -929,8 +995,19 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [onCommit, onNoteEditEnd]);
 
   const editingNote = useMemo(() => editingNoteId ? notes.find(n => n.id === editingNoteId) : null, [notes, editingNoteId]);
-  const selectedNote = useMemo(() => editingNoteId ? null : notes.find(n => n.id === selectedNoteId), [notes, selectedNoteId, editingNoteId]);
-  const selectedImage = useMemo(() => images.find(img => img.id === selectedImageId), [images, selectedImageId]);
+  const selectedNote = useMemo(() => {
+    if (editingNoteId) return null;
+    if (selectedNoteIds.length !== 1) return null;
+    const targetId = primarySelectedNoteId;
+    if (!targetId) return null;
+    return notes.find(n => n.id === targetId) || null;
+  }, [notes, primarySelectedNoteId, editingNoteId, selectedNoteIds.length]);
+  const selectedImage = useMemo(() => {
+    if (selectedImageIds.length !== 1) return null;
+    const targetId = primarySelectedImageId;
+    if (!targetId) return null;
+    return images.find(img => img.id === targetId) || null;
+  }, [images, primarySelectedImageId, selectedImageIds.length]);
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
 
   return (
