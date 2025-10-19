@@ -1356,7 +1356,7 @@ export default function App() {
             ...prevState,
             images: prevState.images.map(img => img.id === originalImage.id ? updatedImage : img),
         }));
-        setSelectedImageId(originalImage.id);
+        setSelectedImageIds([originalImage.id]);
         setCropMode(null);
     };
     newImg.src = croppedImageURL;
