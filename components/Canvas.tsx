@@ -273,13 +273,13 @@ export const Canvas: React.FC<CanvasProps> = ({
         const padding = 5 / scale;
         if (selectedImageIds.includes(image.id)) {
             ctx.strokeStyle = '#0ea5e9'; // sky-500
-            ctx.lineWidth = 2 / scale;
+            ctx.lineWidth = 4 / scale;
             ctx.setLineDash([6 / scale, 4 / scale]);
             ctx.strokeRect(image.x - padding, image.y - padding, image.width + padding * 2, image.height + padding * 2);
             ctx.setLineDash([]);
         } else if (referenceImageIds.includes(image.id)) {
             ctx.strokeStyle = '#10b981'; // emerald-500 for reference
-            ctx.lineWidth = 2 / scale;
+            ctx.lineWidth = 4 / scale;
             ctx.setLineDash([6 / scale, 4 / scale]);
             ctx.strokeRect(image.x - padding, image.y - padding, image.width + padding * 2, image.height + padding * 2);
             ctx.setLineDash([]);
@@ -348,7 +348,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (selectedNoteIds.includes(note.id)) {
           const padding = 5 / scale;
           ctx.strokeStyle = '#0ea5e9'; // sky-500
-          ctx.lineWidth = 2 / scale;
+          ctx.lineWidth = 4 / scale;
           ctx.strokeRect(note.x - padding, note.y - padding, note.width + padding * 2, note.height + padding * 2);
           
           if (selectedNoteIds.length === 1 && primarySelectedNoteId === note.id) {
