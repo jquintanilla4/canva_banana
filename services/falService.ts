@@ -45,9 +45,30 @@ interface GenerateImageEditOptions {
   numImages?: number;
 }
 
+interface GenerateImageOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+  modelId?: string;
+  aspectRatio?: FalAspectRatioOption;
+  numImages?: number;
+  imageSize?: FalImageSizeOption;
+  seed?: number;
+}
+
 const FAL_MODEL_ID = process.env.FAL_MODEL_ID || 'fal-ai/nano-banana/edit';
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit';
 const NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit';
+const NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana';
+const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image';
+const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
+
+const createRandomSeed = (): number => {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    return arr[0];
+  }
+  return Math.floor(Math.random() * 0xffffffff);
+};
 
 let falConfigured = false;
 
@@ -340,6 +361,97 @@ export const generateImageEdit = async ({
 interface RemoveBackgroundOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
 }
+
+export const generateImage = async (
+  prompt: string,
+  options: GenerateImageOptions = {},
+): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => {
+  ensureFalClientConfigured();
+
+  const modelId = options.modelId || NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID;
+  const isSeedreamTextToImage = modelId === SEEDREAM_TEXT_TO_IMAGE_MODEL_ID;
+  const supportsAspectRatio = modelId === NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+  const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
+  const numImagesOption = options.numImages;
+  const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
+
+  const body: {
+    prompt: string;
+    sync_mode: boolean;
+    output_format?: 'png';
+    num_images?: number;
+    aspect_ratio?: string;
+    image_size?: { width: number; height: number } | string;
+    seed?: number;
+  } = {
+    prompt,
+    sync_mode: !isSeedreamTextToImage,
+  };
+
+  if (!isSeedreamTextToImage) {
+    body.output_format = 'png';
+  }
+
+  if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+    const normalized = Math.min(4, Math.max(1, Math.floor(numImagesOption)));
+    if (normalized >= 1) {
+      body.num_images = normalized;
+    }
+  }
+
+  if (isSeedreamTextToImage) {
+    const seedOption = Number.isFinite(options.seed) ? Math.floor(options.seed as number) : createRandomSeed();
+    body.seed = seedOption;
+    if (imageSizeOption !== 'default') {
+      body.image_size = imageSizeOption;
+    }
+  } else if (supportsAspectRatio && aspectRatioOption !== 'default') {
+    body.aspect_ratio = aspectRatioOption;
+  }
+
+  let latestRequestId: string | undefined;
+
+  const result = await fal.subscribe(modelId, {
+    input: body,
+    logs: true,
+    onQueueUpdate: update => {
+      const queueUpdate = update as FalQueueUpdate;
+      if (queueUpdate.requestId) {
+        latestRequestId = queueUpdate.requestId;
+      }
+      options.onQueueUpdate?.({
+        ...queueUpdate,
+        requestId: queueUpdate.requestId || latestRequestId || '',
+      });
+    },
+  });
+
+  const data = result?.data as { images?: Array<{ url: string }>; description?: string } | undefined;
+  const images = data?.images;
+  if (!images || images.length === 0) {
+    throw new Error('Fal.ai API did not return an image.');
+  }
+
+  const inlineDataList = await Promise.all(images.map(image => extractInlineData(image.url)));
+  const base64List = inlineDataList.map(dataUrl => {
+    const base64 = dataUrl.split(',')[1];
+    if (!base64) {
+      throw new Error('Failed to extract image data from Fal.ai response.');
+    }
+    return base64;
+  });
+
+  const [primaryBase64] = base64List;
+  if (!primaryBase64) {
+    throw new Error('Failed to extract image data from Fal.ai response.');
+  }
+
+  const description: string = typeof data?.description === 'string' ? data.description : '';
+
+  const requestId = result?.requestId || latestRequestId;
+
+  return { imageBase64: primaryBase64, imagesBase64: base64List, text: description, requestId };
+};
 
 export const removeBackground = async (
   image: HTMLImageElement,

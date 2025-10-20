@@ -12,18 +12,22 @@ import {
   FalImageSizePreset,
   FalAspectRatioOption,
 } from './types';
-import { generateImageEdit as generateGoogleImageEdit } from './services/geminiService';
-import { generateImageEdit as generateFalImageEdit, removeBackground as removeFalBackground, type FalQueueUpdate } from './services/falService';
+import { generateImageEdit as generateGoogleImageEdit, generateImage as generateGoogleImage } from './services/geminiService';
+import { generateImageEdit as generateFalImageEdit, generateImage as generateFalImage, removeBackground as removeFalBackground, type FalQueueUpdate } from './services/falService';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon, HamburgerIcon } from './components/Icons';
 
 const NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
+const NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana' as const;
+const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
+const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
 
 const FAL_MODEL_OPTIONS = [
   { value: NANO_BANANA_MODEL_ID, label: 'Nano Banana' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
+  { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
 ] as const;
 
 type FalImageSizeSelectionValue = 'default' | FalImageSizePreset;
@@ -45,7 +49,7 @@ const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue;
 
 const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 
-const FAL_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+const FAL_NANO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
   { value: 'default', label: 'Match Source' },
   { value: '21:9', label: '21:9' },
   { value: '1:1', label: '1:1' },
@@ -59,12 +63,28 @@ const FAL_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionVa
   { value: '9:16', label: '9:16' },
 ] as const;
 
+const FAL_REVE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+  { value: 'default', label: 'Default (3:2)' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+  { value: '3:2', label: '3:2' },
+  { value: '2:3', label: '2:3' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:4', label: '3:4' },
+  { value: '1:1', label: '1:1' },
+] as const;
+
+const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
+  ...FAL_NANO_ASPECT_RATIO_OPTIONS.map(option => option.value),
+  ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
+]);
+
 type FalModelId = typeof FAL_MODEL_OPTIONS[number]['value'];
 const isFalImageSizeSelectionValue = (value: unknown): value is FalImageSizeSelectionValue =>
   typeof value === 'string' && FAL_IMAGE_SIZE_OPTIONS.some(option => option.value === value);
 
 const isFalAspectRatioSelectionValue = (value: unknown): value is FalAspectRatioSelectionValue =>
-  typeof value === 'string' && FAL_ASPECT_RATIO_OPTIONS.some(option => option.value === value);
+  typeof value === 'string' && FAL_ASPECT_RATIO_VALUES.has(value as FalAspectRatioSelectionValue);
 
 type PromptBarModelControl = {
   id: string;
@@ -308,6 +328,15 @@ export default function App() {
     const clamped = Math.min(4, Math.max(1, Math.floor(value)));
     setFalNumImages(clamped);
   }, []);
+
+  useEffect(() => {
+    const validOptions = (falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID
+      ? FAL_REVE_ASPECT_RATIO_OPTIONS
+      : FAL_NANO_ASPECT_RATIO_OPTIONS).map(option => option.value);
+    if (!validOptions.includes(falAspectRatioSelection)) {
+      setFalAspectRatioSelection('default');
+    }
+  }, [falModelId, falAspectRatioSelection, setFalAspectRatioSelection]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const snapshotInputRef = useRef<HTMLInputElement>(null);
@@ -924,52 +953,63 @@ export default function App() {
   }, [editingNoteId, handleCommit, cropMode]);
 
   const handleGenerate = useCallback(async () => {
-    if (!primaryImageId) {
-      setError('Please select an image to edit.');
-      return;
-    }
+    const trimmedPrompt = prompt.trim();
+    const isTextToImage = !primaryImageId;
 
-    if (!prompt) {
-      setError('Please write a prompt to describe your edit.');
-      return;
-    }
-
-    if (appMode === 'CANVAS' && tool !== Tool.SELECTION && tool !== Tool.FREE_SELECTION) {
-      setError('In Canvas Mode, please use the Select tool to perform a general image edit.');
-      return;
-    }
-
-    if (!primaryImage) {
-      setError('Selected image not found. Please select another image.');
-      return;
-    }
-
-    const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
-    const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
-    const isNumImagesInvalid =
-      !Number.isFinite(falNumImages) ||
-      falNumImages < 1 ||
-      falNumImages > 4;
-
-    if (apiProvider === 'fal' && (isSeedreamModel || isNanoModel)) {
-      if (isNumImagesInvalid) {
-        setError('Number of images must be between 1 and 4.');
-        return;
-      }
-    }
-
-    if ((appMode === 'ANNOTATE' || appMode === 'INPAINT') && paths.length === 0) {
-      setError(`Please use the Brush tool to draw ${appMode === 'ANNOTATE' ? 'annotations' : 'an inpaint mask'} before generating.`);
+    if (!trimmedPrompt) {
+      setError(isTextToImage ? 'Please describe the image you want to create.' : 'Please write a prompt to describe your edit.');
       return;
     }
 
     const usingFal = apiProvider === 'fal';
+    const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
+    const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
+    const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+    const shouldValidateFalOptions = usingFal && (isSeedreamModel || isNanoModel || isReveModel);
+    const isNumImagesInvalid =
+      !Number.isFinite(falNumImages) ||
+      falNumImages < 1 ||
+      falNumImages > 4;
+    const normalizedFalNumImages = Math.min(4, Math.max(1, Math.floor(Number.isFinite(falNumImages) ? falNumImages : 1)));
+    const googleAspectRatio = isNanoModel && falAspectRatioSelection !== 'default'
+      ? falAspectRatioSelection
+      : undefined;
+
+    const activePrimaryImage = primaryImage;
+
+    if (!isTextToImage) {
+      if (!primaryImageId || !activePrimaryImage) {
+        setError('Please select an image to edit.');
+        return;
+      }
+
+      if (usingFal && isReveModel) {
+        setError('Reve Image only supports text-to-image generation. Please switch to Nano Banana or Seedream for edits.');
+        return;
+      }
+
+      if (appMode === 'CANVAS' && tool !== Tool.SELECTION && tool !== Tool.FREE_SELECTION) {
+        setError('In Canvas Mode, please use the Select tool to perform a general image edit.');
+        return;
+      }
+
+      if ((appMode === 'ANNOTATE' || appMode === 'INPAINT') && paths.length === 0) {
+        setError(`Please use the Brush tool to draw ${appMode === 'ANNOTATE' ? 'annotations' : 'an inpaint mask'} before generating.`);
+        return;
+      }
+    }
+
+    if (shouldValidateFalOptions && isNumImagesInvalid) {
+      setError('Number of images must be between 1 and 4.');
+      return;
+    }
+
     const falJobId = usingFal ? crypto.randomUUID() : null;
 
     if (usingFal && falJobId) {
       const newJob: FalQueueJob = {
         id: falJobId,
-        prompt,
+        prompt: trimmedPrompt,
         status: 'IN_QUEUE',
         logs: [],
         createdAt: Date.now(),
@@ -983,15 +1023,8 @@ export default function App() {
     setError(null);
 
     try {
-      const referenceCanvasImages = referenceImageIds
-        .map(id => images.find(img => img.id === id))
-        .filter((img): img is CanvasImage => !!img);
-
-      const allSelectedImages = [primaryImage, ...referenceCanvasImages];
-
-      const shouldCompose = referenceCanvasImages.length > 0 &&
-        referenceCanvasImages.some(refImg => isOverlapping(primaryImage, refImg));
-
+      let generationResult: { imageBase64: string; imagesBase64: string[]; text: string; requestId?: string };
+      let placementOrigin = { x: 100, y: 100 };
       let sourceImageForAPI: {
         element: HTMLImageElement;
         x: number;
@@ -1001,125 +1034,213 @@ export default function App() {
         naturalWidth: number;
         naturalHeight: number;
         file: File;
-      };
-      let referenceImagesForAPI: HTMLImageElement[] = [];
+      } | null = null;
 
-      if (shouldCompose) {
-        const imageIdsToCompose = allSelectedImages.map(img => img.id);
-        const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
-        const { element, x, y, width, height, naturalWidth, naturalHeight, file } = await rasterizeImages(imagesToCompose);
-        sourceImageForAPI = { element, x, y, width, height, naturalWidth, naturalHeight, file };
-        referenceImagesForAPI = [];
+      if (isTextToImage) {
+        const placementX = images.length > 0
+          ? Math.max(...images.map(img => img.x + img.width)) + 20
+          : 100;
+        const placementY = images.length > 0
+          ? Math.min(...images.map(img => img.y))
+          : 100;
+        placementOrigin = { x: placementX, y: placementY };
+
+        if (usingFal) {
+          if (!falJobId) {
+            throw new Error('Unable to create Fal job identifier.');
+          }
+
+          const textToImageModelId = isSeedreamModel
+            ? SEEDREAM_TEXT_TO_IMAGE_MODEL_ID
+            : isReveModel
+              ? REVE_TEXT_TO_IMAGE_MODEL_ID
+              : NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID;
+
+          const falResult = await generateFalImage(trimmedPrompt, {
+            onQueueUpdate: (update) => {
+              setFalJobs(prev => prev.map(job => {
+                if (job.id !== falJobId) {
+                  return job;
+                }
+
+                const status = mapFalStatusToJobStatus(update.status);
+                return {
+                  ...job,
+                  status,
+                  requestId: update.requestId || job.requestId,
+                  logs: mergeFalLogMessages(job.logs, update.logs),
+                  updatedAt: Date.now(),
+                };
+              }));
+            },
+            modelId: textToImageModelId,
+            aspectRatio: (isNanoModel || isReveModel) ? falAspectRatioSelection : 'default',
+            ...(isSeedreamModel ? { imageSize: falImageSizeSelection } : {}),
+            numImages: normalizedFalNumImages,
+          });
+
+          generationResult = falResult;
+
+          setFalJobs(prev => prev.map(job => {
+            if (job.id !== falJobId) {
+              return job;
+            }
+            if (job.status === 'FAILED') {
+              return job;
+            }
+            return {
+              ...job,
+              status: 'COMPLETED',
+              requestId: falResult.requestId || job.requestId,
+              description: falResult.text,
+              updatedAt: Date.now(),
+            };
+          }));
+        } else {
+          generationResult = await generateGoogleImage(trimmedPrompt, {
+            aspectRatio: googleAspectRatio,
+          });
+        }
       } else {
-        sourceImageForAPI = {
-          element: primaryImage.element,
-          x: primaryImage.x,
-          y: primaryImage.y,
-          width: primaryImage.width,
-          height: primaryImage.height,
-          naturalWidth: primaryImage.naturalWidth,
-          naturalHeight: primaryImage.naturalHeight,
-          file: primaryImage.file,
-        };
-        referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
-      }
-
-      const translatedPaths = paths.map(path => ({
-        ...path,
-        points: path.points.map(point => ({
-          x: point.x - sourceImageForAPI.x,
-          y: point.y - sourceImageForAPI.y,
-        })),
-      }));
-
-      const naturalWidth = sourceImageForAPI.naturalWidth || sourceImageForAPI.element.naturalWidth || sourceImageForAPI.width;
-      const naturalHeight = sourceImageForAPI.naturalHeight || sourceImageForAPI.element.naturalHeight || sourceImageForAPI.height;
-      const scaleX = sourceImageForAPI.width === 0 ? 1 : naturalWidth / sourceImageForAPI.width;
-      const scaleY = sourceImageForAPI.height === 0 ? 1 : naturalHeight / sourceImageForAPI.height;
-
-      const scaledPaths = translatedPaths.map(path => ({
-        ...path,
-        size: path.size * scaleX,
-        points: path.points.map(point => ({
-          x: point.x * scaleX,
-          y: point.y * scaleY,
-        })),
-      }));
-
-      const toolForApi = appMode === 'ANNOTATE' ? Tool.ANNOTATE : appMode === 'INPAINT' ? Tool.INPAINT : tool;
-
-      const basePayload = {
-        prompt,
-        image: sourceImageForAPI.element,
-        tool: toolForApi,
-        paths: scaledPaths,
-        imageDimensions: { width: naturalWidth, height: naturalHeight },
-        inpaintMode,
-        referenceImages: referenceImagesForAPI,
-      } as const;
-
-      let generationResult: { imageBase64: string; imagesBase64: string[]; text: string; requestId?: string };
-
-      if (usingFal) {
-        if (!falJobId) {
-          throw new Error('Unable to create Fal job identifier.');
+        if (!primaryImageId || !activePrimaryImage) {
+          throw new Error('Unable to locate selected image for editing.');
         }
 
-          const falResult = await generateFalImageEdit(basePayload, {
-          modelId: falModelId,
-          onQueueUpdate: (update) => {
-            setFalJobs(prev => prev.map(job => {
-              if (job.id !== falJobId) {
-                return job;
-              }
+        const referenceCanvasImages = referenceImageIds
+          .map(id => images.find(img => img.id === id))
+          .filter((img): img is CanvasImage => !!img);
 
-              const status = mapFalStatusToJobStatus(update.status);
-              return {
-                ...job,
-                status,
-                requestId: update.requestId || job.requestId,
-                logs: mergeFalLogMessages(job.logs, update.logs),
-                updatedAt: Date.now(),
-              };
-            }));
-          },
-          ...(isSeedreamModel
-            ? {
-                imageSize: falImageSizeSelection === 'default'
-                  ? 'default'
-                  : falImageSizeSelection,
-              }
-            : {}),
-          ...(isNanoModel
-            ? {
-                aspectRatio: falAspectRatioSelection,
-              }
-            : {}),
-          numImages: Math.min(4, Math.max(1, Math.floor(falNumImages))),
-        });
+        const allSelectedImages = [activePrimaryImage, ...referenceCanvasImages];
 
-        generationResult = falResult;
+        const shouldCompose = referenceCanvasImages.length > 0 &&
+          referenceCanvasImages.some(refImg => isOverlapping(activePrimaryImage, refImg));
 
-        setFalJobs(prev => prev.map(job => {
-          if (job.id !== falJobId) {
-            return job;
-          }
-          if (job.status === 'FAILED') {
-            return job;
-          }
-          return {
-            ...job,
-            status: 'COMPLETED',
-            requestId: falResult.requestId || job.requestId,
-            description: falResult.text,
-            updatedAt: Date.now(),
+        let referenceImagesForAPI: HTMLImageElement[] = [];
+
+        if (shouldCompose) {
+          const imageIdsToCompose = allSelectedImages.map(img => img.id);
+          const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
+          const composed = await rasterizeImages(imagesToCompose);
+          sourceImageForAPI = composed;
+          referenceImagesForAPI = [];
+        } else {
+          sourceImageForAPI = {
+            element: activePrimaryImage.element,
+            x: activePrimaryImage.x,
+            y: activePrimaryImage.y,
+            width: activePrimaryImage.width,
+            height: activePrimaryImage.height,
+            naturalWidth: activePrimaryImage.naturalWidth,
+            naturalHeight: activePrimaryImage.naturalHeight,
+            file: activePrimaryImage.file,
           };
+          referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
+        }
+
+        if (!sourceImageForAPI) {
+          throw new Error('Failed to prepare source image for editing.');
+        }
+
+        const translatedPaths = paths.map(path => ({
+          ...path,
+          points: path.points.map(point => ({
+            x: point.x - sourceImageForAPI.x,
+            y: point.y - sourceImageForAPI.y,
+          })),
         }));
-      } else {
-        generationResult = await generateGoogleImageEdit({
-          ...basePayload,
-          mimeType: sourceImageForAPI.file.type || 'image/png',
-        });
+
+        const naturalWidth = sourceImageForAPI.naturalWidth || sourceImageForAPI.element.naturalWidth || sourceImageForAPI.width;
+        const naturalHeight = sourceImageForAPI.naturalHeight || sourceImageForAPI.element.naturalHeight || sourceImageForAPI.height;
+        const scaleX = sourceImageForAPI.width === 0 ? 1 : naturalWidth / sourceImageForAPI.width;
+        const scaleY = sourceImageForAPI.height === 0 ? 1 : naturalHeight / sourceImageForAPI.height;
+
+        const scaledPaths = translatedPaths.map(path => ({
+          ...path,
+          size: path.size * scaleX,
+          points: path.points.map(point => ({
+            x: point.x * scaleX,
+            y: point.y * scaleY,
+          })),
+        }));
+
+        const toolForApi = appMode === 'ANNOTATE' ? Tool.ANNOTATE : appMode === 'INPAINT' ? Tool.INPAINT : tool;
+
+        const basePayload = {
+          prompt: trimmedPrompt,
+          image: sourceImageForAPI.element,
+          tool: toolForApi,
+          paths: scaledPaths,
+          imageDimensions: { width: naturalWidth, height: naturalHeight },
+          inpaintMode,
+          referenceImages: referenceImagesForAPI,
+        } as const;
+
+        placementOrigin = {
+          x: sourceImageForAPI.x + sourceImageForAPI.width + 20,
+          y: sourceImageForAPI.y,
+        };
+
+        if (usingFal) {
+          if (!falJobId) {
+            throw new Error('Unable to create Fal job identifier.');
+          }
+
+          const falResult = await generateFalImageEdit(basePayload, {
+            modelId: falModelId,
+            onQueueUpdate: (update) => {
+              setFalJobs(prev => prev.map(job => {
+                if (job.id !== falJobId) {
+                  return job;
+                }
+
+                const status = mapFalStatusToJobStatus(update.status);
+                return {
+                  ...job,
+                  status,
+                  requestId: update.requestId || job.requestId,
+                  logs: mergeFalLogMessages(job.logs, update.logs),
+                  updatedAt: Date.now(),
+                };
+              }));
+            },
+            ...(isSeedreamModel
+              ? {
+                  imageSize: falImageSizeSelection === 'default'
+                    ? 'default'
+                    : falImageSizeSelection,
+                }
+              : {}),
+            ...(isNanoModel
+              ? {
+                  aspectRatio: falAspectRatioSelection,
+                }
+              : {}),
+            numImages: normalizedFalNumImages,
+          });
+
+          generationResult = falResult;
+
+          setFalJobs(prev => prev.map(job => {
+            if (job.id !== falJobId) {
+              return job;
+            }
+            if (job.status === 'FAILED') {
+              return job;
+            }
+            return {
+              ...job,
+              status: 'COMPLETED',
+              requestId: falResult.requestId || job.requestId,
+              description: falResult.text,
+              updatedAt: Date.now(),
+            };
+          }));
+        } else {
+          generationResult = await generateGoogleImageEdit({
+            ...basePayload,
+            mimeType: sourceImageForAPI.file.type || 'image/png',
+          });
+        }
       }
 
       const generatedBase64Images = generationResult.imagesBase64.length > 0
@@ -1128,7 +1249,6 @@ export default function App() {
 
       const generatedCanvasImages: CanvasImage[] = [];
       let yOffset = 0;
-      const targetX = sourceImageForAPI.x + sourceImageForAPI.width + 20;
 
       for (let index = 0; index < generatedBase64Images.length; index += 1) {
         const base64 = generatedBase64Images[index];
@@ -1145,8 +1265,8 @@ export default function App() {
         generatedCanvasImages.push({
           id: crypto.randomUUID(),
           element,
-          x: targetX,
-          y: sourceImageForAPI.y + yOffset,
+          x: placementOrigin.x,
+          y: placementOrigin.y + yOffset,
           width: displayWidth,
           height: displayHeight,
           naturalWidth,
@@ -1162,11 +1282,9 @@ export default function App() {
           ...prevState,
           images: [...prevState.images, ...generatedCanvasImages],
         }));
-        setSelectedImageIds([generatedCanvasImages[0].id]);
-        setSelectedNoteIds([]);
       }
-      setReferenceImageIds([]);
 
+      setReferenceImageIds([]);
     } catch (err) {
       console.error(err);
       const message = err instanceof Error ? err.message : 'An unknown error occurred.';
@@ -1183,7 +1301,6 @@ export default function App() {
             updatedAt: Date.now(),
           };
         }));
-
       }
 
       setError(message);
@@ -1193,21 +1310,27 @@ export default function App() {
       }
     }
   }, [
+    apiProvider,
+    appMode,
+    falAspectRatioSelection,
+    falImageSizeSelection,
+    falModelId,
+    falNumImages,
+    images,
+    inpaintMode,
+    paths,
+    primaryImage,
     primaryImageId,
     prompt,
-    appMode,
-    tool,
-    images,
     referenceImageIds,
-    paths,
-    apiProvider,
-    inpaintMode,
+    setError,
+    setFalJobs,
+    setIsLoading,
+    setReferenceImageIds,
+    setSelectedImageIds,
+    setSelectedNoteIds,
     setState,
-    falModelId,
-    falImageSizeSelection,
-    falAspectRatioSelection,
-    falNumImages,
-    primaryImage,
+    tool,
   ]);
 
   const handleBackgroundRemoval = useCallback(async () => {
@@ -1445,17 +1568,24 @@ export default function App() {
       const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
       const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
       const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
-      const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isNanoModel);
+      const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+      const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isNanoModel || isReveModel);
       const isNumImagesInvalid =
         !Number.isFinite(falNumImages) ||
         falNumImages < 1 ||
         falNumImages > 4;
 
-      const submitDisabled = !primaryImageId || 
-        (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
-        (appMode === 'ANNOTATE' && paths.length === 0) ||
-        (appMode === 'INPAINT' && paths.length === 0) ||
-        (shouldValidateFalOptions && isNumImagesInvalid);
+      const isTextToImage = !primaryImageId;
+      const promptEmpty = prompt.trim().length === 0;
+
+      const submitDisabled = promptEmpty ||
+        (shouldValidateFalOptions && isNumImagesInvalid) ||
+        (!isTextToImage && (
+          (apiProvider === 'fal' && isReveModel) ||
+          (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
+          (appMode === 'ANNOTATE' && paths.length === 0) ||
+          (appMode === 'INPAINT' && paths.length === 0)
+        ));
 
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -1481,6 +1611,7 @@ export default function App() {
     apiProvider,
     falModelId,
     falNumImages,
+    prompt,
   ]);
 
   const canUndo = historyIndex > 0;
@@ -1723,55 +1854,74 @@ export default function App() {
   const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
   const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
+  const isTextToImage = !primaryImageId;
+  const promptEmpty = prompt.trim().length === 0;
   const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
   const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
-  const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isNanoModel);
+  const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+  const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isNanoModel || isReveModel);
   const isNumImagesInvalid =
     !Number.isFinite(falNumImages) ||
     falNumImages < 1 ||
     falNumImages > 4;
 
-  const submitDisabled = !primaryImageId || 
-    (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
-    (appMode === 'ANNOTATE' && paths.length === 0) ||
-    (appMode === 'INPAINT' && paths.length === 0) ||
-    (shouldValidateFalOptions && isNumImagesInvalid);
+  const submitDisabled = promptEmpty ||
+    (shouldValidateFalOptions && isNumImagesInvalid) ||
+    (!isTextToImage && (
+      (apiProvider === 'fal' && isReveModel) ||
+      (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
+      (appMode === 'ANNOTATE' && paths.length === 0) ||
+      (appMode === 'INPAINT' && paths.length === 0)
+    ));
 
-  const disableFalModelInputs = isLoading || apiProvider !== 'fal';
+  const promptPlaceholderText = isTextToImage
+    ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
+    : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
 
-  const falModelControls: ReadonlyArray<PromptBarModelControl> | undefined = (isSeedreamModel || isNanoModel)
-    ? [
-        ...(isSeedreamModel
-          ? [{
-              id: 'fal-image-size-select',
-              ariaLabel: 'Select Seedream image size',
-              options: FAL_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-              value: falImageSizeSelection,
-              onChange: handleFalImageSizeChange,
-              disabled: disableFalModelInputs,
-            }]
-          : []),
-        ...(isNanoModel
-          ? [{
-              id: 'fal-aspect-ratio-select',
-              ariaLabel: 'Select Nano Banana aspect ratio',
-              options: FAL_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-              value: falAspectRatioSelection,
-              onChange: handleFalAspectRatioChange,
-              disabled: disableFalModelInputs,
-            }]
-          : []),
-        {
-          id: 'fal-num-images-select',
-          ariaLabel: 'Select number of images to generate',
-          options: FAL_NUM_IMAGE_OPTIONS.map(option => ({ value: `${option}`, label: `${option}` })),
-          value: falNumImages.toString(),
-          onChange: (value: string) => handleFalNumImagesChange(Number(value)),
-          disabled: disableFalModelInputs,
-          errorMessage: shouldValidateFalOptions && isNumImagesInvalid ? 'Num images must be between 1 and 4.' : undefined,
-        },
-      ]
-    : undefined;
+  const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel;
+  const supportsAspectRatioControl = isNanoModel || isReveModel;
+  const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || isTextToImage);
+  const shouldShowNumImagesControl = apiProvider === 'fal' && (isSeedreamModel || isNanoModel || isReveModel);
+
+  const promptBarModelControlsList: PromptBarModelControl[] = [];
+
+  if (shouldShowSeedreamImageSizeControl) {
+    promptBarModelControlsList.push({
+      id: 'fal-image-size-select',
+      ariaLabel: 'Select Seedream image size',
+      options: FAL_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: falImageSizeSelection,
+      onChange: handleFalImageSizeChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (shouldShowAspectRatioControl) {
+    const aspectRatioOptions = isReveModel ? FAL_REVE_ASPECT_RATIO_OPTIONS : FAL_NANO_ASPECT_RATIO_OPTIONS;
+    promptBarModelControlsList.push({
+      id: 'fal-aspect-ratio-select',
+      ariaLabel: isReveModel ? 'Select Reve Image aspect ratio' : 'Select Nano Banana aspect ratio',
+      options: aspectRatioOptions.map(option => ({ value: option.value, label: option.label })),
+      value: falAspectRatioSelection,
+      onChange: handleFalAspectRatioChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (shouldShowNumImagesControl) {
+    promptBarModelControlsList.push({
+      id: 'fal-num-images-select',
+      ariaLabel: 'Select number of images to generate',
+      options: FAL_NUM_IMAGE_OPTIONS.map(option => ({ value: `${option}`, label: `${option}` })),
+      value: falNumImages.toString(),
+      onChange: (value: string) => handleFalNumImagesChange(Number(value)),
+      disabled: isLoading,
+      errorMessage: shouldValidateFalOptions && isNumImagesInvalid ? 'Num images must be between 1 and 4.' : undefined,
+    });
+  }
+
+  const promptBarModelControls: ReadonlyArray<PromptBarModelControl> | undefined =
+    promptBarModelControlsList.length > 0 ? promptBarModelControlsList : undefined;
 
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
@@ -1929,7 +2079,7 @@ export default function App() {
           onPromptChange={setPrompt}
           onSubmit={handleGenerate}
           isLoading={isLoading}
-          inputDisabled={!primaryImageId}
+          inputDisabled={false}
           submitDisabled={submitDisabled}
           modelOptions={FAL_MODEL_OPTIONS}
           selectedModel={falModelId}
@@ -1939,7 +2089,8 @@ export default function App() {
             }
           }}
           modelSelectDisabled={apiProvider !== 'fal' || isLoading}
-          modelControls={falModelControls}
+          modelControls={promptBarModelControls}
+          promptPlaceholder={promptPlaceholderText}
         />
       )}
     </div>

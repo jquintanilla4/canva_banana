@@ -28,6 +28,7 @@ interface PromptBarProps {
   onModelChange: (modelId: string) => void;
   modelSelectDisabled: boolean;
   modelControls?: ReadonlyArray<FalModelControlConfig>;
+  promptPlaceholder?: string;
 }
 
 export const PromptBar: React.FC<PromptBarProps> = ({
@@ -42,6 +43,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   onModelChange,
   modelSelectDisabled,
   modelControls,
+  promptPlaceholder,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);
@@ -65,6 +67,12 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     wasLoading.current = isLoading;
   }, [isLoading, inputDisabled]);
 
+  const resolvedPlaceholder = promptPlaceholder ?? (
+    inputDisabled
+      ? "Upload or select an image to begin editing..."
+      : "Describe your edit or image idea... (Cmd/Ctrl + Enter to generate)"
+  );
+
   return (
     <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.02rem] p-[0.61rem] w-full max-w-[69.1rem]">
       <div className="relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex items-end gap-[1.1rem] py-[0.81rem] pl-[0.83rem] pr-[1.15rem]">
@@ -73,7 +81,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             ref={textareaRef}
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
-            placeholder={inputDisabled ? "Upload or select an image to begin editing..." : "Describe your edit... (Cmd/Ctrl + Enter to generate)"}
+            placeholder={resolvedPlaceholder}
             disabled={inputDisabled || isLoading}
             rows={3}
             className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto"

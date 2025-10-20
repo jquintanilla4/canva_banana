@@ -200,3 +200,53 @@ export const generateImageEdit = async ({
 
   return { imageBase64: resultImageBase64, imagesBase64: [resultImageBase64], text: resultText };
 };
+
+interface GenerateImageOptions {
+  aspectRatio?: string;
+}
+
+export const generateImage = async (
+  prompt: string,
+  options: GenerateImageOptions = {},
+): Promise<{ imageBase64: string; imagesBase64: string[]; text: string }> => {
+  const model = 'gemini-2.5-flash-image';
+  const client = ensureClient();
+  const aspectRatio = options.aspectRatio;
+
+  const response = await client.models.generateContent({
+    model,
+    contents: {
+      parts: [{ text: prompt }],
+    },
+    config: {
+      responseModalities: [Modality.IMAGE, Modality.TEXT],
+      ...(aspectRatio
+        ? {
+            imageConfig: {
+              aspectRatio,
+            },
+          }
+        : {}),
+    },
+  });
+
+  const imagesBase64: string[] = [];
+  let resultText = '';
+
+  const candidate = response.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
+
+  parts.forEach(part => {
+    if (part.inlineData?.data) {
+      imagesBase64.push(part.inlineData.data);
+    } else if (part.text) {
+      resultText = resultText ? `${resultText}\n${part.text}` : part.text;
+    }
+  });
+
+  if (imagesBase64.length === 0) {
+    throw new Error("API did not return an image.");
+  }
+
+  return { imageBase64: imagesBase64[0], imagesBase64, text: resultText };
+};
