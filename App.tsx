@@ -267,6 +267,8 @@ export default function App() {
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
+  const [zoomInTrigger, setZoomInTrigger] = useState(0);
+  const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
   const [cropMode, setCropMode] = useState<CropModeState | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [apiProvider, setApiProvider] = useState<'google' | 'fal'>('google');
@@ -278,6 +280,12 @@ export default function App() {
   const [falNumImages, setFalNumImages] = useState(1);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const fileMenuRef = useRef<HTMLDivElement>(null);
+  const requestZoomIn = useCallback(() => {
+    setZoomInTrigger(prev => prev + 1);
+  }, []);
+  const requestZoomOut = useCallback(() => {
+    setZoomOutTrigger(prev => prev + 1);
+  }, []);
 
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
@@ -1402,6 +1410,16 @@ export default function App() {
         case 'b': if (appMode !== 'CANVAS') handleToolChange(Tool.BRUSH); break;
         case 'e': handleToolChange(Tool.ERASE); break;
         case 'n': handleToolChange(Tool.NOTE); break;
+        case '=':
+        case '+':
+          e.preventDefault();
+          requestZoomIn();
+          break;
+        case '-':
+        case '_':
+          e.preventDefault();
+          requestZoomOut();
+          break;
         case 'delete':
         case 'backspace':
           handleDelete();
@@ -1418,7 +1436,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool, handleToolChange, appMode, cropMode, handleConfirmCrop, handleCancelCrop]);
+  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool, handleToolChange, appMode, cropMode, handleConfirmCrop, handleCancelCrop, requestZoomIn, requestZoomOut]);
   
   useEffect(() => {
     const handleGlobalSubmit = (e: KeyboardEvent) => {
@@ -1850,6 +1868,8 @@ export default function App() {
           onCommit={handleCommit}
           onFilesDrop={handleFilesDrop}
           zoomToFitTrigger={zoomToFitTrigger}
+          zoomInTrigger={zoomInTrigger}
+          zoomOutTrigger={zoomOutTrigger}
           editingNoteId={editingNoteId}
           onNoteDoubleClick={setEditingNoteId}
           onNoteTextChange={handleNoteTextChange}

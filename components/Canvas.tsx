@@ -22,6 +22,8 @@ interface CanvasProps {
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
   onCommit: () => void;
   zoomToFitTrigger: number;
+  zoomInTrigger: number;
+  zoomOutTrigger: number;
   onFilesDrop: (files: FileList, point: Point) => void;
   editingNoteId: string | null;
   onNoteDoubleClick: (id: string) => void;
@@ -51,6 +53,9 @@ const GRID_MAX_SIZE = 120;
 const DOT_BASE_SIZE = 2;
 const DOT_MIN_SIZE = 0.8;
 const DOT_MAX_SIZE = 3.5;
+const KEYBOARD_ZOOM_MULTIPLIER = 1.05; // 5% zoom steps for keyboard shortcuts
+const KEYBOARD_ZOOM_OUT_MULTIPLIER = 1 / KEYBOARD_ZOOM_MULTIPLIER;
+const WHEEL_ZOOM_MULTIPLIER = 1.1;
 
 // FIX: Added 'resize-l' to the CropAction type to support left-side cropping and fix a type error.
 type CropAction = 'move' | 'resize-tl' | 'resize-t' | 'resize-tr' | 'resize-r' | 'resize-br' | 'resize-b' | 'resize-bl' | 'resize-l';
@@ -90,6 +95,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   onNoteSelect,
   onCommit,
   zoomToFitTrigger,
+  zoomInTrigger,
+  zoomOutTrigger,
   onFilesDrop,
   editingNoteId,
   onNoteDoubleClick,
@@ -137,6 +144,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [cropDragStart, setCropDragStart] = useState<{point: Point, rect: { x: number; y: number; width: number; height: number; }} | null>(null);
 
   const prevZoomToFitTrigger = useRef(zoomToFitTrigger);
+  const prevZoomInTrigger = useRef(zoomInTrigger);
+  const prevZoomOutTrigger = useRef(zoomOutTrigger);
   const prevImagesLength = useRef(images.length);
   const scaleRef = useRef(scale);
   const panRef = useRef(pan);
@@ -222,6 +231,30 @@ export const Canvas: React.FC<CanvasProps> = ({
     setPan(nextPan);
     return nextPan;
   }, []);
+
+  const applyZoom = useCallback((multiplier: number, anchor?: { x: number; y: number }) => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const currentScale = scaleRef.current;
+    const currentPan = panRef.current;
+    const nextScale = currentScale * multiplier;
+    const clampedScale = Math.max(MIN_SCALE, Math.min(nextScale, MAX_SCALE));
+    const scaleRatio = currentScale === 0 ? 1 : clampedScale / currentScale;
+    const anchorX = anchor?.x ?? container.clientWidth / 2;
+    const anchorY = anchor?.y ?? container.clientHeight / 2;
+
+    const updatedPan = {
+      x: anchorX - (anchorX - currentPan.x) * scaleRatio,
+      y: anchorY - (anchorY - currentPan.y) * scaleRatio,
+    };
+
+    scaleRef.current = clampedScale;
+    setScale(clampedScale);
+    setPanSmoothly(updatedPan);
+  }, [setPanSmoothly]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -472,6 +505,20 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [zoomToFitTrigger, zoomToFit]);
 
   useEffect(() => {
+    if (zoomInTrigger > prevZoomInTrigger.current) {
+      applyZoom(KEYBOARD_ZOOM_MULTIPLIER);
+    }
+    prevZoomInTrigger.current = zoomInTrigger;
+  }, [zoomInTrigger, applyZoom]);
+
+  useEffect(() => {
+    if (zoomOutTrigger > prevZoomOutTrigger.current) {
+      applyZoom(KEYBOARD_ZOOM_OUT_MULTIPLIER);
+    }
+    prevZoomOutTrigger.current = zoomOutTrigger;
+  }, [zoomOutTrigger, applyZoom]);
+
+  useEffect(() => {
     scaleRef.current = scale;
   }, [scale]);
 
@@ -492,22 +539,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
 
-      const scaleFactor = 1.1;
-      const currentScale = scaleRef.current;
-      const currentPan = panRef.current;
-
-      const nextScale = event.deltaY < 0 ? currentScale * scaleFactor : currentScale / scaleFactor;
-      const clampedScale = Math.max(MIN_SCALE, Math.min(nextScale, MAX_SCALE));
-      const scaleRatio = currentScale === 0 ? 1 : clampedScale / currentScale;
-
-      const updatedPan = {
-        x: mouseX - (mouseX - currentPan.x) * scaleRatio,
-        y: mouseY - (mouseY - currentPan.y) * scaleRatio,
-      };
-
-      scaleRef.current = clampedScale;
-      setScale(clampedScale);
-      setPanSmoothly(updatedPan);
+      const multiplier = event.deltaY < 0 ? WHEEL_ZOOM_MULTIPLIER : 1 / WHEEL_ZOOM_MULTIPLIER;
+      applyZoom(multiplier, { x: mouseX, y: mouseY });
     };
 
     // Attach a non-passive wheel listener so we can prevent the browser's default scroll.
@@ -516,7 +549,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [setPanSmoothly]);
+  }, [applyZoom]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
