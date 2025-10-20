@@ -11,12 +11,13 @@ import {
   CanvasNote,
   FalImageSizePreset,
   FalAspectRatioOption,
+  CanvasImageSource,
 } from './types';
 import { generateImageEdit as generateGoogleImageEdit, generateImage as generateGoogleImage } from './services/geminiService';
 import { generateImageEdit as generateFalImageEdit, generateImage as generateFalImage, removeBackground as removeFalBackground, type FalQueueUpdate } from './services/falService';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import type { FalQueueJob, FalJobStatus } from './types';
-import { ZoomToFitIcon, HamburgerIcon } from './components/Icons';
+import { ZoomToFitIcon, HamburgerIcon, MetadataIcon } from './components/Icons';
 
 const NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
@@ -104,15 +105,42 @@ const DEFAULT_FAL_MODEL_ID: FalModelId = isFalModelId(process.env.FAL_MODEL_ID)
   ? process.env.FAL_MODEL_ID
   : NANO_BANANA_MODEL_ID;
 
+const isCanvasImageSource = (value: unknown): value is CanvasImageSource => {
+  return value === 'generated' || value === 'imported' || value === 'snapshot' || value === 'derived';
+};
+
+const getFalModelLabel = (modelId: FalModelId): string => {
+  const match = FAL_MODEL_OPTIONS.find(option => option.value === modelId);
+  return match ? match.label : 'FAL Model';
+};
+
+const GOOGLE_MODEL_LABEL = 'Google Gemini';
+
 interface ViewToolbarProps {
   onZoomToFit: () => void;
   disabled: boolean;
+  metadataVisible: boolean;
+  onToggleMetadata: () => void;
 }
 
-const ViewToolbar: React.FC<ViewToolbarProps> = ({ onZoomToFit, disabled }) => {
+const ViewToolbar: React.FC<ViewToolbarProps> = ({ onZoomToFit, disabled, metadataVisible, onToggleMetadata }) => {
+  const metadataButtonClasses = metadataVisible
+    ? 'bg-blue-500 hover:bg-blue-400'
+    : 'bg-gray-700 hover:bg-gray-600';
+
   return (
-    <div className="absolute bottom-4 right-4 z-10 flex flex-col items-center space-y-2">
+    <div className="absolute bottom-4 right-4 z-10 flex items-center space-x-2">
       <button
+        type="button"
+        onClick={onToggleMetadata}
+        aria-pressed={metadataVisible}
+        className={`p-2 rounded-md border-none outline-none focus:outline-none focus:ring-0 shadow-none transition-colors duration-200 text-white ${metadataButtonClasses}`}
+        title={metadataVisible ? 'Hide Generation Prompt Metadata' : 'Show Generation Prompt Metadata'}
+      >
+        <MetadataIcon className="w-5 h-5" />
+      </button>
+      <button
+        type="button"
         onClick={onZoomToFit}
         disabled={disabled}
         className="p-2 rounded-md border-none outline-none focus:outline-none focus:ring-0 shadow-none transition-colors duration-200 bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
@@ -137,6 +165,7 @@ type SerializedCanvasImage = {
   fileName: string;
   fileType: string;
   dataUrl: string;
+  metadata?: CanvasImage['metadata'];
 };
 
 type SerializedSnapshot = {
@@ -298,6 +327,7 @@ export default function App() {
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('default');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
   const [falNumImages, setFalNumImages] = useState(1);
+  const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const fileMenuRef = useRef<HTMLDivElement>(null);
   const requestZoomIn = useCallback(() => {
@@ -455,6 +485,7 @@ export default function App() {
             fileName: img.file.name,
             fileType: img.file.type,
             dataUrl,
+            metadata: img.metadata ? { ...img.metadata } : undefined,
           };
         } catch (err) {
           console.error(err);
@@ -590,6 +621,27 @@ export default function App() {
           const snapshotFile = await dataUrlToFile(img.dataUrl, fileName, fileType);
           const width = typeof img.width === 'number' ? img.width : naturalWidth;
           const height = typeof img.height === 'number' ? img.height : naturalHeight;
+          const rawMetadata = (img as SerializedCanvasImage).metadata as CanvasImage['metadata'] | undefined;
+          let metadata: CanvasImage['metadata'] | undefined;
+
+          if (rawMetadata && typeof rawMetadata === 'object') {
+            const rawSource = rawMetadata.source;
+            const rawPrompt = rawMetadata.prompt;
+            const rawModelLabel = rawMetadata.modelLabel;
+            const source = isCanvasImageSource(rawSource) ? rawSource : 'snapshot';
+            const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
+            const modelLabel = typeof rawModelLabel === 'string' ? rawModelLabel.trim() : '';
+            metadata = {
+              source,
+              ...(prompt.length > 0 ? { prompt } : {}),
+              ...(modelLabel.length > 0 ? { modelLabel } : {}),
+            };
+            if (!prompt && !modelLabel) {
+              metadata = { source };
+            }
+          } else {
+            metadata = undefined;
+          }
 
           return {
             id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
@@ -601,6 +653,7 @@ export default function App() {
             naturalWidth,
             naturalHeight,
             file: snapshotFile,
+            metadata,
           };
         })
       );
@@ -962,6 +1015,7 @@ export default function App() {
     }
 
     const usingFal = apiProvider === 'fal';
+    const generationModelLabel = usingFal ? getFalModelLabel(falModelId) : GOOGLE_MODEL_LABEL;
     const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
     const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
     const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
@@ -1272,6 +1326,11 @@ export default function App() {
           naturalWidth,
           naturalHeight,
           file,
+          metadata: {
+            source: 'generated',
+            prompt: trimmedPrompt,
+            modelLabel: generationModelLabel,
+          },
         });
 
         yOffset += displayHeight + 20;
@@ -1381,6 +1440,9 @@ export default function App() {
         naturalWidth,
         naturalHeight,
         file,
+        metadata: primaryImage.metadata
+          ? { ...primaryImage.metadata }
+          : { source: 'derived' },
       });
 
       while (
@@ -1666,6 +1728,7 @@ export default function App() {
               naturalWidth,
               naturalHeight,
               file: file,
+              metadata: { source: 'imported' },
             };
             setSelectedImageIds([newCanvasImage.id]);
             setSelectedNoteIds([]);
@@ -1712,6 +1775,7 @@ export default function App() {
                     naturalWidth,
                     naturalHeight,
                     file: file,
+                    metadata: { source: 'imported' },
                 };
                 newImages.push(newCanvasImage);
                 lastAddedImageId = newCanvasImage.id;
@@ -2034,8 +2098,14 @@ export default function App() {
           onConfirmCrop={handleConfirmCrop}
           onCancelCrop={handleCancelCrop}
           onNoteCopy={handleNoteCopy}
+          showMetadataOverlay={showMetadataOverlay}
         />
-        <ViewToolbar onZoomToFit={handleZoomToFit} disabled={images.length === 0 && notes.length === 0} />
+        <ViewToolbar
+          onZoomToFit={handleZoomToFit}
+          disabled={images.length === 0 && notes.length === 0}
+          metadataVisible={showMetadataOverlay}
+          onToggleMetadata={() => setShowMetadataOverlay(prev => !prev)}
+        />
       </main>
       
       {error && (

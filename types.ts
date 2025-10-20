@@ -28,6 +28,14 @@ export interface ImageDimensions {
   height: number;
 }
 
+export type CanvasImageSource = 'generated' | 'imported' | 'snapshot' | 'derived';
+
+export interface CanvasImageMetadata {
+  source: CanvasImageSource;
+  prompt?: string;
+  modelLabel?: string;
+}
+
 export type FalImageSizePreset =
   | 'square_hd'
   | 'square'
@@ -65,6 +73,7 @@ export interface CanvasImage {
   naturalWidth: number;
   naturalHeight: number;
   file: File;
+  metadata?: CanvasImageMetadata;
 }
 
 export interface CanvasNote {

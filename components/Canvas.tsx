@@ -39,6 +39,7 @@ interface CanvasProps {
   onConfirmCrop: () => void;
   onCancelCrop: () => void;
   onNoteCopy: (noteId: string) => void;
+  showMetadataOverlay: boolean;
 }
 
 const RESIZE_HANDLE_SIZE = 12;
@@ -112,6 +113,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onConfirmCrop,
   onCancelCrop,
   onNoteCopy,
+  showMetadataOverlay,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -226,6 +228,79 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   };
 
+  const getWrappedLines = (context: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
+    const lines: string[] = [];
+    const paragraphs = text.split(/\r?\n/);
+
+    paragraphs.forEach(paragraph => {
+      if (paragraph === '') {
+        lines.push('');
+        return;
+      }
+
+      const words = paragraph.split(' ');
+      let line = '';
+
+      words.forEach(word => {
+        const appendWord = word === '' ? ' ' : `${word} `;
+        const testLine = line + appendWord;
+        const testWidth = context.measureText(testLine).width;
+
+        if (testWidth > maxWidth && line) {
+          lines.push(line.trimEnd());
+          line = appendWord;
+        } else {
+          line = testLine;
+        }
+      });
+
+      if (line) {
+        lines.push(line.trimEnd());
+      }
+    });
+
+    return lines;
+  };
+
+  const fitTextWithinBox = (
+    context: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+    maxHeight: number,
+    initialFontSize: number,
+    minFontSize = 8,
+  ): { fontSize: number; lineHeight: number; lines: string[] } => {
+    const sanitizedText = text.trim();
+    if (sanitizedText.length === 0 || maxWidth <= 0 || maxHeight <= 0) {
+      const fontSize = Math.max(minFontSize, Math.min(initialFontSize, 16));
+      const lineHeight = fontSize * 1.2;
+      return { fontSize, lineHeight, lines: [] };
+    }
+
+    let fontSize = Math.max(initialFontSize, minFontSize);
+    let lines: string[] = [];
+    let lineHeight = fontSize * 1.2;
+    const minimumFontSize = Math.max(8, minFontSize);
+
+    while (fontSize >= minimumFontSize) {
+      context.font = `${fontSize}px sans-serif`;
+      lineHeight = fontSize * 1.2;
+      lines = getWrappedLines(context, sanitizedText, maxWidth);
+      const requiredHeight = lines.length * lineHeight;
+
+      if (requiredHeight <= maxHeight || fontSize === minimumFontSize) {
+        return { fontSize, lineHeight, lines };
+      }
+
+      fontSize = Math.max(fontSize - 2, minimumFontSize);
+    }
+
+    context.font = `${minimumFontSize}px sans-serif`;
+    lineHeight = minimumFontSize * 1.2;
+    lines = getWrappedLines(context, sanitizedText, maxWidth);
+    return { fontSize: minimumFontSize, lineHeight, lines };
+  };
+
   const setPanSmoothly = useCallback((nextPan: Point) => {
     panRef.current = nextPan;
     setPan(nextPan);
@@ -270,6 +345,47 @@ export const Canvas: React.FC<CanvasProps> = ({
     // Draw images
     images.forEach(image => {
         ctx.drawImage(image.element, image.x, image.y, image.width, image.height);
+
+        const promptText = image.metadata?.prompt?.trim() ?? '';
+        const isGeneratedImage = image.metadata?.source !== 'imported' && promptText.length > 0;
+        const shouldShowMetadata = showMetadataOverlay && isGeneratedImage;
+
+        if (shouldShowMetadata) {
+            const overlayHeight = image.height * 0.15;
+            const overlayY = image.y + image.height - overlayHeight;
+            const paddingInner = Math.max(8, overlayHeight * 0.1);
+            const textAreaWidth = Math.max(image.width - paddingInner * 2, 0);
+            const overlayInnerHeight = Math.max(overlayHeight - paddingInner * 2, 0);
+            const modelLabel = image.metadata?.modelLabel?.trim();
+            const overlayText = modelLabel ? `${modelLabel}; ${promptText}` : promptText;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(image.x, overlayY, image.width, overlayHeight);
+
+            if (textAreaWidth > 0 && overlayInnerHeight > 0) {
+                const baseFontSize = Math.max(14, overlayHeight * 0.35);
+                const { fontSize: fittedFontSize, lineHeight, lines } = fitTextWithinBox(
+                    ctx,
+                    overlayText,
+                    textAreaWidth,
+                    overlayInnerHeight,
+                    baseFontSize,
+                );
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(image.x + paddingInner, overlayY + paddingInner, textAreaWidth, overlayInnerHeight);
+                ctx.clip();
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `${fittedFontSize}px sans-serif`;
+                lines.forEach((line, lineIndex) => {
+                    const textY = overlayY + paddingInner + fittedFontSize + lineIndex * lineHeight;
+                    ctx.fillText(line, image.x + paddingInner, textY);
+                });
+                ctx.restore();
+            }
+        }
+
         const padding = 5 / scale;
         if (selectedImageIds.includes(image.id)) {
             ctx.strokeStyle = '#0ea5e9'; // sky-500
@@ -422,7 +538,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             ctx.drawImage(pathCanvas, 0, 0);
         }
     }
-  }, [images, notes, paths, pan, scale, selectedImageIds, selectedNoteIds, referenceImageIds, cropMode]);
+  }, [images, notes, paths, pan, scale, selectedImageIds, selectedNoteIds, referenceImageIds, cropMode, showMetadataOverlay]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;
