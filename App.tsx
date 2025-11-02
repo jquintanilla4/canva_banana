@@ -1047,8 +1047,11 @@ export default function App() {
         return;
       }
 
-      if ((appMode === 'ANNOTATE' || appMode === 'INPAINT') && paths.length === 0) {
-        setError(`Please use the Brush tool to draw ${appMode === 'ANNOTATE' ? 'annotations' : 'an inpaint mask'} before generating.`);
+      const hasAnnotationStrokes = paths.some(path => path.tool === Tool.ANNOTATE && path.points.length > 0);
+      const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
+
+      if (appMode === 'INPAINT' && !hasInpaintMask) {
+        setError('Please use the Brush tool to draw an inpaint mask before generating.');
         return;
       }
     }
@@ -1217,7 +1220,12 @@ export default function App() {
           })),
         }));
 
-        const toolForApi = appMode === 'ANNOTATE' ? Tool.ANNOTATE : appMode === 'INPAINT' ? Tool.INPAINT : tool;
+        const toolForApi =
+          appMode === 'ANNOTATE'
+            ? (hasAnnotationStrokes ? Tool.ANNOTATE : Tool.SELECTION)
+            : appMode === 'INPAINT'
+              ? Tool.INPAINT
+              : tool;
 
         const basePayload = {
           prompt: trimmedPrompt,
@@ -1639,14 +1647,14 @@ export default function App() {
 
       const isTextToImage = !primaryImageId;
       const promptEmpty = prompt.trim().length === 0;
+      const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
 
       const submitDisabled = promptEmpty ||
         (shouldValidateFalOptions && isNumImagesInvalid) ||
         (!isTextToImage && (
           (apiProvider === 'fal' && isReveModel) ||
           (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
-          (appMode === 'ANNOTATE' && paths.length === 0) ||
-          (appMode === 'INPAINT' && paths.length === 0)
+          (appMode === 'INPAINT' && !hasInpaintMask)
         ));
 
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -1928,14 +1936,14 @@ export default function App() {
     !Number.isFinite(falNumImages) ||
     falNumImages < 1 ||
     falNumImages > 4;
+  const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
 
   const submitDisabled = promptEmpty ||
     (shouldValidateFalOptions && isNumImagesInvalid) ||
     (!isTextToImage && (
       (apiProvider === 'fal' && isReveModel) ||
       (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
-      (appMode === 'ANNOTATE' && paths.length === 0) ||
-      (appMode === 'INPAINT' && paths.length === 0)
+      (appMode === 'INPAINT' && !hasInpaintMask)
     ));
 
   const promptPlaceholderText = isTextToImage
