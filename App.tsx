@@ -179,6 +179,7 @@ type SerializedSnapshot = {
       appMode: AppMode;
       tool: Tool;
       brushSize: number;
+      eraserSize: number;
       brushColor: string;
       prompt: string;
       inpaintMode: InpaintMode;
@@ -282,6 +283,7 @@ export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('CANVAS');
   const [tool, setTool] = useState<Tool>(Tool.PAN);
   const [brushSize, setBrushSize] = useState(20);
+  const [eraserSize, setEraserSize] = useState(20);
   const [brushColor, setBrushColor] = useState('#ff0000');
   const [prompt, setPrompt] = useState('');
   const [inpaintMode, setInpaintMode] = useState<InpaintMode>('STRICT');
@@ -508,6 +510,7 @@ export default function App() {
           appMode,
           tool,
           brushSize,
+          eraserSize,
           brushColor,
           prompt,
           inpaintMode,
@@ -531,6 +534,7 @@ export default function App() {
     appMode,
     tool,
     brushSize,
+    eraserSize,
     brushColor,
     prompt,
     inpaintMode,
@@ -681,11 +685,12 @@ export default function App() {
         const toolValue = Object.values(Tool).includes(path?.tool as Tool)
           ? (path?.tool as Tool)
           : fallbackTool;
+        const fallbackSize = toolValue === Tool.ERASE ? eraserSize : brushSize;
 
         return {
           points,
           color: typeof path?.color === 'string' && path.color.length > 0 ? path.color : brushColor,
-          size: typeof path?.size === 'number' ? path.size : brushSize,
+          size: typeof path?.size === 'number' ? path.size : fallbackSize,
           tool: toolValue,
         };
       });
@@ -713,6 +718,9 @@ export default function App() {
 
         if (typeof meta.brushSize === 'number' && Number.isFinite(meta.brushSize) && meta.brushSize > 0) {
           setBrushSize(meta.brushSize);
+        }
+        if (typeof meta.eraserSize === 'number' && Number.isFinite(meta.eraserSize) && meta.eraserSize > 0) {
+          setEraserSize(meta.eraserSize);
         }
         if (typeof meta.brushColor === 'string' && meta.brushColor.length > 0) {
           setBrushColor(meta.brushColor);
@@ -763,6 +771,7 @@ export default function App() {
   }, [
     brushColor,
     brushSize,
+    eraserSize,
     setLiveImages,
     setLivePaths,
     setLiveNotes,
@@ -770,6 +779,7 @@ export default function App() {
     setAppMode,
     setTool,
     setBrushSize,
+    setEraserSize,
     setBrushColor,
     setPrompt,
     setInpaintMode,
@@ -2048,7 +2058,9 @@ export default function App() {
           appMode={appMode}
           onModeChange={handleModeChange}
           brushSize={brushSize}
+          eraserSize={eraserSize}
           onBrushSizeChange={setBrushSize}
+          onEraserSizeChange={setEraserSize}
           brushColor={brushColor}
           onBrushColorChange={setBrushColor}
           onClear={handleClear}
@@ -2080,6 +2092,7 @@ export default function App() {
           paths={displayedPaths}
           onPathsChange={setLivePaths}
           brushSize={brushSize}
+          eraserSize={eraserSize}
           brushColor={brushColor}
           selectedImageIds={selectedImageIds}
           selectedNoteIds={selectedNoteIds}

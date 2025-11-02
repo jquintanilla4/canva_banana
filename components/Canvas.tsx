@@ -14,6 +14,7 @@ interface CanvasProps {
   paths: Path[];
   onPathsChange: (paths: Path[]) => void;
   brushSize: number;
+  eraserSize: number;
   brushColor: string;
   selectedImageIds: string[];
   selectedNoteIds: string[];
@@ -88,6 +89,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   paths,
   onPathsChange,
   brushSize,
+  eraserSize,
   brushColor,
   selectedImageIds,
   selectedNoteIds,
@@ -914,10 +916,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
       }
 
+      const baseStrokeSize = activeTool === Tool.ERASE ? eraserSize : brushSize;
       const newPath: Path = {
         points: [point],
         color: brushColor,
-        size: brushSize / scale,
+        size: baseStrokeSize / scale,
         tool: pathTool,
       };
       onPathsChange([...paths, newPath]);

@@ -10,7 +10,9 @@ interface ToolbarProps {
   appMode: AppMode;
   onModeChange: (mode: AppMode) => void;
   brushSize: number;
+  eraserSize: number;
   onBrushSizeChange: (size: number) => void;
+  onEraserSizeChange: (size: number) => void;
   brushColor: string;
   onBrushColorChange: (color: string) => void;
   onClear: () => void;
@@ -90,7 +92,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   appMode,
   onModeChange,
   brushSize,
+  eraserSize,
   onBrushSizeChange,
+  onEraserSizeChange,
   brushColor,
   onBrushColorChange,
   onClear,
@@ -109,6 +113,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isBackgroundRemovalDisabled,
   isBackgroundRemovalLoading,
 }) => {
+  const isBrushToolActive = activeTool === Tool.BRUSH;
+  const isEraserToolActive = activeTool === Tool.ERASE;
+  const strokeSize = isEraserToolActive ? eraserSize : brushSize;
+  const handleStrokeSizeChange = (value: number) => {
+    if (isEraserToolActive) {
+      onEraserSizeChange(value);
+    } else {
+      onBrushSizeChange(value);
+    }
+  };
+
   return (
     <header className="absolute top-0 left-1/2 -translate-x-1/2 z-10 mt-4 px-3 py-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex h-12 items-center space-x-4">
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
@@ -164,7 +179,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </ToolButton>
       </div>
 
-      {(activeTool === Tool.BRUSH || activeTool === Tool.ERASE) && (
+      {(isBrushToolActive || isEraserToolActive) && (
         <div className="flex h-full items-center space-x-4 border-r border-gray-600 pr-4">
           <div className="flex h-full items-center space-x-2">
             <label htmlFor="brushSize" className="text-xs text-gray-300">Size</label>
@@ -173,12 +188,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               type="range"
               min="1"
               max="100"
-              value={brushSize}
-              onChange={(e) => onBrushSizeChange(Number(e.target.value))}
+              value={strokeSize}
+              onChange={(e) => handleStrokeSizeChange(Number(e.target.value))}
               className="w-24 h-2 accent-blue-500"
             />
           </div>
-          {activeTool === Tool.BRUSH && appMode === 'ANNOTATE' && (
+          {isBrushToolActive && appMode === 'ANNOTATE' && (
             <div className="flex h-full items-center space-x-2">
               <label htmlFor="brushColor" className="text-xs text-gray-300">Color</label>
               <input
