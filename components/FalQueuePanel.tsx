@@ -1,5 +1,6 @@
 import React from 'react';
 import type { FalQueueJob } from '../types';
+import { isSuppressedFalLogMessage } from '../services/falConstants';
 
 interface FalQueuePanelProps {
   jobs: FalQueueJob[];
@@ -43,7 +44,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({ jobs, onDismiss })
         </div>
         <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {sortedJobs.map(job => {
-            const lastLog = job.logs[job.logs.length - 1];
+            const lastLog = [...job.logs].reverse().find(log => !isSuppressedFalLogMessage(log));
             return (
               <li key={job.id} className="bg-gray-800/70 rounded-md border border-gray-700/50 p-3">
                 <div className="flex items-start justify-between gap-2">

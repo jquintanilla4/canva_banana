@@ -25,6 +25,7 @@ import {
 import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
 import { addDebugLog, clearDebugLogs, getDebugLogs, subscribeToDebugLogs } from './services/debugLog';
+import { isSuppressedFalLogMessage } from './services/falConstants';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon, HamburgerIcon, MetadataIcon } from './components/Icons';
 
@@ -278,10 +279,6 @@ const mapFalStatusToJobStatus = (status: FalQueueUpdate['status'] | undefined): 
   }
 };
 
-const SUPPRESSED_FAL_LOG_STRINGS = new Set([
-  '[WARNING] No request provided, using global lifecycle preference',
-]);
-
 const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['logs']): string[] => {
   if (!updateLogs || updateLogs.length === 0) {
     return existing;
@@ -293,7 +290,7 @@ const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['lo
     if (!message) {
       return;
     }
-    if (SUPPRESSED_FAL_LOG_STRINGS.has(message)) {
+    if (isSuppressedFalLogMessage(message)) {
       addDebugLog({
         direction: 'info',
         source: 'fal',
