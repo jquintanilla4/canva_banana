@@ -371,6 +371,11 @@ export default function App() {
   const displayedImages = liveImages ?? images;
   const displayedPaths = livePaths ?? paths;
   const displayedNotes = liveNotes ?? notes;
+  const hasClearablePaths = displayedPaths.some(
+    path =>
+      (path.tool === Tool.ANNOTATE || path.tool === Tool.INPAINT) &&
+      path.points.length > 0
+  );
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -2388,6 +2393,7 @@ export default function App() {
           brushColor={brushColor}
           onBrushColorChange={setBrushColor}
           onClear={handleClear}
+          hasClearablePaths={hasClearablePaths}
           onUploadClick={handleUploadClick}
           inpaintMode={inpaintMode}
           onInpaintModeChange={setInpaintMode}

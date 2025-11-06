@@ -16,6 +16,7 @@ interface ToolbarProps {
   brushColor: string;
   onBrushColorChange: (color: string) => void;
   onClear: () => void;
+  hasClearablePaths: boolean;
   onUploadClick: () => void;
   inpaintMode: InpaintMode;
   onInpaintModeChange: (mode: InpaintMode) => void;
@@ -98,6 +99,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   brushColor,
   onBrushColorChange,
   onClear,
+  hasClearablePaths,
   onUploadClick,
   inpaintMode,
   onInpaintModeChange,
@@ -153,10 +155,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </ToolButton>
         <button
           onClick={onClear}
-          className="flex h-8 w-8 items-center justify-center bg-red-600 hover:bg-red-500 rounded-md transition-colors"
-          title="Clear Drawings"
+          disabled={!hasClearablePaths}
+          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
+            hasClearablePaths
+              ? 'bg-[#E1B927] hover:bg-[#d4a51f] text-black'
+              : 'bg-[#222937] text-white'
+          } disabled:cursor-not-allowed`}
+          title="Nuke markings"
         >
-          <ClearIcon className="w-4 h-4" />
+          <ClearIcon className="w-[1.15rem] h-[1.15rem]" />
         </button>
         {appMode === 'INPAINT' && (
             <div className="flex h-full items-center space-x-1 pl-2 border-l border-gray-700">
