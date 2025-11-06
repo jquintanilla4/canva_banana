@@ -26,7 +26,7 @@ import {
 import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
 import { addDebugLog, clearDebugLogs, getDebugLogs, subscribeToDebugLogs } from './services/debugLog';
-import { isSuppressedFalLogMessage } from './services/falConstants';
+import { formatFalLogMessage } from './services/falConstants';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon, HamburgerIcon, MetadataIcon } from './components/Icons';
 
@@ -311,21 +311,25 @@ const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['lo
 
   const next = [...existing];
   updateLogs.forEach(log => {
-    const message = typeof log?.message === 'string' ? log.message.trim() : '';
-    if (!message) {
+    const rawMessage = typeof log?.message === 'string' ? log.message.trim() : '';
+    if (!rawMessage) {
       return;
     }
-    if (isSuppressedFalLogMessage(message)) {
+    const { displayMessage, debugMessage } = formatFalLogMessage(rawMessage);
+    if (debugMessage) {
+      const title = displayMessage ? 'Queue log (sanitized)' : 'Queue log (suppressed)';
       addDebugLog({
         direction: 'info',
         source: 'fal',
-        title: 'Queue log (suppressed)',
-        message,
+        title,
+        message: debugMessage,
       });
+    }
+    if (!displayMessage) {
       return;
     }
-    if (!next.includes(message)) {
-      next.push(message);
+    if (!next.includes(displayMessage)) {
+      next.push(displayMessage);
     }
   });
   return next;
