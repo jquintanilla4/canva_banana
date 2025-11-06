@@ -67,6 +67,7 @@ const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-im
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
 const CRYSTAL_UPSCALER_MODEL_ID = 'fal-ai/crystal-upscaler';
 const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler';
+const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -679,6 +680,104 @@ export const upscaleSimaImage = async (
   const base64 = inlineData.split(',')[1];
   if (!base64) {
     throw new Error('Failed to extract image data from Fal.ai Sima Upscaler response.');
+  }
+
+  const requestId = result?.requestId || latestRequestId;
+
+  return {
+    imageBase64: base64,
+    imagesBase64: [base64],
+    text: '',
+    requestId,
+  };
+};
+
+export const upscaleSeedvrImage = async (
+  image: HTMLImageElement,
+  scaleFactor: number,
+  noiseScale: number,
+  options: UpscaleImageOptions = {},
+): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => {
+  ensureFalClientConfigured();
+
+  const imageUrl = await uploadImageElementToFal(image);
+  const sanitizedScale = Number.isFinite(scaleFactor) ? Math.round(scaleFactor) : 2;
+  const normalizedScale = Math.min(10, Math.max(1, sanitizedScale));
+  const sanitizedNoise = Number.isFinite(noiseScale) ? noiseScale : 0.1;
+  const roundedNoise = Math.round(sanitizedNoise * 10) / 10;
+  const normalizedNoise = Math.min(1, Math.max(0.1, roundedNoise));
+  const seedValue = createRandomSeed();
+
+  let latestRequestId: string | undefined;
+
+  const inputPayload = {
+    image_url: imageUrl,
+    upscale_mode: 'factor',
+    upscale_factor: normalizedScale,
+    noise_scale: normalizedNoise,
+    output_format: 'png' as const,
+    seed: seedValue,
+  };
+
+  logFalEvent('outbound', SEEDVR_UPSCALER_MODEL_ID, 'Outbound request (fal.subscribe)', {
+    input: inputPayload,
+  });
+
+  let result: Awaited<ReturnType<typeof fal.subscribe>>;
+  try {
+    result = await fal.subscribe(SEEDVR_UPSCALER_MODEL_ID, {
+      input: inputPayload,
+      logs: true,
+      onQueueUpdate: update => {
+        const queueUpdate = update as FalQueueUpdate;
+        if (queueUpdate.requestId) {
+          latestRequestId = queueUpdate.requestId;
+        }
+        logFalEvent('inbound', SEEDVR_UPSCALER_MODEL_ID, 'Queue update', {
+          status: queueUpdate.status,
+          position: queueUpdate.position,
+          eta: queueUpdate.eta,
+          requestId: queueUpdate.requestId || latestRequestId,
+          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
+        });
+        options.onQueueUpdate?.({
+          ...queueUpdate,
+          requestId: queueUpdate.requestId || latestRequestId || '',
+        });
+      },
+    });
+  } catch (error) {
+    logFalEvent('error', SEEDVR_UPSCALER_MODEL_ID, 'Request failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+
+  logFalEvent('inbound', SEEDVR_UPSCALER_MODEL_ID, 'Result received', {
+    requestId: result?.requestId || latestRequestId,
+    data: (result?.data as Record<string, unknown>) ?? undefined,
+  });
+
+  const data = result?.data as { image?: string | { url?: string } } | undefined;
+  const imageEntry = data?.image;
+  if (!imageEntry) {
+    throw new Error('SeedVR2 Upscaler did not return an image.');
+  }
+
+  const upscaledUrl = typeof imageEntry === 'string'
+    ? imageEntry
+    : typeof imageEntry.url === 'string'
+      ? imageEntry.url
+      : null;
+
+  if (!upscaledUrl) {
+    throw new Error('Unexpected image reference returned by SeedVR2 Upscaler.');
+  }
+
+  const inlineData = await extractInlineData(upscaledUrl);
+  const base64 = inlineData.split(',')[1];
+  if (!base64) {
+    throw new Error('Failed to extract image data from SeedVR2 Upscaler response.');
   }
 
   const requestId = result?.requestId || latestRequestId;

@@ -20,6 +20,7 @@ import {
   removeBackground as removeFalBackground,
   upscaleCrystalImage as upscaleFalCrystalImage,
   upscaleSimaImage as upscaleFalSimaImage,
+  upscaleSeedvrImage as upscaleFalSeedvrImage,
   type FalQueueUpdate,
 } from './services/falService';
 import { FalQueuePanel } from './components/FalQueuePanel';
@@ -36,6 +37,7 @@ const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-im
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
 const CRYSTAL_UPSCALER_MODEL_ID = 'fal-ai/crystal-upscaler' as const;
 const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler' as const;
+const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
 const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 const FAL_MODEL_OPTIONS = [
@@ -44,6 +46,7 @@ const FAL_MODEL_OPTIONS = [
   { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: SIMA_UPSCALER_MODEL_ID, label: 'Sima Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
+  { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
 type FalImageSizeSelectionValue = 'default' | FalImageSizePreset;
@@ -71,6 +74,10 @@ const FAL_CRYSTAL_SCALE_FACTOR_OPTIONS = Array.from({ length: 10 }, (_, index) =
 const FAL_SIMA_SCALE_FACTOR_OPTIONS = Array.from({ length: 4 }, (_, index) => {
   const factor = index + 1;
   return { value: `${factor}`, label: `${factor}x` } as const;
+});
+const FAL_SEEDVR_NOISE_SCALE_OPTIONS = Array.from({ length: 10 }, (_, index) => {
+  const value = (index + 1) / 10;
+  return { value: value.toFixed(1), label: value.toFixed(1) } as const;
 });
 
 const FAL_NANO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
@@ -229,6 +236,7 @@ type SerializedSnapshot = {
         falAspectRatioSelection: FalAspectRatioSelectionValue;
         falNumImages: number;
         falScaleFactor: number;
+        falNoiseScale: number;
         selectedImageIds: string[];
       selectedNoteIds: string[];
       referenceImageIds: string[];
@@ -383,6 +391,7 @@ export default function App() {
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
   const [falNumImages, setFalNumImages] = useState(1);
   const [falScaleFactor, setFalScaleFactor] = useState(2);
+  const [falNoiseScale, setFalNoiseScale] = useState(0.1);
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [isDebugLogOpen, setIsDebugLogOpen] = useState(false);
@@ -428,11 +437,31 @@ export default function App() {
     setFalScaleFactor(clamped);
   }, [falModelId]);
 
+  const handleFalNoiseScaleChange = useCallback((value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      setFalNoiseScale(0.1);
+      return;
+    }
+    const rounded = Math.round(parsed * 10) / 10;
+    const clamped = Math.min(1, Math.max(0.1, rounded));
+    setFalNoiseScale(clamped);
+  }, []);
+
   useEffect(() => {
     setFalScaleFactor(prev => {
       const maxScale = falModelId === SIMA_UPSCALER_MODEL_ID ? 4 : 10;
       const normalizedPrev = Number.isFinite(prev) ? Math.round(prev) : 2;
       const clamped = Math.min(maxScale, Math.max(1, normalizedPrev));
+      return clamped === prev ? prev : clamped;
+    });
+  }, [falModelId]);
+
+  useEffect(() => {
+    setFalNoiseScale(prev => {
+      const normalizedPrev = Number.isFinite(prev) ? prev : 0.1;
+      const rounded = Math.round(normalizedPrev * 10) / 10;
+      const clamped = Math.min(1, Math.max(0.1, rounded));
       return clamped === prev ? prev : clamped;
     });
   }, [falModelId]);
@@ -598,14 +627,15 @@ export default function App() {
           apiProvider,
           falModelId,
           falImageSizeSelection,
-          falAspectRatioSelection,
-          falNumImages,
-          falScaleFactor,
-          selectedImageIds: [...selectedImageIds],
-          selectedNoteIds: [...selectedNoteIds],
-          referenceImageIds: [...referenceImageIds],
-        },
+        falAspectRatioSelection,
+        falNumImages,
+        falScaleFactor,
+        falNoiseScale,
+        selectedImageIds: [...selectedImageIds],
+        selectedNoteIds: [...selectedNoteIds],
+        referenceImageIds: [...referenceImageIds],
       },
+    },
     };
 
     return snapshot;
@@ -626,6 +656,7 @@ export default function App() {
     falAspectRatioSelection,
     falNumImages,
     falScaleFactor,
+    falNoiseScale,
     selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
@@ -836,6 +867,11 @@ export default function App() {
         if (typeof meta.falScaleFactor === 'number') {
           const maxScale = meta.falModelId === SIMA_UPSCALER_MODEL_ID ? 4 : 10;
           setFalScaleFactor(Math.min(maxScale, Math.max(1, Math.round(meta.falScaleFactor))));
+        }
+        if (typeof meta.falNoiseScale === 'number') {
+          const normalizedNoise = Number.isFinite(meta.falNoiseScale) ? meta.falNoiseScale : 0.1;
+          const roundedNoise = Math.round(normalizedNoise * 10) / 10;
+          setFalNoiseScale(Math.min(1, Math.max(0.1, roundedNoise)));
         }
         setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
@@ -1139,7 +1175,8 @@ export default function App() {
     const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const isCrystalUpscaleModel = falModelId === CRYSTAL_UPSCALER_MODEL_ID;
     const isSimaUpscaleModel = falModelId === SIMA_UPSCALER_MODEL_ID;
-    const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel;
+    const isSeedvrUpscaleModel = falModelId === SEEDVR_UPSCALER_MODEL_ID;
+    const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel || isSeedvrUpscaleModel;
     const requiresPrompt = !(usingFal && isUpscaleModel);
 
     if (requiresPrompt && !trimmedPrompt) {
@@ -1198,7 +1235,7 @@ export default function App() {
 
     const falJobId = usingFal ? crypto.randomUUID() : null;
     const jobPromptDescription = usingFal && isUpscaleModel
-      ? `${getFalModelLabel(falModelId)} (${falScaleFactor}x)`
+      ? `${getFalModelLabel(falModelId)} (${falScaleFactor}x${isSeedvrUpscaleModel ? `, noise ${falNoiseScale.toFixed(1)}` : ''})`
       : trimmedPrompt;
 
     if (usingFal && falJobId) {
@@ -1338,9 +1375,8 @@ export default function App() {
               };
             }));
           } else {
-            const upscaleFn = isCrystalUpscaleModel ? upscaleFalCrystalImage : upscaleFalSimaImage;
-            const falResult = await upscaleFn(activePrimaryImage.element, falScaleFactor, {
-              onQueueUpdate: (update) => {
+            const queueOptions = {
+              onQueueUpdate: (update: FalQueueUpdate) => {
                 setFalJobs(prev => prev.map(job => {
                   if (job.id !== falJobId) {
                     return job;
@@ -1356,7 +1392,13 @@ export default function App() {
                   };
                 }));
               },
-            });
+            };
+
+            const falResult = isSeedvrUpscaleModel
+              ? await upscaleFalSeedvrImage(activePrimaryImage.element, falScaleFactor, falNoiseScale, queueOptions)
+              : isCrystalUpscaleModel
+                ? await upscaleFalCrystalImage(activePrimaryImage.element, falScaleFactor, queueOptions)
+                : await upscaleFalSimaImage(activePrimaryImage.element, falScaleFactor, queueOptions);
 
             generationResult = falResult;
 
@@ -1601,6 +1643,7 @@ export default function App() {
     falModelId,
     falNumImages,
     falScaleFactor,
+    falNoiseScale,
     images,
     inpaintMode,
     paths,
@@ -2152,7 +2195,8 @@ export default function App() {
   const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const isCrystalUpscaleModel = falModelId === CRYSTAL_UPSCALER_MODEL_ID;
   const isSimaUpscaleModel = falModelId === SIMA_UPSCALER_MODEL_ID;
-  const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel;
+  const isSeedvrUpscaleModel = falModelId === SEEDVR_UPSCALER_MODEL_ID;
+  const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel || isSeedvrUpscaleModel;
   const shouldValidateFalOptions = usingFal && (isSeedreamModel || isNanoModel || isReveModel);
   const isNumImagesInvalid =
     !Number.isFinite(falNumImages) ||
@@ -2195,6 +2239,17 @@ export default function App() {
       options: scaleOptions.map(option => ({ value: option.value, label: option.label })),
       value: `${falScaleFactor}`,
       onChange: handleFalScaleFactorChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (usingFal && isSeedvrUpscaleModel) {
+    promptBarModelControlsList.push({
+      id: 'fal-noise-scale-select',
+      ariaLabel: 'Select SeedVR2 noise scale',
+      options: FAL_SEEDVR_NOISE_SCALE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: falNoiseScale.toFixed(1),
+      onChange: handleFalNoiseScaleChange,
       disabled: isLoading,
     });
   }
