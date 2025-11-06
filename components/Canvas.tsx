@@ -348,9 +348,36 @@ export const Canvas: React.FC<CanvasProps> = ({
     images.forEach(image => {
         ctx.drawImage(image.element, image.x, image.y, image.width, image.height);
 
-        const promptText = image.metadata?.prompt?.trim() ?? '';
-        const isGeneratedImage = image.metadata?.source !== 'imported' && promptText.length > 0;
-        const shouldShowMetadata = showMetadataOverlay && isGeneratedImage;
+        const metadata = image.metadata;
+        const promptText = metadata?.prompt?.trim() ?? '';
+        const modelLabel = metadata?.modelLabel?.trim() ?? '';
+        const segments: string[] = [];
+
+        if (modelLabel.length > 0) {
+            segments.push(modelLabel);
+        }
+
+        const upscaleFactor = metadata?.upscaleFactor;
+        if (typeof upscaleFactor === 'number' && Number.isFinite(upscaleFactor) && upscaleFactor > 0) {
+            const formattedFactor = Number.isInteger(upscaleFactor)
+                ? `${upscaleFactor}x`
+                : `${Number.parseFloat(upscaleFactor.toFixed(2))}x`;
+            segments.push(formattedFactor);
+        }
+
+        const noiseScale = metadata?.noiseScale;
+        if (typeof noiseScale === 'number' && Number.isFinite(noiseScale)) {
+            const formattedNoise = (Math.round(noiseScale * 10) / 10).toFixed(1);
+            segments.push(formattedNoise);
+        }
+
+        if (promptText.length > 0) {
+            segments.push(promptText);
+        }
+
+        const overlayText = segments.join('; ');
+        const hasOverlayText = overlayText.length > 0;
+        const shouldShowMetadata = showMetadataOverlay && hasOverlayText && metadata?.source !== 'imported';
 
         if (shouldShowMetadata) {
             const overlayHeight = image.height * 0.15;
@@ -358,8 +385,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             const paddingInner = Math.max(8, overlayHeight * 0.1);
             const textAreaWidth = Math.max(image.width - paddingInner * 2, 0);
             const overlayInnerHeight = Math.max(overlayHeight - paddingInner * 2, 0);
-            const modelLabel = image.metadata?.modelLabel?.trim();
-            const overlayText = modelLabel ? `${modelLabel}; ${promptText}` : promptText;
 
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(image.x, overlayY, image.width, overlayHeight);

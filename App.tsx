@@ -750,15 +750,29 @@ export default function App() {
             const rawSource = rawMetadata.source;
             const rawPrompt = rawMetadata.prompt;
             const rawModelLabel = rawMetadata.modelLabel;
+            const rawUpscaleFactor = (rawMetadata as CanvasImage['metadata']).upscaleFactor;
+            const rawNoiseScale = (rawMetadata as CanvasImage['metadata']).noiseScale;
             const source = isCanvasImageSource(rawSource) ? rawSource : 'snapshot';
             const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
             const modelLabel = typeof rawModelLabel === 'string' ? rawModelLabel.trim() : '';
+            const hasValidUpscaleFactor = typeof rawUpscaleFactor === 'number' && Number.isFinite(rawUpscaleFactor) && rawUpscaleFactor > 0;
+            const normalizedNoiseScale = typeof rawNoiseScale === 'number' && Number.isFinite(rawNoiseScale)
+              ? Math.round(rawNoiseScale * 10) / 10
+              : undefined;
+
             metadata = {
               source,
               ...(prompt.length > 0 ? { prompt } : {}),
               ...(modelLabel.length > 0 ? { modelLabel } : {}),
+              ...(hasValidUpscaleFactor ? { upscaleFactor: rawUpscaleFactor } : {}),
+              ...(typeof normalizedNoiseScale === 'number' ? { noiseScale: normalizedNoiseScale } : {}),
             };
-            if (!prompt && !modelLabel) {
+            if (
+              !prompt &&
+              !modelLabel &&
+              !hasValidUpscaleFactor &&
+              typeof normalizedNoiseScale !== 'number'
+            ) {
               metadata = { source };
             }
           } else {
@@ -1587,6 +1601,21 @@ export default function App() {
         const fileSuffix = generatedBase64Images.length === 1 ? '' : `_${index + 1}`;
         const file = new File([blob], `generated_image${fileSuffix}.png`, { type: 'image/png' });
 
+        const metadata: CanvasImage['metadata'] = {
+          source: 'generated',
+          modelLabel: generationModelLabel,
+          ...(requiresPrompt ? { prompt: trimmedPrompt } : {}),
+        };
+
+        if (usingFal && isUpscaleModel) {
+          if (Number.isFinite(falScaleFactor) && falScaleFactor > 0) {
+            metadata.upscaleFactor = falScaleFactor;
+          }
+          if (isSeedvrUpscaleModel && Number.isFinite(falNoiseScale)) {
+            metadata.noiseScale = Math.round(falNoiseScale * 10) / 10;
+          }
+        }
+
         generatedCanvasImages.push({
           id: crypto.randomUUID(),
           element,
@@ -1597,11 +1626,7 @@ export default function App() {
           naturalWidth,
           naturalHeight,
           file,
-          metadata: {
-            source: 'generated',
-            prompt: requiresPrompt ? trimmedPrompt : undefined,
-            modelLabel: generationModelLabel,
-          },
+          metadata,
         });
 
         yOffset += displayHeight + 20;
