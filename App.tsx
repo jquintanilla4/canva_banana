@@ -14,8 +14,17 @@ import {
   CanvasImageSource,
 } from './types';
 import { generateImageEdit as generateGoogleImageEdit, generateImage as generateGoogleImage } from './services/geminiService';
-import { generateImageEdit as generateFalImageEdit, generateImage as generateFalImage, removeBackground as removeFalBackground, type FalQueueUpdate } from './services/falService';
+import {
+  generateImageEdit as generateFalImageEdit,
+  generateImage as generateFalImage,
+  removeBackground as removeFalBackground,
+  upscaleCrystalImage as upscaleFalCrystalImage,
+  upscaleSimaImage as upscaleFalSimaImage,
+  type FalQueueUpdate,
+} from './services/falService';
 import { FalQueuePanel } from './components/FalQueuePanel';
+import { DebugLogPanel } from './components/DebugLogPanel';
+import { addDebugLog, clearDebugLogs, getDebugLogs, subscribeToDebugLogs } from './services/debugLog';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon, HamburgerIcon, MetadataIcon } from './components/Icons';
 
@@ -24,11 +33,16 @@ const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 const NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana' as const;
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
+const CRYSTAL_UPSCALER_MODEL_ID = 'fal-ai/crystal-upscaler' as const;
+const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler' as const;
+const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 const FAL_MODEL_OPTIONS = [
   { value: NANO_BANANA_MODEL_ID, label: 'Nano Banana' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
   { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
+  { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
+  { value: SIMA_UPSCALER_MODEL_ID, label: 'Sima Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
 type FalImageSizeSelectionValue = 'default' | FalImageSizePreset;
@@ -49,6 +63,14 @@ const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue;
 ] as const;
 
 const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
+const FAL_CRYSTAL_SCALE_FACTOR_OPTIONS = Array.from({ length: 10 }, (_, index) => {
+  const factor = index + 1;
+  return { value: `${factor}`, label: `${factor}x` } as const;
+});
+const FAL_SIMA_SCALE_FACTOR_OPTIONS = Array.from({ length: 4 }, (_, index) => {
+  const factor = index + 1;
+  return { value: `${factor}`, label: `${factor}x` } as const;
+});
 
 const FAL_NANO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
   { value: 'default', label: 'Match Source' },
@@ -175,20 +197,21 @@ type SerializedSnapshot = {
     images: SerializedCanvasImage[];
     notes: CanvasNote[];
     paths: Path[];
-    meta?: {
-      appMode: AppMode;
-      tool: Tool;
-      brushSize: number;
-      eraserSize: number;
+      meta?: {
+        appMode: AppMode;
+        tool: Tool;
+        brushSize: number;
+        eraserSize: number;
       brushColor: string;
       prompt: string;
       inpaintMode: InpaintMode;
       apiProvider: 'google' | 'fal';
       falModelId: FalModelId;
-      falImageSizeSelection: FalImageSizeSelectionValue;
-      falAspectRatioSelection: FalAspectRatioSelectionValue;
-      falNumImages: number;
-      selectedImageIds: string[];
+        falImageSizeSelection: FalImageSizeSelectionValue;
+        falAspectRatioSelection: FalAspectRatioSelectionValue;
+        falNumImages: number;
+        falScaleFactor: number;
+        selectedImageIds: string[];
       selectedNoteIds: string[];
       referenceImageIds: string[];
     };
@@ -255,6 +278,10 @@ const mapFalStatusToJobStatus = (status: FalQueueUpdate['status'] | undefined): 
   }
 };
 
+const SUPPRESSED_FAL_LOG_STRINGS = new Set([
+  '[WARNING] No request provided, using global lifecycle preference',
+]);
+
 const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['logs']): string[] => {
   if (!updateLogs || updateLogs.length === 0) {
     return existing;
@@ -263,7 +290,19 @@ const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['lo
   const next = [...existing];
   updateLogs.forEach(log => {
     const message = typeof log?.message === 'string' ? log.message.trim() : '';
-    if (message && !next.includes(message)) {
+    if (!message) {
+      return;
+    }
+    if (SUPPRESSED_FAL_LOG_STRINGS.has(message)) {
+      addDebugLog({
+        direction: 'info',
+        source: 'fal',
+        title: 'Queue log (suppressed)',
+        message,
+      });
+      return;
+    }
+    if (!next.includes(message)) {
       next.push(message);
     }
   });
@@ -329,8 +368,11 @@ export default function App() {
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('default');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
   const [falNumImages, setFalNumImages] = useState(1);
+  const [falScaleFactor, setFalScaleFactor] = useState(2);
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
+  const [isDebugLogOpen, setIsDebugLogOpen] = useState(false);
+  const [debugLogEntries, setDebugLogEntries] = useState(() => getDebugLogs());
   const fileMenuRef = useRef<HTMLDivElement>(null);
   const requestZoomIn = useCallback(() => {
     setZoomInTrigger(prev => prev + 1);
@@ -359,6 +401,31 @@ export default function App() {
     }
     const clamped = Math.min(4, Math.max(1, Math.floor(value)));
     setFalNumImages(clamped);
+  }, []);
+
+  const handleFalScaleFactorChange = useCallback((value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      setFalScaleFactor(2);
+      return;
+    }
+    const maxScale = falModelId === SIMA_UPSCALER_MODEL_ID ? 4 : 10;
+    const clamped = Math.min(maxScale, Math.max(1, Math.round(parsed)));
+    setFalScaleFactor(clamped);
+  }, [falModelId]);
+
+  useEffect(() => {
+    setFalScaleFactor(prev => {
+      const maxScale = falModelId === SIMA_UPSCALER_MODEL_ID ? 4 : 10;
+      const normalizedPrev = Number.isFinite(prev) ? Math.round(prev) : 2;
+      const clamped = Math.min(maxScale, Math.max(1, normalizedPrev));
+      return clamped === prev ? prev : clamped;
+    });
+  }, [falModelId]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToDebugLogs(setDebugLogEntries);
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -519,6 +586,7 @@ export default function App() {
           falImageSizeSelection,
           falAspectRatioSelection,
           falNumImages,
+          falScaleFactor,
           selectedImageIds: [...selectedImageIds],
           selectedNoteIds: [...selectedNoteIds],
           referenceImageIds: [...referenceImageIds],
@@ -543,6 +611,7 @@ export default function App() {
     falImageSizeSelection,
     falAspectRatioSelection,
     falNumImages,
+    falScaleFactor,
     selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
@@ -746,6 +815,10 @@ export default function App() {
         if (typeof meta.falNumImages === 'number') {
           setFalNumImages(Math.min(4, Math.max(1, Math.floor(meta.falNumImages))));
         }
+        if (typeof meta.falScaleFactor === 'number') {
+          const maxScale = meta.falModelId === SIMA_UPSCALER_MODEL_ID ? 4 : 10;
+          setFalScaleFactor(Math.min(maxScale, Math.max(1, Math.round(meta.falScaleFactor))));
+        }
         setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
@@ -816,6 +889,15 @@ export default function App() {
 
   const toggleFileMenu = useCallback(() => {
     setIsFileMenuOpen(prev => !prev);
+  }, []);
+
+  const openDebugLogPanel = useCallback(() => {
+    setIsDebugLogOpen(true);
+    setIsFileMenuOpen(false);
+  }, []);
+
+  const closeDebugLogPanel = useCallback(() => {
+    setIsDebugLogOpen(false);
   }, []);
 
   const handleImportSnapshot = useCallback(async () => {
@@ -926,6 +1008,21 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isDebugLogOpen) {
+      return;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsDebugLogOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isDebugLogOpen]);
+
   const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{
     element: HTMLImageElement;
     x: number;
@@ -1018,17 +1115,26 @@ export default function App() {
   const handleGenerate = useCallback(async () => {
     const trimmedPrompt = prompt.trim();
     const isTextToImage = !primaryImageId;
+    const usingFal = apiProvider === 'fal';
+    const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
+    const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
+    const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+    const isCrystalUpscaleModel = falModelId === CRYSTAL_UPSCALER_MODEL_ID;
+    const isSimaUpscaleModel = falModelId === SIMA_UPSCALER_MODEL_ID;
+    const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel;
+    const requiresPrompt = !(usingFal && isUpscaleModel);
 
-    if (!trimmedPrompt) {
+    if (requiresPrompt && !trimmedPrompt) {
       setError(isTextToImage ? 'Please describe the image you want to create.' : 'Please write a prompt to describe your edit.');
       return;
     }
 
-    const usingFal = apiProvider === 'fal';
+    if (usingFal && isUpscaleModel && isTextToImage) {
+      setError('Please select an image to upscale.');
+      return;
+    }
+
     const generationModelLabel = usingFal ? getFalModelLabel(falModelId) : GOOGLE_MODEL_LABEL;
-    const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
-    const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
-    const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const shouldValidateFalOptions = usingFal && (isSeedreamModel || isNanoModel || isReveModel);
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
@@ -1047,22 +1153,23 @@ export default function App() {
         return;
       }
 
-      if (usingFal && isReveModel) {
+      if (usingFal && !isUpscaleModel && isReveModel) {
         setError('Reve Image only supports text-to-image generation. Please switch to Nano Banana or Seedream for edits.');
         return;
       }
 
-      if (appMode === 'CANVAS' && tool !== Tool.SELECTION && tool !== Tool.FREE_SELECTION) {
-        setError('In Canvas Mode, please use the Select tool to perform a general image edit.');
-        return;
-      }
+      if (!isUpscaleModel) {
+        if (appMode === 'CANVAS' && tool !== Tool.SELECTION && tool !== Tool.FREE_SELECTION) {
+          setError('In Canvas Mode, please use the Select tool to perform a general image edit.');
+          return;
+        }
 
-      const hasAnnotationStrokes = paths.some(path => path.tool === Tool.ANNOTATE && path.points.length > 0);
-      const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
+        const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
 
-      if (appMode === 'INPAINT' && !hasInpaintMask) {
-        setError('Please use the Brush tool to draw an inpaint mask before generating.');
-        return;
+        if (appMode === 'INPAINT' && !hasInpaintMask) {
+          setError('Please use the Brush tool to draw an inpaint mask before generating.');
+          return;
+        }
       }
     }
 
@@ -1072,11 +1179,14 @@ export default function App() {
     }
 
     const falJobId = usingFal ? crypto.randomUUID() : null;
+    const jobPromptDescription = usingFal && isUpscaleModel
+      ? `${getFalModelLabel(falModelId)} (${falScaleFactor}x)`
+      : trimmedPrompt;
 
     if (usingFal && falJobId) {
       const newJob: FalQueueJob = {
         id: falJobId,
-        prompt: trimmedPrompt,
+        prompt: jobPromptDescription,
         status: 'IN_QUEUE',
         logs: [],
         createdAt: Date.now(),
@@ -1173,145 +1283,224 @@ export default function App() {
           throw new Error('Unable to locate selected image for editing.');
         }
 
-        const referenceCanvasImages = referenceImageIds
-          .map(id => images.find(img => img.id === id))
-          .filter((img): img is CanvasImage => !!img);
-
-        const allSelectedImages = [activePrimaryImage, ...referenceCanvasImages];
-
-        const shouldCompose = referenceCanvasImages.length > 0 &&
-          referenceCanvasImages.some(refImg => isOverlapping(activePrimaryImage, refImg));
-
-        let referenceImagesForAPI: HTMLImageElement[] = [];
-
-        if (shouldCompose) {
-          const imageIdsToCompose = allSelectedImages.map(img => img.id);
-          const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
-          const composed = await rasterizeImages(imagesToCompose);
-          sourceImageForAPI = composed;
-          referenceImagesForAPI = [];
-        } else {
-          sourceImageForAPI = {
-            element: activePrimaryImage.element,
-            x: activePrimaryImage.x,
-            y: activePrimaryImage.y,
-            width: activePrimaryImage.width,
-            height: activePrimaryImage.height,
-            naturalWidth: activePrimaryImage.naturalWidth,
-            naturalHeight: activePrimaryImage.naturalHeight,
-            file: activePrimaryImage.file,
-          };
-          referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
-        }
-
-        if (!sourceImageForAPI) {
-          throw new Error('Failed to prepare source image for editing.');
-        }
-
-        const translatedPaths = paths.map(path => ({
-          ...path,
-          points: path.points.map(point => ({
-            x: point.x - sourceImageForAPI.x,
-            y: point.y - sourceImageForAPI.y,
-          })),
-        }));
-
-        const naturalWidth = sourceImageForAPI.naturalWidth || sourceImageForAPI.element.naturalWidth || sourceImageForAPI.width;
-        const naturalHeight = sourceImageForAPI.naturalHeight || sourceImageForAPI.element.naturalHeight || sourceImageForAPI.height;
-        const scaleX = sourceImageForAPI.width === 0 ? 1 : naturalWidth / sourceImageForAPI.width;
-        const scaleY = sourceImageForAPI.height === 0 ? 1 : naturalHeight / sourceImageForAPI.height;
-
-        const scaledPaths = translatedPaths.map(path => ({
-          ...path,
-          size: path.size * scaleX,
-          points: path.points.map(point => ({
-            x: point.x * scaleX,
-            y: point.y * scaleY,
-          })),
-        }));
-
-        const toolForApi =
-          appMode === 'ANNOTATE'
-            ? (hasAnnotationStrokes ? Tool.ANNOTATE : Tool.SELECTION)
-            : appMode === 'INPAINT'
-              ? Tool.INPAINT
-              : tool;
-
-        const basePayload = {
-          prompt: trimmedPrompt,
-          image: sourceImageForAPI.element,
-          tool: toolForApi,
-          paths: scaledPaths,
-          imageDimensions: { width: naturalWidth, height: naturalHeight },
-          inpaintMode,
-          referenceImages: referenceImagesForAPI,
-        } as const;
-
-        placementOrigin = {
-          x: sourceImageForAPI.x + sourceImageForAPI.width + 20,
-          y: sourceImageForAPI.y,
-        };
-
-        if (usingFal) {
+        if (usingFal && isUpscaleModel) {
           if (!falJobId) {
             throw new Error('Unable to create Fal job identifier.');
           }
 
-          const falResult = await generateFalImageEdit(basePayload, {
-            modelId: falModelId,
-            onQueueUpdate: (update) => {
-              setFalJobs(prev => prev.map(job => {
-                if (job.id !== falJobId) {
-                  return job;
-                }
+          placementOrigin = {
+            x: activePrimaryImage.x + activePrimaryImage.width + 20,
+            y: activePrimaryImage.y,
+          };
 
-                const status = mapFalStatusToJobStatus(update.status);
-                return {
-                  ...job,
-                  status,
-                  requestId: update.requestId || job.requestId,
-                  logs: mergeFalLogMessages(job.logs, update.logs),
-                  updatedAt: Date.now(),
-                };
-              }));
-            },
-            ...(isSeedreamModel
-              ? {
-                  imageSize: falImageSizeSelection === 'default'
-                    ? 'default'
-                    : falImageSizeSelection,
-                }
-              : {}),
-            ...(isNanoModel
-              ? {
-                  aspectRatio: falAspectRatioSelection,
-                }
-              : {}),
-            numImages: normalizedFalNumImages,
-          });
-
-          generationResult = falResult;
-
-          setFalJobs(prev => prev.map(job => {
-            if (job.id !== falJobId) {
-              return job;
+          if (isSimaUpscaleModel && falScaleFactor === 1) {
+            const dataUrl = await fileToDataUrl(activePrimaryImage.file);
+            const base64 = dataUrl.split(',')[1];
+            if (!base64) {
+              throw new Error('Failed to duplicate image for 1x upscale.');
             }
-            if (job.status === 'FAILED') {
-              return job;
-            }
-            return {
-              ...job,
-              status: 'COMPLETED',
-              requestId: falResult.requestId || job.requestId,
-              description: falResult.text,
-              updatedAt: Date.now(),
+            generationResult = {
+              imageBase64: base64,
+              imagesBase64: [base64],
+              text: '',
+              requestId: undefined,
             };
-          }));
+
+            setFalJobs(prev => prev.map(job => {
+              if (job.id !== falJobId) {
+                return job;
+              }
+              if (job.status === 'FAILED') {
+                return job;
+              }
+              return {
+                ...job,
+                status: 'COMPLETED',
+                updatedAt: Date.now(),
+              };
+            }));
+          } else {
+            const upscaleFn = isCrystalUpscaleModel ? upscaleFalCrystalImage : upscaleFalSimaImage;
+            const falResult = await upscaleFn(activePrimaryImage.element, falScaleFactor, {
+              onQueueUpdate: (update) => {
+                setFalJobs(prev => prev.map(job => {
+                  if (job.id !== falJobId) {
+                    return job;
+                  }
+
+                  const status = mapFalStatusToJobStatus(update.status);
+                  return {
+                    ...job,
+                    status,
+                    requestId: update.requestId || job.requestId,
+                    logs: mergeFalLogMessages(job.logs, update.logs),
+                    updatedAt: Date.now(),
+                  };
+                }));
+              },
+            });
+
+            generationResult = falResult;
+
+            setFalJobs(prev => prev.map(job => {
+              if (job.id !== falJobId) {
+                return job;
+              }
+              if (job.status === 'FAILED') {
+                return job;
+              }
+              return {
+                ...job,
+                status: 'COMPLETED',
+                requestId: falResult.requestId || job.requestId,
+                description: falResult.text,
+                updatedAt: Date.now(),
+              };
+            }));
+          }
         } else {
-          generationResult = await generateGoogleImageEdit({
-            ...basePayload,
-            mimeType: sourceImageForAPI.file.type || 'image/png',
-          });
+          const referenceCanvasImages = referenceImageIds
+            .map(id => images.find(img => img.id === id))
+            .filter((img): img is CanvasImage => !!img);
+
+          const allSelectedImages = [activePrimaryImage, ...referenceCanvasImages];
+
+          const shouldCompose = referenceCanvasImages.length > 0 &&
+            referenceCanvasImages.some(refImg => isOverlapping(activePrimaryImage, refImg));
+
+          let referenceImagesForAPI: HTMLImageElement[] = [];
+
+          if (shouldCompose) {
+            const imageIdsToCompose = allSelectedImages.map(img => img.id);
+            const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
+            const composed = await rasterizeImages(imagesToCompose);
+            sourceImageForAPI = composed;
+            referenceImagesForAPI = [];
+          } else {
+            sourceImageForAPI = {
+              element: activePrimaryImage.element,
+              x: activePrimaryImage.x,
+              y: activePrimaryImage.y,
+              width: activePrimaryImage.width,
+              height: activePrimaryImage.height,
+              naturalWidth: activePrimaryImage.naturalWidth,
+              naturalHeight: activePrimaryImage.naturalHeight,
+              file: activePrimaryImage.file,
+            };
+            referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
+          }
+
+          if (!sourceImageForAPI) {
+            throw new Error('Failed to prepare source image for editing.');
+          }
+
+          const translatedPaths = paths.map(path => ({
+            ...path,
+            points: path.points.map(point => ({
+              x: point.x - sourceImageForAPI.x,
+              y: point.y - sourceImageForAPI.y,
+            })),
+          }));
+
+          const naturalWidth = sourceImageForAPI.naturalWidth || sourceImageForAPI.element.naturalWidth || sourceImageForAPI.width;
+          const naturalHeight = sourceImageForAPI.naturalHeight || sourceImageForAPI.element.naturalHeight || sourceImageForAPI.height;
+          const scaleX = sourceImageForAPI.width === 0 ? 1 : naturalWidth / sourceImageForAPI.width;
+          const scaleY = sourceImageForAPI.height === 0 ? 1 : naturalHeight / sourceImageForAPI.height;
+
+          const scaledPaths = translatedPaths.map(path => ({
+            ...path,
+            size: path.size * scaleX,
+            points: path.points.map(point => ({
+              x: point.x * scaleX,
+              y: point.y * scaleY,
+            })),
+          }));
+
+          const hasAnnotationStrokes = paths.some(path => path.tool === Tool.ANNOTATE && path.points.length > 0);
+
+          const toolForApi =
+            appMode === 'ANNOTATE'
+              ? (hasAnnotationStrokes ? Tool.ANNOTATE : Tool.SELECTION)
+              : appMode === 'INPAINT'
+                ? Tool.INPAINT
+                : tool;
+
+          const basePayload = {
+            prompt: trimmedPrompt,
+            image: sourceImageForAPI.element,
+            tool: toolForApi,
+            paths: scaledPaths,
+            imageDimensions: { width: naturalWidth, height: naturalHeight },
+            inpaintMode,
+            referenceImages: referenceImagesForAPI,
+          } as const;
+
+          placementOrigin = {
+            x: sourceImageForAPI.x + sourceImageForAPI.width + 20,
+            y: sourceImageForAPI.y,
+          };
+
+          if (usingFal) {
+            if (!falJobId) {
+              throw new Error('Unable to create Fal job identifier.');
+            }
+
+            const falResult = await generateFalImageEdit(basePayload, {
+              modelId: falModelId,
+              onQueueUpdate: (update) => {
+                setFalJobs(prev => prev.map(job => {
+                  if (job.id !== falJobId) {
+                    return job;
+                  }
+
+                  const status = mapFalStatusToJobStatus(update.status);
+                  return {
+                    ...job,
+                    status,
+                    requestId: update.requestId || job.requestId,
+                    logs: mergeFalLogMessages(job.logs, update.logs),
+                    updatedAt: Date.now(),
+                  };
+                }));
+              },
+              ...(isSeedreamModel
+                ? {
+                    imageSize: falImageSizeSelection === 'default'
+                      ? 'default'
+                      : falImageSizeSelection,
+                  }
+                : {}),
+              ...(isNanoModel
+                ? {
+                    aspectRatio: falAspectRatioSelection,
+                  }
+                : {}),
+              numImages: normalizedFalNumImages,
+            });
+
+            generationResult = falResult;
+
+            setFalJobs(prev => prev.map(job => {
+              if (job.id !== falJobId) {
+                return job;
+              }
+              if (job.status === 'FAILED') {
+                return job;
+              }
+              return {
+                ...job,
+                status: 'COMPLETED',
+                requestId: falResult.requestId || job.requestId,
+                description: falResult.text,
+                updatedAt: Date.now(),
+              };
+            }));
+          } else {
+            generationResult = await generateGoogleImageEdit({
+              ...basePayload,
+              mimeType: sourceImageForAPI.file.type || 'image/png',
+            });
+          }
         }
       }
 
@@ -1346,7 +1535,7 @@ export default function App() {
           file,
           metadata: {
             source: 'generated',
-            prompt: trimmedPrompt,
+            prompt: requiresPrompt ? trimmedPrompt : undefined,
             modelLabel: generationModelLabel,
           },
         });
@@ -1393,6 +1582,7 @@ export default function App() {
     falImageSizeSelection,
     falModelId,
     falNumImages,
+    falScaleFactor,
     images,
     inpaintMode,
     paths,
@@ -1935,30 +2125,42 @@ export default function App() {
   const canMoveUp = selectedImageIndex > -1 && selectedImageIndex < images.length - 1;
   const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
+  const usingFal = apiProvider === 'fal';
   const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
   const isTextToImage = !primaryImageId;
   const promptEmpty = prompt.trim().length === 0;
   const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
   const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
   const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-  const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isNanoModel || isReveModel);
+  const isCrystalUpscaleModel = falModelId === CRYSTAL_UPSCALER_MODEL_ID;
+  const isSimaUpscaleModel = falModelId === SIMA_UPSCALER_MODEL_ID;
+  const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel;
+  const shouldValidateFalOptions = usingFal && (isSeedreamModel || isNanoModel || isReveModel);
   const isNumImagesInvalid =
     !Number.isFinite(falNumImages) ||
     falNumImages < 1 ||
     falNumImages > 4;
   const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
+  const requiresPrompt = !(usingFal && isUpscaleModel);
+  const isPromptMissing = requiresPrompt && promptEmpty;
+  const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
+  const editConstraintsActive = !isTextToImage && !isUpscaleModel && (
+    (usingFal && isReveModel) ||
+    (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
+    (appMode === 'INPAINT' && !hasInpaintMask)
+  );
 
-  const submitDisabled = promptEmpty ||
+  const submitDisabled = isPromptMissing ||
     (shouldValidateFalOptions && isNumImagesInvalid) ||
-    (!isTextToImage && (
-      (apiProvider === 'fal' && isReveModel) ||
-      (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
-      (appMode === 'INPAINT' && !hasInpaintMask)
-    ));
+    requiresSelectedImageForUpscale ||
+    editConstraintsActive;
 
-  const promptPlaceholderText = isTextToImage
-    ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
-    : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
+  const promptPlaceholderText = usingFal && isUpscaleModel
+    ? `Prompt disabled for ${getFalModelLabel(falModelId)}. Select an image and scale factor.`
+    : isTextToImage
+      ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
+      : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
+  const disablePromptInput = usingFal && isUpscaleModel;
 
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel;
   const supportsAspectRatioControl = isNanoModel || isReveModel;
@@ -1966,6 +2168,18 @@ export default function App() {
   const shouldShowNumImagesControl = apiProvider === 'fal' && (isSeedreamModel || isNanoModel || isReveModel);
 
   const promptBarModelControlsList: PromptBarModelControl[] = [];
+
+  if (usingFal && isUpscaleModel) {
+    const scaleOptions = isSimaUpscaleModel ? FAL_SIMA_SCALE_FACTOR_OPTIONS : FAL_CRYSTAL_SCALE_FACTOR_OPTIONS;
+    promptBarModelControlsList.push({
+      id: 'fal-scale-factor-select',
+      ariaLabel: `Select ${getFalModelLabel(falModelId)} scale factor`,
+      options: scaleOptions.map(option => ({ value: option.value, label: option.label })),
+      value: `${falScaleFactor}`,
+      onChange: handleFalScaleFactorChange,
+      disabled: isLoading,
+    });
+  }
 
   if (shouldShowSeedreamImageSizeControl) {
     promptBarModelControlsList.push({
@@ -2046,6 +2260,14 @@ export default function App() {
               className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
             >
               Export Snapshot
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={openDebugLogPanel}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+            >
+              Debug Log
             </button>
           </div>
         )}
@@ -2144,6 +2366,14 @@ export default function App() {
 
       <FalQueuePanel jobs={falJobs} onDismiss={handleDismissFalJob} />
 
+      {isDebugLogOpen && (
+        <DebugLogPanel
+          entries={debugLogEntries}
+          onClose={closeDebugLogPanel}
+          onClear={clearDebugLogs}
+        />
+      )}
+
       {!cropMode && (
         <div className="absolute bottom-4 left-4 z-20 flex items-center space-x-2">
           {(['google', 'fal'] as const).map((provider) => {
@@ -2170,7 +2400,7 @@ export default function App() {
           onPromptChange={setPrompt}
           onSubmit={handleGenerate}
           isLoading={isLoading}
-          inputDisabled={false}
+          inputDisabled={disablePromptInput}
           submitDisabled={submitDisabled}
           modelOptions={FAL_MODEL_OPTIONS}
           selectedModel={falModelId}

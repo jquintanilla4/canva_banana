@@ -4,6 +4,7 @@ import { ChevronDownIcon, LayerUpIcon } from './Icons';
 interface ModelOption {
   value: string;
   label: string;
+  highlightColor?: string;
 }
 
 interface FalModelControlConfig {
@@ -23,7 +24,7 @@ interface PromptBarProps {
   isLoading: boolean;
   inputDisabled: boolean;
   submitDisabled: boolean;
-  modelOptions: ModelOption[];
+  modelOptions: ReadonlyArray<ModelOption>;
   selectedModel: string;
   onModelChange: (modelId: string) => void;
   modelSelectDisabled: boolean;
@@ -73,6 +74,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       : "Describe your edit or image idea... (Cmd/Ctrl + Enter to generate)"
   );
 
+  const selectedModelOption = modelOptions.find(option => option.value === selectedModel);
+  const selectHighlightStyle = selectedModelOption?.highlightColor
+    ? { color: selectedModelOption.highlightColor }
+    : undefined;
+
   return (
     <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.02rem] p-[0.61rem] w-full max-w-[69.1rem]">
       <div className="relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex items-end gap-[1.1rem] py-[0.81rem] pl-[0.83rem] pr-[1.15rem]">
@@ -84,7 +90,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             placeholder={resolvedPlaceholder}
             disabled={inputDisabled || isLoading}
             rows={3}
-            className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto"
+            className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
             style={{ minHeight: '92px', maxHeight: '269px' }}
             aria-label="Prompt input"
           />
@@ -100,10 +106,15 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                   onChange={(e) => onModelChange(e.target.value)}
                   disabled={modelSelectDisabled}
                   className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
+                  style={selectHighlightStyle}
                   aria-label="Select image edit model"
                 >
                   {modelOptions.map(option => (
-                    <option key={option.value} value={option.value}>
+                    <option
+                      key={option.value}
+                      value={option.value}
+                      style={option.highlightColor ? { color: option.highlightColor } : undefined}
+                    >
                       {option.label}
                     </option>
                   ))}
