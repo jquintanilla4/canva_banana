@@ -212,7 +212,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <button
           onClick={onRemoveBackground}
           disabled={isBackgroundRemovalDisabled}
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-purple-600 hover:bg-purple-500 text-white disabled:bg-gray-700 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-[#9334EB] text-white disabled:bg-gray-700 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
           title="Remove Background"
           aria-label="Remove Background"
         >
@@ -227,7 +227,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </button>
         <button
           onClick={onUploadClick}
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-blue-600 hover:bg-blue-500 text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-[#2663EB] text-white"
           title="Upload Image"
           aria-label="Upload Image"
         >

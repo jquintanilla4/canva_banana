@@ -139,6 +139,23 @@ const getFalModelLabel = (modelId: FalModelId): string => {
 
 const GOOGLE_MODEL_LABEL = 'Google Gemini';
 
+const PROVIDER_ORDER = ['google', 'fal'] as const;
+type ApiProvider = typeof PROVIDER_ORDER[number];
+
+const hasEnvValue = (value: string | undefined): boolean => typeof value === 'string' && value.trim().length > 0;
+
+const providerAvailability: Record<ApiProvider, boolean> = {
+  google: hasEnvValue(process.env.GEMINI_API_KEY ?? process.env.API_KEY),
+  fal: hasEnvValue(process.env.FAL_API_KEY),
+};
+
+const AVAILABLE_PROVIDERS = PROVIDER_ORDER.filter(provider => providerAvailability[provider]) as ApiProvider[];
+const PROVIDER_LABELS: Record<ApiProvider, string> = {
+  google: 'Google',
+  fal: 'FAL',
+};
+const DEFAULT_API_PROVIDER: ApiProvider = AVAILABLE_PROVIDERS[0] ?? 'google';
+
 interface ViewToolbarProps {
   onZoomToFit: () => void;
   disabled: boolean;
@@ -206,7 +223,7 @@ type SerializedSnapshot = {
       brushColor: string;
       prompt: string;
       inpaintMode: InpaintMode;
-      apiProvider: 'google' | 'fal';
+      apiProvider: ApiProvider;
       falModelId: FalModelId;
         falImageSizeSelection: FalImageSizeSelectionValue;
         falAspectRatioSelection: FalAspectRatioSelectionValue;
@@ -358,7 +375,7 @@ export default function App() {
   const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
   const [cropMode, setCropMode] = useState<CropModeState | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [apiProvider, setApiProvider] = useState<'google' | 'fal'>('google');
+  const [apiProvider, setApiProvider] = useState<ApiProvider>(DEFAULT_API_PROVIDER);
   const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
   const falAutoDismissTimeouts = useRef<Map<string, number>>(new Map());
   const [falModelId, setFalModelId] = useState<FalModelId>(DEFAULT_FAL_MODEL_ID);
@@ -798,7 +815,11 @@ export default function App() {
           setInpaintMode(meta.inpaintMode);
         }
         if (meta.apiProvider === 'google' || meta.apiProvider === 'fal') {
-          setApiProvider(meta.apiProvider);
+          if (providerAvailability[meta.apiProvider]) {
+            setApiProvider(meta.apiProvider);
+          } else if (AVAILABLE_PROVIDERS.length > 0) {
+            setApiProvider(AVAILABLE_PROVIDERS[0]);
+          }
         }
         if (isFalModelId(meta.falModelId)) {
           setFalModelId(meta.falModelId);
@@ -2371,9 +2392,9 @@ export default function App() {
         />
       )}
 
-      {!cropMode && (
+      {!cropMode && AVAILABLE_PROVIDERS.length > 0 && (
         <div className="absolute bottom-4 left-4 z-20 flex items-center space-x-2">
-          {(['google', 'fal'] as const).map((provider) => {
+          {AVAILABLE_PROVIDERS.map((provider) => {
             const isActive = apiProvider === provider;
             return (
               <button
@@ -2384,7 +2405,7 @@ export default function App() {
                 aria-pressed={isActive}
                 className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors duration-200 ${isActive ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'} disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed`}
               >
-                {provider === 'google' ? 'Google' : 'FAL'}
+                {PROVIDER_LABELS[provider]}
               </button>
             );
           })}
