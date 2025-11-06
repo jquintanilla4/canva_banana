@@ -110,6 +110,11 @@ const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
 
+const MIN_STROKE_SIZE = 1;
+const MAX_STROKE_SIZE = 100;
+const clampStrokeSize = (value: number) =>
+  Math.min(MAX_STROKE_SIZE, Math.max(MIN_STROKE_SIZE, value));
+
 type FalModelId = typeof FAL_MODEL_OPTIONS[number]['value'];
 const isFalImageSizeSelectionValue = (value: unknown): value is FalImageSizeSelectionValue =>
   typeof value === 'string' && FAL_IMAGE_SIZE_OPTIONS.some(option => option.value === value);
@@ -352,7 +357,21 @@ export default function App() {
   const [brushColor, setBrushColor] = useState('#ff0000');
   const [prompt, setPrompt] = useState('');
   const [inpaintMode, setInpaintMode] = useState<InpaintMode>('STRICT');
-  
+
+  const adjustBrushSize = useCallback(
+    (delta: number) => {
+      setBrushSize(prev => clampStrokeSize(prev + delta));
+    },
+    [setBrushSize],
+  );
+
+  const adjustEraserSize = useCallback(
+    (delta: number) => {
+      setEraserSize(prev => clampStrokeSize(prev + delta));
+    },
+    [setEraserSize],
+  );
+
   const [historyState, setHistoryState] = useState<{
     history: AppState[],
     index: number,
@@ -1886,12 +1905,31 @@ export default function App() {
         return;
       }
 
-      if (e.key.toLowerCase() === 'escape' && tool === Tool.NOTE) {
+      const key = e.key;
+      const keyLower = key.toLowerCase();
+
+      if (keyLower === 'escape' && tool === Tool.NOTE) {
         handleToolChange(Tool.SELECTION);
         return;
       }
 
-      switch (e.key.toLowerCase()) {
+      const isDecreaseKey = key === '[' || key === '{';
+      const isIncreaseKey = key === ']' || key === '}';
+      const isBrushToolActive = tool === Tool.BRUSH;
+      const isEraserToolActive = tool === Tool.ERASE;
+
+      if ((isDecreaseKey || isIncreaseKey) && (isBrushToolActive || isEraserToolActive)) {
+        e.preventDefault();
+        const delta = isDecreaseKey ? -1 : 1;
+        if (isBrushToolActive) {
+          adjustBrushSize(delta);
+        } else {
+          adjustEraserSize(delta);
+        }
+        return;
+      }
+
+      switch (keyLower) {
         case 'v': handleToolChange(Tool.SELECTION); break;
         case 'f': handleToolChange(Tool.FREE_SELECTION); break;
         case 'h': handleToolChange(Tool.PAN); break;
@@ -1924,7 +1962,23 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDelete, handleZoomToFit, images, notes, editingNoteId, tool, handleToolChange, appMode, cropMode, handleConfirmCrop, handleCancelCrop, requestZoomIn, requestZoomOut]);
+  }, [
+    handleDelete,
+    handleZoomToFit,
+    images,
+    notes,
+    editingNoteId,
+    tool,
+    handleToolChange,
+    appMode,
+    cropMode,
+    handleConfirmCrop,
+    handleCancelCrop,
+    requestZoomIn,
+    requestZoomOut,
+    adjustBrushSize,
+    adjustEraserSize,
+  ]);
   
   useEffect(() => {
     const handleGlobalSubmit = (e: KeyboardEvent) => {

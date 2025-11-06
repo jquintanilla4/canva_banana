@@ -142,6 +142,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState<Point | null>(null);
   const [marqueeCurrent, setMarqueeCurrent] = useState<Point | null>(null);
+  const [brushPreviewPosition, setBrushPreviewPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Crop state
   const [cropAction, setCropAction] = useState<CropAction | null>(null);
@@ -763,6 +764,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         containerRef.current.style.cursor = cursor;
     }
   }, [currentTool, isPanning, isDragging, isResizing, cropMode, isMarqueeSelecting]);
+
+  useEffect(() => {
+    if (currentTool !== Tool.BRUSH && currentTool !== Tool.ERASE) {
+      setBrushPreviewPosition(null);
+    }
+  }, [currentTool]);
   
   useEffect(() => {
     if (editingNoteId && textareaRef.current) {
@@ -953,6 +960,16 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current;
+    const isBrushLikeTool = currentTool === Tool.BRUSH || currentTool === Tool.ERASE;
+    if (container && isBrushLikeTool) {
+      const rect = container.getBoundingClientRect();
+      const nextPosition = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      setBrushPreviewPosition(nextPosition);
+    } else if (brushPreviewPosition !== null) {
+      setBrushPreviewPosition(null);
+    }
+
     if (isMarqueeSelecting) {
         const point = getTransformedPoint(e.clientX, e.clientY);
         setMarqueeCurrent(point);
@@ -1120,6 +1137,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.type === 'mouseleave') {
+      setBrushPreviewPosition(null);
+    }
+
     if (cropMode && cropAction) {
       setCropAction(null);
       setCropDragStart(null);
@@ -1299,6 +1320,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     return Math.max(DOT_MIN_SIZE, Math.min(DOT_MAX_SIZE, scaled));
   }, [scale]);
 
+  const brushPreviewDiameter = currentTool === Tool.ERASE ? eraserSize : brushSize;
+  const shouldRenderBrushPreview = brushPreviewPosition && (currentTool === Tool.BRUSH || currentTool === Tool.ERASE) && brushPreviewDiameter > 0;
+
   const backgroundImage = useMemo(
     () => `radial-gradient(circle, rgba(255,255,255,0.2) ${dotRadius}px, transparent ${dotRadius}px)`,
     [dotRadius],
@@ -1322,6 +1346,19 @@ export const Canvas: React.FC<CanvasProps> = ({
       onDrop={handleDrop}
     >
       <canvas ref={canvasRef} />
+      {shouldRenderBrushPreview && (
+        <div
+          className="pointer-events-none absolute rounded-full border border-white/80"
+          style={{
+            left: `${brushPreviewPosition.x - brushPreviewDiameter / 2}px`,
+            top: `${brushPreviewPosition.y - brushPreviewDiameter / 2}px`,
+            width: `${brushPreviewDiameter}px`,
+            height: `${brushPreviewDiameter}px`,
+            zIndex: 60,
+            boxShadow: '0 0 0 1px rgba(0,0,0,0.45), 0 0 8px rgba(255,255,255,0.35)',
+          }}
+        />
+      )}
       {marqueeRect && (
         <div
           className="absolute border border-sky-500/80 bg-sky-500/10 pointer-events-none"
