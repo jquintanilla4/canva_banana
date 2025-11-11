@@ -1,8 +1,5 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
-# Run and deploy your AI Studio app
+# Fal/Google API backend
+_Work in progress, expect bugs_
 
 This contains everything you need to run your app locally.
 
@@ -70,8 +67,8 @@ View your app in AI Studio: https://ai.studio/apps/drive/1LRCJ0zSN4fC2Lt1H-aYp6q
 - `N` - Note tool
 
 #### Size Adjustment
-- `[` or `{` - Decrease brush/eraser size
-- `]` or `}` - Increase brush/eraser size
+- `[` - Decrease brush/eraser size
+- `]` - Increase brush/eraser size
 
 #### Other Actions
 - `.` (period) - Zoom to fit
