@@ -21,13 +21,6 @@ const statusLabels: Record<FalQueueJob['status'], string> = {
   FAILED: 'Failed',
 };
 
-const formatPromptPreview = (prompt: string): string => {
-  if (prompt.length <= 90) {
-    return prompt;
-  }
-  return `${prompt.slice(0, 87)}...`;
-};
-
 export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({ jobs, onDismiss }) => {
   if (jobs.length === 0) {
     return null;
@@ -50,10 +43,12 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({ jobs, onDismiss })
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-100 font-medium leading-snug break-words">
-                      {formatPromptPreview(job.prompt)}
+                      {job.modelLabel}
                     </p>
                     {job.requestId && (
-                      <p className="text-[11px] text-gray-400 mt-1">#{job.requestId}</p>
+                      <p className="text-[11px] text-gray-400 mt-1 break-all">
+                        Generation ID: {job.requestId}
+                      </p>
                     )}
                   </div>
                   <span className={`text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${statusStyles[job.status]}`}>

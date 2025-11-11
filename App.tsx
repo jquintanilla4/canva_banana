@@ -1276,14 +1276,16 @@ export default function App() {
     }
 
     const falJobId = usingFal ? crypto.randomUUID() : null;
+    const jobModelLabel = getFalModelLabel(falModelId);
     const jobPromptDescription = usingFal && isUpscaleModel
-      ? `${getFalModelLabel(falModelId)} (${falScaleFactor}x${isSeedvrUpscaleModel ? `, noise ${falNoiseScale.toFixed(1)}` : ''})`
+      ? `${jobModelLabel} (${falScaleFactor}x${isSeedvrUpscaleModel ? `, noise ${falNoiseScale.toFixed(1)}` : ''})`
       : trimmedPrompt;
 
     if (usingFal && falJobId) {
       const newJob: FalQueueJob = {
         id: falJobId,
         prompt: jobPromptDescription,
+        modelLabel: jobModelLabel,
         status: 'IN_QUEUE',
         logs: [],
         createdAt: Date.now(),
