@@ -1,4 +1,4 @@
-Check the fal backend branch, it's under constant development.
+Check the **fal backend** branch, it's under constant development.
 
 # Run and deploy your AI Studio app
 
