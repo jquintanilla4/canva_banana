@@ -1,10 +1,6 @@
 # Fal/Google API backend
 _Work in progress, expect bugs_
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/drive/1LRCJ0zSN4fC2Lt1H-aYp6qwHNY2WOh6A
-
 ## Features
 
 - **Multi-brand AI Image Generation** - Generate images from various AI models including multiple Fal.ai endpoints
@@ -38,7 +34,9 @@ View your app in AI Studio: https://ai.studio/apps/drive/1LRCJ0zSN4fC2Lt1H-aYp6q
 
 2. **Set up environment variables:**
    - Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key.
-   - (Optional) Add `FAL_API_KEY` to target Fal.ai. This app calls the `fal-ai/nano-banana/edit` endpoint by default and accepts `FAL_API_URL` if you need to point at a different gateway.
+   - Add `FAL_API_KEY` to target Fal.ai. This app calls the `fal-ai/nano-banana/edit` endpoint by default and accepts `FAL_API_URL` if you need to point at a different gateway.
+   
+   If an API key is not provided for one of the API endpoints, then it will be hidden in the UI. If both are set, then you'll have an option to choose which provider to use per request.
 
 3. **Run the app:**
    ```bash
