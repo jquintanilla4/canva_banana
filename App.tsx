@@ -27,7 +27,7 @@ import {
 import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
 import { addDebugLog, clearDebugLogs, getDebugLogs, subscribeToDebugLogs } from './services/debugLog';
-import { formatFalLogMessage } from './services/falConstants';
+import { buildFalDisplayError, FAL_PROVIDER_DOWN_MESSAGE, formatFalLogMessage } from './services/falConstants';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon, HamburgerIcon, MetadataIcon } from './components/Icons';
 
@@ -364,6 +364,28 @@ const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['lo
     }
   });
   return next;
+};
+
+const applyFalQueueUpdateToJob = (job: FalQueueJob, update: FalQueueUpdate): FalQueueJob => {
+  const status = mapFalStatusToJobStatus(update.status);
+  const mergedLogs = mergeFalLogMessages(job.logs, update.logs);
+  const updateMessage = typeof (update as { message?: unknown }).message === 'string'
+    ? (update as { message?: string }).message
+    : undefined;
+  const error = status === 'FAILED'
+    ? buildFalDisplayError(updateMessage ?? job.error, mergedLogs)
+      ?? job.error
+      ?? FAL_PROVIDER_DOWN_MESSAGE
+    : job.error;
+
+  return {
+    ...job,
+    status,
+    requestId: update.requestId || job.requestId,
+    logs: mergedLogs,
+    error,
+    updatedAt: Date.now(),
+  };
 };
 
 const loadImageFromDataUrl = (dataUrl: string): Promise<HTMLImageElement> => {
@@ -1345,6 +1367,16 @@ export default function App() {
         updatedAt: Date.now(),
       };
       setFalJobs(prev => [...prev.slice(-9), newJob]);
+      addDebugLog({
+        direction: 'outbound',
+        source: 'fal',
+        title: jobModelLabel,
+        message: 'Submitting request',
+        data: {
+          jobId: falJobId,
+          kind: isTextToImage ? 'text-to-image' : isUpscaleModel ? 'upscale' : 'edit',
+        },
+      });
     } else {
       setIsLoading(true);
     }
@@ -1391,15 +1423,7 @@ export default function App() {
                 if (job.id !== falJobId) {
                   return job;
                 }
-
-                const status = mapFalStatusToJobStatus(update.status);
-                return {
-                  ...job,
-                  status,
-                  requestId: update.requestId || job.requestId,
-                  logs: mergeFalLogMessages(job.logs, update.logs),
-                  updatedAt: Date.now(),
-                };
+                return applyFalQueueUpdateToJob(job, update);
               }));
             },
             modelId: textToImageModelId,
@@ -1479,15 +1503,7 @@ export default function App() {
                   if (job.id !== falJobId) {
                     return job;
                   }
-
-                  const status = mapFalStatusToJobStatus(update.status);
-                  return {
-                    ...job,
-                    status,
-                    requestId: update.requestId || job.requestId,
-                    logs: mergeFalLogMessages(job.logs, update.logs),
-                    updatedAt: Date.now(),
-                  };
+                  return applyFalQueueUpdateToJob(job, update);
                 }));
               },
             };
@@ -1612,15 +1628,7 @@ export default function App() {
                   if (job.id !== falJobId) {
                     return job;
                   }
-
-                  const status = mapFalStatusToJobStatus(update.status);
-                  return {
-                    ...job,
-                    status,
-                    requestId: update.requestId || job.requestId,
-                    logs: mergeFalLogMessages(job.logs, update.logs),
-                    updatedAt: Date.now(),
-                  };
+                  return applyFalQueueUpdateToJob(job, update);
                 }));
               },
               ...(isSeedreamModel
@@ -1726,6 +1734,9 @@ export default function App() {
     } catch (err) {
       console.error(err);
       const message = err instanceof Error ? err.message : 'An unknown error occurred.';
+      const userFacingMessage = usingFal
+        ? (buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE)
+        : message;
 
       if (usingFal && falJobId) {
         setFalJobs(prev => prev.map(job => {
@@ -1735,13 +1746,13 @@ export default function App() {
           return {
             ...job,
             status: 'FAILED',
-            error: message,
+            error: userFacingMessage,
             updatedAt: Date.now(),
           };
         }));
       }
 
-      setError(message);
+      setError(userFacingMessage);
     } finally {
       if (!usingFal) {
         setIsLoading(false);
