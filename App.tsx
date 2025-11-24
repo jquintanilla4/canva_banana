@@ -223,7 +223,14 @@ const ViewToolbar: React.FC<ViewToolbarProps> = ({ onZoomToFit, disabled, metada
 };
 
 const MAX_HISTORY_SIZE = 30;
-const MAX_REFERENCE_IMAGES = 2;
+const DEFAULT_MAX_REFERENCE_IMAGES = 13;
+const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId, number>> = {
+  [SEEDREAM_MODEL_ID]: 7, // 7 references + 1 primary = 8 total
+};
+const getMaxReferenceImages = (modelId: FalModelId | undefined): number =>
+  modelId && MODEL_REFERENCE_IMAGE_LIMITS[modelId] !== undefined
+    ? MODEL_REFERENCE_IMAGE_LIMITS[modelId] as number
+    : DEFAULT_MAX_REFERENCE_IMAGES;
 const DEFAULT_NOTE_BACKGROUND = '#1f2937';
 
 type SerializedCanvasImage = {
@@ -451,6 +458,23 @@ export default function App() {
   const requestZoomOut = useCallback(() => {
     setZoomOutTrigger(prev => prev + 1);
   }, []);
+
+  const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
+    const totalLimit = maxReferenceImages + 1;
+    setToastMessage(`${getFalModelLabel(falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
+    setTimeout(() => setToastMessage(null), 2000);
+  }, [falModelId, setToastMessage]);
+
+  useEffect(() => {
+    const maxReferenceImages = getMaxReferenceImages(falModelId);
+    setReferenceImageIds(prevIds => {
+      if (prevIds.length <= maxReferenceImages) {
+        return prevIds;
+      }
+      showReferenceLimitToast(maxReferenceImages);
+      return prevIds.slice(0, maxReferenceImages);
+    });
+  }, [falModelId, showReferenceLimitToast]);
 
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
@@ -1493,9 +1517,11 @@ export default function App() {
             }));
           }
         } else {
+          const maxReferenceImages = getMaxReferenceImages(falModelId);
           const referenceCanvasImages = referenceImageIds
             .map(id => images.find(img => img.id === id))
-            .filter((img): img is CanvasImage => !!img);
+            .filter((img): img is CanvasImage => !!img)
+            .slice(0, maxReferenceImages);
 
           const allSelectedImages = [activePrimaryImage, ...referenceCanvasImages];
 
@@ -2223,13 +2249,15 @@ export default function App() {
     }
 
     if (reference && primaryImageId && imageId !== primaryImageId) {
+      const maxReferenceImages = getMaxReferenceImages(falModelId);
       setReferenceImageIds(prevIds => {
         if (prevIds.includes(imageId)) {
           return prevIds.filter(id => id !== imageId);
         }
-        if (prevIds.length < MAX_REFERENCE_IMAGES) {
+        if (prevIds.length < maxReferenceImages) {
           return [...prevIds, imageId];
         }
+        showReferenceLimitToast(maxReferenceImages);
         return prevIds;
       });
       return;
@@ -2255,7 +2283,7 @@ export default function App() {
     setSelectedImageIds([imageId]);
     setSelectedNoteIds([]);
     setReferenceImageIds([]);
-  }, [primaryImageId, selectedImageIds.length]);
+  }, [falModelId, primaryImageId, selectedImageIds.length, showReferenceLimitToast]);
 
   const handleNoteSelection = useCallback((
     noteId: string | null,
