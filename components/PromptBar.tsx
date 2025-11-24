@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useLayoutEffect } from 'react';
 import { ChevronDownIcon, LayerUpIcon } from './Icons';
 
 interface ModelOption {
@@ -48,6 +48,25 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);
+  const modelSelectRef = useRef<HTMLSelectElement>(null);
+  const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
+
+  const resizeSelectToContent = (selectEl: HTMLSelectElement | null) => {
+    if (!selectEl) return;
+    const selectedText = selectEl.selectedOptions?.[0]?.textContent ?? selectEl.value ?? '';
+    const computedStyle = window.getComputedStyle(selectEl);
+    const font = computedStyle.font || `${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.font = font;
+    const textWidth = context.measureText(selectedText).width;
+    const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
+    const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
+    const arrowAllowance = 12; // space for chevron icon
+    const minWidth = textWidth + paddingLeft + paddingRight + arrowAllowance;
+    selectEl.style.width = `${Math.ceil(minWidth)}px`;
+  };
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -67,6 +86,18 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     }
     wasLoading.current = isLoading;
   }, [isLoading, inputDisabled]);
+
+  useLayoutEffect(() => {
+    resizeSelectToContent(modelSelectRef.current);
+    controlSelectRefs.current.forEach(selectEl => {
+      resizeSelectToContent(selectEl);
+    });
+  }, [
+    selectedModel,
+    modelControls
+      ?.map(control => `${control.id}-${control.value}-${control.options.map(option => option.label).join('~')}`)
+      .join('|') ?? '',
+  ]);
 
   const resolvedPlaceholder = promptPlaceholder ?? (
     inputDisabled
@@ -102,6 +133,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 </label>
                 <select
                   id="model-select"
+                  ref={modelSelectRef}
                   value={selectedModel}
                   onChange={(e) => onModelChange(e.target.value)}
                   disabled={modelSelectDisabled}
@@ -128,6 +160,13 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                   </label>
                   <select
                     id={control.id}
+                    ref={el => {
+                      if (el) {
+                        controlSelectRefs.current.set(control.id, el);
+                      } else {
+                        controlSelectRefs.current.delete(control.id);
+                      }
+                    }}
                     value={control.value}
                     onChange={(e) => control.onChange(e.target.value)}
                     disabled={control.disabled}

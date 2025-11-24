@@ -34,7 +34,7 @@ _Work in progress, expect bugs_
 
 2. **Set up environment variables:**
    - Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key.
-   - Add `FAL_API_KEY` to target Fal.ai. This app calls the `fal-ai/nano-banana/edit` endpoint by default and accepts `FAL_API_URL` if you need to point at a different gateway.
+   - Add `FAL_API_KEY` to target Fal.ai. This app calls the `fal-ai/gemini-3-pro-image-preview/edit` endpoint by default and accepts `FAL_API_URL` if you need to point at a different gateway.
    
    If an API key is not provided for one of the API endpoints, then it will be hidden in the UI. If both are set, then you'll have an option to choose which provider to use per request.
 

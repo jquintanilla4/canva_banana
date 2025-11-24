@@ -6,6 +6,7 @@ import {
   InpaintMode,
   FalImageSizeOption,
   FalAspectRatioOption,
+  FalResolutionOption,
 } from '../types';
 import { addDebugLog } from './debugLog';
 
@@ -44,6 +45,7 @@ interface GenerateImageEditOptions {
   imageSize?: FalImageSizeOption;
   aspectRatio?: FalAspectRatioOption;
   numImages?: number;
+  resolution?: FalResolutionOption;
 }
 
 interface GenerateImageOptions {
@@ -53,16 +55,30 @@ interface GenerateImageOptions {
   numImages?: number;
   imageSize?: FalImageSizeOption;
   seed?: number;
+  resolution?: FalResolutionOption;
 }
 
 interface UpscaleImageOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
 }
 
-const FAL_MODEL_ID = process.env.FAL_MODEL_ID || 'fal-ai/nano-banana/edit';
+const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
+const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview';
+const LEGACY_NANO_BANANA_EDIT_MODEL_ID = 'fal-ai/nano-banana/edit';
+const LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana';
+
+const normalizeModelId = (modelId: string | undefined): string | undefined => {
+  if (modelId === LEGACY_NANO_BANANA_EDIT_MODEL_ID) {
+    return GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+  }
+  if (modelId === LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID) {
+    return GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+  }
+  return modelId;
+};
+
+const FAL_MODEL_ID = normalizeModelId(process.env.FAL_MODEL_ID) || GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit';
-const NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit';
-const NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana';
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image';
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
 const CRYSTAL_UPSCALER_MODEL_ID = 'fal-ai/crystal-upscaler';
@@ -393,10 +409,11 @@ export const generateImageEdit = async ({
     imageUrls.push(...referenceUrls);
   }
 
-  const modelId = options.modelId || FAL_MODEL_ID;
+  const modelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
   const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
   const numImagesOption = options.numImages;
+  const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
 
   const body: {
     prompt: string;
@@ -406,6 +423,7 @@ export const generateImageEdit = async ({
     image_size?: { width: number; height: number } | string;
     num_images?: number;
     aspect_ratio?: string;
+    resolution?: FalResolutionOption;
   } = {
     prompt,
     image_urls: imageUrls,
@@ -427,10 +445,11 @@ export const generateImageEdit = async ({
     } else {
       body.image_size = imageSizeOption;
     }
-  } else if (modelId === NANO_BANANA_MODEL_ID) {
+  } else if (modelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }
+    body.resolution = resolutionOption;
   }
 
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
@@ -800,12 +819,13 @@ export const generateImage = async (
 ): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => {
   ensureFalClientConfigured();
 
-  const modelId = options.modelId || NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID;
+  const modelId = normalizeModelId(options.modelId) || GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
   const isSeedreamTextToImage = modelId === SEEDREAM_TEXT_TO_IMAGE_MODEL_ID;
-  const supportsAspectRatio = modelId === NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+  const supportsAspectRatio = modelId === GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
   const numImagesOption = options.numImages;
   const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
+  const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
 
   const body: {
     prompt: string;
@@ -815,6 +835,7 @@ export const generateImage = async (
     aspect_ratio?: string;
     image_size?: { width: number; height: number } | string;
     seed?: number;
+    resolution?: FalResolutionOption;
   } = {
     prompt,
     sync_mode: !isSeedreamTextToImage,
@@ -837,6 +858,11 @@ export const generateImage = async (
     if (imageSizeOption !== 'default') {
       body.image_size = imageSizeOption;
     }
+  } else if (modelId === GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID) {
+    if (aspectRatioOption !== 'default') {
+      body.aspect_ratio = aspectRatioOption;
+    }
+    body.resolution = resolutionOption;
   } else if (supportsAspectRatio && aspectRatioOption !== 'default') {
     body.aspect_ratio = aspectRatioOption;
   }

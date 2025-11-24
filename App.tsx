@@ -11,6 +11,7 @@ import {
   CanvasNote,
   FalImageSizePreset,
   FalAspectRatioOption,
+  FalResolutionOption,
   CanvasImageSource,
 } from './types';
 import { generateImageEdit as generateGoogleImageEdit, generateImage as generateGoogleImage } from './services/geminiService';
@@ -30,9 +31,9 @@ import { formatFalLogMessage } from './services/falConstants';
 import type { FalQueueJob, FalJobStatus } from './types';
 import { ZoomToFitIcon, HamburgerIcon, MetadataIcon } from './components/Icons';
 
-const NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
+const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit' as const;
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
-const NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana' as const;
+const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview' as const;
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
 const CRYSTAL_UPSCALER_MODEL_ID = 'fal-ai/crystal-upscaler' as const;
@@ -41,7 +42,7 @@ const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
 const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 const FAL_MODEL_OPTIONS = [
-  { value: NANO_BANANA_MODEL_ID, label: 'Nano Banana' },
+  { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
   { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
@@ -52,6 +53,7 @@ const FAL_MODEL_OPTIONS = [
 type FalImageSizeSelectionValue = 'default' | FalImageSizePreset;
 
 type FalAspectRatioSelectionValue = FalAspectRatioOption;
+type FalResolutionSelectionValue = FalResolutionOption;
 
 const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
   { value: 'default', label: 'Match Source' },
@@ -80,8 +82,14 @@ const FAL_SEEDVR_NOISE_SCALE_OPTIONS = Array.from({ length: 10 }, (_, index) => 
   return { value: value.toFixed(1), label: value.toFixed(1) } as const;
 });
 
-const FAL_NANO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
-  { value: 'default', label: 'Match Source' },
+const FAL_RESOLUTION_OPTIONS: ReadonlyArray<{ value: FalResolutionSelectionValue; label: string }> = [
+  { value: '1K', label: '1K (default)' },
+  { value: '2K', label: '2K' },
+  { value: '4K', label: '4K' },
+] as const;
+
+const FAL_GEMINI_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+  { value: 'default', label: 'Auto (default)' },
   { value: '21:9', label: '21:9' },
   { value: '1:1', label: '1:1' },
   { value: '4:3', label: '4:3' },
@@ -106,7 +114,7 @@ const FAL_REVE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelect
 ] as const;
 
 const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
-  ...FAL_NANO_ASPECT_RATIO_OPTIONS.map(option => option.value),
+  ...FAL_GEMINI_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
 
@@ -122,6 +130,9 @@ const isFalImageSizeSelectionValue = (value: unknown): value is FalImageSizeSele
 const isFalAspectRatioSelectionValue = (value: unknown): value is FalAspectRatioSelectionValue =>
   typeof value === 'string' && FAL_ASPECT_RATIO_VALUES.has(value as FalAspectRatioSelectionValue);
 
+const isFalResolutionSelectionValue = (value: unknown): value is FalResolutionSelectionValue =>
+  typeof value === 'string' && FAL_RESOLUTION_OPTIONS.some(option => option.value === value);
+
 type PromptBarModelControl = {
   id: string;
   ariaLabel: string;
@@ -136,9 +147,16 @@ const isFalModelId = (value: string | undefined): value is FalModelId => {
   return typeof value === 'string' && FAL_MODEL_OPTIONS.some(option => option.value === value);
 };
 
-const DEFAULT_FAL_MODEL_ID: FalModelId = isFalModelId(process.env.FAL_MODEL_ID)
-  ? process.env.FAL_MODEL_ID
-  : NANO_BANANA_MODEL_ID;
+const LEGACY_NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
+const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
+  if (value === LEGACY_NANO_BANANA_MODEL_ID) {
+    return GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+  }
+  return isFalModelId(value) ? value : undefined;
+};
+
+const DEFAULT_FAL_MODEL_ID: FalModelId = normalizeFalModelId(process.env.FAL_MODEL_ID)
+  ?? GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
 
 const isCanvasImageSource = (value: unknown): value is CanvasImageSource => {
   return value === 'generated' || value === 'imported' || value === 'snapshot' || value === 'derived';
@@ -227,22 +245,23 @@ type SerializedSnapshot = {
     images: SerializedCanvasImage[];
     notes: CanvasNote[];
     paths: Path[];
-      meta?: {
-        appMode: AppMode;
-        tool: Tool;
-        brushSize: number;
-        eraserSize: number;
+    meta?: {
+      appMode: AppMode;
+      tool: Tool;
+      brushSize: number;
+      eraserSize: number;
       brushColor: string;
       prompt: string;
       inpaintMode: InpaintMode;
       apiProvider: ApiProvider;
       falModelId: FalModelId;
-        falImageSizeSelection: FalImageSizeSelectionValue;
-        falAspectRatioSelection: FalAspectRatioSelectionValue;
-        falNumImages: number;
-        falScaleFactor: number;
-        falNoiseScale: number;
-        selectedImageIds: string[];
+      falImageSizeSelection: FalImageSizeSelectionValue;
+      falAspectRatioSelection: FalAspectRatioSelectionValue;
+      falResolutionSelection: FalResolutionSelectionValue;
+      falNumImages: number;
+      falScaleFactor: number;
+      falNoiseScale: number;
+      selectedImageIds: string[];
       selectedNoteIds: string[];
       referenceImageIds: string[];
     };
@@ -417,6 +436,7 @@ export default function App() {
   const [falModelId, setFalModelId] = useState<FalModelId>(DEFAULT_FAL_MODEL_ID);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('default');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
+  const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
   const [falNumImages, setFalNumImages] = useState(1);
   const [falScaleFactor, setFalScaleFactor] = useState(2);
   const [falNoiseScale, setFalNoiseScale] = useState(0.1);
@@ -443,6 +463,9 @@ export default function App() {
 
   const handleFalAspectRatioChange = useCallback((value: string) => {
     setFalAspectRatioSelection(value as FalAspectRatioSelectionValue);
+  }, []);
+  const handleFalResolutionChange = useCallback((value: string) => {
+    setFalResolutionSelection(value as FalResolutionSelectionValue);
   }, []);
 
   const handleFalNumImagesChange = useCallback((value: number) => {
@@ -502,7 +525,7 @@ export default function App() {
   useEffect(() => {
     const validOptions = (falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID
       ? FAL_REVE_ASPECT_RATIO_OPTIONS
-      : FAL_NANO_ASPECT_RATIO_OPTIONS).map(option => option.value);
+      : FAL_GEMINI_ASPECT_RATIO_OPTIONS).map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
       setFalAspectRatioSelection('default');
     }
@@ -655,15 +678,16 @@ export default function App() {
           apiProvider,
           falModelId,
           falImageSizeSelection,
-        falAspectRatioSelection,
-        falNumImages,
-        falScaleFactor,
-        falNoiseScale,
-        selectedImageIds: [...selectedImageIds],
-        selectedNoteIds: [...selectedNoteIds],
-        referenceImageIds: [...referenceImageIds],
+          falAspectRatioSelection,
+          falResolutionSelection,
+          falNumImages,
+          falScaleFactor,
+          falNoiseScale,
+          selectedImageIds: [...selectedImageIds],
+          selectedNoteIds: [...selectedNoteIds],
+          referenceImageIds: [...referenceImageIds],
+        },
       },
-    },
     };
 
     return snapshot;
@@ -682,6 +706,7 @@ export default function App() {
     falModelId,
     falImageSizeSelection,
     falAspectRatioSelection,
+    falResolutionSelection,
     falNumImages,
     falScaleFactor,
     falNoiseScale,
@@ -894,14 +919,18 @@ export default function App() {
             setApiProvider(AVAILABLE_PROVIDERS[0]);
           }
         }
-        if (isFalModelId(meta.falModelId)) {
-          setFalModelId(meta.falModelId);
+        const normalizedFalModelId = normalizeFalModelId(meta.falModelId);
+        if (normalizedFalModelId) {
+          setFalModelId(normalizedFalModelId);
         }
         if (isFalImageSizeSelectionValue(meta.falImageSizeSelection)) {
           setFalImageSizeSelection(meta.falImageSizeSelection);
         }
         if (isFalAspectRatioSelectionValue(meta.falAspectRatioSelection)) {
           setFalAspectRatioSelection(meta.falAspectRatioSelection);
+        }
+        if (isFalResolutionSelectionValue(meta.falResolutionSelection)) {
+          setFalResolutionSelection(meta.falResolutionSelection);
         }
         if (typeof meta.falNumImages === 'number') {
           setFalNumImages(Math.min(4, Math.max(1, Math.floor(meta.falNumImages))));
@@ -1213,7 +1242,7 @@ export default function App() {
     const isTextToImage = !primaryImageId;
     const usingFal = apiProvider === 'fal';
     const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
-    const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
+    const isGeminiModel = falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
     const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const isCrystalUpscaleModel = falModelId === CRYSTAL_UPSCALER_MODEL_ID;
     const isSimaUpscaleModel = falModelId === SIMA_UPSCALER_MODEL_ID;
@@ -1232,13 +1261,13 @@ export default function App() {
     }
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelId) : GOOGLE_MODEL_LABEL;
-    const shouldValidateFalOptions = usingFal && (isSeedreamModel || isNanoModel || isReveModel);
+    const shouldValidateFalOptions = usingFal && (isSeedreamModel || isGeminiModel || isReveModel);
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
       falNumImages < 1 ||
       falNumImages > 4;
     const normalizedFalNumImages = Math.min(4, Math.max(1, Math.floor(Number.isFinite(falNumImages) ? falNumImages : 1)));
-    const googleAspectRatio = isNanoModel && falAspectRatioSelection !== 'default'
+    const googleAspectRatio = isGeminiModel && falAspectRatioSelection !== 'default'
       ? falAspectRatioSelection
       : undefined;
 
@@ -1251,7 +1280,7 @@ export default function App() {
       }
 
       if (usingFal && !isUpscaleModel && isReveModel) {
-        setError('Reve Image only supports text-to-image generation. Please switch to Nano Banana or Seedream for edits.');
+        setError('Reve Image only supports text-to-image generation. Please switch to Gemini 3 Pro Image Preview or Seedream for edits.');
         return;
       }
 
@@ -1330,7 +1359,7 @@ export default function App() {
             ? SEEDREAM_TEXT_TO_IMAGE_MODEL_ID
             : isReveModel
               ? REVE_TEXT_TO_IMAGE_MODEL_ID
-              : NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID;
+              : GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
 
           const falResult = await generateFalImage(trimmedPrompt, {
             onQueueUpdate: (update) => {
@@ -1350,7 +1379,8 @@ export default function App() {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isNanoModel || isReveModel) ? falAspectRatioSelection : 'default',
+            aspectRatio: (isGeminiModel || isReveModel) ? falAspectRatioSelection : 'default',
+            ...(isGeminiModel ? { resolution: falResolutionSelection } : {}),
             ...(isSeedreamModel ? { imageSize: falImageSizeSelection } : {}),
             numImages: normalizedFalNumImages,
           });
@@ -1574,9 +1604,10 @@ export default function App() {
                       : falImageSizeSelection,
                   }
                 : {}),
-              ...(isNanoModel
+              ...(isGeminiModel
                 ? {
                     aspectRatio: falAspectRatioSelection,
+                    resolution: falResolutionSelection,
                   }
                 : {}),
               numImages: normalizedFalNumImages,
@@ -1695,6 +1726,7 @@ export default function App() {
     appMode,
     falAspectRatioSelection,
     falImageSizeSelection,
+    falResolutionSelection,
     falModelId,
     falNumImages,
     falScaleFactor,
@@ -1988,9 +2020,9 @@ export default function App() {
 
       const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
       const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
-      const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
+      const isGeminiModel = falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
       const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-      const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isNanoModel || isReveModel);
+      const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isGeminiModel || isReveModel);
       const isNumImagesInvalid =
         !Number.isFinite(falNumImages) ||
         falNumImages < 1 ||
@@ -2281,13 +2313,13 @@ export default function App() {
   const isTextToImage = !primaryImageId;
   const promptEmpty = prompt.trim().length === 0;
   const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
-  const isNanoModel = falModelId === NANO_BANANA_MODEL_ID;
+  const isGeminiModel = falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
   const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const isCrystalUpscaleModel = falModelId === CRYSTAL_UPSCALER_MODEL_ID;
   const isSimaUpscaleModel = falModelId === SIMA_UPSCALER_MODEL_ID;
   const isSeedvrUpscaleModel = falModelId === SEEDVR_UPSCALER_MODEL_ID;
   const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel || isSeedvrUpscaleModel;
-  const shouldValidateFalOptions = usingFal && (isSeedreamModel || isNanoModel || isReveModel);
+  const shouldValidateFalOptions = usingFal && (isSeedreamModel || isGeminiModel || isReveModel);
   const isNumImagesInvalid =
     !Number.isFinite(falNumImages) ||
     falNumImages < 1 ||
@@ -2315,9 +2347,10 @@ export default function App() {
   const disablePromptInput = usingFal && isUpscaleModel;
 
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel;
-  const supportsAspectRatioControl = isNanoModel || isReveModel;
+  const supportsAspectRatioControl = isGeminiModel || isReveModel;
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || isTextToImage);
-  const shouldShowNumImagesControl = apiProvider === 'fal' && (isSeedreamModel || isNanoModel || isReveModel);
+  const shouldShowResolutionControl = apiProvider === 'fal' && isGeminiModel;
+  const shouldShowNumImagesControl = apiProvider === 'fal' && (isSeedreamModel || isGeminiModel || isReveModel);
 
   const promptBarModelControlsList: PromptBarModelControl[] = [];
 
@@ -2356,13 +2389,24 @@ export default function App() {
   }
 
   if (shouldShowAspectRatioControl) {
-    const aspectRatioOptions = isReveModel ? FAL_REVE_ASPECT_RATIO_OPTIONS : FAL_NANO_ASPECT_RATIO_OPTIONS;
+    const aspectRatioOptions = isReveModel ? FAL_REVE_ASPECT_RATIO_OPTIONS : FAL_GEMINI_ASPECT_RATIO_OPTIONS;
     promptBarModelControlsList.push({
       id: 'fal-aspect-ratio-select',
-      ariaLabel: isReveModel ? 'Select Reve Image aspect ratio' : 'Select Nano Banana aspect ratio',
+      ariaLabel: isReveModel ? 'Select Reve Image aspect ratio' : 'Select Gemini 3 Pro Image Preview aspect ratio',
       options: aspectRatioOptions.map(option => ({ value: option.value, label: option.label })),
       value: falAspectRatioSelection,
       onChange: handleFalAspectRatioChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (shouldShowResolutionControl) {
+    promptBarModelControlsList.push({
+      id: 'fal-resolution-select',
+      ariaLabel: 'Select NanoBanana Pro resolution',
+      options: FAL_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: falResolutionSelection,
+      onChange: handleFalResolutionChange,
       disabled: isLoading,
     });
   }
@@ -2569,8 +2613,9 @@ export default function App() {
           modelOptions={FAL_MODEL_OPTIONS}
           selectedModel={falModelId}
           onModelChange={(modelId) => {
-            if (isFalModelId(modelId)) {
-              setFalModelId(modelId);
+            const normalizedModelId = normalizeFalModelId(modelId);
+            if (normalizedModelId) {
+              setFalModelId(normalizedModelId);
             }
           }}
           modelSelectDisabled={apiProvider !== 'fal' || isLoading}

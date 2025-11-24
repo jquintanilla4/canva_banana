@@ -65,6 +65,8 @@ export type FalAspectRatioPreset =
 
 export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
 
+export type FalResolutionOption = '1K' | '2K' | '4K';
+
 export interface CanvasImage {
   id: string;
   element: HTMLImageElement;
