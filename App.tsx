@@ -239,6 +239,7 @@ type SerializedCanvasImageV1 = {
   y: number;
   width: number;
   height: number;
+  rotation?: number;
   fileName: string;
   fileType: string;
   dataUrl: string;
@@ -281,6 +282,7 @@ type SnapshotImageManifest = {
   y: number;
   width: number;
   height: number;
+  rotation?: number;
   fileName: string;
   fileType: string;
   fileSize: number;
@@ -348,13 +350,13 @@ const SNAPSHOT_MAGIC = 'BANANA_SNAPSHOT_V2\n';
 const snapshotEncoder = new TextEncoder();
 const snapshotDecoder = new TextDecoder();
 
-const writeUint32BE = (value: number): Uint8Array => {
+const writeUint32BE = (value: number): Uint8Array<ArrayBuffer> => {
   const buffer = new ArrayBuffer(4);
   new DataView(buffer).setUint32(0, value, false);
   return new Uint8Array(buffer);
 };
 
-const writeUint64BE = (value: number): Uint8Array => {
+const writeUint64BE = (value: number): Uint8Array<ArrayBuffer> => {
   const buffer = new ArrayBuffer(8);
   new DataView(buffer).setBigUint64(0, BigInt(value), false);
   return new Uint8Array(buffer);
@@ -518,21 +520,51 @@ const normalizeSnapshotImageMetadata = (
 type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 type AppState = { images: CanvasImage[], paths: Path[], notes: CanvasNote[] };
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
+type TransformModeState = { imageId: string; };
 
 const getStateSignature = (state: AppState): string => {
-  const imageSignature = state.images.map(img => `${img.id},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height}`).join(';');
+  const imageSignature = state.images
+    .map(img => `${img.id},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height},${(img.rotation ?? 0).toFixed(3)}`)
+    .join(';');
   const pathSignature = state.paths.map(p => `${p.points.length},${p.tool}`).join(',');
   const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length}`).join(';');
   return `${imageSignature}|${pathSignature}|${noteSignature}`;
 };
 
+const getImageRotation = (img: CanvasImage): number => img.rotation ?? 0;
+
+const getImageBounds = (img: CanvasImage) => {
+  const rotation = getImageRotation(img);
+  const centerX = img.x + img.width / 2;
+  const centerY = img.y + img.height / 2;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+
+  const corners = [
+    { x: -img.width / 2, y: -img.height / 2 },
+    { x: img.width / 2, y: -img.height / 2 },
+    { x: -img.width / 2, y: img.height / 2 },
+    { x: img.width / 2, y: img.height / 2 },
+  ].map(({ x, y }) => ({
+    x: centerX + x * cos - y * sin,
+    y: centerY + x * sin + y * cos,
+  }));
+
+  const xs = corners.map(corner => corner.x);
+  const ys = corners.map(corner => corner.y);
+
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+};
+
 const isOverlapping = (img1: CanvasImage, img2: CanvasImage): boolean => {
-    return !(
-        img1.x > img2.x + img2.width ||
-        img1.x + img1.width < img2.x ||
-        img1.y > img2.y + img2.height ||
-        img1.y + img1.height < img2.y
-    );
+  const a = getImageBounds(img1);
+  const b = getImageBounds(img2);
+  return !(a.minX > b.maxX || a.maxX < b.minX || a.minY > b.maxY || a.maxY < b.minY);
 };
 
 const mapFalStatusToJobStatus = (status: FalQueueUpdate['status'] | undefined): FalJobStatus => {
@@ -589,8 +621,8 @@ const applyFalQueueUpdateToJob = (job: FalQueueJob, update: FalQueueUpdate): Fal
     : undefined;
   const error = status === 'FAILED'
     ? buildFalDisplayError(updateMessage ?? job.error, mergedLogs)
-      ?? job.error
-      ?? FAL_PROVIDER_DOWN_MESSAGE
+    ?? job.error
+    ?? FAL_PROVIDER_DOWN_MESSAGE
     : job.error;
 
   return {
@@ -673,6 +705,7 @@ export default function App() {
   const [zoomInTrigger, setZoomInTrigger] = useState(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
   const [cropMode, setCropMode] = useState<CropModeState | null>(null);
+  const [transformMode, setTransformMode] = useState<TransformModeState | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [apiProvider, setApiProvider] = useState<ApiProvider>(DEFAULT_API_PROVIDER);
   const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
@@ -801,9 +834,9 @@ export default function App() {
       const { history: prevHistory, index: prevIndex } = currentState;
       const prevState = prevHistory[prevIndex];
       const newState = updater(prevState);
-      
+
       if (getStateSignature(newState) === getStateSignature(prevState)) {
-          return currentState;
+        return currentState;
       }
 
       const newHistory = prevHistory.slice(0, prevIndex + 1);
@@ -821,7 +854,7 @@ export default function App() {
   }, []);
 
   const handleClear = useCallback(() => {
-    setState(prevState => ({...prevState, paths: [] }));
+    setState(prevState => ({ ...prevState, paths: [] }));
   }, [setState]);
 
   const handleModeChange = useCallback((newMode: AppMode) => {
@@ -830,9 +863,9 @@ export default function App() {
     setAppMode(newMode);
     handleClear();
     if (newMode === 'CANVAS') {
-        setTool(Tool.PAN);
+      setTool(Tool.PAN);
     } else { // ANNOTATE or INPAINT
-        setTool(Tool.BRUSH);
+      setTool(Tool.BRUSH);
     }
   }, [appMode, handleClear]);
 
@@ -866,32 +899,32 @@ export default function App() {
 
   const handleImageOrderChange = useCallback((imageId: string, direction: 'up' | 'down') => {
     setState(prevState => {
-        const newImages = [...prevState.images];
-        const index = newImages.findIndex(img => img.id === imageId);
-        
-        if (direction === 'up' && index < newImages.length - 1) {
-            [newImages[index], newImages[index + 1]] = [newImages[index + 1], newImages[index]];
-        } else if (direction === 'down' && index > 0) {
-            [newImages[index], newImages[index - 1]] = [newImages[index - 1], newImages[index]];
-        }
-        
-        return { ...prevState, images: newImages };
+      const newImages = [...prevState.images];
+      const index = newImages.findIndex(img => img.id === imageId);
+
+      if (direction === 'up' && index < newImages.length - 1) {
+        [newImages[index], newImages[index + 1]] = [newImages[index + 1], newImages[index]];
+      } else if (direction === 'down' && index > 0) {
+        [newImages[index], newImages[index - 1]] = [newImages[index - 1], newImages[index]];
+      }
+
+      return { ...prevState, images: newImages };
     });
   }, [setState]);
 
   const handleNoteCopy = useCallback((noteId: string) => {
     const note = displayedNotes.find(n => n.id === noteId);
     if (note && note.text) {
-        navigator.clipboard.writeText(note.text)
-            .then(() => {
-                setToastMessage("Copied to clipboard!");
-                setTimeout(() => setToastMessage(null), 2000);
-            })
-            .catch(err => {
-                console.error('Failed to copy text: ', err);
-                setToastMessage("Failed to copy text.");
-                setTimeout(() => setToastMessage(null), 2000);
-            });
+      navigator.clipboard.writeText(note.text)
+        .then(() => {
+          setToastMessage("Copied to clipboard!");
+          setTimeout(() => setToastMessage(null), 2000);
+        })
+        .catch(err => {
+          console.error('Failed to copy text: ', err);
+          setToastMessage("Failed to copy text.");
+          setTimeout(() => setToastMessage(null), 2000);
+        });
     }
   }, [displayedNotes]);
 
@@ -904,6 +937,7 @@ export default function App() {
           y: img.y,
           width: img.width,
           height: img.height,
+          rotation: img.rotation ?? 0,
           fileName: img.file.name,
           fileType: img.file.type || 'application/octet-stream',
           fileSize: img.file.size,
@@ -1051,6 +1085,7 @@ export default function App() {
             const naturalHeight = element.naturalHeight || element.height || 1;
             const width = typeof img.width === 'number' ? img.width : naturalWidth;
             const height = typeof img.height === 'number' ? img.height : naturalHeight;
+            const rotation = typeof img.rotation === 'number' && Number.isFinite(img.rotation) ? img.rotation : 0;
 
             return {
               id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
@@ -1059,6 +1094,7 @@ export default function App() {
               y: typeof img.y === 'number' ? img.y : 0,
               width,
               height,
+              rotation,
               naturalWidth,
               naturalHeight,
               file: snapshotFile,
@@ -1107,6 +1143,9 @@ export default function App() {
             const width = typeof img.width === 'number' ? img.width : naturalWidth;
             const height = typeof img.height === 'number' ? img.height : naturalHeight;
             const rawMetadata = (img as SerializedCanvasImageV1).metadata as CanvasImage['metadata'] | undefined;
+            const rotation = typeof (img as SerializedCanvasImageV1).rotation === 'number' && Number.isFinite((img as SerializedCanvasImageV1).rotation)
+              ? (img as SerializedCanvasImageV1).rotation
+              : 0;
 
             return {
               id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
@@ -1115,6 +1154,7 @@ export default function App() {
               y: typeof img.y === 'number' ? img.y : 0,
               width,
               height,
+              rotation,
               naturalWidth,
               naturalHeight,
               file: snapshotFile,
@@ -1458,28 +1498,36 @@ export default function App() {
       if (imagesToCompose.length === 0) {
         return reject(new Error("No images to rasterize."));
       }
-  
-      const minX = Math.min(...imagesToCompose.map(img => img.x));
-      const minY = Math.min(...imagesToCompose.map(img => img.y));
-      const maxX = Math.max(...imagesToCompose.map(img => img.x + img.width));
-      const maxY = Math.max(...imagesToCompose.map(img => img.y + img.height));
-  
-      const width = maxX - minX;
-      const height = maxY - minY;
-  
+
+      const boundsList = imagesToCompose.map(getImageBounds);
+      const minX = Math.min(...boundsList.map(b => b.minX));
+      const minY = Math.min(...boundsList.map(b => b.minY));
+      const maxX = Math.max(...boundsList.map(b => b.maxX));
+      const maxY = Math.max(...boundsList.map(b => b.maxY));
+
+      const width = Math.max(1, maxX - minX);
+      const height = Math.max(1, maxY - minY);
+
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-  
+
       if (!ctx) {
         return reject(new Error("Could not create canvas context for rasterization."));
       }
-  
+
       imagesToCompose.forEach(img => {
-        ctx.drawImage(img.element, img.x - minX, img.y - minY, img.width, img.height);
+        const rotation = getImageRotation(img);
+        const centerX = img.x + img.width / 2;
+        const centerY = img.y + img.height / 2;
+        ctx.save();
+        ctx.translate(centerX - minX, centerY - minY);
+        ctx.rotate(rotation);
+        ctx.drawImage(img.element, -img.width / 2, -img.height / 2, img.width, img.height);
+        ctx.restore();
       });
-  
+
       const newImg = new Image();
       newImg.onload = async () => {
         try {
@@ -1523,14 +1571,14 @@ export default function App() {
   }, [liveImages, livePaths, liveNotes, setState]);
 
   const handleToolChange = useCallback((newTool: Tool) => {
-      setTool(newTool);
-      if (editingNoteId) {
-          setEditingNoteId(null);
-          handleCommit();
-      }
-      if(cropMode) {
-        setCropMode(null);
-      }
+    setTool(newTool);
+    if (editingNoteId) {
+      setEditingNoteId(null);
+      handleCommit();
+    }
+    if (cropMode) {
+      setCropMode(null);
+    }
   }, [editingNoteId, handleCommit, cropMode]);
 
   const handleGenerate = useCallback(async () => {
@@ -1648,11 +1696,12 @@ export default function App() {
       } | null = null;
 
       if (isTextToImage) {
-        const placementX = images.length > 0
-          ? Math.max(...images.map(img => img.x + img.width)) + 20
+        const imageBoundsList = images.map(getImageBounds);
+        const placementX = imageBoundsList.length > 0
+          ? Math.max(...imageBoundsList.map(b => b.maxX)) + 20
           : 100;
-        const placementY = images.length > 0
-          ? Math.min(...images.map(img => img.y))
+        const placementY = imageBoundsList.length > 0
+          ? Math.min(...imageBoundsList.map(b => b.minY))
           : 100;
         placementOrigin = { x: placementX, y: placementY };
 
@@ -1715,9 +1764,10 @@ export default function App() {
             throw new Error('Unable to create Fal job identifier.');
           }
 
+          const primaryBounds = getImageBounds(activePrimaryImage);
           placementOrigin = {
-            x: activePrimaryImage.x + activePrimaryImage.width + 20,
-            y: activePrimaryImage.y,
+            x: primaryBounds.maxX + 20,
+            y: primaryBounds.minY,
           };
 
           if (isSimaUpscaleModel && falScaleFactor === 1) {
@@ -1793,15 +1843,28 @@ export default function App() {
 
           const shouldCompose = referenceCanvasImages.length > 0 &&
             referenceCanvasImages.some(refImg => isOverlapping(activePrimaryImage, refImg));
+          const activeNeedsRasterize = (activePrimaryImage.rotation ?? 0) !== 0;
 
           let referenceImagesForAPI: HTMLImageElement[] = [];
 
-          if (shouldCompose) {
-            const imageIdsToCompose = allSelectedImages.map(img => img.id);
+          const prepareReferenceImage = async (img: CanvasImage): Promise<HTMLImageElement> => {
+            if ((img.rotation ?? 0) === 0) {
+              return img.element;
+            }
+            const rasterized = await rasterizeImages([img]);
+            return rasterized.element;
+          };
+
+          if (shouldCompose || activeNeedsRasterize) {
+            const imageIdsToCompose = shouldCompose
+              ? allSelectedImages.map(img => img.id)
+              : [activePrimaryImage.id];
             const imagesToCompose = images.filter(img => imageIdsToCompose.includes(img.id));
             const composed = await rasterizeImages(imagesToCompose);
             sourceImageForAPI = composed;
-            referenceImagesForAPI = [];
+            referenceImagesForAPI = shouldCompose
+              ? []
+              : await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
           } else {
             sourceImageForAPI = {
               element: activePrimaryImage.element,
@@ -1813,7 +1876,7 @@ export default function App() {
               naturalHeight: activePrimaryImage.naturalHeight,
               file: activePrimaryImage.file,
             };
-            referenceImagesForAPI = referenceCanvasImages.map(img => img.element);
+            referenceImagesForAPI = await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
           }
 
           if (!sourceImageForAPI) {
@@ -1883,16 +1946,16 @@ export default function App() {
               },
               ...(isSeedreamModel
                 ? {
-                    imageSize: falImageSizeSelection === 'default'
-                      ? 'default'
-                      : falImageSizeSelection,
-                  }
+                  imageSize: falImageSizeSelection === 'default'
+                    ? 'default'
+                    : falImageSizeSelection,
+                }
                 : {}),
               ...(isGeminiModel
                 ? {
-                    aspectRatio: falAspectRatioSelection,
-                    resolution: falResolutionSelection,
-                  }
+                  aspectRatio: falAspectRatioSelection,
+                  resolution: falResolutionSelection,
+                }
                 : {}),
               numImages: normalizedFalNumImages,
             });
@@ -1964,6 +2027,7 @@ export default function App() {
           y: placementOrigin.y + yOffset,
           width: displayWidth,
           height: displayHeight,
+          rotation: 0,
           naturalWidth,
           naturalHeight,
           file,
@@ -2066,11 +2130,12 @@ export default function App() {
       const fileName = `${baseName || 'image'}_no_bg.png`;
       const file = new File([blob], fileName, { type: 'image/png' });
 
-      const targetX = primaryImage.x + primaryImage.width + 20;
+      const primaryBounds = getImageBounds(primaryImage);
+      const targetX = primaryBounds.maxX + 20;
       const spacing = 20;
       const existingImages = displayedImages;
       let offsetMultiplier = 0;
-      let placementY = primaryImage.y;
+      let placementY = primaryBounds.minY;
       const maxAttempts = existingImages.length + 10;
 
       const createCandidate = (y: number): CanvasImage => ({
@@ -2080,6 +2145,7 @@ export default function App() {
         y,
         width: displayWidth,
         height: displayHeight,
+        rotation: primaryImage.rotation ?? 0,
         naturalWidth,
         naturalHeight,
         file,
@@ -2093,7 +2159,7 @@ export default function App() {
         existingImages.some(img => isOverlapping(img, createCandidate(placementY)))
       ) {
         offsetMultiplier += 1;
-        placementY = primaryImage.y + offsetMultiplier * (element.height + spacing);
+        placementY = primaryBounds.minY + offsetMultiplier * (element.height + spacing);
       }
 
       const newImage: CanvasImage = {
@@ -2169,41 +2235,52 @@ export default function App() {
     const croppedImageURL = tempCanvas.toDataURL('image/png');
     const newImg = new Image();
     newImg.onload = async () => {
-        const blob = await (await fetch(newImg.src)).blob();
-        const newFile = new File([blob], "cropped_image.png", { type: "image/png" });
-        const naturalWidth = newImg.naturalWidth || newImg.width || 1;
-        const naturalHeight = newImg.naturalHeight || newImg.height || 1;
-        const displayWidth = newImg.width || naturalWidth;
-        const displayHeight = newImg.height || naturalHeight;
-        
-        const updatedImage: CanvasImage = {
-          ...originalImage,
-          element: newImg,
-          x: originalImage.x + rect.x,
-          y: originalImage.y + rect.y,
-          width: displayWidth,
-          height: displayHeight,
-          naturalWidth,
-          naturalHeight,
-          file: newFile,
-        };
+      const blob = await (await fetch(newImg.src)).blob();
+      const newFile = new File([blob], "cropped_image.png", { type: "image/png" });
+      const naturalWidth = newImg.naturalWidth || newImg.width || 1;
+      const naturalHeight = newImg.naturalHeight || newImg.height || 1;
+      const displayWidth = newImg.width || naturalWidth;
+      const displayHeight = newImg.height || naturalHeight;
 
-        setState(prevState => ({
-            ...prevState,
-            images: prevState.images.map(img => img.id === originalImage.id ? updatedImage : img),
-        }));
-        setSelectedImageIds([originalImage.id]);
-        setCropMode(null);
+      const updatedImage: CanvasImage = {
+        ...originalImage,
+        element: newImg,
+        x: originalImage.x + rect.x,
+        y: originalImage.y + rect.y,
+        width: displayWidth,
+        height: displayHeight,
+        naturalWidth,
+        naturalHeight,
+        file: newFile,
+      };
+
+      setState(prevState => ({
+        ...prevState,
+        images: prevState.images.map(img => img.id === originalImage.id ? updatedImage : img),
+      }));
+      setSelectedImageIds([originalImage.id]);
+      setCropMode(null);
     };
     newImg.src = croppedImageURL;
 
   }, [cropMode, history, historyIndex, setState, handleCancelCrop]);
 
+  // Transform handlers
+  const handleStartTransform = useCallback((imageId: string) => {
+    const imageToTransform = displayedImages.find(img => img.id === imageId);
+    if (!imageToTransform) return;
+    setTransformMode({ imageId });
+  }, [displayedImages]);
+
+  const handleExitTransform = useCallback(() => {
+    setTransformMode(null);
+  }, []);
+
   useEffect(() => {
     // When a new note is added using the Note tool, switch to the free selection tool
     // to prevent accidental creation of multiple notes.
     if (tool === Tool.NOTE && displayedNotes.length > prevDisplayedNotesLength.current) {
-        handleToolChange(Tool.FREE_SELECTION);
+      handleToolChange(Tool.FREE_SELECTION);
     }
     // Update the ref for the next render.
     prevDisplayedNotesLength.current = displayedNotes.length;
@@ -2214,6 +2291,10 @@ export default function App() {
       if (cropMode) {
         if (e.key === 'Enter') handleConfirmCrop();
         if (e.key === 'Escape') handleCancelCrop();
+        return;
+      }
+      if (transformMode) {
+        if (e.key === 'Enter' || e.key === 'Escape') handleExitTransform();
         return;
       }
       if (editingNoteId) return; // Don't handle shortcuts while editing a note
@@ -2295,15 +2376,17 @@ export default function App() {
     cropMode,
     handleConfirmCrop,
     handleCancelCrop,
+    transformMode,
+    handleExitTransform,
     requestZoomIn,
     requestZoomOut,
     adjustBrushSize,
     adjustEraserSize,
   ]);
-  
+
   useEffect(() => {
     const handleGlobalSubmit = (e: KeyboardEvent) => {
-      if (cropMode) return;
+      if (cropMode || transformMode) return;
 
       const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
       const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
@@ -2329,7 +2412,7 @@ export default function App() {
 
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        
+
         if (!isLoading && !submitDisabled) {
           handleGenerate();
         }
@@ -2348,6 +2431,7 @@ export default function App() {
     paths,
     handleGenerate,
     cropMode,
+    transformMode,
     apiProvider,
     falModelId,
     falNumImages,
@@ -2365,7 +2449,7 @@ export default function App() {
       setHistoryState(prev => ({ ...prev, index: prev.index - 1 }));
     }
   }, [canUndo]);
-  
+
   const redo = useCallback(() => {
     if (canRedo) {
       setLiveImages(null);
@@ -2392,8 +2476,9 @@ export default function App() {
             let newY = 0;
             if (prevState.images.length > 0) {
               const lastImage = prevState.images[prevState.images.length - 1];
-              newX = lastImage.x + lastImage.width + 20;
-              newY = lastImage.y;
+              const lastBounds = getImageBounds(lastImage);
+              newX = lastBounds.maxX + 20;
+              newY = lastBounds.minY;
             }
 
             const newCanvasImage: CanvasImage = {
@@ -2403,6 +2488,7 @@ export default function App() {
               y: newY,
               width: displayWidth,
               height: displayHeight,
+              rotation: 0,
               naturalWidth,
               naturalHeight,
               file: file,
@@ -2435,52 +2521,53 @@ export default function App() {
     let imagesProcessed = 0;
 
     imageFiles.forEach((file, index) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const naturalWidth = img.naturalWidth || img.width || 1;
-                const naturalHeight = img.naturalHeight || img.height || 1;
-                const displayWidth = img.width || naturalWidth;
-                const displayHeight = img.height || naturalHeight;
-                const newCanvasImage: CanvasImage = {
-                    id: crypto.randomUUID(),
-                    element: img,
-                    x: point.x - (displayWidth / 2) + (index * 20),
-                    y: point.y - (displayHeight / 2) + (index * 20),
-                    width: displayWidth,
-                    height: displayHeight,
-                    naturalWidth,
-                    naturalHeight,
-                    file: file,
-                    metadata: { source: 'imported' },
-                };
-                newImages.push(newCanvasImage);
-                lastAddedImageId = newCanvasImage.id;
-                imagesProcessed++;
-                
-                if (imagesProcessed === imageFiles.length) {
-                    setState(prevState => ({
-                        ...prevState,
-                        images: [...prevState.images, ...newImages],
-                        paths: [], 
-                    }));
-                    setSelectedImageIds(lastAddedImageId ? [lastAddedImageId] : []);
-                    setSelectedNoteIds([]);
-                    setReferenceImageIds([]);
-                    setTool(Tool.SELECTION);
-                }
-            };
-            img.src = event.target?.result as string;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const naturalWidth = img.naturalWidth || img.width || 1;
+          const naturalHeight = img.naturalHeight || img.height || 1;
+          const displayWidth = img.width || naturalWidth;
+          const displayHeight = img.height || naturalHeight;
+          const newCanvasImage: CanvasImage = {
+            id: crypto.randomUUID(),
+            element: img,
+            x: point.x - (displayWidth / 2) + (index * 20),
+            y: point.y - (displayHeight / 2) + (index * 20),
+            width: displayWidth,
+            height: displayHeight,
+            rotation: 0,
+            naturalWidth,
+            naturalHeight,
+            file: file,
+            metadata: { source: 'imported' },
+          };
+          newImages.push(newCanvasImage);
+          lastAddedImageId = newCanvasImage.id;
+          imagesProcessed++;
+
+          if (imagesProcessed === imageFiles.length) {
+            setState(prevState => ({
+              ...prevState,
+              images: [...prevState.images, ...newImages],
+              paths: [],
+            }));
+            setSelectedImageIds(lastAddedImageId ? [lastAddedImageId] : []);
+            setSelectedNoteIds([]);
+            setReferenceImageIds([]);
+            setTool(Tool.SELECTION);
+          }
         };
-        reader.readAsDataURL(file);
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
     });
   }, [setState]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
-  
+
   const handleDownload = useCallback(() => {
     if (!hasSingleImageSelected || !primaryImageId) return;
     const imageToDownload = images.find(img => img.id === primaryImageId);
@@ -2493,7 +2580,7 @@ export default function App() {
     link.click();
     document.body.removeChild(link);
   }, [hasSingleImageSelected, primaryImageId, images]);
-  
+
   const handleImageSelection = useCallback((
     imageId: string | null,
     options: { multi?: boolean; reference?: boolean } = {},
@@ -2550,36 +2637,36 @@ export default function App() {
     noteId: string | null,
     options: { multi?: boolean } = {},
   ) => {
-      const { multi = false } = options;
+    const { multi = false } = options;
 
-      if (!noteId) {
-        if (!multi) {
-          setSelectedNoteIds([]);
-          setSelectedImageIds([]);
-          setReferenceImageIds([]);
-        }
-        return;
-      }
-
-      if (multi) {
-        setSelectedNoteIds(prevIds => {
-          if (prevIds.includes(noteId)) {
-            return prevIds.filter(id => id !== noteId);
-          }
-          return [...prevIds, noteId];
-        });
-        return;
-      }
-
-      if (primaryNoteId === noteId && selectedNoteIds.length === 1) {
+    if (!noteId) {
+      if (!multi) {
+        setSelectedNoteIds([]);
         setSelectedImageIds([]);
         setReferenceImageIds([]);
-        return;
       }
+      return;
+    }
 
-      setSelectedNoteIds([noteId]);
+    if (multi) {
+      setSelectedNoteIds(prevIds => {
+        if (prevIds.includes(noteId)) {
+          return prevIds.filter(id => id !== noteId);
+        }
+        return [...prevIds, noteId];
+      });
+      return;
+    }
+
+    if (primaryNoteId === noteId && selectedNoteIds.length === 1) {
       setSelectedImageIds([]);
       setReferenceImageIds([]);
+      return;
+    }
+
+    setSelectedNoteIds([noteId]);
+    setSelectedImageIds([]);
+    setReferenceImageIds([]);
   }, [primaryNoteId, selectedNoteIds.length]);
 
   const handleNoteTextChange = useCallback((noteId: string, text: string) => {
@@ -2768,8 +2855,8 @@ export default function App() {
           </div>
         )}
       </div>
-      
-      {!cropMode && (
+
+      {!cropMode && !transformMode && (
         <Toolbar
           activeTool={tool}
           onToolChange={handleToolChange}
@@ -2799,7 +2886,7 @@ export default function App() {
           isBackgroundRemovalLoading={isRemovingBackground}
         />
       )}
-      
+
       <main className="flex-1 relative">
         <Canvas
           images={displayedImages}
@@ -2818,7 +2905,7 @@ export default function App() {
           referenceImageIds={referenceImageIds}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}
-  
+
           onCommit={handleCommit}
           onFilesDrop={handleFilesDrop}
           zoomToFitTrigger={zoomToFitTrigger}
@@ -2839,6 +2926,9 @@ export default function App() {
           onCancelCrop={handleCancelCrop}
           onNoteCopy={handleNoteCopy}
           showMetadataOverlay={showMetadataOverlay}
+          transformMode={transformMode}
+          onStartTransform={handleStartTransform}
+          onExitTransform={handleExitTransform}
         />
         <ViewToolbar
           onZoomToFit={handleZoomToFit}
@@ -2847,17 +2937,17 @@ export default function App() {
           onToggleMetadata={() => setShowMetadataOverlay(prev => !prev)}
         />
       </main>
-      
+
       {error && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-500 text-white p-3 rounded-md shadow-lg z-20 max-w-md text-center">
-            <p>{error}</p>
-            <button onClick={() => setError(null)} className="absolute -top-1 -right-1 text-2xl font-bold bg-red-700 rounded-full h-6 w-6 flex items-center justify-center leading-none">&times;</button>
+          <p>{error}</p>
+          <button onClick={() => setError(null)} className="absolute -top-1 -right-1 text-2xl font-bold bg-red-700 rounded-full h-6 w-6 flex items-center justify-center leading-none">&times;</button>
         </div>
       )}
-      
+
       {toastMessage && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-green-500 text-white p-3 rounded-md shadow-lg z-20 max-w-md text-center">
-            <p>{toastMessage}</p>
+          <p>{toastMessage}</p>
         </div>
       )}
 
@@ -2871,7 +2961,7 @@ export default function App() {
         />
       )}
 
-      {!cropMode && AVAILABLE_PROVIDERS.length > 0 && (
+      {!cropMode && !transformMode && AVAILABLE_PROVIDERS.length > 0 && (
         <div className="absolute bottom-4 left-4 z-20 flex items-center space-x-2">
           {AVAILABLE_PROVIDERS.map((provider) => {
             const isActive = apiProvider === provider;
@@ -2890,8 +2980,8 @@ export default function App() {
           })}
         </div>
       )}
-      
-      {!cropMode && (
+
+      {!cropMode && !transformMode && (
         <PromptBar
           prompt={prompt}
           onPromptChange={setPrompt}

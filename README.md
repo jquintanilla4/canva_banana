@@ -10,6 +10,7 @@ _Work in progress, expect bugs_
   - Pen tool for annotations
   - Hand tool for easy canvas navigation
 - **Image Manipulation**:
+  - Transform mode for rotating and scaling images (hold Shift for free/non-uniform transforms)
   - Multiple upscale models (e.g., fal-ai/proteus-v2, seed-v2)
   - Background removal
   - Image import/export in various formats
@@ -78,3 +79,9 @@ _Work in progress, expect bugs_
 **Session Snapshots**: Export your entire workspace (images, annotations, canvas state) as a JSON snapshot file. Import snapshots to restore previous sessions.
 
 **Individual Images**: Export selected images as PNG files for use in other applications.
+
+### Image Transform Mode
+- Select a single image to reveal the inline `Transform` button beside the crop control.
+- Click `Transform` to show an orange bounding box with drag handles. Corners scale uniformly; edges scale along one axis; the top circle rotates.
+- Default drag keeps the aspect ratio. Hold Shift while dragging any handle to free-transform (non-uniform scale) for stretching or squashing.
+- Press Enter/Escape or click the orange `Transform` button again to exit and keep the changes.
