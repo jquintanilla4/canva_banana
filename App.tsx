@@ -233,7 +233,7 @@ const getMaxReferenceImages = (modelId: FalModelId | undefined): number =>
     : DEFAULT_MAX_REFERENCE_IMAGES;
 const DEFAULT_NOTE_BACKGROUND = '#1f2937';
 
-type SerializedCanvasImage = {
+type SerializedCanvasImageV1 = {
   id: string;
   x: number;
   y: number;
@@ -245,11 +245,11 @@ type SerializedCanvasImage = {
   metadata?: CanvasImage['metadata'];
 };
 
-type SerializedSnapshot = {
+type SerializedSnapshotV1 = {
   version: 1;
   createdAt: string;
   state: {
-    images: SerializedCanvasImage[];
+    images: SerializedCanvasImageV1[];
     notes: CanvasNote[];
     paths: Path[];
     meta?: {
@@ -275,6 +275,34 @@ type SerializedSnapshot = {
   };
 };
 
+type SnapshotImageManifest = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  metadata?: CanvasImage['metadata'];
+};
+
+type SnapshotManifestV2 = {
+  version: 2;
+  createdAt: string;
+  state: {
+    images: SnapshotImageManifest[];
+    notes: CanvasNote[];
+    paths: Path[];
+    meta?: SerializedSnapshotV1['state']['meta'];
+  };
+};
+
+type SnapshotBinary = {
+  manifest: SnapshotManifestV2;
+  images: Array<{ manifest: SnapshotImageManifest; blob: Blob }>;
+};
+
 const fileToDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -298,6 +326,193 @@ const dataUrlToFile = async (dataUrl: string, fileName: string, fileType: string
   const blob = await response.blob();
   const type = fileType || blob.type || 'application/octet-stream';
   return new File([blob], fileName, { type });
+};
+
+const loadImageFromBlob = (blob: Blob): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(img);
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(objectUrl);
+      reject(err ?? new Error('Failed to load image.'));
+    };
+    img.src = objectUrl;
+  });
+};
+
+const SNAPSHOT_MAGIC = 'BANANA_SNAPSHOT_V2\n';
+const snapshotEncoder = new TextEncoder();
+const snapshotDecoder = new TextDecoder();
+
+const writeUint32BE = (value: number): Uint8Array => {
+  const buffer = new ArrayBuffer(4);
+  new DataView(buffer).setUint32(0, value, false);
+  return new Uint8Array(buffer);
+};
+
+const writeUint64BE = (value: number): Uint8Array => {
+  const buffer = new ArrayBuffer(8);
+  new DataView(buffer).setBigUint64(0, BigInt(value), false);
+  return new Uint8Array(buffer);
+};
+
+const readUint32BE = (view: DataView, offset: number): number => view.getUint32(offset, false);
+const readUint64BE = (view: DataView, offset: number): number => Number(view.getBigUint64(offset, false));
+
+const isBinarySnapshotFile = async (file: File): Promise<boolean> => {
+  const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
+  const headBuffer = await file.slice(0, magicBytes.length).arrayBuffer();
+  const head = new Uint8Array(headBuffer);
+  if (head.length !== magicBytes.length) return false;
+  for (let i = 0; i < magicBytes.length; i += 1) {
+    if (head[i] !== magicBytes[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const parseBinarySnapshotFile = async (file: File): Promise<SnapshotBinary> => {
+  const buffer = await file.arrayBuffer();
+  const view = new DataView(buffer);
+  const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
+  let offset = 0;
+
+  if (buffer.byteLength < magicBytes.length + 4) {
+    throw new Error('Snapshot file is too small.');
+  }
+
+  for (let i = 0; i < magicBytes.length; i += 1) {
+    if (view.getUint8(i) !== magicBytes[i]) {
+      throw new Error('Snapshot file format is invalid.');
+    }
+  }
+  offset += magicBytes.length;
+
+  const manifestLength = readUint32BE(view, offset);
+  offset += 4;
+  if (manifestLength <= 0 || offset + manifestLength > buffer.byteLength) {
+    throw new Error('Snapshot manifest length is invalid.');
+  }
+
+  const manifestBytes = new Uint8Array(buffer, offset, manifestLength);
+  offset += manifestLength;
+  const manifestJson = snapshotDecoder.decode(manifestBytes);
+  const manifest = JSON.parse(manifestJson) as SnapshotManifestV2;
+
+  if (!manifest || manifest.version !== 2 || !manifest.state) {
+    throw new Error('Snapshot manifest is invalid.');
+  }
+
+  const images: SnapshotBinary['images'] = [];
+  for (let index = 0; index < manifest.state.images.length; index += 1) {
+    if (offset + 4 > buffer.byteLength) {
+      throw new Error(`Snapshot image ${index + 1} metadata length is invalid.`);
+    }
+    const metaLength = readUint32BE(view, offset);
+    offset += 4;
+    if (metaLength <= 0 || offset + metaLength > buffer.byteLength) {
+      throw new Error(`Snapshot image ${index + 1} metadata is invalid.`);
+    }
+    const metaBytes = new Uint8Array(buffer, offset, metaLength);
+    offset += metaLength;
+    const imageManifest = JSON.parse(snapshotDecoder.decode(metaBytes)) as SnapshotImageManifest;
+
+    if (offset + 8 > buffer.byteLength) {
+      throw new Error(`Snapshot image ${index + 1} data length is invalid.`);
+    }
+    const dataLength = readUint64BE(view, offset);
+    offset += 8;
+    if (dataLength <= 0 || offset + dataLength > buffer.byteLength) {
+      throw new Error(`Snapshot image ${index + 1} data is invalid.`);
+    }
+    const dataBytes = buffer.slice(offset, offset + dataLength);
+    offset += dataLength;
+
+    images.push({
+      manifest: imageManifest,
+      blob: new Blob([dataBytes], { type: imageManifest.fileType || 'application/octet-stream' }),
+    });
+  }
+
+  return { manifest, images };
+};
+
+const snapshotBinaryToBlob = (binary: SnapshotBinary): Blob => {
+  const parts: BlobPart[] = [];
+  const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
+  parts.push(magicBytes);
+
+  const manifestJson = JSON.stringify(binary.manifest);
+  const manifestBytes = snapshotEncoder.encode(manifestJson);
+  parts.push(writeUint32BE(manifestBytes.length));
+  parts.push(manifestBytes);
+
+  binary.images.forEach(({ manifest, blob }) => {
+    const metaBytes = snapshotEncoder.encode(JSON.stringify(manifest));
+    parts.push(writeUint32BE(metaBytes.length));
+    parts.push(metaBytes);
+    parts.push(writeUint64BE(blob.size));
+    parts.push(blob);
+  });
+
+  return new Blob(parts, { type: 'application/octet-stream' });
+};
+
+type SnapshotWritable = { write: (data: Blob | Uint8Array | string) => Promise<void> };
+const writeSnapshotBinary = async (binary: SnapshotBinary, writable: SnapshotWritable) => {
+  const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
+  await writable.write(magicBytes);
+
+  const manifestJson = JSON.stringify(binary.manifest);
+  const manifestBytes = snapshotEncoder.encode(manifestJson);
+  await writable.write(writeUint32BE(manifestBytes.length));
+  await writable.write(manifestBytes);
+
+  for (const { manifest, blob } of binary.images) {
+    const metaBytes = snapshotEncoder.encode(JSON.stringify(manifest));
+    await writable.write(writeUint32BE(metaBytes.length));
+    await writable.write(metaBytes);
+    await writable.write(writeUint64BE(blob.size));
+    await writable.write(blob);
+  }
+};
+
+const normalizeSnapshotImageMetadata = (
+  rawMetadata: CanvasImage['metadata'] | undefined,
+): CanvasImage['metadata'] | undefined => {
+  if (!rawMetadata || typeof rawMetadata !== 'object') {
+    return undefined;
+  }
+
+  const rawSource = rawMetadata.source;
+  const rawPrompt = rawMetadata.prompt;
+  const rawModelLabel = rawMetadata.modelLabel;
+  const rawUpscaleFactor = rawMetadata.upscaleFactor;
+  const rawNoiseScale = rawMetadata.noiseScale;
+  const source = isCanvasImageSource(rawSource) ? rawSource : 'snapshot';
+  const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
+  const modelLabel = typeof rawModelLabel === 'string' ? rawModelLabel.trim() : '';
+  const hasValidUpscaleFactor = typeof rawUpscaleFactor === 'number'
+    && Number.isFinite(rawUpscaleFactor)
+    && rawUpscaleFactor > 0;
+  const normalizedNoiseScale = typeof rawNoiseScale === 'number' && Number.isFinite(rawNoiseScale)
+    ? Math.round(rawNoiseScale * 10) / 10
+    : undefined;
+
+  const metadata: CanvasImage['metadata'] = {
+    source,
+    ...(prompt.length > 0 ? { prompt } : {}),
+    ...(modelLabel.length > 0 ? { modelLabel } : {}),
+    ...(hasValidUpscaleFactor ? { upscaleFactor: rawUpscaleFactor } : {}),
+    ...(normalizedNoiseScale !== undefined ? { noiseScale: normalizedNoiseScale } : {}),
+  };
+
+  return metadata;
 };
 
 type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
@@ -680,34 +895,30 @@ export default function App() {
     }
   }, [displayedNotes]);
 
-  const buildSnapshot = useCallback(async (): Promise<SerializedSnapshot> => {
-    const serializedImages = await Promise.all(
+  const buildSnapshotBinary = useCallback(async (): Promise<SnapshotBinary> => {
+    const imagesWithManifests: SnapshotBinary['images'] = await Promise.all(
       displayedImages.map(async (img) => {
-        try {
-          const dataUrl = await fileToDataUrl(img.file);
-          return {
-            id: img.id,
-            x: img.x,
-            y: img.y,
-            width: img.width,
-            height: img.height,
-            fileName: img.file.name,
-            fileType: img.file.type,
-            dataUrl,
-            metadata: img.metadata ? { ...img.metadata } : undefined,
-          };
-        } catch (err) {
-          console.error(err);
-          throw new Error(`Unable to serialize image "${img.file?.name ?? img.id}".`);
-        }
+        const manifest: SnapshotImageManifest = {
+          id: img.id,
+          x: img.x,
+          y: img.y,
+          width: img.width,
+          height: img.height,
+          fileName: img.file.name,
+          fileType: img.file.type || 'application/octet-stream',
+          fileSize: img.file.size,
+          metadata: img.metadata ? { ...img.metadata } : undefined,
+        };
+
+        return { manifest, blob: img.file };
       })
     );
 
-    const snapshot: SerializedSnapshot = {
-      version: 1,
+    const manifest: SnapshotManifestV2 = {
+      version: 2,
       createdAt: new Date().toISOString(),
       state: {
-        images: serializedImages,
+        images: imagesWithManifests.map(item => item.manifest),
         notes: displayedNotes.map(note => ({ ...note })),
         paths: displayedPaths.map(path => ({
           ...path,
@@ -736,7 +947,7 @@ export default function App() {
       },
     };
 
-    return snapshot;
+    return { manifest, images: imagesWithManifests };
   }, [
     displayedImages,
     displayedNotes,
@@ -763,10 +974,9 @@ export default function App() {
 
   const handleExportSnapshot = useCallback(async () => {
     try {
-      const snapshot = await buildSnapshot();
-      const contents = JSON.stringify(snapshot, null, 2);
+      const snapshotBinary = await buildSnapshotBinary();
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const suggestedName = `banana-canvas-snapshot-${timestamp}.json`;
+      const suggestedName = `banana-canvas-snapshot-${timestamp}.bcsnap`;
 
       const win = window as unknown as { showSaveFilePicker?: (options?: unknown) => Promise<any> };
       if (typeof win.showSaveFilePicker === 'function') {
@@ -775,15 +985,15 @@ export default function App() {
           types: [
             {
               description: 'Canvas Snapshot',
-              accept: { 'application/json': ['.json'] },
+              accept: { 'application/octet-stream': ['.bcsnap'] },
             },
           ],
         });
         const writable = await saveHandle.createWritable();
-        await writable.write(contents);
+        await writeSnapshotBinary(snapshotBinary, writable);
         await writable.close();
       } else {
-        const blob = new Blob([contents], { type: 'application/json' });
+        const blob = snapshotBinaryToBlob(snapshotBinary);
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -804,92 +1014,126 @@ export default function App() {
     } finally {
       setIsFileMenuOpen(false);
     }
-  }, [buildSnapshot]);
+  }, [buildSnapshotBinary]);
 
   const handleImportSnapshotFromFile = useCallback(async (file: File) => {
     try {
-      const raw = await file.text();
-      const parsed = JSON.parse(raw) as Partial<SerializedSnapshot>;
-      if (!parsed || typeof parsed !== 'object' || !parsed.state) {
-        throw new Error('Snapshot file is invalid.');
-      }
+      const isBinarySnapshot = await isBinarySnapshotFile(file).catch(() => false);
 
-      const { images = [], notes = [], paths = [], meta } = parsed.state;
+      let restoredImages: CanvasImage[] = [];
+      let snapshotNotes: CanvasNote[] = [];
+      let snapshotPaths: Path[] = [];
+      let meta: SerializedSnapshotV1['state']['meta'] | undefined;
 
-      if (!Array.isArray(images) || !Array.isArray(notes) || !Array.isArray(paths)) {
-        throw new Error('Snapshot data is incomplete.');
-      }
+      if (isBinarySnapshot) {
+        const parsed = await parseBinarySnapshotFile(file);
+        const { state } = parsed.manifest;
+        const manifestImages = Array.isArray(state.images) ? state.images : [];
+        const blobsById = new Map(parsed.images.map(entry => [entry.manifest.id, entry.blob]));
 
-      const restoredImages: CanvasImage[] = await Promise.all(
-        images.map(async (img, index) => {
-          if (!img || typeof img !== 'object' || typeof img.dataUrl !== 'string') {
-            throw new Error(`Snapshot image at index ${index} is invalid.`);
-          }
-
-          const element = await loadImageFromDataUrl(img.dataUrl);
-          const naturalWidth = element.naturalWidth || element.width || 1;
-          const naturalHeight = element.naturalHeight || element.height || 1;
-          const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
-            ? img.fileName
-            : `snapshot-image-${index + 1}.png`;
-          const fileType = typeof img.fileType === 'string' && img.fileType.length > 0
-            ? img.fileType
-            : 'image/png';
-          const snapshotFile = await dataUrlToFile(img.dataUrl, fileName, fileType);
-          const width = typeof img.width === 'number' ? img.width : naturalWidth;
-          const height = typeof img.height === 'number' ? img.height : naturalHeight;
-          const rawMetadata = (img as SerializedCanvasImage).metadata as CanvasImage['metadata'] | undefined;
-          let metadata: CanvasImage['metadata'] | undefined;
-
-          if (rawMetadata && typeof rawMetadata === 'object') {
-            const rawSource = rawMetadata.source;
-            const rawPrompt = rawMetadata.prompt;
-            const rawModelLabel = rawMetadata.modelLabel;
-            const rawUpscaleFactor = (rawMetadata as CanvasImage['metadata']).upscaleFactor;
-            const rawNoiseScale = (rawMetadata as CanvasImage['metadata']).noiseScale;
-            const source = isCanvasImageSource(rawSource) ? rawSource : 'snapshot';
-            const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
-            const modelLabel = typeof rawModelLabel === 'string' ? rawModelLabel.trim() : '';
-            const hasValidUpscaleFactor = typeof rawUpscaleFactor === 'number' && Number.isFinite(rawUpscaleFactor) && rawUpscaleFactor > 0;
-            const normalizedNoiseScale = typeof rawNoiseScale === 'number' && Number.isFinite(rawNoiseScale)
-              ? Math.round(rawNoiseScale * 10) / 10
-              : undefined;
-
-            metadata = {
-              source,
-              ...(prompt.length > 0 ? { prompt } : {}),
-              ...(modelLabel.length > 0 ? { modelLabel } : {}),
-              ...(hasValidUpscaleFactor ? { upscaleFactor: rawUpscaleFactor } : {}),
-              ...(typeof normalizedNoiseScale === 'number' ? { noiseScale: normalizedNoiseScale } : {}),
-            };
-            if (
-              !prompt &&
-              !modelLabel &&
-              !hasValidUpscaleFactor &&
-              typeof normalizedNoiseScale !== 'number'
-            ) {
-              metadata = { source };
+        restoredImages = await Promise.all(
+          manifestImages.map(async (img, index) => {
+            const blob = blobsById.get(img.id) ?? parsed.images[index]?.blob;
+            if (!blob) {
+              throw new Error(`Snapshot image "${img.fileName || img.id}" is missing data.`);
             }
-          } else {
-            metadata = undefined;
-          }
 
-          return {
-            id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
-            element,
-            x: typeof img.x === 'number' ? img.x : 0,
-            y: typeof img.y === 'number' ? img.y : 0,
-            width,
-            height,
-            naturalWidth,
-            naturalHeight,
-            file: snapshotFile,
-            metadata,
-          };
-        })
-      );
+            const fileType = typeof img.fileType === 'string' && img.fileType.length > 0
+              ? img.fileType
+              : blob.type || 'application/octet-stream';
+            const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
+              ? img.fileName
+              : `snapshot-image-${index + 1}.png`;
 
-      const sanitizedNotes: CanvasNote[] = notes.map(note => ({
+            const snapshotFile = new File([blob], fileName, { type: fileType });
+            const element = await loadImageFromBlob(blob);
+            const naturalWidth = element.naturalWidth || element.width || 1;
+            const naturalHeight = element.naturalHeight || element.height || 1;
+            const width = typeof img.width === 'number' ? img.width : naturalWidth;
+            const height = typeof img.height === 'number' ? img.height : naturalHeight;
+
+            return {
+              id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
+              element,
+              x: typeof img.x === 'number' ? img.x : 0,
+              y: typeof img.y === 'number' ? img.y : 0,
+              width,
+              height,
+              naturalWidth,
+              naturalHeight,
+              file: snapshotFile,
+              metadata: normalizeSnapshotImageMetadata(img.metadata),
+            };
+          })
+        );
+
+        snapshotNotes = Array.isArray(state.notes) ? state.notes.map(note => ({ ...note })) : [];
+        snapshotPaths = Array.isArray(state.paths)
+          ? state.paths.map(path => ({
+            ...path,
+            points: Array.isArray(path.points) ? path.points.map(point => ({ ...point })) : [],
+          }))
+          : [];
+        meta = state.meta;
+      } else {
+        const raw = await file.text();
+        const parsed = JSON.parse(raw) as Partial<SerializedSnapshotV1>;
+        if (!parsed || typeof parsed !== 'object' || !parsed.state) {
+          throw new Error('Snapshot file is invalid.');
+        }
+
+        const { images = [], notes = [], paths = [], meta: parsedMeta } = parsed.state;
+
+        if (!Array.isArray(images) || !Array.isArray(notes) || !Array.isArray(paths)) {
+          throw new Error('Snapshot data is incomplete.');
+        }
+
+        restoredImages = await Promise.all(
+          images.map(async (img, index) => {
+            if (!img || typeof img !== 'object' || typeof img.dataUrl !== 'string') {
+              throw new Error(`Snapshot image at index ${index} is invalid.`);
+            }
+
+            const element = await loadImageFromDataUrl(img.dataUrl);
+            const naturalWidth = element.naturalWidth || element.width || 1;
+            const naturalHeight = element.naturalHeight || element.height || 1;
+            const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
+              ? img.fileName
+              : `snapshot-image-${index + 1}.png`;
+            const fileType = typeof img.fileType === 'string' && img.fileType.length > 0
+              ? img.fileType
+              : 'image/png';
+            const snapshotFile = await dataUrlToFile(img.dataUrl, fileName, fileType);
+            const width = typeof img.width === 'number' ? img.width : naturalWidth;
+            const height = typeof img.height === 'number' ? img.height : naturalHeight;
+            const rawMetadata = (img as SerializedCanvasImageV1).metadata as CanvasImage['metadata'] | undefined;
+
+            return {
+              id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
+              element,
+              x: typeof img.x === 'number' ? img.x : 0,
+              y: typeof img.y === 'number' ? img.y : 0,
+              width,
+              height,
+              naturalWidth,
+              naturalHeight,
+              file: snapshotFile,
+              metadata: normalizeSnapshotImageMetadata(rawMetadata),
+            };
+          })
+        );
+
+        snapshotNotes = notes.map(note => ({ ...note }));
+        snapshotPaths = paths.map(path => ({
+          ...path,
+          points: Array.isArray(path.points)
+            ? path.points.map(point => ({ ...point }))
+            : [],
+        }));
+        meta = parsedMeta;
+      }
+
+      const sanitizedNotes: CanvasNote[] = snapshotNotes.map(note => ({
         id: typeof note?.id === 'string' && note.id.length > 0 ? note.id : crypto.randomUUID(),
         x: typeof note?.x === 'number' ? note.x : 0,
         y: typeof note?.y === 'number' ? note.y : 0,
@@ -901,7 +1145,7 @@ export default function App() {
           : DEFAULT_NOTE_BACKGROUND,
       }));
 
-      const sanitizedPaths: Path[] = paths.map(path => {
+      const sanitizedPaths: Path[] = snapshotPaths.map(path => {
         const rawPoints = Array.isArray(path?.points) ? path.points : [];
         const points: Point[] = rawPoints
           .map(point => (point && typeof point === 'object' ? point : null))
@@ -1031,7 +1275,10 @@ export default function App() {
     setFalModelId,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
+    setFalResolutionSelection,
     setFalNumImages,
+    setFalScaleFactor,
+    setFalNoiseScale,
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
@@ -1080,7 +1327,10 @@ export default function App() {
           types: [
             {
               description: 'Canvas Snapshot',
-              accept: { 'application/json': ['.json'] },
+              accept: {
+                'application/octet-stream': ['.bcsnap'],
+                'application/json': ['.json'],
+              },
             },
           ],
         });
@@ -2472,7 +2722,7 @@ export default function App() {
         type="file"
         ref={snapshotInputRef}
         onChange={handleSnapshotFileChange}
-        accept="application/json"
+        accept=".bcsnap,application/octet-stream,application/json,.json"
         className="hidden"
       />
       <div ref={fileMenuRef} className="absolute top-4 left-4 z-30">
