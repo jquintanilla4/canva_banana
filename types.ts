@@ -36,6 +36,7 @@ export interface CanvasImageMetadata {
   modelLabel?: string;
   upscaleFactor?: number;
   noiseScale?: number;
+  creativity?: number;
 }
 
 export type FalImageSizePreset =

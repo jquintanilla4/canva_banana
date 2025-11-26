@@ -36,7 +36,7 @@ const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview' as const;
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
-const CRYSTAL_UPSCALER_MODEL_ID = 'fal-ai/crystal-upscaler' as const;
+const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
 const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler' as const;
 const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
 const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
@@ -72,6 +72,11 @@ const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 const FAL_CRYSTAL_SCALE_FACTOR_OPTIONS = Array.from({ length: 10 }, (_, index) => {
   const factor = index + 1;
   return { value: `${factor}`, label: `${factor}x` } as const;
+});
+const FAL_CRYSTAL_CREATIVITY_OPTIONS = Array.from({ length: 21 }, (_, index) => {
+  const value = (index * 0.5);
+  const formatted = value.toFixed(1);
+  return { value: formatted, label: formatted } as const;
 });
 const FAL_SIMA_SCALE_FACTOR_OPTIONS = Array.from({ length: 4 }, (_, index) => {
   const factor = index + 1;
@@ -269,6 +274,7 @@ type SerializedSnapshotV1 = {
       falNumImages: number;
       falScaleFactor: number;
       falNoiseScale: number;
+      falCreativity: number;
       selectedImageIds: string[];
       selectedNoteIds: string[];
       referenceImageIds: string[];
@@ -496,6 +502,7 @@ const normalizeSnapshotImageMetadata = (
   const rawModelLabel = rawMetadata.modelLabel;
   const rawUpscaleFactor = rawMetadata.upscaleFactor;
   const rawNoiseScale = rawMetadata.noiseScale;
+  const rawCreativity = rawMetadata.creativity;
   const source = isCanvasImageSource(rawSource) ? rawSource : 'snapshot';
   const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
   const modelLabel = typeof rawModelLabel === 'string' ? rawModelLabel.trim() : '';
@@ -505,6 +512,9 @@ const normalizeSnapshotImageMetadata = (
   const normalizedNoiseScale = typeof rawNoiseScale === 'number' && Number.isFinite(rawNoiseScale)
     ? Math.round(rawNoiseScale * 10) / 10
     : undefined;
+  const normalizedCreativity = typeof rawCreativity === 'number' && Number.isFinite(rawCreativity)
+    ? Math.max(0, Math.min(10, Math.round(rawCreativity * 2) / 2))
+    : undefined;
 
   const metadata: CanvasImage['metadata'] = {
     source,
@@ -512,6 +522,7 @@ const normalizeSnapshotImageMetadata = (
     ...(modelLabel.length > 0 ? { modelLabel } : {}),
     ...(hasValidUpscaleFactor ? { upscaleFactor: rawUpscaleFactor } : {}),
     ...(normalizedNoiseScale !== undefined ? { noiseScale: normalizedNoiseScale } : {}),
+    ...(normalizedCreativity !== undefined ? { creativity: normalizedCreativity } : {}),
   };
 
   return metadata;
@@ -717,6 +728,7 @@ export default function App() {
   const [falNumImages, setFalNumImages] = useState(1);
   const [falScaleFactor, setFalScaleFactor] = useState(2);
   const [falNoiseScale, setFalNoiseScale] = useState(0.1);
+  const [falCreativity, setFalCreativity] = useState(0);
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [isDebugLogOpen, setIsDebugLogOpen] = useState(false);
@@ -791,6 +803,17 @@ export default function App() {
     const rounded = Math.round(parsed * 10) / 10;
     const clamped = Math.min(1, Math.max(0.1, rounded));
     setFalNoiseScale(clamped);
+  }, []);
+
+  const handleFalCreativityChange = useCallback((value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      setFalCreativity(0);
+      return;
+    }
+    const rounded = Math.round(parsed * 2) / 2;
+    const clamped = Math.min(10, Math.max(0, rounded));
+    setFalCreativity(clamped);
   }, []);
 
   useEffect(() => {
@@ -974,6 +997,7 @@ export default function App() {
           falNumImages,
           falScaleFactor,
           falNoiseScale,
+          falCreativity,
           selectedImageIds: [...selectedImageIds],
           selectedNoteIds: [...selectedNoteIds],
           referenceImageIds: [...referenceImageIds],
@@ -1001,6 +1025,7 @@ export default function App() {
     falNumImages,
     falScaleFactor,
     falNoiseScale,
+    falCreativity,
     selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
@@ -1274,6 +1299,12 @@ export default function App() {
           const roundedNoise = Math.round(normalizedNoise * 10) / 10;
           setFalNoiseScale(Math.min(1, Math.max(0.1, roundedNoise)));
         }
+        if (typeof meta.falCreativity === 'number') {
+          const normalizedCreativity = Number.isFinite(meta.falCreativity)
+            ? Math.round(meta.falCreativity * 2) / 2
+            : 0;
+          setFalCreativity(Math.min(10, Math.max(0, normalizedCreativity)));
+        }
         setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
@@ -1319,6 +1350,7 @@ export default function App() {
     setFalNumImages,
     setFalScaleFactor,
     setFalNoiseScale,
+    setFalCreativity,
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
@@ -1650,8 +1682,15 @@ export default function App() {
 
     const falJobId = usingFal ? crypto.randomUUID() : null;
     const jobModelLabel = getFalModelLabel(falModelId);
+    const upscaleDetails = usingFal && isUpscaleModel
+      ? [
+        `${falScaleFactor}x`,
+        ...(isSeedvrUpscaleModel ? [`noise ${falNoiseScale.toFixed(1)}`] : []),
+        ...(isCrystalUpscaleModel ? [`creativity ${falCreativity.toFixed(1)}`] : []),
+      ].join(', ')
+      : '';
     const jobPromptDescription = usingFal && isUpscaleModel
-      ? `${jobModelLabel} (${falScaleFactor}x${isSeedvrUpscaleModel ? `, noise ${falNoiseScale.toFixed(1)}` : ''})`
+      ? `${jobModelLabel} (${upscaleDetails})`
       : trimmedPrompt;
 
     if (usingFal && falJobId) {
@@ -1811,7 +1850,7 @@ export default function App() {
             const falResult = isSeedvrUpscaleModel
               ? await upscaleFalSeedvrImage(activePrimaryImage.element, falScaleFactor, falNoiseScale, queueOptions)
               : isCrystalUpscaleModel
-                ? await upscaleFalCrystalImage(activePrimaryImage.element, falScaleFactor, queueOptions)
+                ? await upscaleFalCrystalImage(activePrimaryImage.element, falScaleFactor, falCreativity, queueOptions)
                 : await upscaleFalSimaImage(activePrimaryImage.element, falScaleFactor, queueOptions);
 
             generationResult = falResult;
@@ -2017,6 +2056,10 @@ export default function App() {
           }
           if (isSeedvrUpscaleModel && Number.isFinite(falNoiseScale)) {
             metadata.noiseScale = Math.round(falNoiseScale * 10) / 10;
+          }
+          if (isCrystalUpscaleModel && Number.isFinite(falCreativity)) {
+            const normalizedCreativity = Math.round(falCreativity * 2) / 2;
+            metadata.creativity = Math.min(10, Math.max(0, normalizedCreativity));
           }
         }
 
@@ -2740,6 +2783,17 @@ export default function App() {
       onChange: handleFalScaleFactorChange,
       disabled: isLoading,
     });
+
+    if (isCrystalUpscaleModel) {
+      promptBarModelControlsList.push({
+        id: 'fal-creativity-select',
+        ariaLabel: 'Select Crystal Upscaler creativity',
+        options: FAL_CRYSTAL_CREATIVITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+        value: falCreativity.toFixed(1),
+        onChange: handleFalCreativityChange,
+        disabled: isLoading,
+      });
+    }
   }
 
   if (usingFal && isSeedvrUpscaleModel) {

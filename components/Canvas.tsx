@@ -451,6 +451,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         segments.push(formattedNoise);
       }
 
+      const creativity = metadata?.creativity;
+      if (typeof creativity === 'number' && Number.isFinite(creativity)) {
+        segments.push(`Creativity ${creativity.toFixed(1)}`);
+      }
+
       if (promptText.length > 0) {
         segments.push(promptText);
       }

@@ -81,7 +81,7 @@ const FAL_MODEL_ID = normalizeModelId(process.env.FAL_MODEL_ID) || GEMINI_IMAGE_
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit';
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image';
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
-const CRYSTAL_UPSCALER_MODEL_ID = 'fal-ai/crystal-upscaler';
+const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler';
 const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler';
 const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image';
 
@@ -526,6 +526,7 @@ export const generateImageEdit = async ({
 export const upscaleCrystalImage = async (
   image: HTMLImageElement,
   scaleFactor: number,
+  creativity: number,
   options: UpscaleImageOptions = {},
 ): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => {
   ensureFalClientConfigured();
@@ -533,6 +534,9 @@ export const upscaleCrystalImage = async (
   const imageUrl = await uploadImageElementToFal(image);
   const sanitizedScale = Number.isFinite(scaleFactor) ? Math.round(scaleFactor) : 2;
   const normalizedScale = Math.min(200, Math.max(1, sanitizedScale));
+  const sanitizedCreativity = Number.isFinite(creativity) ? creativity : 0;
+  const roundedCreativity = Math.round(sanitizedCreativity * 2) / 2;
+  const normalizedCreativity = Math.min(10, Math.max(0, roundedCreativity));
 
   let latestRequestId: string | undefined;
 
@@ -540,6 +544,7 @@ export const upscaleCrystalImage = async (
     input: {
       image_url: imageUrl,
       scale_factor: normalizedScale,
+      creativity: normalizedCreativity,
     },
   });
 
@@ -549,6 +554,7 @@ export const upscaleCrystalImage = async (
       input: {
         image_url: imageUrl,
         scale_factor: normalizedScale,
+        creativity: normalizedCreativity,
       },
       logs: true,
       onQueueUpdate: update => {
