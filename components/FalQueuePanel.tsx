@@ -65,6 +65,16 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({ jobs, onDismiss })
                     {job.error}
                   </p>
                 )}
+                {job.status === 'COMPLETED' && job.outputUrl && (
+                  <a
+                    href={job.outputUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-blue-300 hover:text-blue-200 transition-colors block mt-2 break-all"
+                  >
+                    Open result
+                  </a>
+                )}
                 {job.status === 'COMPLETED' && job.description && (
                   <p className="text-[11px] text-gray-300 mt-2 leading-snug">
                     {job.description}

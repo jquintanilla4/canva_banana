@@ -13,11 +13,16 @@ import {
   FalAspectRatioOption,
   FalResolutionOption,
   CanvasImageSource,
+  CanvasMediaType,
+  GenerationInputs,
+  GenerationKind,
+  ApiProviderId,
 } from './types';
 import { generateImageEdit as generateGoogleImageEdit, generateImage as generateGoogleImage } from './services/geminiService';
 import {
   generateImageEdit as generateFalImageEdit,
   generateImage as generateFalImage,
+  generateImageToVideo as generateFalImageToVideo,
   removeBackground as removeFalBackground,
   upscaleCrystalImage as upscaleFalCrystalImage,
   upscaleSimaImage as upscaleFalSimaImage,
@@ -39,9 +44,11 @@ const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
 const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
 const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler' as const;
 const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
+const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/standard/image-to-video' as const;
+const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video' as const;
 const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
-const FAL_MODEL_OPTIONS = [
+const FAL_IMAGE_MODEL_OPTIONS = [
   { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
   { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
@@ -50,6 +57,14 @@ const FAL_MODEL_OPTIONS = [
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
+const FAL_VIDEO_MODEL_OPTIONS = [
+  { value: HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID, label: 'Hailuo 2.3 Standard' },
+  { value: HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID, label: 'Hailuo 2.3 Pro' },
+] as const;
+
+const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
+
+type FalModelMode = 'image' | 'video';
 type FalImageSizeSelectionValue = 'default' | FalImageSizePreset;
 
 type FalAspectRatioSelectionValue = FalAspectRatioOption;
@@ -129,6 +144,8 @@ const clampStrokeSize = (value: number) =>
   Math.min(MAX_STROKE_SIZE, Math.max(MIN_STROKE_SIZE, value));
 
 type FalModelId = typeof FAL_MODEL_OPTIONS[number]['value'];
+type FalImageModelId = typeof FAL_IMAGE_MODEL_OPTIONS[number]['value'];
+type FalVideoModelId = typeof FAL_VIDEO_MODEL_OPTIONS[number]['value'];
 const isFalImageSizeSelectionValue = (value: unknown): value is FalImageSizeSelectionValue =>
   typeof value === 'string' && FAL_IMAGE_SIZE_OPTIONS.some(option => option.value === value);
 
@@ -148,9 +165,18 @@ type PromptBarModelControl = {
   errorMessage?: string;
 };
 
-const isFalModelId = (value: string | undefined): value is FalModelId => {
-  return typeof value === 'string' && FAL_MODEL_OPTIONS.some(option => option.value === value);
-};
+const isFalModelId = (value: string | undefined): value is FalModelId =>
+  typeof value === 'string' && FAL_MODEL_OPTIONS.some(option => option.value === value);
+const isFalImageModelId = (value: string | undefined): value is FalImageModelId =>
+  typeof value === 'string' && FAL_IMAGE_MODEL_OPTIONS.some(option => option.value === value);
+const isFalVideoModelId = (value: string | undefined): value is FalVideoModelId =>
+  typeof value === 'string' && FAL_VIDEO_MODEL_OPTIONS.some(option => option.value === value);
+const isApiProvider = (value: unknown): value is ApiProvider =>
+  value === 'google' || value === 'fal';
+const isFalModelMode = (value: unknown): value is FalModelMode =>
+  value === 'image' || value === 'video';
+const isGenerationKind = (value: unknown): value is GenerationKind =>
+  value === 'text_to_image' || value === 'image_edit' || value === 'upscale' || value === 'video';
 
 const LEGACY_NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
@@ -160,12 +186,20 @@ const normalizeFalModelId = (value: string | undefined): FalModelId | undefined 
   return isFalModelId(value) ? value : undefined;
 };
 
-const DEFAULT_FAL_MODEL_ID: FalModelId = normalizeFalModelId(process.env.FAL_MODEL_ID)
-  ?? GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+const ENV_FAL_MODEL_ID = normalizeFalModelId(process.env.FAL_MODEL_ID);
+const DEFAULT_FAL_IMAGE_MODEL_ID: FalImageModelId =
+  isFalImageModelId(ENV_FAL_MODEL_ID) ? ENV_FAL_MODEL_ID : GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+const DEFAULT_FAL_VIDEO_MODEL_ID: FalVideoModelId =
+  FAL_VIDEO_MODEL_OPTIONS[0]?.value ?? HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
 
 const isCanvasImageSource = (value: unknown): value is CanvasImageSource => {
   return value === 'generated' || value === 'imported' || value === 'snapshot' || value === 'derived';
 };
+
+const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
+  !!img && img.mediaType === 'image';
+const isVideoCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLVideoElement } =>
+  !!img && img.mediaType === 'video';
 
 const getFalModelLabel = (modelId: FalModelId): string => {
   const match = FAL_MODEL_OPTIONS.find(option => option.value === modelId);
@@ -174,8 +208,9 @@ const getFalModelLabel = (modelId: FalModelId): string => {
 
 const GOOGLE_MODEL_LABEL = 'Google Gemini';
 
-const PROVIDER_ORDER = ['google', 'fal'] as const;
-type ApiProvider = typeof PROVIDER_ORDER[number];
+type ApiProvider = ApiProviderId;
+
+const PROVIDER_ORDER: ReadonlyArray<ApiProviderId> = ['google', 'fal'];
 
 const hasEnvValue = (value: string | undefined): boolean => typeof value === 'string' && value.trim().length > 0;
 
@@ -231,6 +266,8 @@ const MAX_HISTORY_SIZE = 30;
 const DEFAULT_MAX_REFERENCE_IMAGES = 13;
 const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId, number>> = {
   [SEEDREAM_MODEL_ID]: 7, // 7 references + 1 primary = 8 total
+  [HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID]: 0,
+  [HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID]: 0,
 };
 const getMaxReferenceImages = (modelId: FalModelId | undefined): number =>
   modelId && MODEL_REFERENCE_IMAGE_LIMITS[modelId] !== undefined
@@ -249,6 +286,9 @@ type SerializedCanvasImageV1 = {
   fileType: string;
   dataUrl: string;
   metadata?: CanvasImage['metadata'];
+  mediaType?: CanvasMediaType;
+  isPlaying?: boolean;
+  hasAudio?: boolean;
 };
 
 type SerializedSnapshotV1 = {
@@ -293,6 +333,9 @@ type SnapshotImageManifest = {
   fileType: string;
   fileSize: number;
   metadata?: CanvasImage['metadata'];
+  mediaType?: CanvasMediaType;
+  isPlaying?: boolean;
+  hasAudio?: boolean;
 };
 
 type SnapshotManifestV2 = {
@@ -336,9 +379,46 @@ const dataUrlToFile = async (dataUrl: string, fileName: string, fileType: string
   return new File([blob], fileName, { type });
 };
 
-const loadImageFromBlob = (blob: Blob): Promise<HTMLImageElement> => {
+const isVideoFileType = (fileType: string): boolean =>
+  typeof fileType === 'string' && /video\//.test(fileType);
+const getMediaTypeFromFileType = (fileType: string): CanvasMediaType => (isVideoFileType(fileType) ? 'video' : 'image');
+
+const getNaturalSize = (element: HTMLImageElement | HTMLVideoElement) => {
+  if (element instanceof HTMLVideoElement) {
+    const naturalWidth = element.videoWidth || element.width || 1;
+    const naturalHeight = element.videoHeight || element.height || 1;
+    return { naturalWidth, naturalHeight };
+  }
+
+  const naturalWidth = element.naturalWidth || element.width || 1;
+  const naturalHeight = element.naturalHeight || element.height || 1;
+  return { naturalWidth, naturalHeight };
+};
+
+const loadMediaFromBlob = (
+  blob: Blob,
+  mediaType: CanvasMediaType = getMediaTypeFromFileType(blob.type),
+): Promise<HTMLImageElement | HTMLVideoElement> => {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(blob);
+
+    if (mediaType === 'video') {
+      const video = document.createElement('video');
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.src = objectUrl;
+
+      video.onloadeddata = () => {
+        resolve(video);
+      };
+      video.onerror = (err) => {
+        reject(err ?? new Error('Failed to load video.'));
+      };
+      return;
+    }
+
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
@@ -351,6 +431,33 @@ const loadImageFromBlob = (blob: Blob): Promise<HTMLImageElement> => {
     img.src = objectUrl;
   });
 };
+
+const loadMediaFromDataUrl = (
+  dataUrl: string,
+  mediaType: CanvasMediaType = getMediaTypeFromFileType(dataUrl),
+): Promise<HTMLImageElement | HTMLVideoElement> => {
+  return new Promise((resolve, reject) => {
+    if (mediaType === 'video') {
+      const video = document.createElement('video');
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.src = dataUrl;
+      video.onloadeddata = () => resolve(video);
+      video.onerror = (err) => reject(err ?? new Error('Failed to load video.'));
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image.'));
+    img.src = dataUrl;
+  });
+};
+
+const loadImageFromBlob = (blob: Blob) => loadMediaFromBlob(blob, 'image') as Promise<HTMLImageElement>;
+const loadImageFromDataUrl = (dataUrl: string) => loadMediaFromDataUrl(dataUrl, 'image') as Promise<HTMLImageElement>;
 
 const SNAPSHOT_MAGIC = 'BANANA_SNAPSHOT_V2\n';
 const snapshotEncoder = new TextEncoder();
@@ -493,6 +600,88 @@ const writeSnapshotBinary = async (binary: SnapshotBinary, writable: SnapshotWri
 const normalizeSnapshotImageMetadata = (
   rawMetadata: CanvasImage['metadata'] | undefined,
 ): CanvasImage['metadata'] | undefined => {
+  const normalizeGenerationInputs = (rawGeneration: CanvasImage['metadata'] extends { generation?: infer G } ? G : unknown): GenerationInputs | undefined => {
+    if (!rawGeneration || typeof rawGeneration !== 'object') {
+      return undefined;
+    }
+    const raw = rawGeneration as Partial<GenerationInputs>;
+    const kind = isGenerationKind(raw.kind) ? raw.kind : undefined;
+    const provider = isApiProvider(raw.provider) ? raw.provider : undefined;
+    if (!kind || !provider) {
+      return undefined;
+    }
+
+    const prompt = typeof raw.prompt === 'string' ? raw.prompt.trim() : '';
+    const modelId = typeof raw.modelId === 'string' ? raw.modelId : undefined;
+    const modelLabel = typeof raw.modelLabel === 'string' ? raw.modelLabel.trim() : undefined;
+    const modelMode = isFalModelMode(raw.modelMode) ? raw.modelMode : undefined;
+    const primaryImageId = typeof raw.primaryImageId === 'string' ? raw.primaryImageId : undefined;
+    const referenceImageIds = Array.isArray(raw.referenceImageIds)
+      ? raw.referenceImageIds.filter((id): id is string => typeof id === 'string')
+      : undefined;
+    const videoLastFrameImageId = typeof raw.videoLastFrameImageId === 'string'
+      ? raw.videoLastFrameImageId
+      : undefined;
+
+    const falOptionsRaw = raw.falOptions;
+    let falOptions: GenerationInputs['falOptions'] | undefined;
+    if (falOptionsRaw && typeof falOptionsRaw === 'object') {
+      const typed = falOptionsRaw as GenerationInputs['falOptions'];
+      const normalizedOptions: GenerationInputs['falOptions'] = {};
+      if (isFalImageSizeSelectionValue((typed as { imageSizeSelection?: unknown }).imageSizeSelection)) {
+        normalizedOptions.imageSizeSelection = typed.imageSizeSelection;
+      }
+      if (isFalAspectRatioSelectionValue((typed as { aspectRatioSelection?: unknown }).aspectRatioSelection)) {
+        normalizedOptions.aspectRatioSelection = typed.aspectRatioSelection;
+      }
+      if (isFalResolutionSelectionValue((typed as { resolutionSelection?: unknown }).resolutionSelection)) {
+        normalizedOptions.resolutionSelection = typed.resolutionSelection;
+      }
+      const normalizeNumberOption = (value: unknown, min: number, max: number) => {
+        const parsed = typeof value === 'number' ? value : Number(value);
+        if (!Number.isFinite(parsed)) {
+          return undefined;
+        }
+        return Math.min(max, Math.max(min, parsed));
+      };
+      const numImages = normalizeNumberOption((typed as { numImages?: unknown }).numImages, 1, 4);
+      if (numImages !== undefined) {
+        normalizedOptions.numImages = Math.floor(numImages);
+      }
+      const scaleFactor = normalizeNumberOption((typed as { scaleFactor?: unknown }).scaleFactor, 1, 10);
+      if (scaleFactor !== undefined) {
+        normalizedOptions.scaleFactor = Math.round(scaleFactor * 100) / 100;
+      }
+      const noiseScale = normalizeNumberOption((typed as { noiseScale?: unknown }).noiseScale, 0.1, 1);
+      if (noiseScale !== undefined) {
+        normalizedOptions.noiseScale = Math.round(noiseScale * 10) / 10;
+      }
+      const creativity = normalizeNumberOption((typed as { creativity?: unknown }).creativity, 0, 10);
+      if (creativity !== undefined) {
+        normalizedOptions.creativity = Math.max(0, Math.min(10, Math.round(creativity * 2) / 2));
+      }
+      const videoDuration = (typed as { videoDuration?: unknown }).videoDuration === '10' ? '10' : (typed as { videoDuration?: unknown }).videoDuration === '6' ? '6' : undefined;
+      if (videoDuration) {
+        normalizedOptions.videoDuration = videoDuration;
+      }
+
+      falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
+    }
+
+    return {
+      kind,
+      prompt,
+      provider,
+      ...(modelId ? { modelId } : {}),
+      ...(modelLabel ? { modelLabel } : {}),
+      ...(modelMode ? { modelMode } : {}),
+      ...(primaryImageId ? { primaryImageId } : {}),
+      ...(referenceImageIds && referenceImageIds.length > 0 ? { referenceImageIds } : {}),
+      ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
+      ...(falOptions ? { falOptions } : {}),
+    };
+  };
+
   if (!rawMetadata || typeof rawMetadata !== 'object') {
     return undefined;
   }
@@ -515,6 +704,7 @@ const normalizeSnapshotImageMetadata = (
   const normalizedCreativity = typeof rawCreativity === 'number' && Number.isFinite(rawCreativity)
     ? Math.max(0, Math.min(10, Math.round(rawCreativity * 2) / 2))
     : undefined;
+  const generation = normalizeGenerationInputs((rawMetadata as { generation?: unknown }).generation);
 
   const metadata: CanvasImage['metadata'] = {
     source,
@@ -523,6 +713,7 @@ const normalizeSnapshotImageMetadata = (
     ...(hasValidUpscaleFactor ? { upscaleFactor: rawUpscaleFactor } : {}),
     ...(normalizedNoiseScale !== undefined ? { noiseScale: normalizedNoiseScale } : {}),
     ...(normalizedCreativity !== undefined ? { creativity: normalizedCreativity } : {}),
+    ...(generation ? { generation } : {}),
   };
 
   return metadata;
@@ -646,15 +837,6 @@ const applyFalQueueUpdateToJob = (job: FalQueueJob, update: FalQueueUpdate): Fal
   };
 };
 
-const loadImageFromDataUrl = (dataUrl: string): Promise<HTMLImageElement> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load image.'));
-    img.src = dataUrl;
-  });
-};
-
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('CANVAS');
   const [tool, setTool] = useState<Tool>(Tool.PAN);
@@ -721,7 +903,10 @@ export default function App() {
   const [apiProvider, setApiProvider] = useState<ApiProvider>(DEFAULT_API_PROVIDER);
   const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
   const falAutoDismissTimeouts = useRef<Map<string, number>>(new Map());
-  const [falModelId, setFalModelId] = useState<FalModelId>(DEFAULT_FAL_MODEL_ID);
+  const [falModelMode, setFalModelMode] = useState<FalModelMode>('image');
+  const [falImageModelId, setFalImageModelId] = useState<FalImageModelId>(DEFAULT_FAL_IMAGE_MODEL_ID);
+  const [falVideoModelId, setFalVideoModelId] = useState<FalVideoModelId>(DEFAULT_FAL_VIDEO_MODEL_ID);
+  const [falVideoDuration, setFalVideoDuration] = useState<'6' | '10'>('6');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('default');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -741,6 +926,8 @@ export default function App() {
     setZoomOutTrigger(prev => prev + 1);
   }, []);
 
+  const falModelId: FalModelId = falModelMode === 'video' ? falVideoModelId : falImageModelId;
+
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
     const totalLimit = maxReferenceImages + 1;
     setToastMessage(`${getFalModelLabel(falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
@@ -758,10 +945,44 @@ export default function App() {
     });
   }, [falModelId, showReferenceLimitToast]);
 
+  useEffect(() => {
+    if (apiProvider !== 'fal' && falModelMode !== 'image') {
+      setFalModelMode('image');
+    }
+  }, [apiProvider, falModelMode]);
+
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
     return images.find(img => img.id === primaryImageId) || null;
   }, [images, primaryImageId]);
+
+  const activePrimaryImage = useMemo(() => {
+    return isImageCanvasMedia(primaryImage) ? primaryImage : null;
+  }, [primaryImage]);
+
+  useEffect(() => {
+    if (selectedImageIds.length === 0 && referenceImageIds.length === 0) {
+      return;
+    }
+    const imageIdSet = new Set(images.map(img => img.id));
+    setSelectedImageIds(prevIds => {
+      const validIds = prevIds.filter(id => imageIdSet.has(id));
+      return validIds.length === prevIds.length ? prevIds : validIds;
+    });
+    setReferenceImageIds(prevIds => {
+      const validIds = prevIds.filter(id => imageIdSet.has(id));
+      return validIds.length === prevIds.length ? prevIds : validIds;
+    });
+  }, [images, referenceImageIds, selectedImageIds]);
+
+  const handleModelModeChange = useCallback((mode: FalModelMode) => {
+    setFalModelMode(mode);
+    setReferenceImageIds([]);
+  }, []);
+
+  const handleFalVideoDurationChange = useCallback((value: string) => {
+    setFalVideoDuration(value === '10' ? '10' : '6');
+  }, []);
 
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
@@ -840,13 +1061,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (falModelMode === 'video') {
+      return;
+    }
     const validOptions = (falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID
       ? FAL_REVE_ASPECT_RATIO_OPTIONS
       : FAL_GEMINI_ASPECT_RATIO_OPTIONS).map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
       setFalAspectRatioSelection('default');
     }
-  }, [falModelId, falAspectRatioSelection, setFalAspectRatioSelection]);
+  }, [falModelId, falModelMode, falAspectRatioSelection, setFalAspectRatioSelection]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const snapshotInputRef = useRef<HTMLInputElement>(null);
@@ -951,6 +1175,197 @@ export default function App() {
     }
   }, [displayedNotes]);
 
+  const handleImagePromptCopy = useCallback((imageId: string) => {
+    const image = displayedImages.find(img => img.id === imageId);
+    const promptText = image?.metadata?.prompt?.trim();
+
+    if (!promptText) {
+      setToastMessage('No prompt found for this media.');
+      setTimeout(() => setToastMessage(null), 2000);
+      return;
+    }
+
+    navigator.clipboard.writeText(promptText)
+      .then(() => {
+        setToastMessage('Prompt copied to clipboard!');
+        setTimeout(() => setToastMessage(null), 2000);
+      })
+      .catch(err => {
+        console.error('Failed to copy prompt: ', err);
+        setToastMessage('Failed to copy prompt.');
+        setTimeout(() => setToastMessage(null), 2000);
+      });
+  }, [displayedImages]);
+
+  const handleRerunGeneration = useCallback((imageId: string) => {
+    const targetImage = displayedImages.find(img => img.id === imageId);
+    const generation = targetImage?.metadata?.generation;
+
+    if (!targetImage || !generation) {
+      setToastMessage('No generation data stored for this media.');
+      setTimeout(() => setToastMessage(null), 2000);
+      return;
+    }
+
+    const provider = isApiProvider(generation.provider) ? generation.provider : null;
+    if (!provider || !AVAILABLE_PROVIDERS.includes(provider)) {
+      setError('Saved generation provider is not available. Please regenerate with the current settings.');
+      return;
+    }
+
+    const storedModelId = generation.modelId;
+    const storedModelMode: FalModelMode = isFalModelMode(generation.modelMode)
+      ? generation.modelMode
+      : isFalVideoModelId(storedModelId)
+        ? 'video'
+        : 'image';
+    const modelIdForOverride = provider === 'fal'
+      ? (storedModelMode === 'video'
+        ? (isFalVideoModelId(storedModelId) ? storedModelId : falVideoModelId)
+        : (isFalImageModelId(storedModelId) ? storedModelId : falImageModelId))
+      : undefined;
+
+    const falOptions = generation.falOptions ?? {};
+    const overrideFalOptions = provider === 'fal'
+      ? {
+        ...(isFalImageSizeSelectionValue((falOptions as { imageSizeSelection?: unknown }).imageSizeSelection)
+          ? { imageSizeSelection: falOptions.imageSizeSelection }
+          : {}),
+        ...(isFalAspectRatioSelectionValue((falOptions as { aspectRatioSelection?: unknown }).aspectRatioSelection)
+          ? { aspectRatioSelection: falOptions.aspectRatioSelection }
+          : {}),
+        ...(isFalResolutionSelectionValue((falOptions as { resolutionSelection?: unknown }).resolutionSelection)
+          ? { resolutionSelection: falOptions.resolutionSelection }
+          : {}),
+        ...(typeof falOptions.numImages === 'number' && Number.isFinite(falOptions.numImages)
+          ? { numImages: falOptions.numImages }
+          : {}),
+        ...(typeof falOptions.scaleFactor === 'number' && Number.isFinite(falOptions.scaleFactor)
+          ? { scaleFactor: falOptions.scaleFactor }
+          : {}),
+        ...(typeof falOptions.noiseScale === 'number' && Number.isFinite(falOptions.noiseScale)
+          ? { noiseScale: falOptions.noiseScale }
+          : {}),
+        ...(typeof falOptions.creativity === 'number' && Number.isFinite(falOptions.creativity)
+          ? { creativity: falOptions.creativity }
+          : {}),
+        ...(falOptions.videoDuration === '10' || falOptions.videoDuration === '6'
+          ? { videoDuration: falOptions.videoDuration }
+          : {}),
+      }
+      : undefined;
+
+    const primaryId = generation.kind === 'text_to_image' ? null : generation.primaryImageId ?? null;
+    if (generation.kind !== 'text_to_image' && !primaryId) {
+      setError('This media is missing its original source image and cannot be re-run.');
+      return;
+    }
+
+    if (primaryId) {
+      const sourceImage = images.find(img => img.id === primaryId);
+      if (!sourceImage) {
+        setError('The original source image is no longer on the canvas.');
+        return;
+      }
+      if (generation.kind === 'video' && sourceImage.mediaType !== 'image') {
+        setError('The saved starting frame for this video is not available.');
+        return;
+      }
+    }
+
+    if (generation.kind === 'video' && generation.videoLastFrameImageId) {
+      const lastFrame = images.find(img => img.id === generation.videoLastFrameImageId);
+      if (!lastFrame) {
+        setError('The saved ending frame for this video is missing.');
+        return;
+      }
+    }
+
+    const referenceIds = Array.isArray(generation.referenceImageIds) ? generation.referenceImageIds : [];
+    const missingReferenceIds = referenceIds.filter(id => !images.some(img => img.id === id));
+    if (missingReferenceIds.length > 0) {
+      setError('Some reference images from the original generation are missing from the canvas.');
+      return;
+    }
+
+    setPrompt(generation.prompt ?? '');
+    setApiProvider(provider);
+    setReferenceImageIds(referenceIds);
+
+    if (provider === 'fal') {
+      setFalModelMode(storedModelMode);
+      if (storedModelMode === 'video') {
+        if (isFalVideoModelId(modelIdForOverride)) {
+          setFalVideoModelId(modelIdForOverride);
+        }
+        if (overrideFalOptions?.videoDuration) {
+          setFalVideoDuration(overrideFalOptions.videoDuration);
+        }
+      } else if (isFalImageModelId(modelIdForOverride)) {
+        setFalImageModelId(modelIdForOverride);
+      }
+
+      if (overrideFalOptions?.imageSizeSelection) {
+        setFalImageSizeSelection(overrideFalOptions.imageSizeSelection);
+      }
+      if (overrideFalOptions?.aspectRatioSelection) {
+        setFalAspectRatioSelection(overrideFalOptions.aspectRatioSelection);
+      }
+      if (overrideFalOptions?.resolutionSelection) {
+        setFalResolutionSelection(overrideFalOptions.resolutionSelection);
+      }
+      if (overrideFalOptions?.numImages !== undefined) {
+        setFalNumImages(overrideFalOptions.numImages);
+      }
+      if (overrideFalOptions?.scaleFactor !== undefined) {
+        setFalScaleFactor(overrideFalOptions.scaleFactor);
+      }
+      if (overrideFalOptions?.noiseScale !== undefined) {
+        setFalNoiseScale(overrideFalOptions.noiseScale);
+      }
+      if (overrideFalOptions?.creativity !== undefined) {
+        setFalCreativity(overrideFalOptions.creativity);
+      }
+    } else if (falModelMode === 'video') {
+      setFalModelMode('image');
+    }
+
+    handleGenerate({
+      kind: generation.kind,
+      prompt: generation.prompt ?? '',
+      provider,
+      modelId: provider === 'fal' ? modelIdForOverride : undefined,
+      modelMode: provider === 'fal' ? storedModelMode : 'image',
+      primaryImageId: primaryId,
+      referenceImageIds: referenceIds,
+      videoLastFrameImageId: generation.videoLastFrameImageId,
+      falOptions: provider === 'fal' ? overrideFalOptions : undefined,
+    });
+  }, [
+    displayedImages,
+    falImageModelId,
+    falModelMode,
+    falVideoDuration,
+    falVideoModelId,
+    images,
+    setApiProvider,
+    setError,
+    setFalAspectRatioSelection,
+    setFalCreativity,
+    setFalImageModelId,
+    setFalImageSizeSelection,
+    setFalModelMode,
+    setFalNoiseScale,
+    setFalNumImages,
+    setFalResolutionSelection,
+    setFalScaleFactor,
+    setFalVideoDuration,
+    setFalVideoModelId,
+    setPrompt,
+    setReferenceImageIds,
+    setToastMessage,
+  ]);
+
   const buildSnapshotBinary = useCallback(async (): Promise<SnapshotBinary> => {
     const imagesWithManifests: SnapshotBinary['images'] = await Promise.all(
       displayedImages.map(async (img) => {
@@ -965,6 +1380,9 @@ export default function App() {
           fileType: img.file.type || 'application/octet-stream',
           fileSize: img.file.size,
           metadata: img.metadata ? { ...img.metadata } : undefined,
+          mediaType: img.mediaType,
+          isPlaying: img.isPlaying ?? false,
+          hasAudio: img.hasAudio,
         };
 
         return { manifest, blob: img.file };
@@ -1103,18 +1521,26 @@ export default function App() {
             const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
               ? img.fileName
               : `snapshot-image-${index + 1}.png`;
+            const mediaType = img.mediaType ?? getMediaTypeFromFileType(fileType);
 
             const snapshotFile = new File([blob], fileName, { type: fileType });
-            const element = await loadImageFromBlob(blob);
-            const naturalWidth = element.naturalWidth || element.width || 1;
-            const naturalHeight = element.naturalHeight || element.height || 1;
+            const element = await loadMediaFromBlob(blob, mediaType);
+            const { naturalWidth, naturalHeight } = getNaturalSize(element);
             const width = typeof img.width === 'number' ? img.width : naturalWidth;
             const height = typeof img.height === 'number' ? img.height : naturalHeight;
             const rotation = typeof img.rotation === 'number' && Number.isFinite(img.rotation) ? img.rotation : 0;
+            if (element instanceof HTMLVideoElement) {
+              element.pause();
+              element.currentTime = 0;
+              element.loop = true;
+              element.muted = true;
+              element.playsInline = true;
+            }
 
             return {
               id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
               element,
+              mediaType,
               x: typeof img.x === 'number' ? img.x : 0,
               y: typeof img.y === 'number' ? img.y : 0,
               width,
@@ -1123,6 +1549,8 @@ export default function App() {
               naturalWidth,
               naturalHeight,
               file: snapshotFile,
+              isPlaying: mediaType === 'video' ? Boolean(img.isPlaying) : false,
+              hasAudio: mediaType === 'video' ? img.hasAudio : false,
               metadata: normalizeSnapshotImageMetadata(img.metadata),
             };
           })
@@ -1155,15 +1583,22 @@ export default function App() {
               throw new Error(`Snapshot image at index ${index} is invalid.`);
             }
 
-            const element = await loadImageFromDataUrl(img.dataUrl);
-            const naturalWidth = element.naturalWidth || element.width || 1;
-            const naturalHeight = element.naturalHeight || element.height || 1;
-            const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
-              ? img.fileName
-              : `snapshot-image-${index + 1}.png`;
             const fileType = typeof img.fileType === 'string' && img.fileType.length > 0
               ? img.fileType
               : 'image/png';
+            const mediaType = img.mediaType ?? getMediaTypeFromFileType(fileType);
+            const element = await loadMediaFromDataUrl(img.dataUrl, mediaType);
+            if (element instanceof HTMLVideoElement) {
+              element.pause();
+              element.currentTime = 0;
+              element.loop = true;
+              element.muted = true;
+              element.playsInline = true;
+            }
+            const { naturalWidth, naturalHeight } = getNaturalSize(element);
+            const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
+              ? img.fileName
+              : `snapshot-image-${index + 1}.png`;
             const snapshotFile = await dataUrlToFile(img.dataUrl, fileName, fileType);
             const width = typeof img.width === 'number' ? img.width : naturalWidth;
             const height = typeof img.height === 'number' ? img.height : naturalHeight;
@@ -1175,6 +1610,7 @@ export default function App() {
             return {
               id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
               element,
+              mediaType,
               x: typeof img.x === 'number' ? img.x : 0,
               y: typeof img.y === 'number' ? img.y : 0,
               width,
@@ -1183,6 +1619,8 @@ export default function App() {
               naturalWidth,
               naturalHeight,
               file: snapshotFile,
+              isPlaying: mediaType === 'video' ? Boolean(img.isPlaying) : false,
+              hasAudio: mediaType === 'video' ? img.hasAudio : false,
               metadata: normalizeSnapshotImageMetadata(rawMetadata),
             };
           })
@@ -1276,7 +1714,13 @@ export default function App() {
         }
         const normalizedFalModelId = normalizeFalModelId(meta.falModelId);
         if (normalizedFalModelId) {
-          setFalModelId(normalizedFalModelId);
+          if (isFalVideoModelId(normalizedFalModelId)) {
+            setFalModelMode('video');
+            setFalVideoModelId(normalizedFalModelId);
+          } else if (isFalImageModelId(normalizedFalModelId)) {
+            setFalModelMode('image');
+            setFalImageModelId(normalizedFalModelId);
+          }
         }
         if (isFalImageSizeSelectionValue(meta.falImageSizeSelection)) {
           setFalImageSizeSelection(meta.falImageSizeSelection);
@@ -1343,7 +1787,9 @@ export default function App() {
     setPrompt,
     setInpaintMode,
     setApiProvider,
-    setFalModelId,
+    setFalModelMode,
+    setFalImageModelId,
+    setFalVideoModelId,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,
@@ -1518,6 +1964,7 @@ export default function App() {
 
   const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{
     element: HTMLImageElement;
+    mediaType: 'image';
     x: number;
     y: number;
     width: number;
@@ -1525,6 +1972,8 @@ export default function App() {
     naturalWidth: number;
     naturalHeight: number;
     file: File;
+    isPlaying: false;
+    hasAudio: false;
   }> => {
     return new Promise((resolve, reject) => {
       if (imagesToCompose.length === 0) {
@@ -1572,6 +2021,7 @@ export default function App() {
           const displayHeight = newImg.height || naturalHeight;
           resolve({
             element: newImg,
+            mediaType: 'image',
             x: minX,
             y: minY,
             width: displayWidth,
@@ -1579,6 +2029,8 @@ export default function App() {
             naturalWidth,
             naturalHeight,
             file: newFile,
+            isPlaying: false,
+            hasAudio: false,
           });
         } catch (e) {
           reject(e);
@@ -1613,21 +2065,225 @@ export default function App() {
     }
   }, [editingNoteId, handleCommit, cropMode]);
 
-  const handleGenerate = useCallback(async () => {
-    const trimmedPrompt = prompt.trim();
-    const isTextToImage = !primaryImageId;
-    const usingFal = apiProvider === 'fal';
-    const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
-    const isGeminiModel = falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
-    const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-    const isCrystalUpscaleModel = falModelId === CRYSTAL_UPSCALER_MODEL_ID;
-    const isSimaUpscaleModel = falModelId === SIMA_UPSCALER_MODEL_ID;
-    const isSeedvrUpscaleModel = falModelId === SEEDVR_UPSCALER_MODEL_ID;
+  const handleGenerate = useCallback(async (generationOverrideOrEvent?: GenerationInputs | React.SyntheticEvent) => {
+    // Ignore React synthetic events passed from onClick handlers
+    const generationOverride = generationOverrideOrEvent && 'kind' in generationOverrideOrEvent
+      ? generationOverrideOrEvent
+      : undefined;
+    const overrideKind = generationOverride?.kind;
+    const promptForRun = generationOverride?.prompt ?? prompt;
+    const trimmedPrompt = promptForRun.trim();
+    const apiProviderForRun = isApiProvider(generationOverride?.provider) ? generationOverride.provider : apiProvider;
+    const overrideModelId = generationOverride?.modelId;
+    const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode : falModelMode;
+    const falImageModelIdForRun = isFalImageModelId(overrideModelId) ? overrideModelId : falImageModelId;
+    const falVideoModelIdForRun = isFalVideoModelId(overrideModelId) ? overrideModelId : falVideoModelId;
+    const falModelIdForRun: FalModelId = falModelModeForRun === 'video' ? falVideoModelIdForRun : falImageModelIdForRun;
+    const falOptionsOverride = generationOverride?.falOptions ?? {};
+    const falImageSizeSelectionForRun = falOptionsOverride.imageSizeSelection ?? falImageSizeSelection;
+    const falAspectRatioSelectionForRun = falOptionsOverride.aspectRatioSelection ?? falAspectRatioSelection;
+    const falResolutionSelectionForRun = falOptionsOverride.resolutionSelection ?? falResolutionSelection;
+    const falNumImagesForRun = falOptionsOverride.numImages ?? falNumImages;
+    const falScaleFactorForRun = falOptionsOverride.scaleFactor ?? falScaleFactor;
+    const falNoiseScaleForRun = falOptionsOverride.noiseScale ?? falNoiseScale;
+    const falCreativityForRun = falOptionsOverride.creativity ?? falCreativity;
+    const falVideoDurationForRun = falOptionsOverride.videoDuration ?? falVideoDuration;
+    const primaryImageIdForRun = generationOverride ? generationOverride.primaryImageId ?? null : primaryImageId;
+    const primaryImageForRun = primaryImageIdForRun
+      ? images.find(img => img.id === primaryImageIdForRun) || null
+      : null;
+    const activePrimaryImage = isImageCanvasMedia(primaryImageForRun) ? primaryImageForRun : null;
+    const referenceImageIdsForRun = generationOverride ? generationOverride.referenceImageIds ?? [] : referenceImageIds;
+    const videoLastFrameImageId = generationOverride?.videoLastFrameImageId;
+
+    const usingFal = apiProviderForRun === 'fal';
+    const isVideoMode = usingFal && falModelModeForRun === 'video';
+    const isSeedreamModel = !isVideoMode && falModelIdForRun === SEEDREAM_MODEL_ID;
+    const isGeminiModel = !isVideoMode && falModelIdForRun === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+    const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
+    const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
+    const isSimaUpscaleModel = !isVideoMode && falModelIdForRun === SIMA_UPSCALER_MODEL_ID;
+    const isSeedvrUpscaleModel = !isVideoMode && falModelIdForRun === SEEDVR_UPSCALER_MODEL_ID;
     const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel || isSeedvrUpscaleModel;
+    const isHailuoStandardVideoModel = isVideoMode && falModelIdForRun === HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
+    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimaryImage;
     const requiresPrompt = !(usingFal && isUpscaleModel);
+    const requiresVideoSourceImage = usingFal && isVideoMode;
+    const generationKind: GenerationKind = overrideKind
+      ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
 
     if (requiresPrompt && !trimmedPrompt) {
       setError(isTextToImage ? 'Please describe the image you want to create.' : 'Please write a prompt to describe your edit.');
+      return;
+    }
+
+    if (requiresVideoSourceImage && !activePrimaryImage) {
+      setError('Select an image to use as the first frame for your video.');
+      return;
+    }
+
+    if (isVideoMode) {
+      const falJobId = crypto.randomUUID();
+      const jobModelLabel = getFalModelLabel(falModelIdForRun);
+
+      const newJob: FalQueueJob = {
+        id: falJobId,
+        prompt: trimmedPrompt,
+        modelLabel: jobModelLabel,
+        status: 'IN_QUEUE',
+        logs: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setFalJobs(prev => [...prev.slice(-9), newJob]);
+      addDebugLog({
+        direction: 'outbound',
+        source: 'fal',
+        title: jobModelLabel,
+        message: 'Submitting request',
+        data: { jobId: falJobId, kind: 'video' },
+      });
+
+      setError(null);
+
+      try {
+        if (!activePrimaryImage) {
+          throw new Error('Unable to find the starting frame for this video.');
+        }
+        const videoSourceImage = activePrimaryImage.element as HTMLImageElement;
+        const videoResult = await generateFalImageToVideo(trimmedPrompt, videoSourceImage, {
+          modelId: falVideoModelIdForRun,
+          duration: isHailuoStandardVideoModel ? falVideoDurationForRun : undefined,
+          onQueueUpdate: (update: FalQueueUpdate) => {
+            setFalJobs(prev => prev.map(job => {
+              if (job.id !== falJobId) {
+                return job;
+              }
+              return applyFalQueueUpdateToJob(job, update);
+            }));
+          },
+        });
+
+        setFalJobs(prev => prev.map(job => {
+          if (job.id !== falJobId) {
+            return job;
+          }
+          if (job.status === 'FAILED') {
+            return job;
+          }
+          return {
+            ...job,
+            status: 'COMPLETED',
+            requestId: videoResult.requestId || job.requestId,
+            description: 'Video ready',
+            outputUrl: videoResult.videoUrl,
+            updatedAt: Date.now(),
+          };
+        }));
+
+        try {
+          const response = await fetch(videoResult.videoUrl);
+          const videoBlob = await response.blob();
+          const fileType = videoBlob.type || 'video/mp4';
+          const extension = fileType.split('/')[1]?.split(';')[0] || 'mp4';
+          const videoFileName = `generated_video.${extension}`;
+          const videoElement = await loadMediaFromBlob(videoBlob, 'video') as HTMLVideoElement;
+          videoElement.pause();
+          videoElement.currentTime = 0;
+          videoElement.loop = true;
+          videoElement.muted = true;
+          videoElement.playsInline = true;
+          let isPlaying = true;
+          try {
+            const playPromise = videoElement.play();
+            if (playPromise && typeof playPromise.then === 'function') {
+              await playPromise;
+            }
+          } catch (playErr) {
+            console.error('Failed to autoplay generated video', playErr);
+            videoElement.pause();
+            isPlaying = false;
+          }
+
+          const { naturalWidth, naturalHeight } = getNaturalSize(videoElement);
+          const displayWidth = naturalWidth || 1;
+          const displayHeight = naturalHeight || 1;
+          const primaryBounds = getImageBounds(activePrimaryImage);
+          const placementX = primaryBounds.maxX + 20;
+          const placementY = primaryBounds.minY;
+          const audioTrackInfo = (videoElement as unknown as { audioTracks?: { length?: number } }).audioTracks;
+          const hasAudio = Boolean(
+            (videoElement as unknown as { mozHasAudio?: boolean }).mozHasAudio ||
+            (audioTrackInfo && typeof audioTrackInfo.length === 'number' && audioTrackInfo.length > 0)
+          );
+
+          const newVideo: CanvasImage = {
+            id: crypto.randomUUID(),
+            element: videoElement,
+            mediaType: 'video',
+            x: placementX,
+            y: placementY,
+            width: displayWidth,
+            height: displayHeight,
+            rotation: 0,
+            naturalWidth,
+            naturalHeight,
+            file: new File([videoBlob], videoFileName, { type: fileType }),
+            isPlaying,
+            hasAudio,
+            metadata: {
+              source: 'generated',
+              modelLabel: jobModelLabel,
+              prompt: trimmedPrompt,
+              generation: {
+                kind: 'video',
+                prompt: trimmedPrompt,
+                provider: 'fal',
+                modelId: falModelIdForRun,
+                modelLabel: jobModelLabel,
+                modelMode: falModelModeForRun,
+                primaryImageId: primaryImageIdForRun ?? undefined,
+                ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
+                falOptions: { videoDuration: falVideoDurationForRun },
+              },
+            },
+          };
+
+          setState(prev => ({
+            ...prev,
+            images: [...prev.images, newVideo],
+          }));
+          setSelectedImageIds([newVideo.id]);
+          setSelectedNoteIds([]);
+          setReferenceImageIds([]);
+          setTool(Tool.SELECTION);
+
+          setToastMessage('Video added to canvas');
+        } catch (loadErr) {
+          console.error('Failed to load generated video into canvas', loadErr);
+          setToastMessage('Video ready! Open from the Fal Queue panel.');
+        }
+        setTimeout(() => setToastMessage(null), 2000);
+      } catch (err) {
+        console.error(err);
+        const message = err instanceof Error ? err.message : 'An unknown error occurred.';
+        const userFacingMessage = buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE;
+
+        setFalJobs(prev => prev.map(job => {
+          if (job.id !== falJobId) {
+            return job;
+          }
+          return {
+            ...job,
+            status: 'FAILED',
+            error: userFacingMessage,
+            updatedAt: Date.now(),
+          };
+        }));
+
+        setError(userFacingMessage);
+      }
+
       return;
     }
 
@@ -1636,21 +2292,20 @@ export default function App() {
       return;
     }
 
-    const generationModelLabel = usingFal ? getFalModelLabel(falModelId) : GOOGLE_MODEL_LABEL;
+    const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : GOOGLE_MODEL_LABEL;
     const shouldValidateFalOptions = usingFal && (isSeedreamModel || isGeminiModel || isReveModel);
     const isNumImagesInvalid =
-      !Number.isFinite(falNumImages) ||
-      falNumImages < 1 ||
-      falNumImages > 4;
-    const normalizedFalNumImages = Math.min(4, Math.max(1, Math.floor(Number.isFinite(falNumImages) ? falNumImages : 1)));
-    const googleAspectRatio = isGeminiModel && falAspectRatioSelection !== 'default'
-      ? falAspectRatioSelection
+      !Number.isFinite(falNumImagesForRun) ||
+      falNumImagesForRun < 1 ||
+      falNumImagesForRun > 4;
+    const normalizedFalNumImages = Math.min(4, Math.max(1, Math.floor(Number.isFinite(falNumImagesForRun) ? falNumImagesForRun :
+      1)));
+    const googleAspectRatio = isGeminiModel && falAspectRatioSelectionForRun !== 'default'
+      ? falAspectRatioSelectionForRun
       : undefined;
 
-    const activePrimaryImage = primaryImage;
-
     if (!isTextToImage) {
-      if (!primaryImageId || !activePrimaryImage) {
+      if (!primaryImageIdForRun || !activePrimaryImage) {
         setError('Please select an image to edit.');
         return;
       }
@@ -1681,12 +2336,12 @@ export default function App() {
     }
 
     const falJobId = usingFal ? crypto.randomUUID() : null;
-    const jobModelLabel = getFalModelLabel(falModelId);
+    const jobModelLabel = getFalModelLabel(falModelIdForRun);
     const upscaleDetails = usingFal && isUpscaleModel
       ? [
-        `${falScaleFactor}x`,
-        ...(isSeedvrUpscaleModel ? [`noise ${falNoiseScale.toFixed(1)}`] : []),
-        ...(isCrystalUpscaleModel ? [`creativity ${falCreativity.toFixed(1)}`] : []),
+        `${falScaleFactorForRun}x`,
+        ...(isSeedvrUpscaleModel ? [`noise ${falNoiseScaleForRun.toFixed(1)}`] : []),
+        ...(isCrystalUpscaleModel ? [`creativity ${falCreativityForRun.toFixed(1)}`] : []),
       ].join(', ')
       : '';
     const jobPromptDescription = usingFal && isUpscaleModel
@@ -1719,6 +2374,8 @@ export default function App() {
     }
 
     setError(null);
+
+    let referenceIdsUsed: string[] = [];
 
     try {
       let generationResult: { imageBase64: string; imagesBase64: string[]; text: string; requestId?: string };
@@ -1765,9 +2422,9 @@ export default function App() {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isGeminiModel || isReveModel) ? falAspectRatioSelection : 'default',
-            ...(isGeminiModel ? { resolution: falResolutionSelection } : {}),
-            ...(isSeedreamModel ? { imageSize: falImageSizeSelection } : {}),
+            aspectRatio: (isGeminiModel || isReveModel) ? falAspectRatioSelectionForRun : 'default',
+            ...(isGeminiModel ? { resolution: falResolutionSelectionForRun } : {}),
+            ...(isSeedreamModel ? { imageSize: falImageSizeSelectionForRun } : {}),
             numImages: normalizedFalNumImages,
           });
 
@@ -1794,7 +2451,7 @@ export default function App() {
           });
         }
       } else {
-        if (!primaryImageId || !activePrimaryImage) {
+        if (!primaryImageIdForRun || !activePrimaryImage) {
           throw new Error('Unable to locate selected image for editing.');
         }
 
@@ -1809,7 +2466,7 @@ export default function App() {
             y: primaryBounds.minY,
           };
 
-          if (isSimaUpscaleModel && falScaleFactor === 1) {
+          if (isSimaUpscaleModel && falScaleFactorForRun === 1) {
             const dataUrl = await fileToDataUrl(activePrimaryImage.file);
             const base64 = dataUrl.split(',')[1];
             if (!base64) {
@@ -1848,10 +2505,10 @@ export default function App() {
             };
 
             const falResult = isSeedvrUpscaleModel
-              ? await upscaleFalSeedvrImage(activePrimaryImage.element, falScaleFactor, falNoiseScale, queueOptions)
+              ? await upscaleFalSeedvrImage(activePrimaryImage.element, falScaleFactorForRun, falNoiseScaleForRun, queueOptions)
               : isCrystalUpscaleModel
-                ? await upscaleFalCrystalImage(activePrimaryImage.element, falScaleFactor, falCreativity, queueOptions)
-                : await upscaleFalSimaImage(activePrimaryImage.element, falScaleFactor, queueOptions);
+                ? await upscaleFalCrystalImage(activePrimaryImage.element, falScaleFactorForRun, falCreativityForRun, queueOptions)
+                : await upscaleFalSimaImage(activePrimaryImage.element, falScaleFactorForRun, queueOptions);
 
             generationResult = falResult;
 
@@ -1872,11 +2529,18 @@ export default function App() {
             }));
           }
         } else {
-          const maxReferenceImages = getMaxReferenceImages(falModelId);
-          const referenceCanvasImages = referenceImageIds
+          const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
+          const referenceCanvasImages = referenceImageIdsForRun
             .map(id => images.find(img => img.id === id))
-            .filter((img): img is CanvasImage => !!img)
+            .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
             .slice(0, maxReferenceImages);
+
+          if (generationOverride && referenceImageIdsForRun.length > referenceCanvasImages.length) {
+            setError('One or more reference images for this generation are missing from the canvas.');
+            return;
+          }
+
+          referenceIdsUsed = referenceCanvasImages.map(img => img.id);
 
           const allSelectedImages = [activePrimaryImage, ...referenceCanvasImages];
 
@@ -1886,7 +2550,7 @@ export default function App() {
 
           let referenceImagesForAPI: HTMLImageElement[] = [];
 
-          const prepareReferenceImage = async (img: CanvasImage): Promise<HTMLImageElement> => {
+          const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
             if ((img.rotation ?? 0) === 0) {
               return img.element;
             }
@@ -1974,7 +2638,7 @@ export default function App() {
             }
 
             const falResult = await generateFalImageEdit(basePayload, {
-              modelId: falModelId,
+              modelId: falModelIdForRun,
               onQueueUpdate: (update) => {
                 setFalJobs(prev => prev.map(job => {
                   if (job.id !== falJobId) {
@@ -1985,15 +2649,15 @@ export default function App() {
               },
               ...(isSeedreamModel
                 ? {
-                  imageSize: falImageSizeSelection === 'default'
+                  imageSize: falImageSizeSelectionForRun === 'default'
                     ? 'default'
-                    : falImageSizeSelection,
+                    : falImageSizeSelectionForRun,
                 }
                 : {}),
               ...(isGeminiModel
                 ? {
-                  aspectRatio: falAspectRatioSelection,
-                  resolution: falResolutionSelection,
+                  aspectRatio: falAspectRatioSelectionForRun,
+                  resolution: falResolutionSelectionForRun,
                 }
                 : {}),
               numImages: normalizedFalNumImages,
@@ -2025,6 +2689,29 @@ export default function App() {
         }
       }
 
+      const falOptionsForGeneration = usingFal
+        ? {
+          ...(isSeedreamModel ? { imageSizeSelection: falImageSizeSelectionForRun } : {}),
+          ...(isGeminiModel || isReveModel ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
+          ...(isGeminiModel ? { resolutionSelection: falResolutionSelectionForRun } : {}),
+          numImages: normalizedFalNumImages,
+          ...(isUpscaleModel ? { scaleFactor: falScaleFactorForRun } : {}),
+          ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
+          ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
+        }
+        : undefined;
+
+      const generationDetails: GenerationInputs = {
+        kind: generationKind,
+        prompt: trimmedPrompt,
+        provider: apiProviderForRun,
+        modelLabel: generationModelLabel,
+        ...(usingFal ? { modelId: falModelIdForRun, modelMode: falModelModeForRun } : {}),
+        ...(activePrimaryImage && !isTextToImage ? { primaryImageId: activePrimaryImage.id } : {}),
+        ...(referenceIdsUsed.length > 0 ? { referenceImageIds: referenceIdsUsed } : {}),
+        ...(falOptionsForGeneration ? { falOptions: falOptionsForGeneration } : {}),
+      };
+
       const generatedBase64Images = generationResult.imagesBase64.length > 0
         ? generationResult.imagesBase64
         : [generationResult.imageBase64];
@@ -2037,10 +2724,9 @@ export default function App() {
         const dataUrl = `data:image/png;base64,${base64}`;
         const element = await loadImageFromDataUrl(dataUrl);
         const blob = await (await fetch(dataUrl)).blob();
-        const naturalWidth = element.naturalWidth || element.width || 1;
-        const naturalHeight = element.naturalHeight || element.height || 1;
-        const displayWidth = element.width || naturalWidth;
-        const displayHeight = element.height || naturalHeight;
+        const { naturalWidth, naturalHeight } = getNaturalSize(element);
+        const displayWidth = (element as HTMLImageElement).width || naturalWidth;
+        const displayHeight = (element as HTMLImageElement).height || naturalHeight;
         const fileSuffix = generatedBase64Images.length === 1 ? '' : `_${index + 1}`;
         const file = new File([blob], `generated_image${fileSuffix}.png`, { type: 'image/png' });
 
@@ -2048,17 +2734,18 @@ export default function App() {
           source: 'generated',
           modelLabel: generationModelLabel,
           ...(requiresPrompt ? { prompt: trimmedPrompt } : {}),
+          generation: generationDetails,
         };
 
         if (usingFal && isUpscaleModel) {
-          if (Number.isFinite(falScaleFactor) && falScaleFactor > 0) {
-            metadata.upscaleFactor = falScaleFactor;
+          if (Number.isFinite(falScaleFactorForRun) && falScaleFactorForRun > 0) {
+            metadata.upscaleFactor = falScaleFactorForRun;
           }
-          if (isSeedvrUpscaleModel && Number.isFinite(falNoiseScale)) {
-            metadata.noiseScale = Math.round(falNoiseScale * 10) / 10;
+          if (isSeedvrUpscaleModel && Number.isFinite(falNoiseScaleForRun)) {
+            metadata.noiseScale = Math.round(falNoiseScaleForRun * 10) / 10;
           }
-          if (isCrystalUpscaleModel && Number.isFinite(falCreativity)) {
-            const normalizedCreativity = Math.round(falCreativity * 2) / 2;
+          if (isCrystalUpscaleModel && Number.isFinite(falCreativityForRun)) {
+            const normalizedCreativity = Math.round(falCreativityForRun * 2) / 2;
             metadata.creativity = Math.min(10, Math.max(0, normalizedCreativity));
           }
         }
@@ -2066,6 +2753,7 @@ export default function App() {
         generatedCanvasImages.push({
           id: crypto.randomUUID(),
           element,
+          mediaType: 'image',
           x: placementOrigin.x,
           y: placementOrigin.y + yOffset,
           width: displayWidth,
@@ -2074,6 +2762,8 @@ export default function App() {
           naturalWidth,
           naturalHeight,
           file,
+          isPlaying: false,
+          hasAudio: false,
           metadata,
         });
 
@@ -2121,14 +2811,17 @@ export default function App() {
     falAspectRatioSelection,
     falImageSizeSelection,
     falResolutionSelection,
-    falModelId,
+    falImageModelId,
+    falModelMode,
+    falVideoDuration,
+    falVideoModelId,
     falNumImages,
     falScaleFactor,
     falNoiseScale,
+    falCreativity,
     images,
     inpaintMode,
     paths,
-    primaryImage,
     primaryImageId,
     prompt,
     referenceImageIds,
@@ -2139,6 +2832,7 @@ export default function App() {
     setSelectedImageIds,
     setSelectedNoteIds,
     setState,
+    setToastMessage,
     tool,
   ]);
 
@@ -2153,6 +2847,11 @@ export default function App() {
       return;
     }
 
+    if (!isImageCanvasMedia(primaryImage)) {
+      setError('Background removal is only available for images.');
+      return;
+    }
+
     setError(null);
     setIsRemovingBackground(true);
 
@@ -2161,8 +2860,7 @@ export default function App() {
       const dataUrl = `data:image/png;base64,${removalResult.imageBase64}`;
       const element = await loadImageFromDataUrl(dataUrl);
       const blob = await (await fetch(dataUrl)).blob();
-      const naturalWidth = element.naturalWidth || element.width || 1;
-      const naturalHeight = element.naturalHeight || element.height || 1;
+      const { naturalWidth, naturalHeight } = getNaturalSize(element);
       const displayWidth = element.width || naturalWidth;
       const displayHeight = element.height || naturalHeight;
 
@@ -2184,6 +2882,7 @@ export default function App() {
       const createCandidate = (y: number): CanvasImage => ({
         id: 'candidate',
         element,
+        mediaType: 'image',
         x: targetX,
         y,
         width: displayWidth,
@@ -2192,6 +2891,8 @@ export default function App() {
         naturalWidth,
         naturalHeight,
         file,
+        isPlaying: false,
+        hasAudio: false,
         metadata: primaryImage.metadata
           ? { ...primaryImage.metadata }
           : { source: 'derived' },
@@ -2230,6 +2931,12 @@ export default function App() {
     primaryImageId,
     primaryImage,
     displayedImages,
+    getImageBounds,
+    setError,
+    setIsRemovingBackground,
+    setReferenceImageIds,
+    setSelectedImageIds,
+    setSelectedNoteIds,
     setState,
   ]);
 
@@ -2237,11 +2944,15 @@ export default function App() {
   const handleStartCrop = useCallback((imageId: string) => {
     const imageToCrop = displayedImages.find(img => img.id === imageId);
     if (!imageToCrop) return;
+    if (imageToCrop.mediaType !== 'image') {
+      setError('Cropping is only available for images.');
+      return;
+    }
     setCropMode({
       imageId: imageId,
       rect: { x: 0, y: 0, width: imageToCrop.width, height: imageToCrop.height },
     });
-  }, [displayedImages]);
+  }, [displayedImages, setError]);
 
   const handleCropRectChange = useCallback((rect: { x: number; y: number; width: number; height: number; }) => {
     setCropMode(prev => prev ? { ...prev, rect } : null);
@@ -2256,6 +2967,11 @@ export default function App() {
 
     const originalImage = history[historyIndex].images.find(img => img.id === cropMode.imageId);
     if (!originalImage) return;
+    if (originalImage.mediaType !== 'image') {
+      setError('Cropping is only available for images.');
+      handleCancelCrop();
+      return;
+    }
 
     const { rect } = cropMode;
     if (rect.width <= 0 || rect.height <= 0) {
@@ -2288,6 +3004,7 @@ export default function App() {
       const updatedImage: CanvasImage = {
         ...originalImage,
         element: newImg,
+        mediaType: 'image',
         x: originalImage.x + rect.x,
         y: originalImage.y + rect.y,
         width: displayWidth,
@@ -2295,6 +3012,8 @@ export default function App() {
         naturalWidth,
         naturalHeight,
         file: newFile,
+        isPlaying: false,
+        hasAudio: false,
       };
 
       setState(prevState => ({
@@ -2306,7 +3025,7 @@ export default function App() {
     };
     newImg.src = croppedImageURL;
 
-  }, [cropMode, history, historyIndex, setState, handleCancelCrop]);
+  }, [cropMode, handleCancelCrop, history, historyIndex, setError, setState]);
 
   // Transform handlers
   const handleStartTransform = useCallback((imageId: string) => {
@@ -2432,22 +3151,26 @@ export default function App() {
       if (cropMode || transformMode) return;
 
       const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
-      const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
-      const isGeminiModel = falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
-      const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-      const shouldValidateFalOptions = apiProvider === 'fal' && (isSeedreamModel || isGeminiModel || isReveModel);
+      const isVideoMode = falModelMode === 'video';
+      const isSeedreamModel = !isVideoMode && falModelId === SEEDREAM_MODEL_ID;
+      const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+      const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+      const shouldValidateFalOptions = apiProvider === 'fal' && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel)
+        ;
       const isNumImagesInvalid =
         !Number.isFinite(falNumImages) ||
         falNumImages < 1 ||
         falNumImages > 4;
 
-      const isTextToImage = !primaryImageId;
+      const isTextToImage = !activePrimaryImage;
       const promptEmpty = prompt.trim().length === 0;
       const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
+      const requiresSelectedImageForVideo = apiProvider === 'fal' && isVideoMode && isTextToImage;
 
       const submitDisabled = promptEmpty ||
         (shouldValidateFalOptions && isNumImagesInvalid) ||
-        (!isTextToImage && (
+        requiresSelectedImageForVideo ||
+        (!isVideoMode && !isTextToImage && (
           (apiProvider === 'fal' && isReveModel) ||
           (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
           (appMode === 'INPAINT' && !hasInpaintMask)
@@ -2468,7 +3191,7 @@ export default function App() {
     };
   }, [
     isLoading,
-    primaryImageId,
+    activePrimaryImage,
     tool,
     appMode,
     paths,
@@ -2477,6 +3200,7 @@ export default function App() {
     transformMode,
     apiProvider,
     falModelId,
+    falModelMode,
     falNumImages,
     prompt,
   ]);
@@ -2510,8 +3234,7 @@ export default function App() {
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
-          const naturalWidth = img.naturalWidth || img.width || 1;
-          const naturalHeight = img.naturalHeight || img.height || 1;
+          const { naturalWidth, naturalHeight } = getNaturalSize(img);
           const displayWidth = img.width || naturalWidth;
           const displayHeight = img.height || naturalHeight;
           setState(prevState => {
@@ -2527,6 +3250,7 @@ export default function App() {
             const newCanvasImage: CanvasImage = {
               id: crypto.randomUUID(),
               element: img,
+              mediaType: 'image',
               x: newX,
               y: newY,
               width: displayWidth,
@@ -2535,6 +3259,8 @@ export default function App() {
               naturalWidth,
               naturalHeight,
               file: file,
+              isPlaying: false,
+              hasAudio: false,
               metadata: { source: 'imported' },
             };
             setSelectedImageIds([newCanvasImage.id]);
@@ -2568,13 +3294,13 @@ export default function App() {
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
-          const naturalWidth = img.naturalWidth || img.width || 1;
-          const naturalHeight = img.naturalHeight || img.height || 1;
+          const { naturalWidth, naturalHeight } = getNaturalSize(img);
           const displayWidth = img.width || naturalWidth;
           const displayHeight = img.height || naturalHeight;
           const newCanvasImage: CanvasImage = {
             id: crypto.randomUUID(),
             element: img,
+            mediaType: 'image',
             x: point.x - (displayWidth / 2) + (index * 20),
             y: point.y - (displayHeight / 2) + (index * 20),
             width: displayWidth,
@@ -2583,6 +3309,8 @@ export default function App() {
             naturalWidth,
             naturalHeight,
             file: file,
+            isPlaying: false,
+            hasAudio: false,
             metadata: { source: 'imported' },
           };
           newImages.push(newCanvasImage);
@@ -2616,19 +3344,34 @@ export default function App() {
     const imageToDownload = images.find(img => img.id === primaryImageId);
     if (!imageToDownload) return;
 
+    const mediaElement = imageToDownload.element;
+    const href = mediaElement instanceof HTMLVideoElement
+      ? (mediaElement.currentSrc || mediaElement.src)
+      : mediaElement.src;
+    if (!href) {
+      setError('No downloadable source found for this item.');
+      return;
+    }
+
     const link = document.createElement('a');
-    link.href = imageToDownload.element.src;
-    link.download = imageToDownload.file.name || 'download.png';
+    link.href = href;
+    link.download = imageToDownload.file.name || (imageToDownload.mediaType === 'video' ? 'video.mp4' : 'download.png');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [hasSingleImageSelected, primaryImageId, images]);
+  }, [hasSingleImageSelected, images, primaryImageId, setError]);
 
   const handleImageSelection = useCallback((
     imageId: string | null,
     options: { multi?: boolean; reference?: boolean } = {},
   ) => {
     const { multi = false, reference = false } = options;
+    const targetImage = imageId ? images.find(img => img.id === imageId) : null;
+
+    if (reference && targetImage?.mediaType === 'video') {
+      setError('Reference images must be still images.');
+      return;
+    }
 
     if (!imageId) {
       if (!multi) {
@@ -2674,7 +3417,7 @@ export default function App() {
     setSelectedImageIds([imageId]);
     setSelectedNoteIds([]);
     setReferenceImageIds([]);
-  }, [falModelId, primaryImageId, selectedImageIds.length, showReferenceLimitToast]);
+  }, [falModelId, images, primaryImageId, selectedImageIds.length, setError, showReferenceLimitToast]);
 
   const handleNoteSelection = useCallback((
     noteId: string | null,
@@ -2728,17 +3471,18 @@ export default function App() {
   const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
   const usingFal = apiProvider === 'fal';
+  const isVideoMode = falModelMode === 'video';
   const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
-  const isTextToImage = !primaryImageId;
+  const isTextToImage = !activePrimaryImage;
   const promptEmpty = prompt.trim().length === 0;
-  const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID;
-  const isGeminiModel = falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
-  const isReveModel = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-  const isCrystalUpscaleModel = falModelId === CRYSTAL_UPSCALER_MODEL_ID;
-  const isSimaUpscaleModel = falModelId === SIMA_UPSCALER_MODEL_ID;
-  const isSeedvrUpscaleModel = falModelId === SEEDVR_UPSCALER_MODEL_ID;
+  const isSeedreamModel = !isVideoMode && falModelId === SEEDREAM_MODEL_ID;
+  const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+  const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+  const isCrystalUpscaleModel = !isVideoMode && falModelId === CRYSTAL_UPSCALER_MODEL_ID;
+  const isSimaUpscaleModel = !isVideoMode && falModelId === SIMA_UPSCALER_MODEL_ID;
+  const isSeedvrUpscaleModel = !isVideoMode && falModelId === SEEDVR_UPSCALER_MODEL_ID;
   const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel || isSeedvrUpscaleModel;
-  const shouldValidateFalOptions = usingFal && (isSeedreamModel || isGeminiModel || isReveModel);
+  const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel);
   const isNumImagesInvalid =
     !Number.isFinite(falNumImages) ||
     falNumImages < 1 ||
@@ -2747,7 +3491,8 @@ export default function App() {
   const requiresPrompt = !(usingFal && isUpscaleModel);
   const isPromptMissing = requiresPrompt && promptEmpty;
   const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-  const editConstraintsActive = !isTextToImage && !isUpscaleModel && (
+  const requiresSelectedImageForVideo = usingFal && isVideoMode && isTextToImage;
+  const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
     (usingFal && isReveModel) ||
     (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
     (appMode === 'INPAINT' && !hasInpaintMask)
@@ -2756,13 +3501,18 @@ export default function App() {
   const submitDisabled = isPromptMissing ||
     (shouldValidateFalOptions && isNumImagesInvalid) ||
     requiresSelectedImageForUpscale ||
+    requiresSelectedImageForVideo ||
     editConstraintsActive;
 
-  const promptPlaceholderText = usingFal && isUpscaleModel
-    ? `Prompt disabled for ${getFalModelLabel(falModelId)}. Select an image and scale factor.`
-    : isTextToImage
-      ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
-      : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
+  const promptPlaceholderText = isVideoMode
+    ? (activePrimaryImage
+      ? 'Describe the motion or scene you want this image to turn into...'
+      : 'Select an image and describe the video you want to create...')
+    : usingFal && isUpscaleModel
+      ? `Prompt disabled for ${getFalModelLabel(falModelId)}. Select an image and scale factor.`
+      : isTextToImage
+        ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
+        : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
   const disablePromptInput = usingFal && isUpscaleModel;
 
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel;
@@ -2773,7 +3523,21 @@ export default function App() {
 
   const promptBarModelControlsList: PromptBarModelControl[] = [];
 
-  if (usingFal && isUpscaleModel) {
+  if (isVideoMode && usingFal && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID) {
+    promptBarModelControlsList.push({
+      id: 'fal-video-duration-select',
+      ariaLabel: 'Select Hailuo 2.3 Standard duration',
+      options: [
+        { value: '6', label: '6s' },
+        { value: '10', label: '10s' },
+      ],
+      value: falVideoDuration,
+      onChange: handleFalVideoDurationChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (!isVideoMode && usingFal && isUpscaleModel) {
     const scaleOptions = isSimaUpscaleModel ? FAL_SIMA_SCALE_FACTOR_OPTIONS : FAL_CRYSTAL_SCALE_FACTOR_OPTIONS;
     promptBarModelControlsList.push({
       id: 'fal-scale-factor-select',
@@ -2796,7 +3560,7 @@ export default function App() {
     }
   }
 
-  if (usingFal && isSeedvrUpscaleModel) {
+  if (!isVideoMode && usingFal && isSeedvrUpscaleModel) {
     promptBarModelControlsList.push({
       id: 'fal-noise-scale-select',
       ariaLabel: 'Select SeedVR2 noise scale',
@@ -2855,6 +3619,7 @@ export default function App() {
 
   const promptBarModelControls: ReadonlyArray<PromptBarModelControl> | undefined =
     promptBarModelControlsList.length > 0 ? promptBarModelControlsList : undefined;
+  const promptBarModelOptions = falModelMode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
 
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
@@ -2870,13 +3635,13 @@ export default function App() {
         <button
           type="button"
           onClick={toggleFileMenu}
-          aria-haspopup="menu"
-          aria-expanded={isFileMenuOpen}
-          aria-label="Snapshot menu"
-          className="p-2 text-white bg-transparent hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-md transition-colors"
-        >
-          <HamburgerIcon className="w-6 h-6" />
-        </button>
+        aria-haspopup="menu"
+        aria-expanded={isFileMenuOpen}
+        aria-label="Snapshot menu"
+        className="p-2 text-white bg-transparent hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-md transition-colors"
+      >
+        <HamburgerIcon className="w-6 h-6" />
+      </button>
         {isFileMenuOpen && (
           <div
             role="menu"
@@ -2979,6 +3744,8 @@ export default function App() {
           onConfirmCrop={handleConfirmCrop}
           onCancelCrop={handleCancelCrop}
           onNoteCopy={handleNoteCopy}
+          onImagePromptCopy={handleImagePromptCopy}
+          onRerunGeneration={handleRerunGeneration}
           showMetadataOverlay={showMetadataOverlay}
           transformMode={transformMode}
           onStartTransform={handleStartTransform}
@@ -3043,15 +3810,24 @@ export default function App() {
           isLoading={isLoading}
           inputDisabled={disablePromptInput}
           submitDisabled={submitDisabled}
-          modelOptions={FAL_MODEL_OPTIONS}
+          modelOptions={promptBarModelOptions}
           selectedModel={falModelId}
           onModelChange={(modelId) => {
             const normalizedModelId = normalizeFalModelId(modelId);
             if (normalizedModelId) {
-              setFalModelId(normalizedModelId);
+              if (isFalVideoModelId(normalizedModelId)) {
+                setFalModelMode('video');
+                setFalVideoModelId(normalizedModelId);
+              } else if (isFalImageModelId(normalizedModelId)) {
+                setFalModelMode('image');
+                setFalImageModelId(normalizedModelId);
+              }
             }
           }}
           modelSelectDisabled={apiProvider !== 'fal' || isLoading}
+          modelMode={falModelMode}
+          onModelModeChange={handleModelModeChange}
+          modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
           promptPlaceholder={promptPlaceholderText}
         />

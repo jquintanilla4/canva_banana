@@ -62,6 +62,13 @@ interface UpscaleImageOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
 }
 
+interface GenerateVideoOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+  promptOptimizer?: boolean;
+  modelId?: string;
+  duration?: '6' | '10';
+}
+
 const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
 const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview';
 const LEGACY_NANO_BANANA_EDIT_MODEL_ID = 'fal-ai/nano-banana/edit';
@@ -84,6 +91,9 @@ const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
 const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler';
 const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler';
 const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image';
+export const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/standard/image-to-video';
+export const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video';
+export const HAILUO_IMAGE_TO_VIDEO_MODEL_ID = HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -937,6 +947,82 @@ export const generateImage = async (
   const requestId = result?.requestId || latestRequestId;
 
   return { imageBase64: primaryBase64, imagesBase64: base64List, text: description, requestId };
+};
+
+export const generateImageToVideo = async (
+  prompt: string,
+  image: HTMLImageElement,
+  options: GenerateVideoOptions = {},
+): Promise<{ videoUrl: string; requestId?: string }> => {
+  ensureFalClientConfigured();
+
+  const imageUrl = await uploadImageElementToFal(image);
+  const promptOptimizer = options.promptOptimizer ?? true;
+  const modelId = options.modelId || HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
+  const duration = options.duration;
+  let latestRequestId: string | undefined;
+
+  const inputPayload = {
+    prompt,
+    image_url: imageUrl,
+    prompt_optimizer: promptOptimizer,
+    ...(duration ? { duration } : {}),
+  };
+
+  logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
+    input: inputPayload,
+  });
+
+  let result: Awaited<ReturnType<typeof fal.subscribe>>;
+  try {
+    result = await fal.subscribe(modelId, {
+      input: inputPayload,
+      logs: true,
+      onQueueUpdate: update => {
+        const queueUpdate = update as FalQueueUpdate;
+        if (queueUpdate.requestId) {
+          latestRequestId = queueUpdate.requestId;
+        }
+        logFalEvent('inbound', modelId, 'Queue update', {
+          status: queueUpdate.status,
+          position: queueUpdate.position,
+          eta: queueUpdate.eta,
+          requestId: queueUpdate.requestId || latestRequestId,
+          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
+        });
+        options.onQueueUpdate?.({
+          ...queueUpdate,
+          requestId: queueUpdate.requestId || latestRequestId || '',
+        });
+      },
+    });
+  } catch (error) {
+    logFalEvent('error', modelId, 'Request failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+
+  logFalEvent('inbound', modelId, 'Result received', {
+    requestId: result?.requestId || latestRequestId,
+    data: (result?.data as Record<string, unknown>) ?? undefined,
+  });
+
+  const data = result?.data as { video?: string | { url?: string } } | undefined;
+  const videoEntry = data?.video;
+  const videoUrl = typeof videoEntry === 'string'
+    ? videoEntry
+    : videoEntry && typeof videoEntry.url === 'string'
+      ? videoEntry.url
+      : null;
+
+  if (!videoUrl) {
+    throw new Error('Fal.ai API did not return a video.');
+  }
+
+  const requestId = result?.requestId || latestRequestId;
+
+  return { videoUrl, requestId };
 };
 
 export const removeBackground = async (

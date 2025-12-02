@@ -28,6 +28,9 @@ interface PromptBarProps {
   selectedModel: string;
   onModelChange: (modelId: string) => void;
   modelSelectDisabled: boolean;
+  modelMode: 'image' | 'video';
+  onModelModeChange: (mode: 'image' | 'video') => void;
+  modelModeDisabled?: boolean;
   modelControls?: ReadonlyArray<FalModelControlConfig>;
   promptPlaceholder?: string;
 }
@@ -43,6 +46,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   selectedModel,
   onModelChange,
   modelSelectDisabled,
+  modelMode,
+  onModelModeChange,
+  modelModeDisabled,
   modelControls,
   promptPlaceholder,
 }) => {
@@ -110,6 +116,13 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     ? { color: selectedModelOption.highlightColor }
     : undefined;
 
+  const modelSelectLabel = modelMode === 'video' ? 'Select video model' : 'Select image edit model';
+  const resolvedModeDisabled = modelModeDisabled || modelSelectDisabled;
+  const modelModeOptions: Array<{ value: 'image' | 'video'; label: string }> = [
+    { value: 'image', label: 'Image' },
+    { value: 'video', label: 'Video' },
+  ];
+
   return (
     <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.02rem] p-[0.61rem] w-full max-w-[69.1rem]">
       <div className="relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex items-end gap-[1.1rem] py-[0.81rem] pl-[0.83rem] pr-[1.15rem]">
@@ -127,9 +140,27 @@ export const PromptBar: React.FC<PromptBarProps> = ({
           />
           <div className="flex flex-col gap-2 mt-[0.47rem] ml-[0.5rem]">
             <div className="relative flex flex-wrap items-center gap-3">
+              <div className="flex items-center bg-gray-800/80 rounded-full p-1">
+                {modelModeOptions.map(option => {
+                  const isActive = option.value === modelMode;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => onModelModeChange(option.value)}
+                      disabled={resolvedModeDisabled}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-150 ${isActive ? 'bg-blue-500 text-white' : 'text-gray-300 hover:text-white'} disabled:opacity-60 disabled:cursor-not-allowed`}
+                      aria-pressed={isActive}
+                      aria-label={`Switch to ${option.label} models`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="relative">
                 <label className="sr-only" htmlFor="model-select">
-                  Select image edit model
+                  {modelSelectLabel}
                 </label>
                 <select
                   id="model-select"
@@ -139,7 +170,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                   disabled={modelSelectDisabled}
                   className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
                   style={selectHighlightStyle}
-                  aria-label="Select image edit model"
+                  aria-label={modelSelectLabel}
                 >
                   {modelOptions.map(option => (
                     <option

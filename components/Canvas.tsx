@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote } from '../types';
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon } from './Icons';
 
 type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 
@@ -40,6 +40,8 @@ interface CanvasProps {
   onConfirmCrop: () => void;
   onCancelCrop: () => void;
   onNoteCopy: (noteId: string) => void;
+  onImagePromptCopy: (imageId: string) => void;
+  onRerunGeneration: (imageId: string) => void;
   showMetadataOverlay: boolean;
   transformMode: { imageId: string; } | null;
   onStartTransform: (imageId: string) => void;
@@ -122,6 +124,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   onConfirmCrop,
   onCancelCrop,
   onNoteCopy,
+  onImagePromptCopy,
+  onRerunGeneration,
   showMetadataOverlay,
   transformMode,
   onStartTransform,
@@ -169,6 +173,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     initialAngle: number;
     imageRotation: number;
   } | null>(null);
+  const [hoveredVideoId, setHoveredVideoId] = useState<string | null>(null);
 
   const prevZoomToFitTrigger = useRef(zoomToFitTrigger);
   const prevZoomInTrigger = useRef(zoomInTrigger);
@@ -232,6 +237,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       maxY: Math.max(...ys),
     };
   }, [imageLocalToWorld]);
+
+  const isVideoImage = (img: CanvasImage): img is CanvasImage & { element: HTMLVideoElement } =>
+    img.mediaType === 'video';
 
   const getNoteAtPoint = useCallback((point: Point): CanvasNote | null => {
     for (let i = notes.length - 1; i >= 0; i--) {
@@ -333,6 +341,34 @@ export const Canvas: React.FC<CanvasProps> = ({
     return lines;
   };
 
+  const toggleVideoPlayback = useCallback((videoId: string) => {
+    const target = images.find(img => img.id === videoId && isVideoImage(img));
+    if (!target) {
+      return;
+    }
+
+    const videoElement = target.element;
+    const nextIsPlaying = !target.isPlaying;
+    videoElement.loop = true;
+    videoElement.playsInline = true;
+
+    if (nextIsPlaying) {
+      const playPromise = videoElement.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(err => console.error('Failed to play video', err));
+      }
+    } else {
+      videoElement.pause();
+    }
+
+    const updatedImages = images.map(img => {
+      if (img.id !== videoId) return img;
+      return { ...img, isPlaying: nextIsPlaying };
+    });
+    onImagesChange(updatedImages);
+    onCommit();
+  }, [images, isVideoImage, onCommit, onImagesChange]);
+
   const fitTextWithinBox = (
     context: CanvasRenderingContext2D,
     text: string,
@@ -425,6 +461,11 @@ export const Canvas: React.FC<CanvasProps> = ({
       ctx.save();
       ctx.translate(center.x, center.y);
       ctx.rotate(rotation);
+
+      if (isVideoImage(image) && image.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        ctx.restore();
+        return;
+      }
 
       ctx.drawImage(image.element, baseX, baseY, image.width, image.height);
 
@@ -921,6 +962,35 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [draw]);
 
   useEffect(() => {
+    const hasPlayingVideo = images.some(img => img.mediaType === 'video' && img.isPlaying);
+    if (!hasPlayingVideo) {
+      return;
+    }
+
+    let rafId = requestAnimationFrame(() => {});
+
+    const tick = () => {
+      draw();
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [draw, images]);
+
+  useEffect(() => {
+    images.forEach(img => {
+      if (!isVideoImage(img)) {
+        return;
+      }
+      const video = img.element;
+      const shouldUnmute = hoveredVideoId === img.id && img.isPlaying && img.hasAudio !== false;
+      video.muted = !shouldUnmute;
+      video.volume = shouldUnmute ? 1 : 0;
+    });
+  }, [hoveredVideoId, images, isVideoImage]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -1201,14 +1271,23 @@ export const Canvas: React.FC<CanvasProps> = ({
       setBrushPreviewPosition(null);
     }
 
+    const hoverPoint = getTransformedPoint(e.clientX, e.clientY);
+    const hoveredImage = getImageAtPoint(hoverPoint);
+    if (hoveredImage?.mediaType === 'video') {
+      if (hoveredVideoId !== hoveredImage.id) {
+        setHoveredVideoId(hoveredImage.id);
+      }
+    } else if (hoveredVideoId !== null) {
+      setHoveredVideoId(null);
+    }
+
     if (isMarqueeSelecting) {
-      const point = getTransformedPoint(e.clientX, e.clientY);
-      setMarqueeCurrent(point);
+      setMarqueeCurrent(hoverPoint);
       return;
     }
 
     if (cropMode && cropAction && cropDragStart) {
-      const point = getTransformedPoint(e.clientX, e.clientY);
+      const point = hoverPoint;
       const imageToCrop = images.find(img => img.id === cropMode.imageId);
       if (!imageToCrop) return;
 
@@ -1265,7 +1344,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     // Handle transform mode mouse move
     if (transformMode && transformAction && transformDragStart) {
-      const point = getTransformedPoint(e.clientX, e.clientY);
+      const point = hoverPoint;
       const imageToTransform = images.find(img => img.id === transformMode.imageId);
       if (!imageToTransform) return;
 
@@ -1513,6 +1592,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.type === 'mouseleave') {
       setBrushPreviewPosition(null);
+      setHoveredVideoId(null);
     }
 
     if (cropMode && cropAction) {
@@ -1578,6 +1658,27 @@ export const Canvas: React.FC<CanvasProps> = ({
       setIsMarqueeSelecting(false);
       setMarqueeStart(null);
       setMarqueeCurrent(null);
+    }
+
+    const dragDistance = dragStartPoint
+      ? Math.hypot(e.clientX - dragStartPoint.x, e.clientY - dragStartPoint.y)
+      : 0;
+    const DRAG_DEADZONE_PX = 3;
+    const didDrag = isDragging && dragDistance > DRAG_DEADZONE_PX;
+    const canToggleVideo = e.button !== 1 &&
+      !isDrawing &&
+      !isResizing &&
+      !isPanning &&
+      !isMarqueeSelecting &&
+      !cropMode &&
+      !transformMode &&
+      (!isDragging || !didDrag);
+    if (canToggleVideo) {
+      const point = getTransformedPoint(e.clientX, e.clientY);
+      const targetImage = getImageAtPoint(point);
+      if (targetImage && isVideoImage(targetImage)) {
+        toggleVideoPlayback(targetImage.id);
+      }
     }
 
     // If we're releasing the middle mouse button, we're ending a temporary tool action.
@@ -1678,6 +1779,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!targetId) return null;
     return images.find(img => img.id === targetId) || null;
   }, [images, primarySelectedImageId, selectedImageIds.length]);
+  const selectedImageIsVideo = selectedImage?.mediaType === 'video';
+  const selectedImagePrompt = selectedImage?.metadata?.prompt?.trim() ?? '';
+  const selectedImageHasGeneration = Boolean(selectedImage?.metadata?.generation);
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
   const imageBeingTransformed = useMemo(() => transformMode ? images.find(img => img.id === transformMode.imageId) : null, [images, transformMode]);
   const selectedImageBounds = useMemo(() => selectedImage ? getImageBounds(selectedImage) : null, [getImageBounds, selectedImage]);
@@ -1833,8 +1937,26 @@ export const Canvas: React.FC<CanvasProps> = ({
           <ActionButton onClick={() => onStartTransform(selectedImage.id)} disabled={false} title="Transform Image (Shift for free transform)">
             <TransformIcon className="w-4 h-4" />
           </ActionButton>
-          <ActionButton onClick={() => onStartCrop(selectedImage.id)} disabled={false} title="Crop Image">
+          <ActionButton
+            onClick={() => onStartCrop(selectedImage.id)}
+            disabled={selectedImageIsVideo}
+            title={selectedImageIsVideo ? 'Cropping is only available for images' : 'Crop Image'}
+          >
             <CropIcon className="w-4 h-4" />
+          </ActionButton>
+          <ActionButton
+            onClick={() => onRerunGeneration(selectedImage.id)}
+            disabled={!selectedImageHasGeneration}
+            title={selectedImageHasGeneration ? 'Re-run this generation' : 'No saved generation data'}
+          >
+            <RerunIcon className="w-4 h-4" />
+          </ActionButton>
+          <ActionButton
+            onClick={() => onImagePromptCopy(selectedImage.id)}
+            disabled={!selectedImagePrompt}
+            title={selectedImagePrompt ? 'Copy Generation Prompt' : 'No prompt available to copy'}
+          >
+            <CopyIcon className="w-4 h-4" />
           </ActionButton>
         </div>
       )}

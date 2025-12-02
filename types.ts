@@ -29,6 +29,7 @@ export interface ImageDimensions {
 }
 
 export type CanvasImageSource = 'generated' | 'imported' | 'snapshot' | 'derived';
+export type ApiProviderId = 'google' | 'fal';
 
 export interface CanvasImageMetadata {
   source: CanvasImageSource;
@@ -37,7 +38,10 @@ export interface CanvasImageMetadata {
   upscaleFactor?: number;
   noiseScale?: number;
   creativity?: number;
+  generation?: GenerationInputs;
 }
+
+export type CanvasMediaType = 'image' | 'video';
 
 export type FalImageSizePreset =
   | 'square_hd'
@@ -68,9 +72,36 @@ export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
 
 export type FalResolutionOption = '1K' | '2K' | '4K';
 
+export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
+
+export type GenerationFalOptions = Partial<{
+  imageSizeSelection: FalImageSizeOption;
+  aspectRatioSelection: FalAspectRatioOption;
+  resolutionSelection: FalResolutionOption;
+  numImages: number;
+  scaleFactor: number;
+  noiseScale: number;
+  creativity: number;
+  videoDuration: '6' | '10';
+}>;
+
+export interface GenerationInputs {
+  kind: GenerationKind;
+  prompt: string;
+  provider: ApiProviderId;
+  modelId?: string;
+  modelLabel?: string;
+  modelMode?: 'image' | 'video';
+  primaryImageId?: string;
+  referenceImageIds?: string[];
+  videoLastFrameImageId?: string;
+  falOptions?: GenerationFalOptions;
+}
+
 export interface CanvasImage {
   id: string;
-  element: HTMLImageElement;
+  element: HTMLImageElement | HTMLVideoElement;
+  mediaType: CanvasMediaType;
   x: number;
   y: number;
   width: number;
@@ -79,6 +110,8 @@ export interface CanvasImage {
   naturalWidth: number;
   naturalHeight: number;
   file: File;
+  isPlaying?: boolean;
+  hasAudio?: boolean;
   metadata?: CanvasImageMetadata;
 }
 
@@ -105,4 +138,5 @@ export interface FalQueueJob {
   error?: string;
   createdAt: number;
   updatedAt: number;
+  outputUrl?: string;
 }
