@@ -1197,175 +1197,6 @@ export default function App() {
       });
   }, [displayedImages]);
 
-  const handleRerunGeneration = useCallback((imageId: string) => {
-    const targetImage = displayedImages.find(img => img.id === imageId);
-    const generation = targetImage?.metadata?.generation;
-
-    if (!targetImage || !generation) {
-      setToastMessage('No generation data stored for this media.');
-      setTimeout(() => setToastMessage(null), 2000);
-      return;
-    }
-
-    const provider = isApiProvider(generation.provider) ? generation.provider : null;
-    if (!provider || !AVAILABLE_PROVIDERS.includes(provider)) {
-      setError('Saved generation provider is not available. Please regenerate with the current settings.');
-      return;
-    }
-
-    const storedModelId = generation.modelId;
-    const storedModelMode: FalModelMode = isFalModelMode(generation.modelMode)
-      ? generation.modelMode
-      : isFalVideoModelId(storedModelId)
-        ? 'video'
-        : 'image';
-    const modelIdForOverride = provider === 'fal'
-      ? (storedModelMode === 'video'
-        ? (isFalVideoModelId(storedModelId) ? storedModelId : falVideoModelId)
-        : (isFalImageModelId(storedModelId) ? storedModelId : falImageModelId))
-      : undefined;
-
-    const falOptions = generation.falOptions ?? {};
-    const overrideFalOptions = provider === 'fal'
-      ? {
-        ...(isFalImageSizeSelectionValue((falOptions as { imageSizeSelection?: unknown }).imageSizeSelection)
-          ? { imageSizeSelection: falOptions.imageSizeSelection }
-          : {}),
-        ...(isFalAspectRatioSelectionValue((falOptions as { aspectRatioSelection?: unknown }).aspectRatioSelection)
-          ? { aspectRatioSelection: falOptions.aspectRatioSelection }
-          : {}),
-        ...(isFalResolutionSelectionValue((falOptions as { resolutionSelection?: unknown }).resolutionSelection)
-          ? { resolutionSelection: falOptions.resolutionSelection }
-          : {}),
-        ...(typeof falOptions.numImages === 'number' && Number.isFinite(falOptions.numImages)
-          ? { numImages: falOptions.numImages }
-          : {}),
-        ...(typeof falOptions.scaleFactor === 'number' && Number.isFinite(falOptions.scaleFactor)
-          ? { scaleFactor: falOptions.scaleFactor }
-          : {}),
-        ...(typeof falOptions.noiseScale === 'number' && Number.isFinite(falOptions.noiseScale)
-          ? { noiseScale: falOptions.noiseScale }
-          : {}),
-        ...(typeof falOptions.creativity === 'number' && Number.isFinite(falOptions.creativity)
-          ? { creativity: falOptions.creativity }
-          : {}),
-        ...(falOptions.videoDuration === '10' || falOptions.videoDuration === '6'
-          ? { videoDuration: falOptions.videoDuration }
-          : {}),
-      }
-      : undefined;
-
-    const primaryId = generation.kind === 'text_to_image' ? null : generation.primaryImageId ?? null;
-    if (generation.kind !== 'text_to_image' && !primaryId) {
-      setError('This media is missing its original source image and cannot be re-run.');
-      return;
-    }
-
-    if (primaryId) {
-      const sourceImage = images.find(img => img.id === primaryId);
-      if (!sourceImage) {
-        setError('The original source image is no longer on the canvas.');
-        return;
-      }
-      if (generation.kind === 'video' && sourceImage.mediaType !== 'image') {
-        setError('The saved starting frame for this video is not available.');
-        return;
-      }
-    }
-
-    if (generation.kind === 'video' && generation.videoLastFrameImageId) {
-      const lastFrame = images.find(img => img.id === generation.videoLastFrameImageId);
-      if (!lastFrame) {
-        setError('The saved ending frame for this video is missing.');
-        return;
-      }
-    }
-
-    const referenceIds = Array.isArray(generation.referenceImageIds) ? generation.referenceImageIds : [];
-    const missingReferenceIds = referenceIds.filter(id => !images.some(img => img.id === id));
-    if (missingReferenceIds.length > 0) {
-      setError('Some reference images from the original generation are missing from the canvas.');
-      return;
-    }
-
-    setPrompt(generation.prompt ?? '');
-    setApiProvider(provider);
-    setReferenceImageIds(referenceIds);
-
-    if (provider === 'fal') {
-      setFalModelMode(storedModelMode);
-      if (storedModelMode === 'video') {
-        if (isFalVideoModelId(modelIdForOverride)) {
-          setFalVideoModelId(modelIdForOverride);
-        }
-        if (overrideFalOptions?.videoDuration) {
-          setFalVideoDuration(overrideFalOptions.videoDuration);
-        }
-      } else if (isFalImageModelId(modelIdForOverride)) {
-        setFalImageModelId(modelIdForOverride);
-      }
-
-      if (overrideFalOptions?.imageSizeSelection) {
-        setFalImageSizeSelection(overrideFalOptions.imageSizeSelection);
-      }
-      if (overrideFalOptions?.aspectRatioSelection) {
-        setFalAspectRatioSelection(overrideFalOptions.aspectRatioSelection);
-      }
-      if (overrideFalOptions?.resolutionSelection) {
-        setFalResolutionSelection(overrideFalOptions.resolutionSelection);
-      }
-      if (overrideFalOptions?.numImages !== undefined) {
-        setFalNumImages(overrideFalOptions.numImages);
-      }
-      if (overrideFalOptions?.scaleFactor !== undefined) {
-        setFalScaleFactor(overrideFalOptions.scaleFactor);
-      }
-      if (overrideFalOptions?.noiseScale !== undefined) {
-        setFalNoiseScale(overrideFalOptions.noiseScale);
-      }
-      if (overrideFalOptions?.creativity !== undefined) {
-        setFalCreativity(overrideFalOptions.creativity);
-      }
-    } else if (falModelMode === 'video') {
-      setFalModelMode('image');
-    }
-
-    handleGenerate({
-      kind: generation.kind,
-      prompt: generation.prompt ?? '',
-      provider,
-      modelId: provider === 'fal' ? modelIdForOverride : undefined,
-      modelMode: provider === 'fal' ? storedModelMode : 'image',
-      primaryImageId: primaryId,
-      referenceImageIds: referenceIds,
-      videoLastFrameImageId: generation.videoLastFrameImageId,
-      falOptions: provider === 'fal' ? overrideFalOptions : undefined,
-    });
-  }, [
-    displayedImages,
-    falImageModelId,
-    falModelMode,
-    falVideoDuration,
-    falVideoModelId,
-    images,
-    setApiProvider,
-    setError,
-    setFalAspectRatioSelection,
-    setFalCreativity,
-    setFalImageModelId,
-    setFalImageSizeSelection,
-    setFalModelMode,
-    setFalNoiseScale,
-    setFalNumImages,
-    setFalResolutionSelection,
-    setFalScaleFactor,
-    setFalVideoDuration,
-    setFalVideoModelId,
-    setPrompt,
-    setReferenceImageIds,
-    setToastMessage,
-  ]);
-
   const buildSnapshotBinary = useCallback(async (): Promise<SnapshotBinary> => {
     const imagesWithManifests: SnapshotBinary['images'] = await Promise.all(
       displayedImages.map(async (img) => {
@@ -2125,6 +1956,36 @@ export default function App() {
     if (isVideoMode) {
       const falJobId = crypto.randomUUID();
       const jobModelLabel = getFalModelLabel(falModelIdForRun);
+      const findNonOverlappingPlacement = (
+        width: number,
+        height: number,
+        startX: number,
+        startY: number,
+        spacing = 20,
+        maxAttempts = 24,
+      ): { x: number; y: number } => {
+        let x = startX;
+        let y = startY;
+        const overlapsExisting = (minX: number, minY: number, maxX: number, maxY: number) => {
+          return images.some(img => {
+            const bounds = getImageBounds(img);
+            return !(minX > bounds.maxX || maxX < bounds.minX || minY > bounds.maxY || maxY < bounds.minY);
+          });
+        };
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          const minX = x;
+          const minY = y;
+          const maxX = x + width;
+          const maxY = y + height;
+          if (!overlapsExisting(minX, minY, maxX, maxY)) {
+            return { x, y };
+          }
+          x += width + spacing;
+        }
+
+        return { x: startX, y: startY + height + spacing };
+      };
 
       const newJob: FalQueueJob = {
         id: falJobId,
@@ -2211,6 +2072,7 @@ export default function App() {
           const primaryBounds = getImageBounds(activePrimaryImage);
           const placementX = primaryBounds.maxX + 20;
           const placementY = primaryBounds.minY;
+          const placement = findNonOverlappingPlacement(displayWidth, displayHeight, placementX, placementY);
           const audioTrackInfo = (videoElement as unknown as { audioTracks?: { length?: number } }).audioTracks;
           const hasAudio = Boolean(
             (videoElement as unknown as { mozHasAudio?: boolean }).mozHasAudio ||
@@ -2221,8 +2083,8 @@ export default function App() {
             id: crypto.randomUUID(),
             element: videoElement,
             mediaType: 'video',
-            x: placementX,
-            y: placementY,
+            x: placement.x,
+            y: placement.y,
             width: displayWidth,
             height: displayHeight,
             rotation: 0,
@@ -2834,6 +2696,176 @@ export default function App() {
     setState,
     setToastMessage,
     tool,
+  ]);
+
+  const handleRerunGeneration = useCallback((imageId: string) => {
+    const targetImage = displayedImages.find(img => img.id === imageId);
+    const generation = targetImage?.metadata?.generation;
+
+    if (!targetImage || !generation) {
+      setToastMessage('No generation data stored for this media.');
+      setTimeout(() => setToastMessage(null), 2000);
+      return;
+    }
+
+    const provider = isApiProvider(generation.provider) ? generation.provider : null;
+    if (!provider || !AVAILABLE_PROVIDERS.includes(provider)) {
+      setError('Saved generation provider is not available. Please regenerate with the current settings.');
+      return;
+    }
+
+    const storedModelId = generation.modelId;
+    const storedModelMode: FalModelMode = isFalModelMode(generation.modelMode)
+      ? generation.modelMode
+      : isFalVideoModelId(storedModelId)
+        ? 'video'
+        : 'image';
+    const modelIdForOverride = provider === 'fal'
+      ? (storedModelMode === 'video'
+        ? (isFalVideoModelId(storedModelId) ? storedModelId : falVideoModelId)
+        : (isFalImageModelId(storedModelId) ? storedModelId : falImageModelId))
+      : undefined;
+
+    const falOptions = generation.falOptions ?? {};
+    const overrideFalOptions = provider === 'fal'
+      ? {
+        ...(isFalImageSizeSelectionValue((falOptions as { imageSizeSelection?: unknown }).imageSizeSelection)
+          ? { imageSizeSelection: falOptions.imageSizeSelection }
+          : {}),
+        ...(isFalAspectRatioSelectionValue((falOptions as { aspectRatioSelection?: unknown }).aspectRatioSelection)
+          ? { aspectRatioSelection: falOptions.aspectRatioSelection }
+          : {}),
+        ...(isFalResolutionSelectionValue((falOptions as { resolutionSelection?: unknown }).resolutionSelection)
+          ? { resolutionSelection: falOptions.resolutionSelection }
+          : {}),
+        ...(typeof falOptions.numImages === 'number' && Number.isFinite(falOptions.numImages)
+          ? { numImages: falOptions.numImages }
+          : {}),
+        ...(typeof falOptions.scaleFactor === 'number' && Number.isFinite(falOptions.scaleFactor)
+          ? { scaleFactor: falOptions.scaleFactor }
+          : {}),
+        ...(typeof falOptions.noiseScale === 'number' && Number.isFinite(falOptions.noiseScale)
+          ? { noiseScale: falOptions.noiseScale }
+          : {}),
+        ...(typeof falOptions.creativity === 'number' && Number.isFinite(falOptions.creativity)
+          ? { creativity: falOptions.creativity }
+          : {}),
+        ...(falOptions.videoDuration === '10' || falOptions.videoDuration === '6'
+          ? { videoDuration: falOptions.videoDuration }
+          : {}),
+      }
+      : undefined;
+
+    const primaryId = generation.kind === 'text_to_image' ? null : generation.primaryImageId ?? null;
+    if (generation.kind !== 'text_to_image' && !primaryId) {
+      setError('This media is missing its original source image and cannot be re-run.');
+      return;
+    }
+
+    if (primaryId) {
+      const sourceImage = images.find(img => img.id === primaryId);
+      if (!sourceImage) {
+        setError('The original source image is no longer on the canvas.');
+        return;
+      }
+      if (generation.kind === 'video' && sourceImage.mediaType !== 'image') {
+        setError('The saved starting frame for this video is not available.');
+        return;
+      }
+    }
+
+    if (generation.kind === 'video' && generation.videoLastFrameImageId) {
+      const lastFrame = images.find(img => img.id === generation.videoLastFrameImageId);
+      if (!lastFrame) {
+        setError('The saved ending frame for this video is missing.');
+        return;
+      }
+    }
+
+    const referenceIds = Array.isArray(generation.referenceImageIds) ? generation.referenceImageIds : [];
+    const missingReferenceIds = referenceIds.filter(id => !images.some(img => img.id === id));
+    if (missingReferenceIds.length > 0) {
+      setError('Some reference images from the original generation are missing from the canvas.');
+      return;
+    }
+
+    setPrompt(generation.prompt ?? '');
+    setApiProvider(provider);
+    setReferenceImageIds(referenceIds);
+
+    if (provider === 'fal') {
+      setFalModelMode(storedModelMode);
+      if (storedModelMode === 'video') {
+        if (isFalVideoModelId(modelIdForOverride)) {
+          setFalVideoModelId(modelIdForOverride);
+        }
+        if (overrideFalOptions?.videoDuration) {
+          setFalVideoDuration(overrideFalOptions.videoDuration);
+        }
+      } else if (isFalImageModelId(modelIdForOverride)) {
+        setFalImageModelId(modelIdForOverride);
+      }
+
+      if (overrideFalOptions?.imageSizeSelection) {
+        setFalImageSizeSelection(overrideFalOptions.imageSizeSelection);
+      }
+      if (overrideFalOptions?.aspectRatioSelection) {
+        setFalAspectRatioSelection(overrideFalOptions.aspectRatioSelection);
+      }
+      if (overrideFalOptions?.resolutionSelection) {
+        setFalResolutionSelection(overrideFalOptions.resolutionSelection);
+      }
+      if (overrideFalOptions?.numImages !== undefined) {
+        setFalNumImages(overrideFalOptions.numImages);
+      }
+      if (overrideFalOptions?.scaleFactor !== undefined) {
+        setFalScaleFactor(overrideFalOptions.scaleFactor);
+      }
+      if (overrideFalOptions?.noiseScale !== undefined) {
+        setFalNoiseScale(overrideFalOptions.noiseScale);
+      }
+      if (overrideFalOptions?.creativity !== undefined) {
+        setFalCreativity(overrideFalOptions.creativity);
+      }
+    } else if (falModelMode === 'video') {
+      setFalModelMode('image');
+    }
+
+    handleGenerate({
+      kind: generation.kind,
+      prompt: generation.prompt ?? '',
+      provider,
+      modelId: provider === 'fal' ? modelIdForOverride : undefined,
+      modelMode: provider === 'fal' ? storedModelMode : 'image',
+      primaryImageId: primaryId,
+      referenceImageIds: referenceIds,
+      videoLastFrameImageId: generation.videoLastFrameImageId,
+      falOptions: provider === 'fal' ? overrideFalOptions : undefined,
+    });
+  }, [
+    displayedImages,
+    handleGenerate,
+    falImageModelId,
+    falModelMode,
+    falVideoDuration,
+    falVideoModelId,
+    images,
+    setApiProvider,
+    setError,
+    setFalAspectRatioSelection,
+    setFalCreativity,
+    setFalImageModelId,
+    setFalImageSizeSelection,
+    setFalModelMode,
+    setFalNoiseScale,
+    setFalNumImages,
+    setFalResolutionSelection,
+    setFalScaleFactor,
+    setFalVideoDuration,
+    setFalVideoModelId,
+    setPrompt,
+    setReferenceImageIds,
+    setToastMessage,
   ]);
 
   const handleBackgroundRemoval = useCallback(async () => {
