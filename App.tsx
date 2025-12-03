@@ -25,7 +25,6 @@ import {
   generateImageToVideo as generateFalImageToVideo,
   removeBackground as removeFalBackground,
   upscaleCrystalImage as upscaleFalCrystalImage,
-  upscaleSimaImage as upscaleFalSimaImage,
   upscaleSeedvrImage as upscaleFalSeedvrImage,
   type FalQueueUpdate,
 } from './services/falService';
@@ -41,8 +40,8 @@ const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview' as const;
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
+const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1' as const;
 const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
-const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler' as const;
 const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
 const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/standard/image-to-video' as const;
 const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video' as const;
@@ -51,9 +50,9 @@ const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 const FAL_IMAGE_MODEL_OPTIONS = [
   { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
+  { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
   { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
-  { value: SIMA_UPSCALER_MODEL_ID, label: 'Sima Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
@@ -94,10 +93,6 @@ const FAL_CRYSTAL_CREATIVITY_OPTIONS = Array.from({ length: 21 }, (_, index) => 
   const formatted = value.toFixed(1);
   return { value: formatted, label: formatted } as const;
 });
-const FAL_SIMA_SCALE_FACTOR_OPTIONS = Array.from({ length: 4 }, (_, index) => {
-  const factor = index + 1;
-  return { value: `${factor}`, label: `${factor}x` } as const;
-});
 const FAL_SEEDVR_NOISE_SCALE_OPTIONS = Array.from({ length: 10 }, (_, index) => {
   const value = (index + 1) / 10;
   return { value: value.toFixed(1), label: value.toFixed(1) } as const;
@@ -107,6 +102,11 @@ const FAL_RESOLUTION_OPTIONS: ReadonlyArray<{ value: FalResolutionSelectionValue
   { value: '1K', label: '1K (default)' },
   { value: '2K', label: '2K' },
   { value: '4K', label: '4K' },
+] as const;
+
+const FAL_KLING_RESOLUTION_OPTIONS: ReadonlyArray<{ value: FalResolutionSelectionValue; label: string }> = [
+  { value: '1K', label: '1K (default)' },
+  { value: '2K', label: '2K' },
 ] as const;
 
 const FAL_GEMINI_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
@@ -136,9 +136,23 @@ const FAL_REVE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelect
   { value: '1:1', label: '1:1' },
 ] as const;
 
+const FAL_KLING_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+  { value: 'placeholder', label: 'Aspect Ratio' },
+  { value: 'default', label: 'Auto (default)' },
+  { value: '21:9', label: '21:9' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+  { value: '1:1', label: '1:1' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:4', label: '3:4' },
+  { value: '3:2', label: '3:2' },
+  { value: '2:3', label: '2:3' },
+] as const;
+
 const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...FAL_GEMINI_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
+  ...FAL_KLING_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
 
 const MIN_STROKE_SIZE = 1;
@@ -269,6 +283,7 @@ const MAX_HISTORY_SIZE = 30;
 const DEFAULT_MAX_REFERENCE_IMAGES = 13;
 const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId, number>> = {
   [SEEDREAM_MODEL_ID]: 7, // 7 references + 1 primary = 8 total
+  [KLING_IMAGE_MODEL_ID]: 10, // Kling O1 allows up to 10 reference images
   [HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID]: 0,
   [HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID]: 0,
 };
@@ -603,7 +618,7 @@ const writeSnapshotBinary = async (binary: SnapshotBinary, writable: SnapshotWri
 const normalizeSnapshotImageMetadata = (
   rawMetadata: CanvasImage['metadata'] | undefined,
 ): CanvasImage['metadata'] | undefined => {
-  const normalizeGenerationInputs = (rawGeneration: CanvasImage['metadata'] extends { generation?: infer G } ? G : unknown): GenerationInputs | undefined => {
+  const normalizeGenerationInputs = (rawGeneration: unknown): GenerationInputs | undefined => {
     if (!rawGeneration || typeof rawGeneration !== 'object') {
       return undefined;
     }
@@ -954,6 +969,12 @@ export default function App() {
     }
   }, [apiProvider, falModelMode]);
 
+  useEffect(() => {
+    if (falModelId === KLING_IMAGE_MODEL_ID && falResolutionSelection === '4K') {
+      setFalResolutionSelection('2K');
+    }
+  }, [falModelId, falResolutionSelection]);
+
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
     return images.find(img => img.id === primaryImageId) || null;
@@ -995,8 +1016,9 @@ export default function App() {
     setFalAspectRatioSelection(value as FalAspectRatioSelectionValue);
   }, []);
   const handleFalResolutionChange = useCallback((value: string) => {
-    setFalResolutionSelection(value as FalResolutionSelectionValue);
-  }, []);
+    const nextValue = value === '4K' && falModelId === KLING_IMAGE_MODEL_ID ? '2K' : value;
+    setFalResolutionSelection(nextValue as FalResolutionSelectionValue);
+  }, [falModelId]);
 
   const handleFalNumImagesChange = useCallback((value: number) => {
     if (!Number.isFinite(value)) {
@@ -1013,10 +1035,9 @@ export default function App() {
       setFalScaleFactor(2);
       return;
     }
-    const maxScale = falModelId === SIMA_UPSCALER_MODEL_ID ? 4 : 10;
-    const clamped = Math.min(maxScale, Math.max(1, Math.round(parsed)));
+    const clamped = Math.min(10, Math.max(1, Math.round(parsed)));
     setFalScaleFactor(clamped);
-  }, [falModelId]);
+  }, []);
 
   const handleFalNoiseScaleChange = useCallback((value: string) => {
     const parsed = Number(value);
@@ -1042,9 +1063,8 @@ export default function App() {
 
   useEffect(() => {
     setFalScaleFactor(prev => {
-      const maxScale = falModelId === SIMA_UPSCALER_MODEL_ID ? 4 : 10;
       const normalizedPrev = Number.isFinite(prev) ? Math.round(prev) : 2;
-      const clamped = Math.min(maxScale, Math.max(1, normalizedPrev));
+      const clamped = Math.min(10, Math.max(1, normalizedPrev));
       return clamped === prev ? prev : clamped;
     });
   }, [falModelId]);
@@ -1067,9 +1087,12 @@ export default function App() {
     if (falModelMode === 'video') {
       return;
     }
-    const validOptions = (falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID
+    const aspectRatioOptions = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID
       ? FAL_REVE_ASPECT_RATIO_OPTIONS
-      : FAL_GEMINI_ASPECT_RATIO_OPTIONS).map(option => option.value);
+      : falModelId === KLING_IMAGE_MODEL_ID
+        ? FAL_KLING_ASPECT_RATIO_OPTIONS
+        : FAL_GEMINI_ASPECT_RATIO_OPTIONS;
+    const validOptions = aspectRatioOptions.map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
       setFalAspectRatioSelection('default');
     }
@@ -1569,8 +1592,7 @@ export default function App() {
           setFalNumImages(Math.min(4, Math.max(1, Math.floor(meta.falNumImages))));
         }
         if (typeof meta.falScaleFactor === 'number') {
-          const maxScale = meta.falModelId === SIMA_UPSCALER_MODEL_ID ? 4 : 10;
-          setFalScaleFactor(Math.min(maxScale, Math.max(1, Math.round(meta.falScaleFactor))));
+          setFalScaleFactor(Math.min(10, Math.max(1, Math.round(meta.falScaleFactor))));
         }
         if (typeof meta.falNoiseScale === 'number') {
           const normalizedNoise = Number.isFinite(meta.falNoiseScale) ? meta.falNoiseScale : 0.1;
@@ -1930,6 +1952,14 @@ export default function App() {
       ? images.find(img => img.id === primaryImageIdForRun) || null
       : null;
     const activePrimaryImage = isImageCanvasMedia(primaryImageForRun) ? primaryImageForRun : null;
+
+    // Debug logging for generation source tracking
+    // if (generationOverride) {
+    //   console.log('[Generate] Using override - primaryImageId:', generationOverride.primaryImageId);
+    //   console.log('[Generate] Resolved primaryImageIdForRun:', primaryImageIdForRun);
+    //   console.log('[Generate] Found primaryImageForRun:', primaryImageForRun?.id);
+    //   console.log('[Generate] activePrimaryImage:', activePrimaryImage?.id);
+    // }
     const referenceImageIdsForRun = generationOverride ? generationOverride.referenceImageIds ?? [] : referenceImageIds;
     const videoLastFrameImageId = generationOverride?.videoLastFrameImageId;
 
@@ -1938,10 +1968,12 @@ export default function App() {
     const isSeedreamModel = !isVideoMode && falModelIdForRun === SEEDREAM_MODEL_ID;
     const isGeminiModel = !isVideoMode && falModelIdForRun === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
     const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
+    const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
+    const normalizedFalResolutionSelectionForRun =
+      isKlingModel && falResolutionSelectionForRun === '4K' ? '2K' : falResolutionSelectionForRun;
     const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
-    const isSimaUpscaleModel = !isVideoMode && falModelIdForRun === SIMA_UPSCALER_MODEL_ID;
     const isSeedvrUpscaleModel = !isVideoMode && falModelIdForRun === SEEDVR_UPSCALER_MODEL_ID;
-    const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel || isSeedvrUpscaleModel;
+    const isUpscaleModel = isCrystalUpscaleModel || isSeedvrUpscaleModel;
     const isHailuoStandardVideoModel = isVideoMode && falModelIdForRun === HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
     const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimaryImage;
     const requiresPrompt = !(usingFal && isUpscaleModel);
@@ -2111,6 +2143,10 @@ export default function App() {
                 modelLabel: jobModelLabel,
                 modelMode: falModelModeForRun,
                 primaryImageId: primaryImageIdForRun ?? undefined,
+                // Track original source through chains (e.g., if source was itself a generated edit)
+                ...(activePrimaryImage?.metadata?.generation?.originalSourceImageId
+                  ? { originalSourceImageId: activePrimaryImage.metadata.generation.originalSourceImageId }
+                  : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
                 falOptions: { videoDuration: falVideoDurationForRun },
               },
@@ -2161,7 +2197,7 @@ export default function App() {
     }
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : GOOGLE_MODEL_LABEL;
-    const shouldValidateFalOptions = usingFal && (isSeedreamModel || isGeminiModel || isReveModel);
+    const shouldValidateFalOptions = usingFal && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
     const isNumImagesInvalid =
       !Number.isFinite(falNumImagesForRun) ||
       falNumImagesForRun < 1 ||
@@ -2286,7 +2322,31 @@ export default function App() {
             ? SEEDREAM_TEXT_TO_IMAGE_MODEL_ID
             : isReveModel
               ? REVE_TEXT_TO_IMAGE_MODEL_ID
-              : GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+              : isKlingModel
+                ? KLING_IMAGE_MODEL_ID
+                : GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+
+          let klingReferenceImages: HTMLImageElement[] | undefined;
+          if (isKlingModel) {
+            const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
+            const referenceCanvasImages = referenceImageIdsForRun
+              .map(id => images.find(img => img.id === id))
+              .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
+              .slice(0, maxReferenceImages);
+
+            const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
+              if ((img.rotation ?? 0) === 0) {
+                return img.element;
+              }
+              const rasterized = await rasterizeImages([img]);
+              return rasterized.element;
+            };
+
+            if (referenceCanvasImages.length > 0) {
+              klingReferenceImages = await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
+              referenceIdsUsed = referenceCanvasImages.map(img => img.id);
+            }
+          }
 
           const falResult = await generateFalImage(trimmedPrompt, {
             onQueueUpdate: (update) => {
@@ -2298,9 +2358,11 @@ export default function App() {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isGeminiModel || isReveModel) ? falAspectRatioSelectionForRun : 'default',
+            aspectRatio: (isGeminiModel || isReveModel || isKlingModel) ? falAspectRatioSelectionForRun : 'default',
             ...(isGeminiModel ? { resolution: falResolutionSelectionForRun } : {}),
+            ...(isKlingModel ? { resolution: normalizedFalResolutionSelectionForRun } : {}),
             ...(isSeedreamModel ? { imageSize: falImageSizeSelectionForRun } : {}),
+            ...(klingReferenceImages ? { referenceImages: klingReferenceImages } : {}),
             numImages: normalizedFalNumImages,
           });
 
@@ -2342,68 +2404,38 @@ export default function App() {
             y: primaryBounds.minY,
           };
 
-          if (isSimaUpscaleModel && falScaleFactorForRun === 1) {
-            const dataUrl = await fileToDataUrl(activePrimaryImage.file);
-            const base64 = dataUrl.split(',')[1];
-            if (!base64) {
-              throw new Error('Failed to duplicate image for 1x upscale.');
+          const queueOptions = {
+            onQueueUpdate: (update: FalQueueUpdate) => {
+              setFalJobs(prev => prev.map(job => {
+                if (job.id !== falJobId) {
+                  return job;
+                }
+                return applyFalQueueUpdateToJob(job, update);
+              }));
+            },
+          };
+
+          const falResult = isSeedvrUpscaleModel
+            ? await upscaleFalSeedvrImage(activePrimaryImage.element, falScaleFactorForRun, falNoiseScaleForRun, queueOptions)
+            : await upscaleFalCrystalImage(activePrimaryImage.element, falScaleFactorForRun, falCreativityForRun, queueOptions);
+
+          generationResult = falResult;
+
+          setFalJobs(prev => prev.map(job => {
+            if (job.id !== falJobId) {
+              return job;
             }
-            generationResult = {
-              imageBase64: base64,
-              imagesBase64: [base64],
-              text: '',
-              requestId: undefined,
+            if (job.status === 'FAILED') {
+              return job;
+            }
+            return {
+              ...job,
+              status: 'COMPLETED',
+              requestId: falResult.requestId || job.requestId,
+              description: falResult.text,
+              updatedAt: Date.now(),
             };
-
-            setFalJobs(prev => prev.map(job => {
-              if (job.id !== falJobId) {
-                return job;
-              }
-              if (job.status === 'FAILED') {
-                return job;
-              }
-              return {
-                ...job,
-                status: 'COMPLETED',
-                updatedAt: Date.now(),
-              };
-            }));
-          } else {
-            const queueOptions = {
-              onQueueUpdate: (update: FalQueueUpdate) => {
-                setFalJobs(prev => prev.map(job => {
-                  if (job.id !== falJobId) {
-                    return job;
-                  }
-                  return applyFalQueueUpdateToJob(job, update);
-                }));
-              },
-            };
-
-            const falResult = isSeedvrUpscaleModel
-              ? await upscaleFalSeedvrImage(activePrimaryImage.element, falScaleFactorForRun, falNoiseScaleForRun, queueOptions)
-              : isCrystalUpscaleModel
-                ? await upscaleFalCrystalImage(activePrimaryImage.element, falScaleFactorForRun, falCreativityForRun, queueOptions)
-                : await upscaleFalSimaImage(activePrimaryImage.element, falScaleFactorForRun, queueOptions);
-
-            generationResult = falResult;
-
-            setFalJobs(prev => prev.map(job => {
-              if (job.id !== falJobId) {
-                return job;
-              }
-              if (job.status === 'FAILED') {
-                return job;
-              }
-              return {
-                ...job,
-                status: 'COMPLETED',
-                requestId: falResult.requestId || job.requestId,
-                description: falResult.text,
-                updatedAt: Date.now(),
-              };
-            }));
-          }
+          }));
         } else {
           const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
           const referenceCanvasImages = referenceImageIdsForRun
@@ -2530,10 +2562,10 @@ export default function App() {
                     : falImageSizeSelectionForRun,
                 }
                 : {}),
-              ...(isGeminiModel
+              ...(isGeminiModel || isKlingModel
                 ? {
                   aspectRatio: falAspectRatioSelectionForRun,
-                  resolution: falResolutionSelectionForRun,
+                  resolution: isKlingModel ? normalizedFalResolutionSelectionForRun : falResolutionSelectionForRun,
                 }
                 : {}),
               numImages: normalizedFalNumImages,
@@ -2568,13 +2600,23 @@ export default function App() {
       const falOptionsForGeneration = usingFal
         ? {
           ...(isSeedreamModel ? { imageSizeSelection: falImageSizeSelectionForRun } : {}),
-          ...(isGeminiModel || isReveModel ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
-          ...(isGeminiModel ? { resolutionSelection: falResolutionSelectionForRun } : {}),
+          ...(isGeminiModel || isReveModel || isKlingModel ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
+          ...(isGeminiModel || isKlingModel
+            ? { resolutionSelection: isKlingModel ? normalizedFalResolutionSelectionForRun : falResolutionSelectionForRun }
+            : {}),
           numImages: normalizedFalNumImages,
           ...(isUpscaleModel ? { scaleFactor: falScaleFactorForRun } : {}),
           ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
           ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
         }
+        : undefined;
+
+      // Track the original source image through chains of edits
+      // If the source image was itself an edit, use its originalSourceImageId
+      // Otherwise, the source image is the original
+      const sourceOriginalId = activePrimaryImage?.metadata?.generation?.originalSourceImageId;
+      const originalSourceImageId = activePrimaryImage && !isTextToImage
+        ? (sourceOriginalId ?? activePrimaryImage.id)
         : undefined;
 
       const generationDetails: GenerationInputs = {
@@ -2584,6 +2626,7 @@ export default function App() {
         modelLabel: generationModelLabel,
         ...(usingFal ? { modelId: falModelIdForRun, modelMode: falModelModeForRun } : {}),
         ...(activePrimaryImage && !isTextToImage ? { primaryImageId: activePrimaryImage.id } : {}),
+        ...(originalSourceImageId ? { originalSourceImageId } : {}),
         ...(referenceIdsUsed.length > 0 ? { referenceImageIds: referenceIdsUsed } : {}),
         ...(falOptionsForGeneration ? { falOptions: falOptionsForGeneration } : {}),
       };
@@ -2716,6 +2759,12 @@ export default function App() {
     const targetImage = displayedImages.find(img => img.id === imageId);
     const generation = targetImage?.metadata?.generation;
 
+    // Debug logging for re-run troubleshooting
+    // console.log('[Re-run] Target image ID:', imageId);
+    // console.log('[Re-run] Generation metadata:', generation);
+    // console.log('[Re-run] Primary image ID (source):', generation?.primaryImageId);
+    // console.log('[Re-run] Original source ID:', generation?.originalSourceImageId);
+
     if (!targetImage || !generation) {
       setToastMessage('No generation data stored for this media.');
       setTimeout(() => setToastMessage(null), 2000);
@@ -2771,6 +2820,8 @@ export default function App() {
       : undefined;
 
     const primaryId = generation.kind === 'text_to_image' ? null : generation.primaryImageId ?? null;
+    // console.log('[Re-run] Resolved primaryId for generation:', primaryId);
+
     if (generation.kind !== 'text_to_image' && !primaryId) {
       setError('This media is missing its original source image and cannot be re-run.');
       return;
@@ -2778,6 +2829,7 @@ export default function App() {
 
     if (primaryId) {
       const sourceImage = images.find(img => img.id === primaryId);
+      // console.log('[Re-run] Found source image:', sourceImage?.id, 'mediaType:', sourceImage?.mediaType);
       if (!sourceImage) {
         setError('The original source image is no longer on the canvas.');
         return;
@@ -3201,8 +3253,8 @@ export default function App() {
       const isSeedreamModel = !isVideoMode && falModelId === SEEDREAM_MODEL_ID;
       const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
       const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-      const shouldValidateFalOptions = apiProvider === 'fal' && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel)
-        ;
+      const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
+      const shouldValidateFalOptions = apiProvider === 'fal' && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
       const isNumImagesInvalid =
         !Number.isFinite(falNumImages) ||
         falNumImages < 1 ||
@@ -3419,16 +3471,14 @@ export default function App() {
       return;
     }
 
-    if (!imageId) {
-      if (!multi) {
-        setSelectedImageIds([]);
-        setSelectedNoteIds([]);
-        setReferenceImageIds([]);
+    if (reference) {
+      if (primaryImageId && imageId === primaryImageId) {
+        return;
       }
-      return;
-    }
-
-    if (reference && primaryImageId && imageId !== primaryImageId) {
+      if (!imageId) {
+        setReferenceImageIds([]);
+        return;
+      }
       const maxReferenceImages = getMaxReferenceImages(falModelId);
       setReferenceImageIds(prevIds => {
         if (prevIds.includes(imageId)) {
@@ -3440,6 +3490,15 @@ export default function App() {
         showReferenceLimitToast(maxReferenceImages);
         return prevIds;
       });
+      return;
+    }
+
+    if (!imageId) {
+      if (!multi) {
+        setSelectedImageIds([]);
+        setSelectedNoteIds([]);
+        setReferenceImageIds([]);
+      }
       return;
     }
 
@@ -3524,11 +3583,11 @@ export default function App() {
   const isSeedreamModel = !isVideoMode && falModelId === SEEDREAM_MODEL_ID;
   const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
   const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+  const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
   const isCrystalUpscaleModel = !isVideoMode && falModelId === CRYSTAL_UPSCALER_MODEL_ID;
-  const isSimaUpscaleModel = !isVideoMode && falModelId === SIMA_UPSCALER_MODEL_ID;
   const isSeedvrUpscaleModel = !isVideoMode && falModelId === SEEDVR_UPSCALER_MODEL_ID;
-  const isUpscaleModel = isCrystalUpscaleModel || isSimaUpscaleModel || isSeedvrUpscaleModel;
-  const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel);
+  const isUpscaleModel = isCrystalUpscaleModel || isSeedvrUpscaleModel;
+  const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
   const isNumImagesInvalid =
     !Number.isFinite(falNumImages) ||
     falNumImages < 1 ||
@@ -3562,10 +3621,10 @@ export default function App() {
   const disablePromptInput = usingFal && isUpscaleModel;
 
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel;
-  const supportsAspectRatioControl = isGeminiModel || isReveModel;
+  const supportsAspectRatioControl = isGeminiModel || isReveModel || isKlingModel;
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || isTextToImage);
-  const shouldShowResolutionControl = apiProvider === 'fal' && isGeminiModel;
-  const shouldShowNumImagesControl = apiProvider === 'fal' && (isSeedreamModel || isGeminiModel || isReveModel);
+  const shouldShowResolutionControl = apiProvider === 'fal' && (isGeminiModel || isKlingModel);
+  const shouldShowNumImagesControl = apiProvider === 'fal' && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
 
   const promptBarModelControlsList: PromptBarModelControl[] = [];
 
@@ -3584,11 +3643,10 @@ export default function App() {
   }
 
   if (!isVideoMode && usingFal && isUpscaleModel) {
-    const scaleOptions = isSimaUpscaleModel ? FAL_SIMA_SCALE_FACTOR_OPTIONS : FAL_CRYSTAL_SCALE_FACTOR_OPTIONS;
     promptBarModelControlsList.push({
       id: 'fal-scale-factor-select',
       ariaLabel: `Select ${getFalModelLabel(falModelId)} scale factor`,
-      options: scaleOptions.map(option => ({ value: option.value, label: option.label })),
+      options: FAL_CRYSTAL_SCALE_FACTOR_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: `${falScaleFactor}`,
       onChange: handleFalScaleFactorChange,
       disabled: isLoading,
@@ -3629,10 +3687,14 @@ export default function App() {
   }
 
   if (shouldShowAspectRatioControl) {
-    const aspectRatioOptions = isReveModel ? FAL_REVE_ASPECT_RATIO_OPTIONS : FAL_GEMINI_ASPECT_RATIO_OPTIONS;
+    const aspectRatioOptions = isReveModel
+      ? FAL_REVE_ASPECT_RATIO_OPTIONS
+      : isGeminiModel
+        ? FAL_GEMINI_ASPECT_RATIO_OPTIONS
+        : FAL_KLING_ASPECT_RATIO_OPTIONS;
     promptBarModelControlsList.push({
       id: 'fal-aspect-ratio-select',
-      ariaLabel: isReveModel ? 'Select Reve Image aspect ratio' : 'Select Gemini 3 Pro Image Preview aspect ratio',
+      ariaLabel: `Select ${getFalModelLabel(falModelId)} aspect ratio`,
       options: aspectRatioOptions.map(option => ({ value: option.value, label: option.label })),
       value: falAspectRatioSelection,
       onChange: handleFalAspectRatioChange,
@@ -3641,11 +3703,13 @@ export default function App() {
   }
 
   if (shouldShowResolutionControl) {
+    const resolutionOptions = isKlingModel ? FAL_KLING_RESOLUTION_OPTIONS : FAL_RESOLUTION_OPTIONS;
+    const resolutionValue = isKlingModel && falResolutionSelection === '4K' ? '2K' : falResolutionSelection;
     promptBarModelControlsList.push({
       id: 'fal-resolution-select',
-      ariaLabel: 'Select NanoBanana Pro resolution',
-      options: FAL_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: falResolutionSelection,
+      ariaLabel: `Select ${getFalModelLabel(falModelId)} resolution`,
+      options: resolutionOptions.map(option => ({ value: option.value, label: option.label })),
+      value: resolutionValue,
       onChange: handleFalResolutionChange,
       disabled: isLoading,
     });
@@ -3681,13 +3745,13 @@ export default function App() {
         <button
           type="button"
           onClick={toggleFileMenu}
-        aria-haspopup="menu"
-        aria-expanded={isFileMenuOpen}
-        aria-label="Snapshot menu"
-        className="p-2 text-white bg-transparent hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-md transition-colors"
-      >
-        <HamburgerIcon className="w-6 h-6" />
-      </button>
+          aria-haspopup="menu"
+          aria-expanded={isFileMenuOpen}
+          aria-label="Snapshot menu"
+          className="p-2 text-white bg-transparent hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-md transition-colors"
+        >
+          <HamburgerIcon className="w-6 h-6" />
+        </button>
         {isFileMenuOpen && (
           <div
             role="menu"

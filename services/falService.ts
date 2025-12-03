@@ -56,6 +56,7 @@ interface GenerateImageOptions {
   imageSize?: FalImageSizeOption;
   seed?: number;
   resolution?: FalResolutionOption;
+  referenceImages?: HTMLImageElement[];
 }
 
 interface UpscaleImageOptions {
@@ -88,8 +89,8 @@ const FAL_MODEL_ID = normalizeModelId(process.env.FAL_MODEL_ID) || GEMINI_IMAGE_
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit';
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image';
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
+const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1';
 const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler';
-const SIMA_UPSCALER_MODEL_ID = 'simalabs/sima-upscaler';
 const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image';
 export const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/standard/image-to-video';
 export const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video';
@@ -228,6 +229,21 @@ const canvasToBlob = (canvas: HTMLCanvasElement, mimeType: string = 'image/png')
 const uploadCanvasToFal = async (canvas: HTMLCanvasElement): Promise<string> => {
   const blob = await canvasToBlob(canvas);
   return fal.storage.upload(blob);
+};
+
+const createTransparentPlaceholderUrl = async (): Promise<string> => {
+  const canvas = document.createElement('canvas');
+  // Kling O1 enforces a minimum 300px dimension for each reference image,
+  // so we generate a sufficiently large transparent placeholder.
+  const size = 512;
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Unable to create placeholder image.');
+  }
+  ctx.clearRect(0, 0, size, size);
+  return uploadCanvasToFal(canvas);
 };
 
 const uploadImageElementToFal = async (image: HTMLImageElement): Promise<string> => {
@@ -424,6 +440,8 @@ export const generateImageEdit = async ({
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
   const numImagesOption = options.numImages;
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
+  const isKlingModel = modelId === KLING_IMAGE_MODEL_ID;
+  const normalizedResolutionOption: FalResolutionOption = isKlingModel && resolutionOption === '4K' ? '2K' : resolutionOption;
 
   const body: {
     prompt: string;
@@ -455,11 +473,11 @@ export const generateImageEdit = async ({
     } else {
       body.image_size = imageSizeOption;
     }
-  } else if (modelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID) {
+  } else if (modelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID || isKlingModel) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }
-    body.resolution = resolutionOption;
+    body.resolution = isKlingModel ? normalizedResolutionOption : resolutionOption;
   }
 
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
@@ -637,96 +655,6 @@ export const upscaleCrystalImage = async (
   };
 };
 
-export const upscaleSimaImage = async (
-  image: HTMLImageElement,
-  scaleFactor: number,
-  options: UpscaleImageOptions = {},
-): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => {
-  ensureFalClientConfigured();
-
-  const imageUrl = await uploadImageElementToFal(image);
-  const sanitizedScale = Number.isFinite(scaleFactor) ? Math.round(scaleFactor) : 4;
-  const normalizedScale = Math.min(4, Math.max(2, sanitizedScale));
-
-  let latestRequestId: string | undefined;
-
-  logFalEvent('outbound', SIMA_UPSCALER_MODEL_ID, 'Outbound request (fal.subscribe)', {
-    input: {
-      image_url: imageUrl,
-      scale: normalizedScale,
-    },
-  });
-
-  let result: Awaited<ReturnType<typeof fal.subscribe>>;
-  try {
-    result = await fal.subscribe(SIMA_UPSCALER_MODEL_ID, {
-      input: {
-        image_url: imageUrl,
-        scale: normalizedScale,
-      },
-      logs: true,
-      onQueueUpdate: update => {
-        const queueUpdate = update as FalQueueUpdate;
-        if (queueUpdate.requestId) {
-          latestRequestId = queueUpdate.requestId;
-        }
-        logFalEvent('inbound', SIMA_UPSCALER_MODEL_ID, 'Queue update', {
-          status: queueUpdate.status,
-          position: queueUpdate.position,
-          eta: queueUpdate.eta,
-          requestId: queueUpdate.requestId || latestRequestId,
-          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
-        });
-        options.onQueueUpdate?.({
-          ...queueUpdate,
-          requestId: queueUpdate.requestId || latestRequestId || '',
-        });
-      },
-    });
-  } catch (error) {
-    logFalEvent('error', SIMA_UPSCALER_MODEL_ID, 'Request failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  }
-
-  logFalEvent('inbound', SIMA_UPSCALER_MODEL_ID, 'Result received', {
-    requestId: result?.requestId || latestRequestId,
-    data: (result?.data as Record<string, unknown>) ?? undefined,
-  });
-
-  const data = result?.data as { image?: string | { url?: string } } | undefined;
-  const imageEntry = data?.image;
-  if (!imageEntry) {
-    throw new Error('Fal.ai Sima Upscaler did not return an image.');
-  }
-
-  const upscaledUrl = typeof imageEntry === 'string'
-    ? imageEntry
-    : typeof imageEntry.url === 'string'
-      ? imageEntry.url
-      : null;
-
-  if (!upscaledUrl) {
-    throw new Error('Unexpected image reference returned by Fal.ai Sima Upscaler.');
-  }
-
-  const inlineData = await extractInlineData(upscaledUrl);
-  const base64 = inlineData.split(',')[1];
-  if (!base64) {
-    throw new Error('Failed to extract image data from Fal.ai Sima Upscaler response.');
-  }
-
-  const requestId = result?.requestId || latestRequestId;
-
-  return {
-    imageBase64: base64,
-    imagesBase64: [base64],
-    text: '',
-    requestId,
-  };
-};
-
 export const upscaleSeedvrImage = async (
   image: HTMLImageElement,
   scaleFactor: number,
@@ -837,11 +765,17 @@ export const generateImage = async (
 
   const modelId = normalizeModelId(options.modelId) || GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
   const isSeedreamTextToImage = modelId === SEEDREAM_TEXT_TO_IMAGE_MODEL_ID;
-  const supportsAspectRatio = modelId === GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+  const isGeminiTextToImage = modelId === GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+  const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
+  const supportsAspectRatio = isGeminiTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
+  const supportsResolution = isGeminiTextToImage || isKlingTextToImage;
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
   const numImagesOption = options.numImages;
   const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
+  const normalizedResolutionOption: FalResolutionOption = isKlingTextToImage && resolutionOption === '4K' ? '2K' : resolutionOption;
+  const referenceImages = Array.isArray(options.referenceImages) ? options.referenceImages : [];
+  const shouldSendReferenceImages = isKlingTextToImage;
 
   const body: {
     prompt: string;
@@ -852,6 +786,7 @@ export const generateImage = async (
     image_size?: { width: number; height: number } | string;
     seed?: number;
     resolution?: FalResolutionOption;
+    image_urls?: string[];
   } = {
     prompt,
     sync_mode: !isSeedreamTextToImage,
@@ -874,13 +809,26 @@ export const generateImage = async (
     if (imageSizeOption !== 'default') {
       body.image_size = imageSizeOption;
     }
-  } else if (modelId === GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID) {
+  } else if (isGeminiTextToImage || isKlingTextToImage) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }
-    body.resolution = resolutionOption;
+    if (supportsResolution) {
+      body.resolution = isKlingTextToImage ? normalizedResolutionOption : resolutionOption;
+    }
   } else if (supportsAspectRatio && aspectRatioOption !== 'default') {
     body.aspect_ratio = aspectRatioOption;
+  }
+
+  if (shouldSendReferenceImages) {
+    let referenceUrls: string[] = [];
+    if (referenceImages.length > 0) {
+      referenceUrls = await collectReferenceUploadUrls(referenceImages);
+    }
+    if (referenceUrls.length === 0) {
+      referenceUrls = [await createTransparentPlaceholderUrl()];
+    }
+    body.image_urls = referenceUrls;
   }
 
   let latestRequestId: string | undefined;

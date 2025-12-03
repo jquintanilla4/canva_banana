@@ -93,6 +93,7 @@ export interface GenerationInputs {
   modelLabel?: string;
   modelMode?: 'image' | 'video';
   primaryImageId?: string;
+  originalSourceImageId?: string;
   referenceImageIds?: string[];
   videoLastFrameImageId?: string;
   falOptions?: GenerationFalOptions;
