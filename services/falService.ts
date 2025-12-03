@@ -88,6 +88,15 @@ const normalizeModelId = (modelId: string | undefined): string | undefined => {
 const FAL_MODEL_ID = normalizeModelId(process.env.FAL_MODEL_ID) || GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit';
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image';
+const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit';
+const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image';
+const SEEDREAM_EDIT_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
+type SeedreamEditModelId = typeof SEEDREAM_EDIT_MODEL_IDS[number];
+const isSeedreamEditModelId = (modelId: string | undefined): modelId is SeedreamEditModelId =>
+  !!modelId && (SEEDREAM_EDIT_MODEL_IDS as readonly string[]).includes(modelId);
+const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID] as const;
+const isSeedreamTextToImageModelId = (modelId: string | undefined): boolean =>
+  !!modelId && (SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(modelId);
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
 const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1';
 const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler';
@@ -436,6 +445,7 @@ export const generateImageEdit = async ({
   }
 
   const modelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
+  const isSeedreamModel = isSeedreamEditModelId(modelId);
   const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
   const numImagesOption = options.numImages;
@@ -455,16 +465,16 @@ export const generateImageEdit = async ({
   } = {
     prompt,
     image_urls: imageUrls,
-    sync_mode: modelId !== SEEDREAM_MODEL_ID,
+    sync_mode: !isSeedreamModel,
   };
 
-  if (modelId !== SEEDREAM_MODEL_ID) {
+  if (!isSeedreamModel) {
     body.output_format = 'png';
   }
 
   let latestRequestId: string | undefined;
 
-  if (modelId === SEEDREAM_MODEL_ID) {
+  if (isSeedreamModel) {
     if (imageSizeOption === 'default') {
       body.image_size = {
         width: imageDimensions.width,
@@ -764,7 +774,7 @@ export const generateImage = async (
   ensureFalClientConfigured();
 
   const modelId = normalizeModelId(options.modelId) || GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
-  const isSeedreamTextToImage = modelId === SEEDREAM_TEXT_TO_IMAGE_MODEL_ID;
+  const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
   const isGeminiTextToImage = modelId === GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
   const supportsAspectRatio = isGeminiTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;

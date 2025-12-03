@@ -37,8 +37,10 @@ import { ZoomToFitIcon, HamburgerIcon, MetadataIcon } from './components/Icons';
 
 const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit' as const;
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
+const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
 const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview' as const;
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
+const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
 const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1' as const;
 const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
@@ -50,6 +52,7 @@ const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 const FAL_IMAGE_MODEL_OPTIONS = [
   { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
+  { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream v4.5' },
   { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
   { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
@@ -62,6 +65,12 @@ const FAL_VIDEO_MODEL_OPTIONS = [
 ] as const;
 
 const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
+const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
+type SeedreamModelId = typeof SEEDREAM_MODEL_IDS[number];
+const SEEDREAM_TEXT_TO_IMAGE_MAP: Record<SeedreamModelId, string> = {
+  [SEEDREAM_MODEL_ID]: SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
+  [SEEDREAM_V45_MODEL_ID]: SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
+};
 
 type FalModelMode = 'image' | 'video';
 type FalImageSizeSelectionValue = 'placeholder' | 'default' | FalImageSizePreset;
@@ -188,6 +197,10 @@ const isFalImageModelId = (value: string | undefined): value is FalImageModelId 
   typeof value === 'string' && FAL_IMAGE_MODEL_OPTIONS.some(option => option.value === value);
 const isFalVideoModelId = (value: string | undefined): value is FalVideoModelId =>
   typeof value === 'string' && FAL_VIDEO_MODEL_OPTIONS.some(option => option.value === value);
+const isSeedreamModelId = (value: FalModelId | undefined): value is SeedreamModelId =>
+  !!value && (SEEDREAM_MODEL_IDS as readonly string[]).includes(value);
+const getSeedreamTextToImageModelId = (modelId: SeedreamModelId): string =>
+  SEEDREAM_TEXT_TO_IMAGE_MAP[modelId];
 const isApiProvider = (value: unknown): value is ApiProvider =>
   value === 'google' || value === 'fal';
 const isFalModelMode = (value: unknown): value is FalModelMode =>
@@ -283,6 +296,7 @@ const MAX_HISTORY_SIZE = 30;
 const DEFAULT_MAX_REFERENCE_IMAGES = 13;
 const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId, number>> = {
   [SEEDREAM_MODEL_ID]: 7, // 7 references + 1 primary = 8 total
+  [SEEDREAM_V45_MODEL_ID]: 8, // v4.5 allows up to 10 inputs; leave headroom for base/mask images
   [KLING_IMAGE_MODEL_ID]: 10, // Kling O1 allows up to 10 reference images
   [HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID]: 0,
   [HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID]: 0,
@@ -1965,7 +1979,7 @@ export default function App() {
 
     const usingFal = apiProviderForRun === 'fal';
     const isVideoMode = usingFal && falModelModeForRun === 'video';
-    const isSeedreamModel = !isVideoMode && falModelIdForRun === SEEDREAM_MODEL_ID;
+    const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelIdForRun);
     const isGeminiModel = !isVideoMode && falModelIdForRun === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
     const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
@@ -2319,7 +2333,7 @@ export default function App() {
           }
 
           const textToImageModelId = isSeedreamModel
-            ? SEEDREAM_TEXT_TO_IMAGE_MODEL_ID
+            ? getSeedreamTextToImageModelId(falModelIdForRun)
             : isReveModel
               ? REVE_TEXT_TO_IMAGE_MODEL_ID
               : isKlingModel
@@ -3250,7 +3264,7 @@ export default function App() {
 
       const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
       const isVideoMode = falModelMode === 'video';
-      const isSeedreamModel = !isVideoMode && falModelId === SEEDREAM_MODEL_ID;
+      const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelId);
       const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
       const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
       const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
@@ -3580,7 +3594,7 @@ export default function App() {
   const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
   const isTextToImage = !activePrimaryImage;
   const promptEmpty = prompt.trim().length === 0;
-  const isSeedreamModel = !isVideoMode && falModelId === SEEDREAM_MODEL_ID;
+  const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelId);
   const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
   const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
