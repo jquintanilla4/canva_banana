@@ -16,6 +16,7 @@ import {
   CanvasMediaType,
   GenerationInputs,
   GenerationKind,
+  FalVideoDuration,
   ApiProviderId,
 } from './types';
 import { generateImageEdit as generateGoogleImageEdit, generateImage as generateGoogleImage } from './services/geminiService';
@@ -48,9 +49,14 @@ const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
 const HAILUO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/image-to-video' as const;
 const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/standard/image-to-video' as const;
 const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video' as const;
+const KLING_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-video' as const;
+const KLING_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video' as const;
+const KLING_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video' as const;
 const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 type HailuoVariant = 'standard' | 'pro';
+type KlingVariant = 'standard' | 'pro';
+const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 
 const FAL_IMAGE_MODEL_OPTIONS = [
   { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
@@ -64,6 +70,7 @@ const FAL_IMAGE_MODEL_OPTIONS = [
 
 const FAL_VIDEO_MODEL_OPTIONS = [
   { value: HAILUO_IMAGE_TO_VIDEO_MODEL_ID, label: 'Hailuo 2.3' },
+  { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
 ] as const;
 
 const HAILUO_VARIANT_OPTIONS: ReadonlyArray<{ value: HailuoVariant; label: string }> = [
@@ -73,6 +80,14 @@ const HAILUO_VARIANT_OPTIONS: ReadonlyArray<{ value: HailuoVariant; label: strin
 
 const getHailuoActualModelId = (variant: HailuoVariant): string =>
   variant === 'pro' ? HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID : HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
+
+const KLING_VARIANT_OPTIONS: ReadonlyArray<{ value: KlingVariant; label: string }> = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'pro', label: 'Pro' },
+] as const;
+
+const getKlingActualModelId = (variant: KlingVariant): string =>
+  variant === 'pro' ? KLING_VIDEO_PRO_MODEL_ID : KLING_VIDEO_STANDARD_MODEL_ID;
 
 const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
 const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
@@ -308,6 +323,7 @@ const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId, number>> = {
   [SEEDREAM_V45_MODEL_ID]: 8, // v4.5 allows up to 10 inputs; leave headroom for base/mask images
   [KLING_IMAGE_MODEL_ID]: 10, // Kling O1 allows up to 10 reference images
   [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0, // Hailuo video models don't support reference images
+  [KLING_VIDEO_MODEL_ID]: 0, // Kling 2.5 Turbo video does not use reference images
 };
 const getMaxReferenceImages = (modelId: FalModelId | undefined): number =>
   modelId && MODEL_REFERENCE_IMAGE_LIMITS[modelId] !== undefined
@@ -700,13 +716,22 @@ const normalizeSnapshotImageMetadata = (
       if (creativity !== undefined) {
         normalizedOptions.creativity = Math.max(0, Math.min(10, Math.round(creativity * 2) / 2));
       }
-      const videoDuration = (typed as { videoDuration?: unknown }).videoDuration === '10' ? '10' : (typed as { videoDuration?: unknown }).videoDuration === '6' ? '6' : undefined;
+      const videoDurationRaw = (typed as { videoDuration?: unknown }).videoDuration;
+      const videoDuration = videoDurationRaw === '10' ? '10' : videoDurationRaw === '6' ? '6' : videoDurationRaw === '5' ? '5' : undefined;
       if (videoDuration) {
         normalizedOptions.videoDuration = videoDuration;
       }
       const hailuoVariantValue = (typed as { hailuoVariant?: unknown }).hailuoVariant;
       if (hailuoVariantValue === 'standard' || hailuoVariantValue === 'pro') {
         normalizedOptions.hailuoVariant = hailuoVariantValue;
+      }
+      const klingVariantValue = (typed as { klingVariant?: unknown }).klingVariant;
+      if (klingVariantValue === 'standard' || klingVariantValue === 'pro') {
+        normalizedOptions.klingVariant = klingVariantValue;
+      }
+      const negativePrompt = (typed as { negativePrompt?: unknown }).negativePrompt;
+      if (typeof negativePrompt === 'string' && negativePrompt.trim().length > 0) {
+        normalizedOptions.negativePrompt = negativePrompt.trim();
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
@@ -950,8 +975,10 @@ export default function App() {
   const [falModelMode, setFalModelMode] = useState<FalModelMode>('image');
   const [falImageModelId, setFalImageModelId] = useState<FalImageModelId>(DEFAULT_FAL_IMAGE_MODEL_ID);
   const [falVideoModelId, setFalVideoModelId] = useState<FalVideoModelId>(DEFAULT_FAL_VIDEO_MODEL_ID);
-  const [falVideoDuration, setFalVideoDuration] = useState<'6' | '10'>('6');
+  const [falVideoDuration, setFalVideoDuration] = useState<FalVideoDuration>('6');
   const [hailuoVariant, setHailuoVariant] = useState<HailuoVariant>('standard');
+  const [klingVariant, setKlingVariant] = useState<KlingVariant>('standard');
+  const [klingNegativePrompt, setKlingNegativePrompt] = useState<string>(KLING_DEFAULT_NEGATIVE_PROMPT);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -1002,6 +1029,22 @@ export default function App() {
     }
   }, [falModelId, falResolutionSelection]);
 
+  useEffect(() => {
+    if (falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID) {
+      setFalVideoDuration(prev => (prev === '10' ? '10' : '6'));
+      return;
+    }
+    if (falVideoModelId === KLING_VIDEO_MODEL_ID) {
+      setFalVideoDuration(prev => (prev === '10' ? '10' : '5'));
+    }
+  }, [falVideoModelId]);
+
+  useEffect(() => {
+    if (falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID && hailuoVariant === 'pro' && falVideoDuration !== '6') {
+      setFalVideoDuration('6');
+    }
+  }, [falVideoModelId, hailuoVariant, falVideoDuration]);
+
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
     return images.find(img => img.id === primaryImageId) || null;
@@ -1032,7 +1075,15 @@ export default function App() {
   }, []);
 
   const handleFalVideoDurationChange = useCallback((value: string) => {
-    setFalVideoDuration(value === '10' ? '10' : '6');
+    if (value === '10') {
+      setFalVideoDuration('10');
+      return;
+    }
+    if (value === '5') {
+      setFalVideoDuration('5');
+      return;
+    }
+    setFalVideoDuration('6');
   }, []);
 
   const handleHailuoVariantChange = useCallback((value: string) => {
@@ -1042,6 +1093,11 @@ export default function App() {
     if (variant === 'pro') {
       setFalVideoDuration('6');
     }
+  }, []);
+
+  const handleKlingVariantChange = useCallback((value: string) => {
+    const variant = value === 'pro' ? 'pro' : 'standard';
+    setKlingVariant(variant);
   }, []);
 
   const handleFalImageSizeChange = useCallback((value: string) => {
@@ -1984,6 +2040,8 @@ export default function App() {
     const falCreativityForRun = falOptionsOverride.creativity ?? falCreativity;
     const falVideoDurationForRun = falOptionsOverride.videoDuration ?? falVideoDuration;
     const hailuoVariantForRun = falOptionsOverride.hailuoVariant ?? hailuoVariant;
+    const klingVariantForRun = falOptionsOverride.klingVariant ?? klingVariant;
+    const klingNegativePromptForRun = falOptionsOverride.negativePrompt ?? klingNegativePrompt;
     const primaryImageIdForRun = generationOverride ? generationOverride.primaryImageId ?? null : primaryImageId;
     const primaryImageForRun = primaryImageIdForRun
       ? images.find(img => img.id === primaryImageIdForRun) || null
@@ -2014,6 +2072,15 @@ export default function App() {
     const isHailuoVideoModel = isVideoMode && falVideoModelIdForRun === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
     const isHailuoStandardVideoModel = isHailuoVideoModel && hailuoVariantForRun === 'standard';
     const actualHailuoModelId = isHailuoVideoModel ? getHailuoActualModelId(hailuoVariantForRun) : null;
+    const isKlingVideoModel = isVideoMode && falVideoModelIdForRun === KLING_VIDEO_MODEL_ID;
+    const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
+    const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
+      ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
+      : isKlingVideoModel
+        ? (falVideoDurationForRun === '10' ? '10' : '5')
+        : undefined;
+    const normalizedKlingNegativePrompt = isKlingVideoModel ? klingNegativePromptForRun.trim() : '';
+    const hasKlingNegativePrompt = normalizedKlingNegativePrompt.length > 0;
     const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimaryImage;
     const requiresPrompt = !(usingFal && isUpscaleModel);
     const requiresVideoSourceImage = usingFal && isVideoMode;
@@ -2035,6 +2102,8 @@ export default function App() {
       const baseModelLabel = getFalModelLabel(falModelIdForRun);
       const jobModelLabel = isHailuoVideoModel
         ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
+        : isKlingVideoModel
+          ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
         : baseModelLabel;
       const findNonOverlappingPlacement = (
         width: number,
@@ -2092,9 +2161,16 @@ export default function App() {
           throw new Error('Unable to find the starting frame for this video.');
         }
         const videoSourceImage = activePrimaryImage.element as HTMLImageElement;
+        const videoModelIdForRequest = actualHailuoModelId ?? actualKlingModelId ?? falVideoModelIdForRun;
+        const shouldSendDuration = isHailuoVideoModel ? isHailuoStandardVideoModel : isKlingVideoModel;
+        const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
+        const negativePromptForRequest = isKlingVideoModel && hasKlingNegativePrompt
+          ? normalizedKlingNegativePrompt
+          : undefined;
         const videoResult = await generateFalImageToVideo(trimmedPrompt, videoSourceImage, {
-          modelId: actualHailuoModelId ?? falVideoModelIdForRun,
-          duration: isHailuoStandardVideoModel ? falVideoDurationForRun : undefined,
+          modelId: videoModelIdForRequest,
+          duration: durationForRequest,
+          negativePrompt: negativePromptForRequest,
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
               if (job.id !== falJobId) {
@@ -2191,8 +2267,10 @@ export default function App() {
                   : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
                 falOptions: {
-                  videoDuration: falVideoDurationForRun,
-                  hailuoVariant: hailuoVariantForRun,
+                  ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
+                  ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
+                  ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
+                  ...(isKlingVideoModel && hasKlingNegativePrompt ? { negativePrompt: normalizedKlingNegativePrompt } : {}),
                 },
               },
             },
@@ -2783,6 +2861,9 @@ export default function App() {
     falScaleFactor,
     falNoiseScale,
     falCreativity,
+    hailuoVariant,
+    klingNegativePrompt,
+    klingVariant,
     images,
     inpaintMode,
     paths,
@@ -2858,11 +2939,17 @@ export default function App() {
         ...(typeof falOptions.creativity === 'number' && Number.isFinite(falOptions.creativity)
           ? { creativity: falOptions.creativity }
           : {}),
-        ...(falOptions.videoDuration === '10' || falOptions.videoDuration === '6'
+        ...(falOptions.videoDuration === '10' || falOptions.videoDuration === '6' || falOptions.videoDuration === '5'
           ? { videoDuration: falOptions.videoDuration }
           : {}),
         ...(falOptions.hailuoVariant === 'standard' || falOptions.hailuoVariant === 'pro'
           ? { hailuoVariant: falOptions.hailuoVariant }
+          : {}),
+        ...(falOptions.klingVariant === 'standard' || falOptions.klingVariant === 'pro'
+          ? { klingVariant: falOptions.klingVariant }
+          : {}),
+        ...(typeof falOptions.negativePrompt === 'string' && falOptions.negativePrompt.trim().length > 0
+          ? { negativePrompt: falOptions.negativePrompt.trim() }
           : {}),
       }
       : undefined;
@@ -2915,6 +3002,15 @@ export default function App() {
         }
         if (overrideFalOptions?.videoDuration) {
           setFalVideoDuration(overrideFalOptions.videoDuration);
+        }
+        if (overrideFalOptions?.hailuoVariant) {
+          setHailuoVariant(overrideFalOptions.hailuoVariant);
+        }
+        if (overrideFalOptions?.klingVariant) {
+          setKlingVariant(overrideFalOptions.klingVariant);
+        }
+        if (typeof overrideFalOptions?.negativePrompt === 'string') {
+          setKlingNegativePrompt(overrideFalOptions.negativePrompt);
         }
       } else if (isFalImageModelId(modelIdForOverride)) {
         setFalImageModelId(modelIdForOverride);
@@ -3677,6 +3773,7 @@ export default function App() {
   const promptBarModelControlsList: PromptBarModelControl[] = [];
 
   const isHailuoVideoModel = isVideoMode && usingFal && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+  const isKlingVideoModel = isVideoMode && usingFal && falVideoModelId === KLING_VIDEO_MODEL_ID;
 
   if (isHailuoVideoModel) {
     // Add variant selector (Standard/Pro)
@@ -3703,6 +3800,29 @@ export default function App() {
       value: isProVariant ? '6' : falVideoDuration,
       onChange: handleFalVideoDurationChange,
       disabled: isLoading || isProVariant, // Disable for Pro since only 6s is supported
+    });
+  }
+
+  if (isKlingVideoModel) {
+    promptBarModelControlsList.push({
+      id: 'kling-variant-select',
+      ariaLabel: 'Select Kling 2.5 Turbo variant',
+      options: KLING_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: klingVariant,
+      onChange: handleKlingVariantChange,
+      disabled: isLoading,
+    });
+
+    promptBarModelControlsList.push({
+      id: 'kling-video-duration-select',
+      ariaLabel: 'Select Kling 2.5 Turbo duration',
+      options: [
+        { value: '5', label: '5s' },
+        { value: '10', label: '10s' },
+      ],
+      value: falVideoDuration === '10' ? '10' : '5',
+      onChange: handleFalVideoDurationChange,
+      disabled: isLoading,
     });
   }
 
@@ -3794,6 +3914,9 @@ export default function App() {
   const promptBarModelControls: ReadonlyArray<PromptBarModelControl> | undefined =
     promptBarModelControlsList.length > 0 ? promptBarModelControlsList : undefined;
   const promptBarModelOptions = falModelMode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
+  const shouldShowKlingNegativePrompt = isKlingVideoModel;
+  const promptOutlineColor = shouldShowKlingNegativePrompt ? '#34d399' : undefined;
+  const negativePromptOutlineColor = shouldShowKlingNegativePrompt ? '#f87171' : undefined;
 
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
@@ -4004,6 +4127,12 @@ export default function App() {
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
           promptPlaceholder={promptPlaceholderText}
+          showNegativePrompt={shouldShowKlingNegativePrompt}
+          negativePrompt={klingNegativePrompt}
+          onNegativePromptChange={setKlingNegativePrompt}
+          negativePromptPlaceholder="Describe what the video should avoid... (optional)"
+          promptOutlineColor={promptOutlineColor}
+          negativePromptOutlineColor={negativePromptOutlineColor}
         />
       )}
     </div>

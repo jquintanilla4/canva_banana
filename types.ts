@@ -72,6 +72,8 @@ export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
 
 export type FalResolutionOption = '1K' | '2K' | '4K';
 
+export type FalVideoDuration = '5' | '6' | '10';
+
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
 
 export type GenerationFalOptions = Partial<{
@@ -82,8 +84,10 @@ export type GenerationFalOptions = Partial<{
   scaleFactor: number;
   noiseScale: number;
   creativity: number;
-  videoDuration: '6' | '10';
+  videoDuration: FalVideoDuration;
   hailuoVariant: 'standard' | 'pro';
+  klingVariant: 'standard' | 'pro';
+  negativePrompt: string;
 }>;
 
 export interface GenerationInputs {

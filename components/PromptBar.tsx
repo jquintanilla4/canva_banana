@@ -33,6 +33,12 @@ interface PromptBarProps {
   modelModeDisabled?: boolean;
   modelControls?: ReadonlyArray<FalModelControlConfig>;
   promptPlaceholder?: string;
+  showNegativePrompt?: boolean;
+  negativePrompt?: string;
+  onNegativePromptChange?: (prompt: string) => void;
+  negativePromptPlaceholder?: string;
+  promptOutlineColor?: string;
+  negativePromptOutlineColor?: string;
 }
 
 export const PromptBar: React.FC<PromptBarProps> = ({
@@ -51,8 +57,15 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   modelModeDisabled,
   modelControls,
   promptPlaceholder,
+  showNegativePrompt,
+  negativePrompt,
+  onNegativePromptChange,
+  negativePromptPlaceholder,
+  promptOutlineColor,
+  negativePromptOutlineColor,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const negativeTextareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
@@ -93,6 +106,16 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     wasLoading.current = isLoading;
   }, [isLoading, inputDisabled]);
 
+  useEffect(() => {
+    if (!showNegativePrompt) {
+      return;
+    }
+    if (negativeTextareaRef.current) {
+      negativeTextareaRef.current.style.height = 'auto';
+      negativeTextareaRef.current.style.height = `${negativeTextareaRef.current.scrollHeight}px`;
+    }
+  }, [negativePrompt, showNegativePrompt]);
+
   useLayoutEffect(() => {
     resizeSelectToContent(modelSelectRef.current);
     controlSelectRefs.current.forEach(selectEl => {
@@ -110,6 +133,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       ? "Upload or select an image to begin editing..."
       : "Describe your edit or image idea... (Cmd/Ctrl + Enter to generate)"
   );
+  const resolvedNegativePromptPlaceholder = negativePromptPlaceholder ?? 'What should the video avoid? (negative prompt)';
 
   const selectedModelOption = modelOptions.find(option => option.value === selectedModel);
   const selectHighlightStyle = selectedModelOption?.highlightColor
@@ -122,121 +146,148 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     { value: 'image', label: 'Image' },
     { value: 'video', label: 'Video' },
   ];
+  const containerBaseClass = 'relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex items-end gap-[1.1rem] py-[0.81rem] pl-[0.83rem] pr-[1.15rem]';
+  const promptContainerClass = `${containerBaseClass} ${promptOutlineColor ? 'border' : ''}`;
+  const negativePromptContainerClass = `${containerBaseClass} ${negativePromptOutlineColor ? 'border' : ''}`;
+  const promptContainerStyle = promptOutlineColor ? { borderColor: promptOutlineColor } : undefined;
+  const negativePromptContainerStyle = negativePromptOutlineColor ? { borderColor: negativePromptOutlineColor } : undefined;
 
   return (
     <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.02rem] p-[0.61rem] w-full max-w-[69.1rem]">
-      <div className="relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex items-end gap-[1.1rem] py-[0.81rem] pl-[0.83rem] pr-[1.15rem]">
-        <div className="flex flex-1 flex-col">
-          <textarea
-            ref={textareaRef}
-            value={prompt}
-            onChange={(e) => onPromptChange(e.target.value)}
-            placeholder={resolvedPlaceholder}
-            disabled={inputDisabled || isLoading}
-            rows={3}
-            className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
-            style={{ minHeight: '92px', maxHeight: '269px' }}
-            aria-label="Prompt input"
-          />
-          <div className="flex flex-col gap-2 mt-[0.47rem] ml-[0.5rem]">
-            <div className="relative flex flex-wrap items-center gap-3">
-              <div className="flex items-center bg-gray-800/80 rounded-full p-1">
-                {modelModeOptions.map(option => {
-                  const isActive = option.value === modelMode;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => onModelModeChange(option.value)}
-                      disabled={resolvedModeDisabled}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-150 ${isActive ? 'bg-blue-500 text-white' : 'text-gray-300 hover:text-white'} disabled:opacity-60 disabled:cursor-not-allowed`}
-                      aria-pressed={isActive}
-                      aria-label={`Switch to ${option.label} models`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
+      <div className="flex flex-col gap-3">
+        {showNegativePrompt && (
+          <div className={negativePromptContainerClass} style={negativePromptContainerStyle}>
+            <div className="flex flex-1 flex-col">
+              <div className="flex items-center justify-between pr-1">
+                <span className="text-xs font-semibold text-red-200 uppercase tracking-wide">Negative prompt</span>
               </div>
-              <div className="relative">
-                <label className="sr-only" htmlFor="model-select">
-                  {modelSelectLabel}
-                </label>
-                <select
-                  id="model-select"
-                  ref={modelSelectRef}
-                  value={selectedModel}
-                  onChange={(e) => onModelChange(e.target.value)}
-                  disabled={modelSelectDisabled}
-                  className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
-                  style={selectHighlightStyle}
-                  aria-label={modelSelectLabel}
-                >
-                  {modelOptions.map(option => (
-                    <option
-                      key={option.value}
-                      value={option.value}
-                      style={option.highlightColor ? { color: option.highlightColor } : undefined}
-                    >
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
-              </div>
-              {modelControls?.map(control => (
-                <div className="relative" key={control.id}>
-                  <label className="sr-only" htmlFor={control.id}>
-                    {control.ariaLabel}
+              <textarea
+                ref={negativeTextareaRef}
+                value={negativePrompt ?? ''}
+                onChange={(e) => onNegativePromptChange?.(e.target.value)}
+                placeholder={resolvedNegativePromptPlaceholder}
+                disabled={isLoading || !onNegativePromptChange}
+                rows={3}
+                className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+                style={{ minHeight: '92px', maxHeight: '269px' }}
+                aria-label="Negative prompt input"
+              />
+            </div>
+          </div>
+        )}
+        <div className={promptContainerClass} style={promptContainerStyle}>
+          <div className="flex flex-1 flex-col">
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={(e) => onPromptChange(e.target.value)}
+              placeholder={resolvedPlaceholder}
+              disabled={inputDisabled || isLoading}
+              rows={3}
+              className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+              style={{ minHeight: '92px', maxHeight: '269px' }}
+              aria-label="Prompt input"
+            />
+            <div className="flex flex-col gap-2 mt-[0.47rem] ml-[0.5rem]">
+              <div className="relative flex flex-wrap items-center gap-3">
+                <div className="flex items-center bg-gray-800/80 rounded-full p-1">
+                  {modelModeOptions.map(option => {
+                    const isActive = option.value === modelMode;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => onModelModeChange(option.value)}
+                        disabled={resolvedModeDisabled}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-150 ${isActive ? 'bg-blue-500 text-white' : 'text-gray-300 hover:text-white'} disabled:opacity-60 disabled:cursor-not-allowed`}
+                        aria-pressed={isActive}
+                        aria-label={`Switch to ${option.label} models`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="relative">
+                  <label className="sr-only" htmlFor="model-select">
+                    {modelSelectLabel}
                   </label>
                   <select
-                    id={control.id}
-                    ref={el => {
-                      if (el) {
-                        controlSelectRefs.current.set(control.id, el);
-                      } else {
-                        controlSelectRefs.current.delete(control.id);
-                      }
-                    }}
-                    value={control.value}
-                    onChange={(e) => control.onChange(e.target.value)}
-                    disabled={control.disabled}
+                    id="model-select"
+                    ref={modelSelectRef}
+                    value={selectedModel}
+                    onChange={(e) => onModelChange(e.target.value)}
+                    disabled={modelSelectDisabled}
                     className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
-                    aria-label={control.ariaLabel}
+                    style={selectHighlightStyle}
+                    aria-label={modelSelectLabel}
                   >
-                    {control.options.map(option => (
-                      <option key={option.value} value={option.value}>
+                    {modelOptions.map(option => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                        style={option.highlightColor ? { color: option.highlightColor } : undefined}
+                      >
                         {option.label}
                       </option>
                     ))}
                   </select>
                   <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
                 </div>
-              ))}
+                {modelControls?.map(control => (
+                  <div className="relative" key={control.id}>
+                    <label className="sr-only" htmlFor={control.id}>
+                      {control.ariaLabel}
+                    </label>
+                    <select
+                      id={control.id}
+                      ref={el => {
+                        if (el) {
+                          controlSelectRefs.current.set(control.id, el);
+                        } else {
+                          controlSelectRefs.current.delete(control.id);
+                        }
+                      }}
+                      value={control.value}
+                      onChange={(e) => control.onChange(e.target.value)}
+                      disabled={control.disabled}
+                      className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
+                      aria-label={control.ariaLabel}
+                    >
+                      {control.options.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
+                  </div>
+                ))}
+              </div>
+              {modelControls?.map(control => control.errorMessage ? (
+                <p key={`${control.id}-error`} className="text-xs text-red-400">
+                  {control.errorMessage}
+                </p>
+              ) : null)}
             </div>
-            {modelControls?.map(control => control.errorMessage ? (
-              <p key={`${control.id}-error`} className="text-xs text-red-400">
-                {control.errorMessage}
-              </p>
-            ) : null)}
           </div>
+          <button
+            type="button"
+            aria-label="Generate"
+            onClick={onSubmit}
+            disabled={isLoading || submitDisabled}
+            className="h-[2.64rem] w-[2.64rem] bg-green-600 text-white font-semibold rounded-full transition-all duration-200 ease-in-out disabled:bg-gray-500 disabled:cursor-not-allowed hover:bg-green-500 flex items-center justify-center"
+          >
+            {isLoading ? (
+              <svg className="animate-spin h-[1.1rem] w-[1.1rem] text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : (
+              <LayerUpIcon className="h-[1.1rem] w-[1.1rem] text-white" aria-hidden="true" />
+            )}
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Generate"
-          onClick={onSubmit}
-          disabled={isLoading || submitDisabled}
-          className="h-[2.64rem] w-[2.64rem] bg-green-600 text-white font-semibold rounded-full transition-all duration-200 ease-in-out disabled:bg-gray-500 disabled:cursor-not-allowed hover:bg-green-500 flex items-center justify-center"
-        >
-          {isLoading ? (
-            <svg className="animate-spin h-[1.1rem] w-[1.1rem] text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          ) : (
-            <LayerUpIcon className="h-[1.1rem] w-[1.1rem] text-white" aria-hidden="true" />
-          )}
-        </button>
       </div>
     </footer>
   );

@@ -7,6 +7,7 @@ import {
   FalImageSizeOption,
   FalAspectRatioOption,
   FalResolutionOption,
+  FalVideoDuration,
 } from '../types';
 import { addDebugLog } from './debugLog';
 
@@ -67,7 +68,9 @@ interface GenerateVideoOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
   promptOptimizer?: boolean;
   modelId?: string;
-  duration?: '6' | '10';
+  duration?: FalVideoDuration;
+  negativePrompt?: string;
+  cfgScale?: number;
 }
 
 const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
@@ -104,6 +107,9 @@ const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image';
 export const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/standard/image-to-video';
 export const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video';
 export const HAILUO_IMAGE_TO_VIDEO_MODEL_ID = HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID;
+export const KLING_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-video';
+export const KLING_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video';
+export const KLING_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -915,16 +921,23 @@ export const generateImageToVideo = async (
   ensureFalClientConfigured();
 
   const imageUrl = await uploadImageElementToFal(image);
-  const promptOptimizer = options.promptOptimizer ?? true;
   const modelId = options.modelId || HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
+  const isHailuoVideoModel = modelId.includes('hailuo-2.3');
+  const promptOptimizer = options.promptOptimizer ?? (isHailuoVideoModel ? true : undefined);
   const duration = options.duration;
+  const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
+  const cfgScale = typeof options.cfgScale === 'number' && Number.isFinite(options.cfgScale)
+    ? options.cfgScale
+    : undefined;
   let latestRequestId: string | undefined;
 
-  const inputPayload = {
+  const inputPayload: Record<string, unknown> = {
     prompt,
     image_url: imageUrl,
-    prompt_optimizer: promptOptimizer,
+    ...(promptOptimizer !== undefined ? { prompt_optimizer: promptOptimizer } : {}),
     ...(duration ? { duration } : {}),
+    ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+    ...(cfgScale !== undefined ? { cfg_scale: cfgScale } : {}),
   };
 
   logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
