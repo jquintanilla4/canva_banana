@@ -952,9 +952,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       draw();
     };
 
-    window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
-    return () => window.removeEventListener('resize', resizeCanvas);
+
+    const observer = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(resizeCanvas)
+      : null;
+    observer?.observe(container);
+
+    window.addEventListener('resize', resizeCanvas);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', resizeCanvas);
+    };
   }, [draw]);
 
   useEffect(() => {
@@ -1823,7 +1832,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-black overflow-hidden relative"
+      className="relative w-full h-full min-h-0 bg-black overflow-hidden"
       style={{
         backgroundImage,
         backgroundSize: `${gridSpacing}px ${gridSpacing}px`,
@@ -1837,7 +1846,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
       {shouldRenderBrushPreview && (
         <div
           className="pointer-events-none absolute rounded-full border border-white/80"
@@ -2008,10 +2017,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         </div>
       )}
       {images.length === 0 && notes.length === 0 && !isDraggingOver && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center p-8 bg-black/30 rounded-lg">
-            <h2 className="text-2xl font-bold text-white">Welcome to the Infinite Canvas</h2>
-            <p className="text-gray-300 mt-2">Click "Upload Image", create a Note, or drag & drop to start.</p>
+        <div className="pointer-events-none absolute inset-0 grid place-items-center px-4 sm:px-6">
+          <div className="w-full max-w-xl text-center p-6 sm:p-8 bg-black/30 rounded-lg backdrop-blur-sm">
+            <h2 className="text-xl sm:text-2xl font-bold text-white">Welcome to the Infinite Canvas</h2>
+            <p className="text-sm sm:text-base text-gray-300 mt-2">Click "Upload Image", create a Note, or drag &amp; drop to start.</p>
           </div>
         </div>
       )}

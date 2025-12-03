@@ -3706,7 +3706,7 @@ export default function App() {
         />
       )}
 
-      <main className="flex-1 relative">
+      <main className="relative flex-1 min-h-0">
         <Canvas
           images={displayedImages}
           onImagesChange={setLiveImages}
