@@ -45,9 +45,12 @@ const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
 const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1' as const;
 const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
 const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
+const HAILUO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/image-to-video' as const;
 const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/standard/image-to-video' as const;
 const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video' as const;
 const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
+
+type HailuoVariant = 'standard' | 'pro';
 
 const FAL_IMAGE_MODEL_OPTIONS = [
   { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
@@ -60,9 +63,16 @@ const FAL_IMAGE_MODEL_OPTIONS = [
 ] as const;
 
 const FAL_VIDEO_MODEL_OPTIONS = [
-  { value: HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID, label: 'Hailuo 2.3 Standard' },
-  { value: HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID, label: 'Hailuo 2.3 Pro' },
+  { value: HAILUO_IMAGE_TO_VIDEO_MODEL_ID, label: 'Hailuo 2.3' },
 ] as const;
+
+const HAILUO_VARIANT_OPTIONS: ReadonlyArray<{ value: HailuoVariant; label: string }> = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'pro', label: 'Pro' },
+] as const;
+
+const getHailuoActualModelId = (variant: HailuoVariant): string =>
+  variant === 'pro' ? HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID : HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
 
 const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
 const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
@@ -219,8 +229,7 @@ const normalizeFalModelId = (value: string | undefined): FalModelId | undefined 
 const ENV_FAL_MODEL_ID = normalizeFalModelId(process.env.FAL_MODEL_ID);
 const DEFAULT_FAL_IMAGE_MODEL_ID: FalImageModelId =
   isFalImageModelId(ENV_FAL_MODEL_ID) ? ENV_FAL_MODEL_ID : GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
-const DEFAULT_FAL_VIDEO_MODEL_ID: FalVideoModelId =
-  FAL_VIDEO_MODEL_OPTIONS[0]?.value ?? HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
+const DEFAULT_FAL_VIDEO_MODEL_ID: FalVideoModelId = HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
 
 const isCanvasImageSource = (value: unknown): value is CanvasImageSource => {
   return value === 'generated' || value === 'imported' || value === 'snapshot' || value === 'derived';
@@ -298,8 +307,7 @@ const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId, number>> = {
   [SEEDREAM_MODEL_ID]: 7, // 7 references + 1 primary = 8 total
   [SEEDREAM_V45_MODEL_ID]: 8, // v4.5 allows up to 10 inputs; leave headroom for base/mask images
   [KLING_IMAGE_MODEL_ID]: 10, // Kling O1 allows up to 10 reference images
-  [HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID]: 0,
-  [HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID]: 0,
+  [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0, // Hailuo video models don't support reference images
 };
 const getMaxReferenceImages = (modelId: FalModelId | undefined): number =>
   modelId && MODEL_REFERENCE_IMAGE_LIMITS[modelId] !== undefined
@@ -696,6 +704,10 @@ const normalizeSnapshotImageMetadata = (
       if (videoDuration) {
         normalizedOptions.videoDuration = videoDuration;
       }
+      const hailuoVariantValue = (typed as { hailuoVariant?: unknown }).hailuoVariant;
+      if (hailuoVariantValue === 'standard' || hailuoVariantValue === 'pro') {
+        normalizedOptions.hailuoVariant = hailuoVariantValue;
+      }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
     }
@@ -939,6 +951,7 @@ export default function App() {
   const [falImageModelId, setFalImageModelId] = useState<FalImageModelId>(DEFAULT_FAL_IMAGE_MODEL_ID);
   const [falVideoModelId, setFalVideoModelId] = useState<FalVideoModelId>(DEFAULT_FAL_VIDEO_MODEL_ID);
   const [falVideoDuration, setFalVideoDuration] = useState<'6' | '10'>('6');
+  const [hailuoVariant, setHailuoVariant] = useState<HailuoVariant>('standard');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -1020,6 +1033,15 @@ export default function App() {
 
   const handleFalVideoDurationChange = useCallback((value: string) => {
     setFalVideoDuration(value === '10' ? '10' : '6');
+  }, []);
+
+  const handleHailuoVariantChange = useCallback((value: string) => {
+    const variant = value === 'pro' ? 'pro' : 'standard';
+    setHailuoVariant(variant);
+    // Pro only supports 6 seconds, so reset duration when switching to Pro
+    if (variant === 'pro') {
+      setFalVideoDuration('6');
+    }
   }, []);
 
   const handleFalImageSizeChange = useCallback((value: string) => {
@@ -1961,6 +1983,7 @@ export default function App() {
     const falNoiseScaleForRun = falOptionsOverride.noiseScale ?? falNoiseScale;
     const falCreativityForRun = falOptionsOverride.creativity ?? falCreativity;
     const falVideoDurationForRun = falOptionsOverride.videoDuration ?? falVideoDuration;
+    const hailuoVariantForRun = falOptionsOverride.hailuoVariant ?? hailuoVariant;
     const primaryImageIdForRun = generationOverride ? generationOverride.primaryImageId ?? null : primaryImageId;
     const primaryImageForRun = primaryImageIdForRun
       ? images.find(img => img.id === primaryImageIdForRun) || null
@@ -1988,7 +2011,9 @@ export default function App() {
     const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
     const isSeedvrUpscaleModel = !isVideoMode && falModelIdForRun === SEEDVR_UPSCALER_MODEL_ID;
     const isUpscaleModel = isCrystalUpscaleModel || isSeedvrUpscaleModel;
-    const isHailuoStandardVideoModel = isVideoMode && falModelIdForRun === HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
+    const isHailuoVideoModel = isVideoMode && falVideoModelIdForRun === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+    const isHailuoStandardVideoModel = isHailuoVideoModel && hailuoVariantForRun === 'standard';
+    const actualHailuoModelId = isHailuoVideoModel ? getHailuoActualModelId(hailuoVariantForRun) : null;
     const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimaryImage;
     const requiresPrompt = !(usingFal && isUpscaleModel);
     const requiresVideoSourceImage = usingFal && isVideoMode;
@@ -2007,7 +2032,10 @@ export default function App() {
 
     if (isVideoMode) {
       const falJobId = crypto.randomUUID();
-      const jobModelLabel = getFalModelLabel(falModelIdForRun);
+      const baseModelLabel = getFalModelLabel(falModelIdForRun);
+      const jobModelLabel = isHailuoVideoModel
+        ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
+        : baseModelLabel;
       const findNonOverlappingPlacement = (
         width: number,
         height: number,
@@ -2065,7 +2093,7 @@ export default function App() {
         }
         const videoSourceImage = activePrimaryImage.element as HTMLImageElement;
         const videoResult = await generateFalImageToVideo(trimmedPrompt, videoSourceImage, {
-          modelId: falVideoModelIdForRun,
+          modelId: actualHailuoModelId ?? falVideoModelIdForRun,
           duration: isHailuoStandardVideoModel ? falVideoDurationForRun : undefined,
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
@@ -2162,7 +2190,10 @@ export default function App() {
                   ? { originalSourceImageId: activePrimaryImage.metadata.generation.originalSourceImageId }
                   : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
-                falOptions: { videoDuration: falVideoDurationForRun },
+                falOptions: {
+                  videoDuration: falVideoDurationForRun,
+                  hailuoVariant: hailuoVariantForRun,
+                },
               },
             },
           };
@@ -2829,6 +2860,9 @@ export default function App() {
           : {}),
         ...(falOptions.videoDuration === '10' || falOptions.videoDuration === '6'
           ? { videoDuration: falOptions.videoDuration }
+          : {}),
+        ...(falOptions.hailuoVariant === 'standard' || falOptions.hailuoVariant === 'pro'
+          ? { hailuoVariant: falOptions.hailuoVariant }
           : {}),
       }
       : undefined;
@@ -3642,17 +3676,33 @@ export default function App() {
 
   const promptBarModelControlsList: PromptBarModelControl[] = [];
 
-  if (isVideoMode && usingFal && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID) {
+  const isHailuoVideoModel = isVideoMode && usingFal && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+
+  if (isHailuoVideoModel) {
+    // Add variant selector (Standard/Pro)
+    promptBarModelControlsList.push({
+      id: 'hailuo-variant-select',
+      ariaLabel: 'Select Hailuo 2.3 variant',
+      options: HAILUO_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: hailuoVariant,
+      onChange: handleHailuoVariantChange,
+      disabled: isLoading,
+    });
+
+    // Add duration selector - Pro only supports 6s (disabled), Standard supports 6s/10s
+    const isProVariant = hailuoVariant === 'pro';
     promptBarModelControlsList.push({
       id: 'fal-video-duration-select',
-      ariaLabel: 'Select Hailuo 2.3 Standard duration',
-      options: [
-        { value: '6', label: '6s' },
-        { value: '10', label: '10s' },
-      ],
-      value: falVideoDuration,
+      ariaLabel: isProVariant ? 'Hailuo 2.3 Pro duration (6s only)' : 'Select Hailuo 2.3 Standard duration',
+      options: isProVariant
+        ? [{ value: '6', label: '6s' }]
+        : [
+          { value: '6', label: '6s' },
+          { value: '10', label: '10s' },
+        ],
+      value: isProVariant ? '6' : falVideoDuration,
       onChange: handleFalVideoDurationChange,
-      disabled: isLoading,
+      disabled: isLoading || isProVariant, // Disable for Pro since only 6s is supported
     });
   }
 

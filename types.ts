@@ -83,6 +83,7 @@ export type GenerationFalOptions = Partial<{
   noiseScale: number;
   creativity: number;
   videoDuration: '6' | '10';
+  hailuoVariant: 'standard' | 'pro';
 }>;
 
 export interface GenerationInputs {
