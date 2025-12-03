@@ -65,17 +65,18 @@ const FAL_VIDEO_MODEL_OPTIONS = [
 const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
 
 type FalModelMode = 'image' | 'video';
-type FalImageSizeSelectionValue = 'default' | FalImageSizePreset;
+type FalImageSizeSelectionValue = 'placeholder' | 'default' | FalImageSizePreset;
 
-type FalAspectRatioSelectionValue = FalAspectRatioOption;
+type FalAspectRatioSelectionValue = 'placeholder' | FalAspectRatioOption;
 type FalResolutionSelectionValue = FalResolutionOption;
 
 const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
+  { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Match Source' },
   { value: 'square_hd', label: 'Square HD' },
   { value: 'square', label: 'Square' },
-  { value: 'portrait_4_3', label: 'Portrait 4:3' },
-  { value: 'portrait_16_9', label: 'Portrait 16:9' },
+  { value: 'portrait_4_3', label: 'Portrait 3:4' },
+  { value: 'portrait_16_9', label: 'Portrait 9:16' },
   { value: 'landscape_4_3', label: 'Landscape 4:3' },
   { value: 'landscape_16_9', label: 'Landscape 16:9' },
   { value: 'auto', label: 'Auto' },
@@ -109,6 +110,7 @@ const FAL_RESOLUTION_OPTIONS: ReadonlyArray<{ value: FalResolutionSelectionValue
 ] as const;
 
 const FAL_GEMINI_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+  { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Auto (default)' },
   { value: '21:9', label: '21:9' },
   { value: '1:1', label: '1:1' },
@@ -123,6 +125,7 @@ const FAL_GEMINI_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSele
 ] as const;
 
 const FAL_REVE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+  { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Default (3:2)' },
   { value: '16:9', label: '16:9' },
   { value: '9:16', label: '9:16' },
@@ -907,8 +910,8 @@ export default function App() {
   const [falImageModelId, setFalImageModelId] = useState<FalImageModelId>(DEFAULT_FAL_IMAGE_MODEL_ID);
   const [falVideoModelId, setFalVideoModelId] = useState<FalVideoModelId>(DEFAULT_FAL_VIDEO_MODEL_ID);
   const [falVideoDuration, setFalVideoDuration] = useState<'6' | '10'>('6');
-  const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('default');
-  const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('default');
+  const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
+  const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
   const [falNumImages, setFalNumImages] = useState(1);
   const [falScaleFactor, setFalScaleFactor] = useState(2);
@@ -1911,8 +1914,11 @@ export default function App() {
     const falVideoModelIdForRun = isFalVideoModelId(overrideModelId) ? overrideModelId : falVideoModelId;
     const falModelIdForRun: FalModelId = falModelModeForRun === 'video' ? falVideoModelIdForRun : falImageModelIdForRun;
     const falOptionsOverride = generationOverride?.falOptions ?? {};
-    const falImageSizeSelectionForRun = falOptionsOverride.imageSizeSelection ?? falImageSizeSelection;
-    const falAspectRatioSelectionForRun = falOptionsOverride.aspectRatioSelection ?? falAspectRatioSelection;
+    // Map placeholder to default for actual generation
+    const rawFalImageSizeSelection = falOptionsOverride.imageSizeSelection ?? falImageSizeSelection;
+    const rawFalAspectRatioSelection = falOptionsOverride.aspectRatioSelection ?? falAspectRatioSelection;
+    const falImageSizeSelectionForRun = rawFalImageSizeSelection === 'placeholder' ? 'default' : rawFalImageSizeSelection;
+    const falAspectRatioSelectionForRun = rawFalAspectRatioSelection === 'placeholder' ? 'default' : rawFalAspectRatioSelection;
     const falResolutionSelectionForRun = falOptionsOverride.resolutionSelection ?? falResolutionSelection;
     const falNumImagesForRun = falOptionsOverride.numImages ?? falNumImages;
     const falScaleFactorForRun = falOptionsOverride.scaleFactor ?? falScaleFactor;
@@ -2236,6 +2242,14 @@ export default function App() {
     }
 
     setError(null);
+
+    // After generation starts, update placeholder to default so user sees "Match Source"
+    if (rawFalImageSizeSelection === 'placeholder' && !falOptionsOverride.imageSizeSelection) {
+      setFalImageSizeSelection('default');
+    }
+    if (rawFalAspectRatioSelection === 'placeholder' && !falOptionsOverride.aspectRatioSelection) {
+      setFalAspectRatioSelection('default');
+    }
 
     let referenceIdsUsed: string[] = [];
 
