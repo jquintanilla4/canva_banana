@@ -70,6 +70,15 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
 
+  const handleSubmitShortcut = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      if (!isLoading && !inputDisabled && !submitDisabled) {
+        onSubmit();
+      }
+    }
+  };
+
   const resizeSelectToContent = (selectEl: HTMLSelectElement | null) => {
     if (!selectEl) return;
     const selectedText = selectEl.selectedOptions?.[0]?.textContent ?? selectEl.value ?? '';
@@ -162,14 +171,15 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 <span className="text-xs font-semibold text-red-200 uppercase tracking-wide">Negative prompt</span>
               </div>
               <textarea
-                ref={negativeTextareaRef}
-                value={negativePrompt ?? ''}
-                onChange={(e) => onNegativePromptChange?.(e.target.value)}
-                placeholder={resolvedNegativePromptPlaceholder}
-                disabled={isLoading || !onNegativePromptChange}
-                rows={3}
-                className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
-                style={{ minHeight: '92px', maxHeight: '269px' }}
+              ref={negativeTextareaRef}
+              value={negativePrompt ?? ''}
+              onChange={(e) => onNegativePromptChange?.(e.target.value)}
+              onKeyDown={handleSubmitShortcut}
+              placeholder={resolvedNegativePromptPlaceholder}
+              disabled={isLoading || !onNegativePromptChange}
+              rows={3}
+              className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+              style={{ minHeight: '92px', maxHeight: '269px' }}
                 aria-label="Negative prompt input"
               />
             </div>
@@ -181,6 +191,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               ref={textareaRef}
               value={prompt}
               onChange={(e) => onPromptChange(e.target.value)}
+              onKeyDown={handleSubmitShortcut}
               placeholder={resolvedPlaceholder}
               disabled={inputDisabled || isLoading}
               rows={3}

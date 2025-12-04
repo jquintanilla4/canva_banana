@@ -1,8 +1,6 @@
 import React from 'react';
-import { Tool, InpaintMode } from '../types';
+import { Tool, InpaintMode, AppMode } from '../types';
 import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon } from './Icons';
-
-type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 
 interface ToolbarProps {
   activeTool: Tool;

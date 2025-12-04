@@ -1,0 +1,191 @@
+import { CanvasMediaType, CanvasImage } from '../types';
+import { getImageBounds, getImageRotation } from '../utils/canvasGeometry';
+
+export const isVideoFileType = (fileType: string): boolean =>
+  typeof fileType === 'string' && /video\//.test(fileType);
+
+export const getMediaTypeFromFileType = (fileType: string): CanvasMediaType =>
+  (isVideoFileType(fileType) ? 'video' : 'image');
+
+export const getNaturalSize = (element: HTMLImageElement | HTMLVideoElement) => {
+  if (element instanceof HTMLVideoElement) {
+    const naturalWidth = element.videoWidth || element.width || 1;
+    const naturalHeight = element.videoHeight || element.height || 1;
+    return { naturalWidth, naturalHeight };
+  }
+
+  const naturalWidth = element.naturalWidth || element.width || 1;
+  const naturalHeight = element.naturalHeight || element.height || 1;
+  return { naturalWidth, naturalHeight };
+};
+
+export const loadMediaFromBlob = (
+  blob: Blob,
+  mediaType: CanvasMediaType = getMediaTypeFromFileType(blob.type),
+): Promise<HTMLImageElement | HTMLVideoElement> => {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
+    if (mediaType === 'video') {
+      const video = document.createElement('video');
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.src = objectUrl;
+      video.onloadeddata = () => {
+        cleanup();
+        resolve(video);
+      };
+      video.onerror = (err) => {
+        cleanup();
+        reject(err ?? new Error('Failed to load video.'));
+      };
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      cleanup();
+      resolve(img);
+    };
+    img.onerror = () => {
+      cleanup();
+      reject(new Error('Failed to load image.'));
+    };
+    img.src = objectUrl;
+  });
+};
+
+export const loadMediaFromDataUrl = (
+  dataUrl: string,
+  mediaType: CanvasMediaType = getMediaTypeFromFileType(dataUrl),
+): Promise<HTMLImageElement | HTMLVideoElement> => {
+  return new Promise((resolve, reject) => {
+    if (mediaType === 'video') {
+      const video = document.createElement('video');
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.src = dataUrl;
+      video.onloadeddata = () => resolve(video);
+      video.onerror = (err) => reject(err ?? new Error('Failed to load video.'));
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image.'));
+    img.src = dataUrl;
+  });
+};
+
+export const loadImageFromBlob = (blob: Blob) =>
+  loadMediaFromBlob(blob, 'image') as Promise<HTMLImageElement>;
+
+export const loadImageFromDataUrl = (dataUrl: string) =>
+  loadMediaFromDataUrl(dataUrl, 'image') as Promise<HTMLImageElement>;
+
+export const dataUrlToFile = async (dataUrl: string, fileName: string, fileType: string): Promise<File> => {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  const type = fileType || blob.type || 'application/octet-stream';
+  return new File([blob], fileName, { type });
+};
+
+export const fileToDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : null;
+      if (!result) {
+        reject(new Error('Failed to read file.'));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => {
+      reject(new Error('Failed to read file.'));
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+export const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{
+  element: HTMLImageElement;
+  mediaType: 'image';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  naturalWidth: number;
+  naturalHeight: number;
+  file: File;
+  isPlaying: false;
+  hasAudio: false;
+}> => {
+  return new Promise((resolve, reject) => {
+    if (imagesToCompose.length === 0) {
+      return reject(new Error('No images to rasterize.'));
+    }
+
+    const boundsList = imagesToCompose.map(getImageBounds);
+    const minX = Math.min(...boundsList.map(b => b.minX));
+    const minY = Math.min(...boundsList.map(b => b.minY));
+    const maxX = Math.max(...boundsList.map(b => b.maxX));
+    const maxY = Math.max(...boundsList.map(b => b.maxY));
+
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      return reject(new Error('Could not create canvas context for rasterization.'));
+    }
+
+    imagesToCompose.forEach(img => {
+      const rotation = getImageRotation(img);
+      const centerX = img.x + img.width / 2;
+      const centerY = img.y + img.height / 2;
+      ctx.save();
+      ctx.translate(centerX - minX, centerY - minY);
+      ctx.rotate(rotation);
+      ctx.drawImage(img.element, -img.width / 2, -img.height / 2, img.width, img.height);
+      ctx.restore();
+    });
+
+    const newImg = new Image();
+    newImg.onload = async () => {
+      try {
+        const blob = await (await fetch(newImg.src)).blob();
+        const newFile = new File([blob], 'composite.png', { type: 'image/png' });
+        const naturalWidth = newImg.naturalWidth || newImg.width || width;
+        const naturalHeight = newImg.naturalHeight || newImg.height || height;
+        const displayWidth = newImg.width || naturalWidth;
+        const displayHeight = newImg.height || naturalHeight;
+        resolve({
+          element: newImg,
+          mediaType: 'image',
+          x: minX,
+          y: minY,
+          width: displayWidth,
+          height: displayHeight,
+          naturalWidth,
+          naturalHeight,
+          file: newFile,
+          isPlaying: false,
+          hasAudio: false,
+        });
+      } catch (e) {
+        reject(e);
+      }
+    };
+    newImg.onerror = (err) => reject(err);
+    newImg.src = canvas.toDataURL('image/png');
+  });
+};

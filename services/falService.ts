@@ -553,7 +553,7 @@ export const generateImageEdit = async ({
       input: body,
       logs: true,
       onQueueUpdate: update => {
-        const queueUpdate = update as FalQueueUpdate;
+        const queueUpdate = update as unknown as FalQueueUpdate;
         const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
         const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
         if (resolvedRequestId) {
@@ -647,7 +647,7 @@ export const upscaleCrystalImage = async (
       },
       logs: true,
       onQueueUpdate: update => {
-        const queueUpdate = update as FalQueueUpdate;
+        const queueUpdate = update as unknown as FalQueueUpdate;
         const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
         const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
         if (resolvedRequestId) {
@@ -756,7 +756,7 @@ export const upscaleSeedvrImage = async (
       input: inputPayload,
       logs: true,
       onQueueUpdate: update => {
-        const queueUpdate = update as FalQueueUpdate;
+        const queueUpdate = update as unknown as FalQueueUpdate;
         const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
         const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
         if (resolvedRequestId) {
@@ -908,7 +908,7 @@ export const generateImage = async (
       input: body,
       logs: true,
       onQueueUpdate: update => {
-        const queueUpdate = update as FalQueueUpdate;
+        const queueUpdate = update as unknown as FalQueueUpdate;
         const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
         const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
         if (resolvedRequestId) {
@@ -1009,7 +1009,7 @@ export const generateImageToVideo = async (
       input: inputPayload,
       logs: true,
       onQueueUpdate: update => {
-        const queueUpdate = update as FalQueueUpdate;
+        const queueUpdate = update as unknown as FalQueueUpdate;
         const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
         const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
         if (resolvedRequestId) {
@@ -1085,7 +1085,7 @@ export const removeBackground = async (
       },
       logs: true,
       onQueueUpdate: update => {
-        const queueUpdate = update as FalQueueUpdate;
+        const queueUpdate = update as unknown as FalQueueUpdate;
         const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
         const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
         if (resolvedRequestId) {

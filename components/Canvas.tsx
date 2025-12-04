@@ -1,8 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Tool, Path, Point, CanvasImage, CanvasNote } from '../types';
+import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode } from '../types';
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon } from './Icons';
-
-type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 
 interface CanvasProps {
   images: CanvasImage[];

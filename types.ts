@@ -10,6 +10,7 @@ export enum Tool {
 }
 
 export type InpaintMode = 'STRICT' | 'CREATIVE';
+export type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
 
 export interface Point {
   x: number;
