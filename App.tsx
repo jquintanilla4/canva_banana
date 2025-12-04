@@ -2325,10 +2325,15 @@ export default function App() {
           const placementY = primaryBounds.minY;
           const placement = findNonOverlappingPlacement(displayWidth, displayHeight, placementX, placementY);
           const audioTrackInfo = (videoElement as unknown as { audioTracks?: { length?: number } }).audioTracks;
-          const hasAudio = Boolean(
+          const audioTrackCount = typeof audioTrackInfo?.length === 'number' ? audioTrackInfo.length : 0;
+          const webkitAudioDecodedByteCount = (videoElement as unknown as { webkitAudioDecodedByteCount?: number }).webkitAudioDecodedByteCount;
+          const hasDetectedAudio = Boolean(
             (videoElement as unknown as { mozHasAudio?: boolean }).mozHasAudio ||
-            (audioTrackInfo && typeof audioTrackInfo.length === 'number' && audioTrackInfo.length > 0)
+            audioTrackCount > 0 ||
+            (typeof webkitAudioDecodedByteCount === 'number' && webkitAudioDecodedByteCount > 0)
           );
+          // Chrome does not expose audioTracks; fall back to the requested audio flag when available.
+          const hasAudio = hasDetectedAudio || generateAudioForRequest === true;
 
           const newVideo: CanvasImage = {
             id: crypto.randomUUID(),
