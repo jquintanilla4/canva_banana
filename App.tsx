@@ -1045,7 +1045,6 @@ export default function App() {
     falModelMode === 'video' &&
     falVideoModelId === KLING_VIDEO_MODEL_ID &&
     klingVariant === 'pro';
-  const isKling26VideoModel = falVideoModelId === KLING_26_VIDEO_MODEL_ID;
 
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
     const totalLimit = maxReferenceImages + 1;
@@ -3946,6 +3945,7 @@ export default function App() {
 
   const isHailuoVideoModel = isVideoMode && usingFal && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   const isKlingVideoModel = isVideoMode && usingFal && falVideoModelId === KLING_VIDEO_MODEL_ID;
+  const isKling26VideoModel = isVideoMode && usingFal && falVideoModelId === KLING_26_VIDEO_MODEL_ID;
 
   if (isHailuoVideoModel) {
     // Add variant selector (Standard/Pro)
