@@ -88,6 +88,7 @@ export type GenerationFalOptions = Partial<{
   hailuoVariant: 'standard' | 'pro';
   klingVariant: 'standard' | 'pro';
   negativePrompt: string;
+  kling26Audio: boolean;
 }>;
 
 export interface GenerationInputs {

@@ -52,6 +52,7 @@ const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-
 const KLING_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-video' as const;
 const KLING_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video' as const;
 const KLING_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video' as const;
+const KLING_26_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/image-to-video' as const;
 const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 type HailuoVariant = 'standard' | 'pro';
@@ -71,6 +72,7 @@ const FAL_IMAGE_MODEL_OPTIONS = [
 const FAL_VIDEO_MODEL_OPTIONS = [
   { value: HAILUO_IMAGE_TO_VIDEO_MODEL_ID, label: 'Hailuo 2.3' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
+  { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
 ] as const;
 
 const HAILUO_VARIANT_OPTIONS: ReadonlyArray<{ value: HailuoVariant; label: string }> = [
@@ -102,6 +104,7 @@ type FalImageSizeSelectionValue = 'placeholder' | 'default' | FalImageSizePreset
 
 type FalAspectRatioSelectionValue = 'placeholder' | FalAspectRatioOption;
 type FalResolutionSelectionValue = FalResolutionOption;
+type Kling26AudioSelectionValue = 'placeholder' | 'on' | 'off';
 
 const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
   { value: 'placeholder', label: 'Aspect Ratio' },
@@ -188,6 +191,12 @@ const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_KLING_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
+
+const KLING26_AUDIO_OPTIONS: ReadonlyArray<{ value: Kling26AudioSelectionValue; label: string }> = [
+  { value: 'placeholder', label: 'Audio' },
+  { value: 'off', label: 'OFF' },
+  { value: 'on', label: 'ON' },
+] as const;
 
 const MIN_STROKE_SIZE = 1;
 const MAX_STROKE_SIZE = 100;
@@ -324,6 +333,7 @@ const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId, number>> = {
   [KLING_IMAGE_MODEL_ID]: 10, // Kling O1 allows up to 10 reference images
   [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0, // Hailuo video models don't support reference images
   [KLING_VIDEO_MODEL_ID]: 0, // Kling 2.5 Turbo video does not use reference images
+  [KLING_26_VIDEO_MODEL_ID]: 0, // Kling 2.6 video does not use reference images
 };
 const getMaxReferenceImages = (modelId: FalModelId | undefined): number =>
   modelId && MODEL_REFERENCE_IMAGE_LIMITS[modelId] !== undefined
@@ -374,6 +384,7 @@ type SerializedSnapshotV1 = {
       selectedImageIds: string[];
       selectedNoteIds: string[];
       referenceImageIds: string[];
+      videoLastFrameImageId?: string | null;
     };
   };
 };
@@ -853,14 +864,42 @@ const mapFalStatusToJobStatus = (status: FalQueueUpdate['status'] | undefined): 
   }
 };
 
+const extractFalLogMessages = (updateLogs?: FalQueueUpdate['logs']): string[] => {
+  if (!updateLogs) {
+    return [];
+  }
+  if (Array.isArray(updateLogs)) {
+    return updateLogs
+      .map(log => {
+        if (typeof log === 'string') {
+          return log;
+        }
+        if (log && typeof log === 'object' && typeof (log as { message?: unknown }).message === 'string') {
+          return (log as { message: string }).message;
+        }
+        return '';
+      })
+      .filter(Boolean);
+  }
+  if (typeof updateLogs === 'object') {
+    return Object.values(updateLogs)
+      .flatMap(entry => extractFalLogMessages(entry as FalQueueUpdate['logs']));
+  }
+  if (typeof updateLogs === 'string') {
+    return [updateLogs];
+  }
+  return [];
+};
+
 const mergeFalLogMessages = (existing: string[], updateLogs?: FalQueueUpdate['logs']): string[] => {
-  if (!updateLogs || updateLogs.length === 0) {
+  const incomingMessages = extractFalLogMessages(updateLogs);
+  if (incomingMessages.length === 0) {
     return existing;
   }
 
   const next = [...existing];
-  updateLogs.forEach(log => {
-    const rawMessage = typeof log?.message === 'string' ? log.message.trim() : '';
+  incomingMessages.forEach(raw => {
+    const rawMessage = raw.trim();
     if (!rawMessage) {
       return;
     }
@@ -960,6 +999,7 @@ export default function App() {
   const hasSingleImageSelected = selectedImageIds.length === 1;
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [referenceImageIds, setReferenceImageIds] = useState<string[]>([]);
+  const [videoLastFrameImageId, setVideoLastFrameImageId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -979,6 +1019,7 @@ export default function App() {
   const [hailuoVariant, setHailuoVariant] = useState<HailuoVariant>('standard');
   const [klingVariant, setKlingVariant] = useState<KlingVariant>('standard');
   const [klingNegativePrompt, setKlingNegativePrompt] = useState<string>(KLING_DEFAULT_NEGATIVE_PROMPT);
+  const [kling26AudioSelection, setKling26AudioSelection] = useState<Kling26AudioSelectionValue>('placeholder');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -999,6 +1040,12 @@ export default function App() {
   }, []);
 
   const falModelId: FalModelId = falModelMode === 'video' ? falVideoModelId : falImageModelId;
+  const isKlingProVideoSelection =
+    apiProvider === 'fal' &&
+    falModelMode === 'video' &&
+    falVideoModelId === KLING_VIDEO_MODEL_ID &&
+    klingVariant === 'pro';
+  const isKling26VideoModel = falVideoModelId === KLING_26_VIDEO_MODEL_ID;
 
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
     const totalLimit = maxReferenceImages + 1;
@@ -1034,7 +1081,7 @@ export default function App() {
       setFalVideoDuration(prev => (prev === '10' ? '10' : '6'));
       return;
     }
-    if (falVideoModelId === KLING_VIDEO_MODEL_ID) {
+    if (falVideoModelId === KLING_VIDEO_MODEL_ID || falVideoModelId === KLING_26_VIDEO_MODEL_ID) {
       setFalVideoDuration(prev => (prev === '10' ? '10' : '5'));
     }
   }, [falVideoModelId]);
@@ -1044,6 +1091,12 @@ export default function App() {
       setFalVideoDuration('6');
     }
   }, [falVideoModelId, hailuoVariant, falVideoDuration]);
+
+  useEffect(() => {
+    if (!isKlingProVideoSelection && videoLastFrameImageId) {
+      setVideoLastFrameImageId(null);
+    }
+  }, [isKlingProVideoSelection, videoLastFrameImageId]);
 
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
@@ -1055,7 +1108,7 @@ export default function App() {
   }, [primaryImage]);
 
   useEffect(() => {
-    if (selectedImageIds.length === 0 && referenceImageIds.length === 0) {
+    if (selectedImageIds.length === 0 && referenceImageIds.length === 0 && !videoLastFrameImageId) {
       return;
     }
     const imageIdSet = new Set(images.map(img => img.id));
@@ -1067,7 +1120,8 @@ export default function App() {
       const validIds = prevIds.filter(id => imageIdSet.has(id));
       return validIds.length === prevIds.length ? prevIds : validIds;
     });
-  }, [images, referenceImageIds, selectedImageIds]);
+    setVideoLastFrameImageId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
+  }, [images, referenceImageIds, selectedImageIds, videoLastFrameImageId]);
 
   const handleModelModeChange = useCallback((mode: FalModelMode) => {
     setFalModelMode(mode);
@@ -1098,6 +1152,18 @@ export default function App() {
   const handleKlingVariantChange = useCallback((value: string) => {
     const variant = value === 'pro' ? 'pro' : 'standard';
     setKlingVariant(variant);
+  }, []);
+
+  const handleKling26AudioChange = useCallback((value: string) => {
+    if (value === 'on') {
+      setKling26AudioSelection('on');
+      return;
+    }
+    if (value === 'off') {
+      setKling26AudioSelection('off');
+      return;
+    }
+    setKling26AudioSelection('placeholder');
   }, []);
 
   const handleFalImageSizeChange = useCallback((value: string) => {
@@ -1252,6 +1318,7 @@ export default function App() {
     if (selectedImageIds.length) {
       setSelectedImageIds([]);
       setReferenceImageIds([]);
+      setVideoLastFrameImageId(null);
     }
     if (selectedNoteIds.length) {
       setSelectedNoteIds([]);
@@ -1368,6 +1435,7 @@ export default function App() {
           selectedImageIds: [...selectedImageIds],
           selectedNoteIds: [...selectedNoteIds],
           referenceImageIds: [...referenceImageIds],
+          ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
         },
       },
     };
@@ -1700,10 +1768,16 @@ export default function App() {
         setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
+        if (typeof meta.videoLastFrameImageId === 'string' && meta.videoLastFrameImageId.length > 0) {
+          setVideoLastFrameImageId(meta.videoLastFrameImageId);
+        } else {
+          setVideoLastFrameImageId(null);
+        }
       } else {
         setSelectedImageIds([]);
         setSelectedNoteIds([]);
         setReferenceImageIds([]);
+        setVideoLastFrameImageId(null);
       }
 
       setError(null);
@@ -1748,6 +1822,7 @@ export default function App() {
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
+    setVideoLastFrameImageId,
     setError,
     setToastMessage,
   ]);
@@ -2042,6 +2117,10 @@ export default function App() {
     const hailuoVariantForRun = falOptionsOverride.hailuoVariant ?? hailuoVariant;
     const klingVariantForRun = falOptionsOverride.klingVariant ?? klingVariant;
     const klingNegativePromptForRun = falOptionsOverride.negativePrompt ?? klingNegativePrompt;
+    const kling26AudioOverride = falOptionsOverride.kling26Audio;
+    const kling26AudioForRun = kling26AudioOverride !== undefined
+      ? kling26AudioOverride
+      : kling26AudioSelection === 'on';
     const primaryImageIdForRun = generationOverride ? generationOverride.primaryImageId ?? null : primaryImageId;
     const primaryImageForRun = primaryImageIdForRun
       ? images.find(img => img.id === primaryImageIdForRun) || null
@@ -2056,7 +2135,7 @@ export default function App() {
     //   console.log('[Generate] activePrimaryImage:', activePrimaryImage?.id);
     // }
     const referenceImageIdsForRun = generationOverride ? generationOverride.referenceImageIds ?? [] : referenceImageIds;
-    const videoLastFrameImageId = generationOverride?.videoLastFrameImageId;
+    const videoLastFrameImageIdForRun = generationOverride?.videoLastFrameImageId ?? videoLastFrameImageId;
 
     const usingFal = apiProviderForRun === 'fal';
     const isVideoMode = usingFal && falModelModeForRun === 'video';
@@ -2073,13 +2152,14 @@ export default function App() {
     const isHailuoStandardVideoModel = isHailuoVideoModel && hailuoVariantForRun === 'standard';
     const actualHailuoModelId = isHailuoVideoModel ? getHailuoActualModelId(hailuoVariantForRun) : null;
     const isKlingVideoModel = isVideoMode && falVideoModelIdForRun === KLING_VIDEO_MODEL_ID;
+    const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
     const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
     const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
       ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
-      : isKlingVideoModel
+      : (isKlingVideoModel || isKling26VideoModel)
         ? (falVideoDurationForRun === '10' ? '10' : '5')
         : undefined;
-    const normalizedKlingNegativePrompt = isKlingVideoModel ? klingNegativePromptForRun.trim() : '';
+    const normalizedKlingNegativePrompt = (isKlingVideoModel || isKling26VideoModel) ? klingNegativePromptForRun.trim() : '';
     const hasKlingNegativePrompt = normalizedKlingNegativePrompt.length > 0;
     const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimaryImage;
     const requiresPrompt = !(usingFal && isUpscaleModel);
@@ -2104,6 +2184,8 @@ export default function App() {
         ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
         : isKlingVideoModel
           ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
+        : isKling26VideoModel
+          ? `${baseModelLabel} Pro`
         : baseModelLabel;
       const findNonOverlappingPlacement = (
         width: number,
@@ -2161,16 +2243,29 @@ export default function App() {
           throw new Error('Unable to find the starting frame for this video.');
         }
         const videoSourceImage = activePrimaryImage.element as HTMLImageElement;
+        let videoTailImageElement: HTMLImageElement | null = null;
+        if (isKlingVideoModel && klingVariantForRun === 'pro' && videoLastFrameImageIdForRun) {
+          const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
+          if (!isImageCanvasMedia(tailFrame)) {
+            setError('Select a still image on the canvas to use as the ending frame.');
+            return;
+          }
+          videoTailImageElement = tailFrame.element as HTMLImageElement;
+        }
+        const videoLastFrameIdForMetadata = videoTailImageElement ? videoLastFrameImageIdForRun : null;
         const videoModelIdForRequest = actualHailuoModelId ?? actualKlingModelId ?? falVideoModelIdForRun;
-        const shouldSendDuration = isHailuoVideoModel ? isHailuoStandardVideoModel : isKlingVideoModel;
+        const shouldSendDuration = isHailuoVideoModel ? isHailuoStandardVideoModel : (isKlingVideoModel || isKling26VideoModel);
         const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
-        const negativePromptForRequest = isKlingVideoModel && hasKlingNegativePrompt
+        const negativePromptForRequest = (isKlingVideoModel || isKling26VideoModel) && hasKlingNegativePrompt
           ? normalizedKlingNegativePrompt
           : undefined;
+        const generateAudioForRequest = isKling26VideoModel ? kling26AudioForRun : undefined;
         const videoResult = await generateFalImageToVideo(trimmedPrompt, videoSourceImage, {
           modelId: videoModelIdForRequest,
           duration: durationForRequest,
           negativePrompt: negativePromptForRequest,
+          ...(videoTailImageElement ? { tailImage: videoTailImageElement } : {}),
+          ...(generateAudioForRequest !== undefined ? { generateAudio: generateAudioForRequest } : {}),
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
               if (job.id !== falJobId) {
@@ -2265,12 +2360,13 @@ export default function App() {
                 ...(activePrimaryImage?.metadata?.generation?.originalSourceImageId
                   ? { originalSourceImageId: activePrimaryImage.metadata.generation.originalSourceImageId }
                   : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
-                ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
+                ...(videoLastFrameIdForMetadata ? { videoLastFrameImageId: videoLastFrameIdForMetadata } : {}),
                 falOptions: {
                   ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
                   ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
                   ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
-                  ...(isKlingVideoModel && hasKlingNegativePrompt ? { negativePrompt: normalizedKlingNegativePrompt } : {}),
+                  ...((isKlingVideoModel || isKling26VideoModel) && hasKlingNegativePrompt ? { negativePrompt: normalizedKlingNegativePrompt } : {}),
+                  ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                 },
               },
             },
@@ -2864,6 +2960,7 @@ export default function App() {
     hailuoVariant,
     klingNegativePrompt,
     klingVariant,
+    kling26AudioSelection,
     images,
     inpaintMode,
     paths,
@@ -2948,6 +3045,9 @@ export default function App() {
         ...(falOptions.klingVariant === 'standard' || falOptions.klingVariant === 'pro'
           ? { klingVariant: falOptions.klingVariant }
           : {}),
+        ...(typeof falOptions.kling26Audio === 'boolean'
+          ? { kling26Audio: falOptions.kling26Audio }
+          : {}),
         ...(typeof falOptions.negativePrompt === 'string' && falOptions.negativePrompt.trim().length > 0
           ? { negativePrompt: falOptions.negativePrompt.trim() }
           : {}),
@@ -2993,6 +3093,7 @@ export default function App() {
     setPrompt(generation.prompt ?? '');
     setApiProvider(provider);
     setReferenceImageIds(referenceIds);
+    setVideoLastFrameImageId(generation.videoLastFrameImageId ?? null);
 
     if (provider === 'fal') {
       setFalModelMode(storedModelMode);
@@ -3011,6 +3112,11 @@ export default function App() {
         }
         if (typeof overrideFalOptions?.negativePrompt === 'string') {
           setKlingNegativePrompt(overrideFalOptions.negativePrompt);
+        }
+        if (overrideFalOptions?.kling26Audio !== undefined) {
+          setKling26AudioSelection(overrideFalOptions.kling26Audio ? 'on' : 'off');
+        } else if (modelIdForOverride === KLING_26_VIDEO_MODEL_ID) {
+          setKling26AudioSelection('placeholder');
         }
       } else if (isFalImageModelId(modelIdForOverride)) {
         setFalImageModelId(modelIdForOverride);
@@ -3075,6 +3181,7 @@ export default function App() {
     setFalVideoModelId,
     setPrompt,
     setReferenceImageIds,
+    setVideoLastFrameImageId,
     setToastMessage,
   ]);
 
@@ -3605,13 +3712,51 @@ export default function App() {
 
   const handleImageSelection = useCallback((
     imageId: string | null,
-    options: { multi?: boolean; reference?: boolean } = {},
+    options: { multi?: boolean; reference?: boolean; lastFrame?: boolean } = {},
   ) => {
-    const { multi = false, reference = false } = options;
+    const { multi = false, reference = false, lastFrame = false } = options;
     const targetImage = imageId ? images.find(img => img.id === imageId) : null;
+    const isKlingVideoSelection = apiProvider === 'fal'
+      && falModelMode === 'video'
+      && falVideoModelId === KLING_VIDEO_MODEL_ID;
 
     if (reference && targetImage?.mediaType === 'video') {
       setError('Reference images must be still images.');
+      return;
+    }
+
+    if (lastFrame) {
+      if (!isKlingProVideoSelection) {
+        return;
+      }
+      if (!imageId) {
+        setVideoLastFrameImageId(null);
+        return;
+      }
+      if (!isImageCanvasMedia(targetImage)) {
+        setError('Ending frame must be a still image.');
+        return;
+      }
+      if (primaryImageId && imageId === primaryImageId) {
+        setVideoLastFrameImageId(null);
+        return;
+      }
+      setVideoLastFrameImageId(prevId => (prevId === imageId ? null : imageId));
+      return;
+    }
+
+    if (reference && isKlingVideoSelection) {
+      if (klingVariant === 'pro') {
+        if (!isImageCanvasMedia(targetImage)) {
+          setError('Ending frame must be a still image.');
+          return;
+        }
+        if (primaryImageId && imageId === primaryImageId) {
+          setVideoLastFrameImageId(null);
+          return;
+        }
+        setVideoLastFrameImageId(prevId => (prevId === imageId ? null : imageId ?? null));
+      }
       return;
     }
 
@@ -3642,12 +3787,14 @@ export default function App() {
         setSelectedImageIds([]);
         setSelectedNoteIds([]);
         setReferenceImageIds([]);
+        setVideoLastFrameImageId(null);
       }
       return;
     }
 
     if (multi) {
       setReferenceImageIds([]);
+      setVideoLastFrameImageId(null);
       setSelectedImageIds(prevIds => {
         if (prevIds.includes(imageId)) {
           return prevIds.filter(id => id !== imageId);
@@ -3660,13 +3807,30 @@ export default function App() {
     if (primaryImageId === imageId && selectedImageIds.length === 1) {
       setSelectedNoteIds([]);
       setReferenceImageIds([]);
+      setVideoLastFrameImageId(null);
       return;
     }
 
     setSelectedImageIds([imageId]);
     setSelectedNoteIds([]);
     setReferenceImageIds([]);
-  }, [falModelId, images, primaryImageId, selectedImageIds.length, setError, showReferenceLimitToast]);
+    if (videoLastFrameImageId && videoLastFrameImageId === imageId) {
+      setVideoLastFrameImageId(null);
+    }
+  }, [
+    apiProvider,
+    falModelId,
+    falModelMode,
+    falVideoModelId,
+    images,
+    isKlingProVideoSelection,
+    klingVariant,
+    primaryImageId,
+    selectedImageIds.length,
+    setError,
+    showReferenceLimitToast,
+    videoLastFrameImageId,
+  ]);
 
   const handleNoteSelection = useCallback((
     noteId: string | null,
@@ -3679,6 +3843,7 @@ export default function App() {
         setSelectedNoteIds([]);
         setSelectedImageIds([]);
         setReferenceImageIds([]);
+        setVideoLastFrameImageId(null);
       }
       return;
     }
@@ -3696,12 +3861,14 @@ export default function App() {
     if (primaryNoteId === noteId && selectedNoteIds.length === 1) {
       setSelectedImageIds([]);
       setReferenceImageIds([]);
+      setVideoLastFrameImageId(null);
       return;
     }
 
     setSelectedNoteIds([noteId]);
     setSelectedImageIds([]);
     setReferenceImageIds([]);
+    setVideoLastFrameImageId(null);
   }, [primaryNoteId, selectedNoteIds.length]);
 
   const handleNoteTextChange = useCallback((noteId: string, text: string) => {
@@ -3826,6 +3993,41 @@ export default function App() {
     });
   }
 
+  if (isKling26VideoModel) {
+    // Pro variant selector (disabled since only Pro is available)
+    promptBarModelControlsList.push({
+      id: 'kling26-variant-select',
+      ariaLabel: 'Kling 2.6 Pro variant',
+      options: [{ value: 'pro', label: 'Pro' }],
+      value: 'pro',
+      onChange: () => {},
+      disabled: true,
+    });
+
+    // Duration selector (5s or 10s, default 5s)
+    promptBarModelControlsList.push({
+      id: 'kling26-video-duration-select',
+      ariaLabel: 'Select Kling 2.6 duration',
+      options: [
+        { value: '5', label: '5s' },
+        { value: '10', label: '10s' },
+      ],
+      value: falVideoDuration === '10' ? '10' : '5',
+      onChange: handleFalVideoDurationChange,
+      disabled: isLoading,
+    });
+
+    // Audio selector (Off or On, default Off)
+    promptBarModelControlsList.push({
+      id: 'kling26-audio-select',
+      ariaLabel: 'Select Kling 2.6 audio',
+      options: KLING26_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: kling26AudioSelection,
+      onChange: handleKling26AudioChange,
+      disabled: isLoading,
+    });
+  }
+
   if (!isVideoMode && usingFal && isUpscaleModel) {
     promptBarModelControlsList.push({
       id: 'fal-scale-factor-select',
@@ -3914,7 +4116,7 @@ export default function App() {
   const promptBarModelControls: ReadonlyArray<PromptBarModelControl> | undefined =
     promptBarModelControlsList.length > 0 ? promptBarModelControlsList : undefined;
   const promptBarModelOptions = falModelMode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
-  const shouldShowKlingNegativePrompt = isKlingVideoModel;
+  const shouldShowKlingNegativePrompt = isKlingVideoModel || isKling26VideoModel;
   const promptOutlineColor = shouldShowKlingNegativePrompt ? '#34d399' : undefined;
   const negativePromptOutlineColor = shouldShowKlingNegativePrompt ? '#f87171' : undefined;
 
@@ -4019,6 +4221,8 @@ export default function App() {
           selectedImageIds={selectedImageIds}
           selectedNoteIds={selectedNoteIds}
           referenceImageIds={referenceImageIds}
+          videoLastFrameImageId={videoLastFrameImageId}
+          tailSelectionEnabled={isKlingProVideoSelection}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}
 

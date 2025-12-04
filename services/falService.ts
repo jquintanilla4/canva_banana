@@ -31,14 +31,53 @@ const ensureFalApiKey = () => {
 
 type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED';
 
+type FalQueueLogs = Array<{ message?: string }> | Record<string, unknown> | string | undefined;
+
 export interface FalQueueUpdate {
-  requestId: string;
+  requestId?: string;
   status: FalQueueStatus;
   position?: number;
   eta?: number;
-  logs?: Array<{ message?: string }>;
+  logs?: FalQueueLogs;
   [key: string]: unknown;
 }
+
+const normalizeQueueLogs = (logs: FalQueueLogs): Array<{ message?: string }> => {
+  if (!logs) {
+    return [];
+  }
+  if (Array.isArray(logs)) {
+    return logs
+      .map(entry => {
+        if (typeof entry === 'string') {
+          return { message: entry };
+        }
+        if (entry && typeof entry === 'object') {
+          const message = (entry as { message?: unknown }).message;
+          return typeof message === 'string' ? { message } : entry as { message?: string };
+        }
+        return null;
+      })
+      .filter(Boolean) as Array<{ message?: string }>;
+  }
+  if (typeof logs === 'object') {
+    return Object.values(logs)
+      .flatMap(value => normalizeQueueLogs(value as FalQueueLogs));
+  }
+  if (typeof logs === 'string') {
+    return [{ message: logs }];
+  }
+  return [];
+};
+
+const resolveQueueRequestId = (update: FalQueueUpdate, fallback?: string): string | undefined => {
+  const requestId = typeof update.requestId === 'string'
+    ? update.requestId
+    : typeof (update as { request_id?: unknown }).request_id === 'string'
+      ? (update as { request_id?: string }).request_id
+      : undefined;
+  return requestId || fallback;
+};
 
 interface GenerateImageEditOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
@@ -71,6 +110,8 @@ interface GenerateVideoOptions {
   duration?: FalVideoDuration;
   negativePrompt?: string;
   cfgScale?: number;
+  tailImage?: HTMLImageElement;
+  generateAudio?: boolean;
 }
 
 const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
@@ -110,6 +151,7 @@ export const HAILUO_IMAGE_TO_VIDEO_MODEL_ID = HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID
 export const KLING_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-video';
 export const KLING_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video';
 export const KLING_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
+export const KLING_26_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/image-to-video';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -512,19 +554,22 @@ export const generateImageEdit = async ({
       logs: true,
       onQueueUpdate: update => {
         const queueUpdate = update as FalQueueUpdate;
-        if (queueUpdate.requestId) {
-          latestRequestId = queueUpdate.requestId;
+        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+        if (resolvedRequestId) {
+          latestRequestId = resolvedRequestId;
         }
         logFalEvent('inbound', modelId, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
           eta: queueUpdate.eta,
-          requestId: queueUpdate.requestId || latestRequestId,
-          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
+          requestId: resolvedRequestId,
+          logs: normalizedLogs.map(log => log?.message ?? ''),
         });
         options.onQueueUpdate?.({
           ...queueUpdate,
-          requestId: queueUpdate.requestId || latestRequestId || '',
+          requestId: resolvedRequestId || '',
+          logs: normalizedLogs,
         });
       },
     });
@@ -603,19 +648,22 @@ export const upscaleCrystalImage = async (
       logs: true,
       onQueueUpdate: update => {
         const queueUpdate = update as FalQueueUpdate;
-        if (queueUpdate.requestId) {
-          latestRequestId = queueUpdate.requestId;
+        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+        if (resolvedRequestId) {
+          latestRequestId = resolvedRequestId;
         }
         logFalEvent('inbound', CRYSTAL_UPSCALER_MODEL_ID, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
           eta: queueUpdate.eta,
-          requestId: queueUpdate.requestId || latestRequestId,
-          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
+          requestId: resolvedRequestId,
+          logs: normalizedLogs.map(log => log?.message ?? ''),
         });
         options.onQueueUpdate?.({
           ...queueUpdate,
-          requestId: queueUpdate.requestId || latestRequestId || '',
+          requestId: resolvedRequestId || '',
+          logs: normalizedLogs,
         });
       },
     });
@@ -709,19 +757,22 @@ export const upscaleSeedvrImage = async (
       logs: true,
       onQueueUpdate: update => {
         const queueUpdate = update as FalQueueUpdate;
-        if (queueUpdate.requestId) {
-          latestRequestId = queueUpdate.requestId;
+        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+        if (resolvedRequestId) {
+          latestRequestId = resolvedRequestId;
         }
         logFalEvent('inbound', SEEDVR_UPSCALER_MODEL_ID, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
           eta: queueUpdate.eta,
-          requestId: queueUpdate.requestId || latestRequestId,
-          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
+          requestId: resolvedRequestId,
+          logs: normalizedLogs.map(log => log?.message ?? ''),
         });
         options.onQueueUpdate?.({
           ...queueUpdate,
-          requestId: queueUpdate.requestId || latestRequestId || '',
+          requestId: resolvedRequestId || '',
+          logs: normalizedLogs,
         });
       },
     });
@@ -858,19 +909,22 @@ export const generateImage = async (
       logs: true,
       onQueueUpdate: update => {
         const queueUpdate = update as FalQueueUpdate;
-        if (queueUpdate.requestId) {
-          latestRequestId = queueUpdate.requestId;
+        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+        if (resolvedRequestId) {
+          latestRequestId = resolvedRequestId;
         }
         logFalEvent('inbound', modelId, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
           eta: queueUpdate.eta,
-          requestId: queueUpdate.requestId || latestRequestId,
-          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
+          requestId: resolvedRequestId,
+          logs: normalizedLogs.map(log => log?.message ?? ''),
         });
         options.onQueueUpdate?.({
           ...queueUpdate,
-          requestId: queueUpdate.requestId || latestRequestId || '',
+          requestId: resolvedRequestId || '',
+          logs: normalizedLogs,
         });
       },
     });
@@ -929,6 +983,9 @@ export const generateImageToVideo = async (
   const cfgScale = typeof options.cfgScale === 'number' && Number.isFinite(options.cfgScale)
     ? options.cfgScale
     : undefined;
+  const tailImage = options.tailImage;
+  const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage) : undefined;
+  const generateAudio = typeof options.generateAudio === 'boolean' ? options.generateAudio : undefined;
   let latestRequestId: string | undefined;
 
   const inputPayload: Record<string, unknown> = {
@@ -938,6 +995,8 @@ export const generateImageToVideo = async (
     ...(duration ? { duration } : {}),
     ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
     ...(cfgScale !== undefined ? { cfg_scale: cfgScale } : {}),
+    ...(tailImageUrl ? { tail_image_url: tailImageUrl } : {}),
+    ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
   };
 
   logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
@@ -951,19 +1010,22 @@ export const generateImageToVideo = async (
       logs: true,
       onQueueUpdate: update => {
         const queueUpdate = update as FalQueueUpdate;
-        if (queueUpdate.requestId) {
-          latestRequestId = queueUpdate.requestId;
+        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+        if (resolvedRequestId) {
+          latestRequestId = resolvedRequestId;
         }
         logFalEvent('inbound', modelId, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
           eta: queueUpdate.eta,
-          requestId: queueUpdate.requestId || latestRequestId,
-          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
+          requestId: resolvedRequestId,
+          logs: normalizedLogs.map(log => log?.message ?? ''),
         });
         options.onQueueUpdate?.({
           ...queueUpdate,
-          requestId: queueUpdate.requestId || latestRequestId || '',
+          requestId: resolvedRequestId || '',
+          logs: normalizedLogs,
         });
       },
     });
@@ -1024,19 +1086,22 @@ export const removeBackground = async (
       logs: true,
       onQueueUpdate: update => {
         const queueUpdate = update as FalQueueUpdate;
-        if (queueUpdate.requestId) {
-          latestRequestId = queueUpdate.requestId;
+        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+        if (resolvedRequestId) {
+          latestRequestId = resolvedRequestId;
         }
         logFalEvent('inbound', backgroundModelId, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
           eta: queueUpdate.eta,
-          requestId: queueUpdate.requestId || latestRequestId,
-          logs: queueUpdate.logs?.map(log => log?.message ?? ''),
+          requestId: resolvedRequestId,
+          logs: normalizedLogs.map(log => log?.message ?? ''),
         });
         options.onQueueUpdate?.({
           ...queueUpdate,
-          requestId: queueUpdate.requestId || latestRequestId || '',
+          requestId: resolvedRequestId || '',
+          logs: normalizedLogs,
         });
       },
     });

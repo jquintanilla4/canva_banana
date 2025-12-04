@@ -19,7 +19,9 @@ interface CanvasProps {
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
-  onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean }) => void;
+  videoLastFrameImageId: string | null;
+  tailSelectionEnabled: boolean;
+  onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
   onCommit: () => void;
   zoomToFitTrigger: number;
@@ -103,6 +105,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   selectedImageIds,
   selectedNoteIds,
   referenceImageIds,
+  videoLastFrameImageId,
+  tailSelectionEnabled,
   onImageSelect,
   onNoteSelect,
   onCommit,
@@ -546,6 +550,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([6 / scale, 4 / scale]);
         ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
         ctx.setLineDash([]);
+      } else if (videoLastFrameImageId === image.id) {
+        ctx.strokeStyle = '#f59e0b'; // amber-500 for ending frame
+        ctx.lineWidth = 4 / scale;
+        ctx.setLineDash([6 / scale, 4 / scale]);
+        ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
+        ctx.setLineDash([]);
       } else if (referenceImageIds.includes(image.id)) {
         ctx.strokeStyle = '#10b981'; // emerald-500 for reference
         ctx.lineWidth = 4 / scale;
@@ -767,7 +777,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.drawImage(pathCanvas, 0, 0);
       }
     }
-  }, [cropMode, getImageCenter, getImageRotation, images, notes, paths, pan, referenceImageIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode]);
+  }, [cropMode, getImageCenter, getImageRotation, images, notes, paths, pan, referenceImageIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode, videoLastFrameImageId]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1131,7 +1141,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     const isMultiSelectKey = e.metaKey || e.ctrlKey;
-    const isReferenceToggle = !isMultiSelectKey && e.shiftKey;
+    const wantsTailSelection = tailSelectionEnabled && !isMultiSelectKey && e.shiftKey;
+    const isReferenceToggle = !wantsTailSelection && !isMultiSelectKey && e.shiftKey;
 
     const beginDrag = (imageIdsToDrag: string[], noteIdsToDrag: string[]) => {
       const imagePositions: Record<string, Point> = {};
@@ -1200,6 +1211,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       const image = getImageAtPoint(point);
       if (image) {
+        if (wantsTailSelection) {
+          onImageSelect(image.id, { lastFrame: true });
+          return;
+        }
         if (isReferenceToggle) {
           onImageSelect(image.id, { reference: true });
           return;
