@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tool, InpaintMode, AppMode } from '../types';
-import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon } from './Icons';
+import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon } from './Icons';
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -29,6 +29,8 @@ interface ToolbarProps {
   onRemoveBackground: () => void;
   isBackgroundRemovalDisabled: boolean;
   isBackgroundRemovalLoading: boolean;
+  onResize: () => void;
+  isResizeDisabled: boolean;
 }
 
 const ToolButton: React.FC<{
@@ -112,6 +114,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onRemoveBackground,
   isBackgroundRemovalDisabled,
   isBackgroundRemovalLoading,
+  onResize,
+  isResizeDisabled,
 }) => {
   // Main control bar: switches modes/tools and exposes canvas actions (undo, clear, upload, background removal).
   const isBrushToolActive = activeTool === Tool.BRUSH;
@@ -215,6 +219,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       )}
       
       <div className="flex h-full items-center space-x-2">
+        <button
+          onClick={onResize}
+          disabled={isResizeDisabled}
+          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-blue-600 text-white disabled:bg-gray-700 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Resize Selected Image"
+          aria-label="Resize Selected Image"
+        >
+          <ResizeIcon className="w-4 h-4" />
+        </button>
         <button
           onClick={onRemoveBackground}
           disabled={isBackgroundRemovalDisabled}

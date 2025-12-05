@@ -31,6 +31,7 @@ import { FileMenu } from './components/FileMenu';
 import { ViewToolbar } from './components/ViewToolbar';
 import { ProviderSwitcher } from './components/ProviderSwitcher';
 import { StatusBanner } from './components/StatusBanner';
+import { ImageResizeToast } from './components/ImageResizeToast';
 import { useGeneration } from './hooks/useGeneration';
 import { useCanvasHistory } from './hooks/useCanvasHistory';
 import { useSelectionState } from './hooks/useSelectionState';
@@ -39,6 +40,7 @@ import { useSnapshotIO } from './hooks/useSnapshotIO';
 import { useCanvasMediaActions } from './hooks/useCanvasMediaActions';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useGenerationGuards } from './hooks/useGenerationGuards';
+import { useImageResize } from './hooks/useImageResize';
 import type { FalModelMode } from './services/modelConfig';
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
@@ -288,6 +290,28 @@ export default function App() {
     handleCommit,
   });
 
+  const {
+    isOpen: isResizeToastOpen,
+    width: resizeWidth,
+    height: resizeHeight,
+    keepAspect: resizeKeepAspect,
+    isProcessing: isResizing,
+    canResize,
+    open: openResizeToast,
+    cancel: cancelResizeToast,
+    setWidth: setResizeWidth,
+    setHeight: setResizeHeight,
+    setKeepAspect: setResizeKeepAspect,
+    confirm: confirmResize,
+  } = useImageResize({
+    images,
+    selectedImageIds,
+    setState,
+    handleCommit,
+    setToastMessage,
+    setError,
+  });
+
   useEffect(() => {
     // Enforce reference image limits whenever the active model changes.
     const maxReferenceImages = getMaxReferenceImages(falModelId);
@@ -533,6 +557,13 @@ export default function App() {
     };
   }, [isDebugLogOpen]);
 
+  useEffect(() => {
+    if (!isResizeToastOpen) return;
+    if (cropMode || transformMode) {
+      cancelResizeToast();
+    }
+  }, [cancelResizeToast, cropMode, isResizeToastOpen, transformMode]);
+
   const handleToolChange = useCallback((newTool: Tool) => {
     // Changing tools finalizes any in-progress note edits or crop sessions to keep state consistent.
     setTool(newTool);
@@ -756,6 +787,8 @@ export default function App() {
           isImageSelected={hasSingleImageSelected}
           isObjectSelected={selectedImageIds.length > 0 || selectedNoteIds.length > 0}
           onDelete={handleDelete}
+          onResize={openResizeToast}
+          isResizeDisabled={!canResize || isRemovingBackground || isResizing || isLoading}
           onRemoveBackground={handleBackgroundRemoval}
           isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
           isBackgroundRemovalLoading={isRemovingBackground}
@@ -823,6 +856,19 @@ export default function App() {
       )}
       {toastMessage && (
         <StatusBanner message={toastMessage} variant="success" />
+      )}
+      {isResizeToastOpen && (
+        <ImageResizeToast
+          width={resizeWidth}
+          height={resizeHeight}
+          onWidthChange={setResizeWidth}
+          onHeightChange={setResizeHeight}
+          keepAspect={resizeKeepAspect}
+          onToggleKeepAspect={setResizeKeepAspect}
+          isProcessing={isResizing}
+          onCancel={cancelResizeToast}
+          onConfirm={confirmResize}
+        />
       )}
 
       {/* FAL job queue panel */}
