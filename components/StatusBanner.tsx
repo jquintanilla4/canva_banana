@@ -13,6 +13,7 @@ const variantStyles = {
 
 export const StatusBanner: React.FC<StatusBannerProps> = ({ message, variant, onClose }) => {
   const colorClass = variantStyles[variant];
+  // Lightweight toast for errors/success with optional dismiss.
   return (
     <div className={`absolute top-20 left-1/2 -translate-x-1/2 ${colorClass} text-white p-3 rounded-md shadow-lg z-20 max-w-md text-center`}>
       <p>{message}</p>

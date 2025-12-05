@@ -87,7 +87,7 @@ const ActionButton: React.FC<{
   </button>
 );
 
-
+// Core canvas surface: renders images/notes, handles drawing tools, selection, transforms, and emits updates to parents.
 export const Canvas: React.FC<CanvasProps> = ({
   images,
   onImagesChange,

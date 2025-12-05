@@ -113,6 +113,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isBackgroundRemovalDisabled,
   isBackgroundRemovalLoading,
 }) => {
+  // Main control bar: switches modes/tools and exposes canvas actions (undo, clear, upload, background removal).
   const isBrushToolActive = activeTool === Tool.BRUSH;
   const isEraserToolActive = activeTool === Tool.ERASE;
   const strokeSize = isEraserToolActive ? eraserSize : brushSize;

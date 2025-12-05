@@ -64,6 +64,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   promptOutlineColor,
   negativePromptOutlineColor,
 }) => {
+  // Prompt input surface with dynamic model selectors and optional negative prompt for video flows.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const negativeTextareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);

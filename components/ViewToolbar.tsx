@@ -14,6 +14,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   metadataVisible,
   onToggleMetadata,
 }) => {
+  // Lightweight view controls separate from the main tool palette.
   const metadataButtonClasses = metadataVisible
     ? 'bg-blue-500 hover:bg-blue-400'
     : 'bg-gray-700 hover:bg-gray-600';

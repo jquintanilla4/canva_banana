@@ -2,6 +2,7 @@ const SUPPRESSED_MESSAGES = [
   '[WARNING] No request provided, using global lifecycle preference',
 ] as const;
 
+// Normalize noisy Fal responses into actionable, user-friendly strings.
 export const SUPPRESSED_FAL_LOG_MESSAGE_SET = new Set<string>(SUPPRESSED_MESSAGES);
 const SERVER_BUSY_KEYWORDS = [
   'server busy',

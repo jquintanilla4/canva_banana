@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { addDebugLog } from './debugLog';
 
+// Wrapper around @fal-ai/client that normalizes queue updates and surfaces debug logs for the UI.
 interface GenerateImageEditParams {
   prompt: string;
   image: HTMLImageElement;
@@ -141,6 +142,30 @@ const isSeedreamEditModelId = (modelId: string | undefined): modelId is Seedream
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID] as const;
 const isSeedreamTextToImageModelId = (modelId: string | undefined): boolean =>
   !!modelId && (SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(modelId);
+const isSeedreamV45ModelId = (modelId: string | undefined): boolean =>
+  modelId === SEEDREAM_V45_MODEL_ID || modelId === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID;
+const SEEDREAM_CUSTOM_SIZE_MAP = {
+  '1280x720': { width: 1280, height: 720 },
+  '1920x1080': { width: 1920, height: 1080 },
+} as const;
+type SeedreamCustomSizeKey = keyof typeof SEEDREAM_CUSTOM_SIZE_MAP;
+const isSeedreamCustomSize = (value: unknown): value is SeedreamCustomSizeKey =>
+  value === '1280x720' || value === '1920x1080';
+const getSeedreamCustomSize = (value: string | undefined) =>
+  isSeedreamCustomSize(value) ? SEEDREAM_CUSTOM_SIZE_MAP[value] : undefined;
+const resolveSeedreamCustomSizeForModel = (
+  modelId: string | undefined,
+  imageSizeOption: FalImageSizeOption | FalAspectRatioOption,
+): { width: number; height: number } | undefined => {
+  if (isSeedreamV45ModelId(modelId)) {
+    return undefined;
+  }
+  const baseSize = getSeedreamCustomSize(imageSizeOption);
+  if (!baseSize) {
+    return undefined;
+  }
+  return baseSize;
+};
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
 const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1';
 const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler';
@@ -494,8 +519,16 @@ export const generateImageEdit = async ({
 
   const modelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
   const isSeedreamModel = isSeedreamEditModelId(modelId);
-  const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
+  const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
+  const imageSizeOption: FalImageSizeOption =
+    isSeedreamModel && isSeedreamV45ModelId(modelId) && isSeedreamCustomSize(rawImageSizeOption)
+      ? 'default'
+      : rawImageSizeOption;
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
+  const seedreamCustomSize = isSeedreamModel
+    ? (resolveSeedreamCustomSizeForModel(modelId, imageSizeOption)
+      ?? resolveSeedreamCustomSizeForModel(modelId, aspectRatioOption))
+    : undefined;
   const numImagesOption = options.numImages;
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
   const isKlingModel = modelId === KLING_IMAGE_MODEL_ID;
@@ -523,7 +556,9 @@ export const generateImageEdit = async ({
   let latestRequestId: string | undefined;
 
   if (isSeedreamModel) {
-    if (imageSizeOption === 'default') {
+    if (seedreamCustomSize) {
+      body.image_size = seedreamCustomSize;
+    } else if (imageSizeOption === 'default') {
       body.image_size = {
         width: imageDimensions.width,
         height: imageDimensions.height,
@@ -836,9 +871,17 @@ export const generateImage = async (
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
   const supportsAspectRatio = isGeminiTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
   const supportsResolution = isGeminiTextToImage || isKlingTextToImage;
-  const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
   const numImagesOption = options.numImages;
-  const imageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
+  const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
+  const imageSizeOption: FalImageSizeOption =
+    isSeedreamTextToImage && isSeedreamV45ModelId(modelId) && isSeedreamCustomSize(rawImageSizeOption)
+      ? 'default'
+      : rawImageSizeOption;
+  const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
+  const seedreamCustomSize = isSeedreamTextToImage
+    ? (resolveSeedreamCustomSizeForModel(modelId, imageSizeOption)
+      ?? resolveSeedreamCustomSizeForModel(modelId, aspectRatioOption))
+    : undefined;
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
   const normalizedResolutionOption: FalResolutionOption = isKlingTextToImage && resolutionOption === '4K' ? '2K' : resolutionOption;
   const referenceImages = Array.isArray(options.referenceImages) ? options.referenceImages : [];
@@ -873,7 +916,9 @@ export const generateImage = async (
   if (isSeedreamTextToImage) {
     const seedOption = Number.isFinite(options.seed) ? Math.floor(options.seed as number) : createRandomSeed();
     body.seed = seedOption;
-    if (imageSizeOption !== 'default') {
+    if (seedreamCustomSize) {
+      body.image_size = seedreamCustomSize;
+    } else if (imageSizeOption !== 'default') {
       body.image_size = imageSizeOption;
     }
   } else if (isGeminiTextToImage || isKlingTextToImage) {

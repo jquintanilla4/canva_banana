@@ -1,0 +1,333 @@
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import type React from 'react';
+import {
+  type CanvasImage,
+  type CanvasNote,
+  type Path,
+  type Point,
+  Tool,
+} from '../types';
+import { getNaturalSize, loadMediaFromBlob } from '../services/mediaService';
+import { removeBackground as removeFalBackground } from '../services/falService';
+
+type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
+type TransformModeState = { imageId: string; };
+
+type UseCanvasMediaActionsArgs = {
+  images: CanvasImage[];
+  displayedImages: CanvasImage[];
+  hasSingleImageSelected: boolean;
+  primaryImageId: string | null;
+  setState: Dispatch<SetStateAction<{ images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] }>>;
+  setSelectedImageIds: (ids: string[]) => void;
+  setSelectedNoteIds: (ids: string[]) => void;
+  setReferenceImageIds: (ids: string[]) => void;
+  setTool: (tool: Tool) => void;
+  setError: (message: string | null) => void;
+  setToastMessage: (message: string | null) => void;
+  setLiveImages: (images: CanvasImage[] | null) => void;
+  handleCommit: () => void;
+};
+
+type UseCanvasMediaActionsResult = {
+  cropMode: CropModeState | null;
+  transformMode: TransformModeState | null;
+  isRemovingBackground: boolean;
+  handleFilesDrop: (files: FileList, point: Point) => void;
+  handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleDownload: () => void;
+  handleBackgroundRemoval: () => Promise<void>;
+  handleStartCrop: (imageId: string) => void;
+  handleCropRectChange: (rect: { x: number; y: number; width: number; height: number; }) => void;
+  handleConfirmCrop: () => Promise<void>;
+  handleCancelCrop: () => void;
+  handleStartTransform: (imageId: string) => void;
+  handleExitTransform: () => void;
+};
+
+const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
+  !!img && img.mediaType === 'image';
+
+export function useCanvasMediaActions({
+  images,
+  displayedImages,
+  hasSingleImageSelected,
+  primaryImageId,
+  setState,
+  setSelectedImageIds,
+  setSelectedNoteIds,
+  setReferenceImageIds,
+  setTool,
+  setError,
+  setToastMessage,
+  setLiveImages,
+  handleCommit,
+}: UseCanvasMediaActionsArgs): UseCanvasMediaActionsResult {
+  const [cropMode, setCropMode] = useState<CropModeState | null>(null);
+  const [transformMode, setTransformMode] = useState<TransformModeState | null>(null);
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+
+  // Adds dropped/uploaded images to the canvas and selects the last one placed.
+  const handleFilesDrop = useCallback((files: FileList, point: Point) => {
+    const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    let lastAddedImageId: string | null = null;
+    const newImages: CanvasImage[] = [];
+    let imagesProcessed = 0;
+
+    imageFiles.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const { naturalWidth, naturalHeight } = getNaturalSize(img);
+          const displayWidth = img.width || naturalWidth;
+          const displayHeight = img.height || naturalHeight;
+          const newCanvasImage: CanvasImage = {
+            id: crypto.randomUUID(),
+            element: img,
+            mediaType: 'image',
+            x: point.x - (displayWidth / 2) + (index * 20),
+            y: point.y - (displayHeight / 2) + (index * 20),
+            width: displayWidth,
+            height: displayHeight,
+            rotation: 0,
+            naturalWidth,
+            naturalHeight,
+            file: file,
+            isPlaying: false,
+            hasAudio: false,
+            metadata: { source: 'imported' },
+          };
+          newImages.push(newCanvasImage);
+          lastAddedImageId = newCanvasImage.id;
+          imagesProcessed++;
+
+          if (imagesProcessed === imageFiles.length) {
+            setState(prevState => ({
+              ...prevState,
+              images: [...prevState.images, ...newImages],
+              paths: [],
+            }));
+            setSelectedImageIds(lastAddedImageId ? [lastAddedImageId] : []);
+            setSelectedNoteIds([]);
+            setReferenceImageIds([]);
+            setTool(Tool.SELECTION);
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  }, [setReferenceImageIds, setSelectedImageIds, setSelectedNoteIds, setState, setTool]);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const centerPoint: Point = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+      handleFilesDrop(files, centerPoint);
+    }
+    e.target.value = '';
+  }, [handleFilesDrop]);
+
+  const handleDownload = useCallback(() => {
+    if (!hasSingleImageSelected || !primaryImageId) return;
+    const imageToDownload = images.find(img => img.id === primaryImageId);
+    if (!imageToDownload) return;
+
+    const mediaElement = imageToDownload.element;
+    const fallbackHref = mediaElement instanceof HTMLVideoElement
+      ? (mediaElement.currentSrc || mediaElement.src)
+      : mediaElement.src;
+    const objectUrl = imageToDownload.file ? URL.createObjectURL(imageToDownload.file) : null;
+    const href = objectUrl || fallbackHref;
+    if (!href) {
+      setError('No downloadable source found for this item.');
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = imageToDownload.file.name || (imageToDownload.mediaType === 'video' ? 'video.mp4' : 'download.png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    if (objectUrl) {
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    }
+  }, [hasSingleImageSelected, images, primaryImageId, setError]);
+
+  const handleBackgroundRemoval = useCallback(async () => {
+    if (!hasSingleImageSelected || !primaryImageId) {
+      setError('Select an image to remove its background.');
+      return;
+    }
+    const targetImage = images.find(img => img.id === primaryImageId);
+    if (!targetImage || !isImageCanvasMedia(targetImage)) {
+      setError('Background removal is only available for images.');
+      return;
+    }
+
+    try {
+      setIsRemovingBackground(true);
+      const { imageBase64 } = await removeFalBackground(targetImage.element);
+      const dataUrl = `data:image/png;base64,${imageBase64}`;
+      const blob = await (await fetch(dataUrl)).blob();
+      const element = await loadMediaFromBlob(blob, 'image');
+      const { naturalWidth, naturalHeight } = getNaturalSize(element);
+      const fileNameBase = targetImage.file?.name?.replace(/\.[^.]+$/, '') || 'image';
+      const updatedFile = new File([blob], `${fileNameBase}-nobg.png`, { type: blob.type || targetImage.file.type || 'image/png' });
+      const width = element.width || naturalWidth;
+      const height = element.height || naturalHeight;
+
+      setState(prev => ({
+        ...prev,
+        images: prev.images.map(img => img.id === targetImage.id
+          ? {
+              ...img,
+              element,
+              width,
+              height,
+              naturalWidth,
+              naturalHeight,
+              file: updatedFile,
+              metadata: { ...img.metadata, source: img.metadata?.source ?? 'derived' },
+            }
+          : img),
+      }));
+      setError(null);
+      setToastMessage('Background removed');
+      setTimeout(() => setToastMessage(null), 2000);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Failed to remove background.';
+    setError(message);
+  } finally {
+    setIsRemovingBackground(false);
+  }
+}, [hasSingleImageSelected, images, primaryImageId, setError, setState, setToastMessage]);
+
+  const handleStartCrop = useCallback((imageId: string) => {
+    handleCommit();
+    const targetImage = displayedImages.find(img => img.id === imageId);
+    if (!targetImage) {
+      return;
+    }
+    if (!isImageCanvasMedia(targetImage)) {
+      setError('Cropping is only available for images.');
+      return;
+    }
+    setTransformMode(null);
+    setCropMode({
+      imageId,
+      rect: { x: 0, y: 0, width: targetImage.width, height: targetImage.height },
+    });
+    setSelectedImageIds([imageId]);
+  }, [displayedImages, handleCommit, setError, setSelectedImageIds]);
+
+  const handleCropRectChange = useCallback((rect: { x: number; y: number; width: number; height: number; }) => {
+    setCropMode(prev => (prev ? { ...prev, rect } : prev));
+  }, []);
+
+  // Renders the selected crop into a new image/file and replaces the original.
+  const handleConfirmCrop = useCallback(async () => {
+    if (!cropMode) return;
+    const targetImage = images.find(img => img.id === cropMode.imageId);
+    if (!targetImage || !isImageCanvasMedia(targetImage)) {
+      setCropMode(null);
+      return;
+    }
+
+    try {
+      const { x, y, width, height } = cropMode.rect;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(width));
+      canvas.height = Math.max(1, Math.round(height));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Unable to crop image.');
+      }
+
+      ctx.drawImage(targetImage.element, x, y, width, height, 0, 0, width, height);
+
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(result => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(new Error('Failed to create cropped image.'));
+          }
+        }, targetImage.file.type || 'image/png');
+      });
+
+      const element = await loadMediaFromBlob(blob, 'image');
+      const { naturalWidth, naturalHeight } = getNaturalSize(element);
+      const fileNameBase = targetImage.file?.name?.replace(/\.[^.]+$/, '') || 'image';
+      const croppedFile = new File([blob], `${fileNameBase}-cropped.png`, { type: blob.type || targetImage.file.type || 'image/png' });
+      const displayWidth = element.width || naturalWidth;
+      const displayHeight = element.height || naturalHeight;
+
+      setState(prev => ({
+        ...prev,
+        images: prev.images.map(img => img.id === targetImage.id
+          ? {
+              ...img,
+              element,
+              x: img.x + x,
+              y: img.y + y,
+              width: displayWidth,
+              height: displayHeight,
+              naturalWidth,
+              naturalHeight,
+              rotation: 0,
+              file: croppedFile,
+              metadata: { ...img.metadata, source: img.metadata?.source ?? 'derived' },
+            }
+          : img),
+      }));
+      setSelectedImageIds([targetImage.id]);
+      setToastMessage('Cropped image saved');
+      setTimeout(() => setToastMessage(null), 2000);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Failed to crop image.';
+      setError(message);
+    } finally {
+      setCropMode(null);
+      setLiveImages(null);
+    }
+  }, [cropMode, images, setError, setLiveImages, setSelectedImageIds, setState, setToastMessage]);
+
+  const handleCancelCrop = useCallback(() => {
+    setCropMode(null);
+  }, []);
+
+  const handleStartTransform = useCallback((imageId: string) => {
+    handleCommit();
+    setCropMode(null);
+    setTransformMode({ imageId });
+    setSelectedImageIds([imageId]);
+  }, [handleCommit, setSelectedImageIds]);
+
+  const handleExitTransform = useCallback(() => {
+    handleCommit();
+    setTransformMode(null);
+  }, [handleCommit]);
+
+  return {
+    cropMode,
+    transformMode,
+    isRemovingBackground,
+    handleFilesDrop,
+    handleFileChange,
+    handleDownload,
+    handleBackgroundRemoval,
+    handleStartCrop,
+    handleCropRectChange,
+    handleConfirmCrop,
+    handleCancelCrop,
+    handleStartTransform,
+    handleExitTransform,
+  };
+}

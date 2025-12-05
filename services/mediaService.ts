@@ -1,6 +1,7 @@
 import { CanvasMediaType, CanvasImage } from '../types';
 import { getImageBounds, getImageRotation } from '../utils/canvasGeometry';
 
+// Utilities for loading media into elements and rasterizing canvas items for API compatibility.
 export const isVideoFileType = (fileType: string): boolean =>
   typeof fileType === 'string' && /video\//.test(fileType);
 
@@ -152,6 +153,7 @@ export const rasterizeImages = (imagesToCompose: CanvasImage[]): Promise<{
       const rotation = getImageRotation(img);
       const centerX = img.x + img.width / 2;
       const centerY = img.y + img.height / 2;
+      // Draw each image in its own rotated context so composite respects transforms.
       ctx.save();
       ctx.translate(centerX - minX, centerY - minY);
       ctx.rotate(rotation);

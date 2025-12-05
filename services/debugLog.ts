@@ -16,6 +16,7 @@ const MAX_ENTRIES = 200;
 const entries: DebugLogEntry[] = [];
 const listeners = new Set<DebugLogListener>();
 
+// Lightweight in-memory pub/sub so UI panels can stream log updates without Redux.
 const generateId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();

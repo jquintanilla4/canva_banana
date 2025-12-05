@@ -45,6 +45,7 @@ const renderData = (data: Record<string, unknown> | undefined): string | null =>
 };
 
 export const DebugLogPanel: React.FC<DebugLogPanelProps> = ({ entries, onClose, onClear }) => {
+  // Show newest entries first so recent requests bubble to the top.
   const sortedEntries = [...entries].sort((a, b) => b.timestamp - a.timestamp);
 
   return (

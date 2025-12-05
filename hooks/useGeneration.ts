@@ -145,6 +145,7 @@ export const useGeneration = (context: GenerationContext) => {
     setFalAspectRatioSelection,
   } = context;
 
+  // Centralized generation orchestrator for both providers (Fal/Gemini) across text-to-image, edits, upscales, and video.
   const handleGenerate = useCallback(async (generationOverrideOrEvent?: GenerationInputs | SyntheticEvent) => {
     const generationOverride = generationOverrideOrEvent && 'kind' in generationOverrideOrEvent
       ? generationOverrideOrEvent
@@ -265,6 +266,7 @@ export const useGeneration = (context: GenerationContext) => {
         return { x: startX, y: startY + height + spacing };
       };
 
+      // Spin up a Fal queue job so the UI can show progress even while the video generates server-side.
       const newJob: FalQueueJob = {
         id: falJobId,
         prompt: trimmedPrompt,
@@ -623,7 +625,7 @@ export const useGeneration = (context: GenerationContext) => {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isGeminiModel || isReveModel || isKlingModel) ? falAspectRatioSelectionForRun : 'default',
+            aspectRatio: (isGeminiModel || isReveModel || isKlingModel || isSeedreamModel) ? falAspectRatioSelectionForRun : 'default',
             ...(isGeminiModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(isKlingModel ? { resolution: normalizedFalResolutionSelectionForRun } : {}),
             ...(isSeedreamModel ? { imageSize: falImageSizeSelectionForRun } : {}),
@@ -748,6 +750,7 @@ export const useGeneration = (context: GenerationContext) => {
 
       const imagesBase64 = generationResult.imagesBase64 || [];
       const generatedImages = imagesBase64.length > 0 ? imagesBase64 : [generationResult.imageBase64];
+      // Hydrate base64 outputs back into canvas images and annotate them with generation metadata.
       const addGeneratedImages = async () => {
         const newImages: CanvasImage[] = [];
         let lastBounds = images.length > 0 ? getImageBounds(images[images.length - 1]) : null;

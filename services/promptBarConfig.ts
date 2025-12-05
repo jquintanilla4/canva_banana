@@ -13,7 +13,6 @@ import {
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
   FAL_GEMINI_ASPECT_RATIO_OPTIONS,
   FAL_IMAGE_MODEL_OPTIONS,
-  FAL_IMAGE_SIZE_OPTIONS,
   FAL_KLING_ASPECT_RATIO_OPTIONS,
   FAL_KLING_RESOLUTION_OPTIONS,
   FAL_NUM_IMAGE_OPTIONS,
@@ -21,6 +20,8 @@ import {
   FAL_RESOLUTION_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
+  getSeedreamAspectRatioOptions,
+  getSeedreamImageSizeOptions,
   HAILUO_VARIANT_OPTIONS,
   KLING26_AUDIO_OPTIONS,
   KLING_26_VIDEO_MODEL_ID,
@@ -82,6 +83,7 @@ export type PromptBarControlsInput = {
   isNumImagesInvalid: boolean;
 };
 
+// Map model/provider state into select configs consumed by PromptBar.
 export const buildPromptBarModelControls = (input: PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> | undefined => {
   const {
     apiProvider,
@@ -245,24 +247,27 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && (falModelId === SEEDREAM_MODEL_ID || falModelId === SEEDREAM_V45_MODEL_ID);
   if (shouldShowSeedreamImageSizeControl) {
+    const seedreamImageSizeOptions = getSeedreamImageSizeOptions(falModelId);
     controls.push({
       id: 'fal-image-size-select',
       ariaLabel: 'Select Seedream image size',
-      options: FAL_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      options: seedreamImageSizeOptions.map(option => ({ value: option.value, label: option.label })),
       value: falImageSizeSelection,
       onChange: onFalImageSizeChange,
       disabled: isLoading,
     });
   }
 
-  const supportsAspectRatioControl = isGeminiModel || isReveModel || isKlingModel;
+  const supportsAspectRatioControl = isGeminiModel || isReveModel || isKlingModel || (isSeedreamModel && !shouldShowSeedreamImageSizeControl);
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || !isVideoMode);
   if (shouldShowAspectRatioControl) {
     const aspectRatioOptions = isReveModel
       ? FAL_REVE_ASPECT_RATIO_OPTIONS
       : isGeminiModel
         ? FAL_GEMINI_ASPECT_RATIO_OPTIONS
-        : FAL_KLING_ASPECT_RATIO_OPTIONS;
+        : isSeedreamModel
+          ? getSeedreamAspectRatioOptions(falModelId)
+          : FAL_KLING_ASPECT_RATIO_OPTIONS;
     controls.push({
       id: 'fal-aspect-ratio-select',
       ariaLabel: 'Select aspect ratio',

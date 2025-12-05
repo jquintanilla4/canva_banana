@@ -51,6 +51,8 @@ export type FalImageSizePreset =
   | 'portrait_16_9'
   | 'landscape_4_3'
   | 'landscape_16_9'
+  | '1280x720'
+  | '1920x1080'
   | 'auto'
   | 'auto_2K'
   | 'auto_4K';
@@ -67,7 +69,9 @@ export type FalAspectRatioPreset =
   | '4:5'
   | '3:4'
   | '16:9'
-  | '9:16';
+  | '9:16'
+  | '1280x720'
+  | '1920x1080';
 
 export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
 

@@ -7,6 +7,7 @@ import type {
   GenerationKind,
 } from '../types';
 
+// Central registry of supported model IDs plus helpers for validation/labeling in the UI.
 export const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit' as const;
 export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
@@ -69,6 +70,8 @@ export const SEEDREAM_TEXT_TO_IMAGE_MAP: Record<SeedreamModelId, string> = {
   [SEEDREAM_MODEL_ID]: SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
   [SEEDREAM_V45_MODEL_ID]: SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
 };
+export const isSeedreamV45ModelId = (value: string | undefined): boolean =>
+  value === SEEDREAM_V45_MODEL_ID || value === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID;
 
 export type FalModelMode = 'image' | 'video';
 export type FalImageSizeSelectionValue = 'placeholder' | 'default' | FalImageSizePreset;
@@ -129,10 +132,17 @@ export const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectio
   { value: 'portrait_16_9', label: 'Portrait 9:16' },
   { value: 'landscape_4_3', label: 'Landscape 4:3' },
   { value: 'landscape_16_9', label: 'Landscape 16:9' },
+  { value: '1280x720', label: '1280 x 720' },
+  { value: '1920x1080', label: '1920 x 1080' },
   { value: 'auto', label: 'Auto' },
   { value: 'auto_2K', label: 'Auto 2K' },
   { value: 'auto_4K', label: 'Auto 4K' },
 ] as const;
+const SEEDREAM_CUSTOM_SIZE_VALUES = new Set<FalImageSizeSelectionValue>(['1280x720', '1920x1080']);
+export const getSeedreamImageSizeOptions = (modelId: string | undefined) =>
+  isSeedreamV45ModelId(modelId)
+    ? FAL_IMAGE_SIZE_OPTIONS.filter(option => !SEEDREAM_CUSTOM_SIZE_VALUES.has(option.value))
+    : FAL_IMAGE_SIZE_OPTIONS;
 
 export const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 export const FAL_CRYSTAL_SCALE_FACTOR_OPTIONS = Array.from({ length: 10 }, (_, index) => {
@@ -200,10 +210,23 @@ export const FAL_KLING_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRat
   { value: '2:3', label: '2:3' },
 ] as const;
 
+export const FAL_SEEDREAM_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+  { value: 'placeholder', label: 'Aspect Ratio' },
+  { value: 'default', label: 'Default' },
+  { value: '1280x720', label: '1280 x 720' },
+  { value: '1920x1080', label: '1920 x 1080' },
+] as const;
+const SEEDREAM_CUSTOM_AR_VALUES = new Set<FalAspectRatioSelectionValue>(['1280x720', '1920x1080']);
+export const getSeedreamAspectRatioOptions = (modelId: string | undefined) =>
+  isSeedreamV45ModelId(modelId)
+    ? FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.filter(option => !SEEDREAM_CUSTOM_AR_VALUES.has(option.value))
+    : FAL_SEEDREAM_ASPECT_RATIO_OPTIONS;
+
 export const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...FAL_GEMINI_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_KLING_ASPECT_RATIO_OPTIONS.map(option => option.value),
+  ...FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
 
 export const KLING26_AUDIO_OPTIONS: ReadonlyArray<{ value: Kling26AudioSelectionValue; label: string }> = [

@@ -25,6 +25,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
       return;
     }
 
+    // Close the menu on outside click or Escape to mirror native dropdown behavior.
     const handleMouseDown = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         onClose();

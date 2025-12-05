@@ -26,6 +26,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({ jobs, onDismiss })
     return null;
   }
 
+  // Keep the latest requests at the top so users can watch active generations.
   const sortedJobs = [...jobs].sort((a, b) => b.createdAt - a.createdAt);
 
   return (

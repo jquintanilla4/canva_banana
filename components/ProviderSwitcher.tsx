@@ -16,6 +16,7 @@ export const ProviderSwitcher: React.FC<ProviderSwitcherProps> = ({
   disabled = false,
   onSelect,
 }) => {
+  // Provider toggle between Google/Fal; keeps visual emphasis on the active selection.
   return (
     <div className="absolute bottom-4 left-4 z-20 flex items-center space-x-2">
       {providers.map((provider) => {

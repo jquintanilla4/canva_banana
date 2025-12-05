@@ -3,6 +3,7 @@ import type { FalJobStatus, FalQueueJob } from '../types';
 import { buildFalDisplayError, FAL_PROVIDER_DOWN_MESSAGE, formatFalLogMessage } from './falConstants';
 import { addDebugLog } from './debugLog';
 
+// Helpers to normalize Fal streaming updates into the UI-friendly queue model.
 export const mapFalStatusToJobStatus = (status: FalQueueUpdate['status'] | undefined): FalJobStatus => {
   switch (status) {
     case 'IN_PROGRESS':

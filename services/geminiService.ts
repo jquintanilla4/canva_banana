@@ -3,6 +3,7 @@ import { Tool, Path, ImageDimensions, InpaintMode } from '../types';
 
 let cachedClient: GoogleGenAI | null = null;
 
+// Thin wrapper around Google GenAI client with helpers to translate canvas state into prompt parts.
 const ensureClient = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {

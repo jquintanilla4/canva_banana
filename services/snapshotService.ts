@@ -27,6 +27,7 @@ import {
   loadMediaFromDataUrl,
 } from './mediaService';
 
+// Handles snapshot serialization/deserialization so canvases can be saved/restored across sessions.
 export type SnapshotImageManifest = {
   id: string;
   x: number;
