@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode } from '../types';
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon } from './Icons';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -40,7 +40,9 @@ interface CanvasProps {
   onConfirmCrop: () => void;
   onCancelCrop: () => void;
   onNoteCopy: (noteId: string) => void;
+  onNoteDuplicate: (noteId: string) => void;
   onImagePromptCopy: (imageId: string) => void;
+  onImageDuplicate: (imageId: string) => void;
   onRerunGeneration: (imageId: string) => void;
   showMetadataOverlay: boolean;
   transformMode: { imageId: string; } | null;
@@ -126,7 +128,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   onConfirmCrop,
   onCancelCrop,
   onNoteCopy,
+  onNoteDuplicate,
   onImagePromptCopy,
+  onImageDuplicate,
   onRerunGeneration,
   showMetadataOverlay,
   transformMode,
@@ -1933,6 +1937,13 @@ export const Canvas: React.FC<CanvasProps> = ({
           >
             <CopyIcon className="w-4 h-4" />
           </ActionButton>
+          <ActionButton
+            onClick={() => onNoteDuplicate(selectedNote.id)}
+            disabled={false}
+            title="Duplicate Note"
+          >
+            <DuplicateIcon className="w-4 h-4" />
+          </ActionButton>
         </div>
       )}
       {selectedImage && !cropMode && !transformMode && (
@@ -1979,6 +1990,13 @@ export const Canvas: React.FC<CanvasProps> = ({
             title={selectedImagePrompt ? 'Copy Generation Prompt' : 'No prompt available to copy'}
           >
             <CopyIcon className="w-4 h-4" />
+          </ActionButton>
+          <ActionButton
+            onClick={() => onImageDuplicate(selectedImage.id)}
+            disabled={false}
+            title="Duplicate Media"
+          >
+            <DuplicateIcon className="w-4 h-4" />
           </ActionButton>
         </div>
       )}

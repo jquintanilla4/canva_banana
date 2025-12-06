@@ -41,15 +41,16 @@ import { useCanvasMediaActions } from './hooks/useCanvasMediaActions';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useGenerationGuards } from './hooks/useGenerationGuards';
 import { useImageResize } from './hooks/useImageResize';
+import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
 import type { FalModelMode } from './services/modelConfig';
 
-const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
-  !!img && img.mediaType === 'image';
-
+// Type guard for CanvasImage elements that are images
+const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } => !!img && img.mediaType === 'image';
+// Type alias for API providers
 type ApiProvider = ApiProviderId;
-
+// Defines preferred order of API providers
 const PROVIDER_ORDER: ReadonlyArray<ApiProviderId> = ['google', 'fal'];
-
+// Checks if an environment variable is a non-empty string
 const hasEnvValue = (value: string | undefined): boolean => typeof value === 'string' && value.trim().length > 0;
 
 // Detect which API providers are usable based on available API keys in env.
@@ -58,15 +59,13 @@ const providerAvailability: Record<ApiProvider, boolean> = {
   fal: hasEnvValue(process.env.FAL_API_KEY),
 };
 
-const AVAILABLE_PROVIDERS = PROVIDER_ORDER.filter(provider => providerAvailability[provider]) as ApiProvider[];
-const PROVIDER_LABELS: Record<ApiProvider, string> = {
-  google: 'Google',
-  fal: 'FAL',
-};
-const DEFAULT_API_PROVIDER: ApiProvider = AVAILABLE_PROVIDERS[0] ?? 'google';
+// Determine available API providers based on environment, assign user-friendly labels, and set default provider.
+const AVAILABLE_PROVIDERS = PROVIDER_ORDER.filter(provider => providerAvailability[provider]) as ApiProvider[]; // List of enabled providers
+const PROVIDER_LABELS: Record<ApiProvider, string> = { google: 'Google', fal: 'FAL' }; // Mapping of provider IDs to display names
+const DEFAULT_API_PROVIDER: ApiProvider = AVAILABLE_PROVIDERS[0] ?? 'google'; // Default provider (first available or fallback)
 
+// Root component wires up canvas state, generation controls, and provider-specific settings.
 export default function App() {
-  // Root component wires up canvas state, generation controls, and provider-specific settings.
   const [appMode, setAppMode] = useState<AppMode>('CANVAS');
   const [tool, setTool] = useState<Tool>(Tool.PAN);
   const [brushSize, setBrushSize] = useState(20);
@@ -75,92 +74,120 @@ export default function App() {
   const [prompt, setPrompt] = useState('');
   const [inpaintMode, setInpaintMode] = useState<InpaintMode>('STRICT');
 
+  // Canvas state/history: manages undo/redo, staged edits, and exposes current media slices
   const {
-    images,
-    paths,
-    notes,
-    displayedImages,
-    displayedPaths,
-    displayedNotes,
-    setState,
-    setLiveImages,
-    setLivePaths,
-    setLiveNotes,
-    commit: handleCommit,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    resetHistory,
+    images,                // Committed canvas images
+    paths,                 // Committed drawing paths (brush/inpaint)
+    notes,                 // Committed notes
+    displayedImages,       // Images currently displayed (may include live edits)
+    displayedPaths,        // Paths currently displayed (may include live edits)
+    displayedNotes,        // Notes currently displayed (may include live edits)
+    setState,              // Update state with undo/redo support
+    setLiveImages,         // Stage in-progress edits to images
+    setLivePaths,          // Stage in-progress edits to paths
+    setLiveNotes,          // Stage in-progress edits to notes
+    commit: handleCommit,  // Commit staged (live) edits as a new history entry
+    undo,                  // Undo last committed action
+    redo,                  // Redo last undone action
+    canUndo,               // Whether undo is currently possible
+    canRedo,               // Whether redo is currently possible
+    resetHistory,          // Reset canvas state and undo/redo stack
   } = useCanvasHistory({ images: [], paths: [], notes: [] });
+  
   // Brush/inpaint layers (paths) are the only things we clear with the eraser button.
   const hasClearablePaths = displayedPaths.some(
     path =>
       (path.tool === Tool.ANNOTATE || path.tool === Tool.INPAINT) &&
       path.points.length > 0
   );
-
+  // State for note editing (currently edited note's ID or null if none)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+
+  // State to track if the app is currently performing a loading operation
   const [isLoading, setIsLoading] = useState(false);
+
+  // State for error message display (null if no error)
   const [error, setError] = useState<string | null>(null);
+
+  // Triggers to control zoom-to-fit, zoom-in, and zoom-out actions (increment to trigger effect)
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
   const [zoomInTrigger, setZoomInTrigger] = useState(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
+
+  // State for transient toast message notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // State for currently selected API provider (e.g., 'google', 'fal')
   const [apiProvider, setApiProvider] = useState<ApiProvider>(DEFAULT_API_PROVIDER);
+
+  // State for tracking the queue of FAL (FastAI Lab) jobs
   const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
+
+  // Ref to store timeouts for auto-dismissing FAL job notifications, mapped by job ID
   const falAutoDismissTimeouts = useRef<Map<string, number>>(new Map());
+
+  // FAL model and option state/handlers (image/video mode, variants, sliders, etc.)
   const {
-    falModelMode,
-    falModelId,
-    falImageModelId,
-    falVideoModelId,
-    falVideoDuration,
-    hailuoVariant,
-    klingVariant,
-    kling26AudioSelection,
-    falImageSizeSelection,
-    falAspectRatioSelection,
-    falResolutionSelection,
-    falNumImages,
-    falScaleFactor,
-    falNoiseScale,
-    falCreativity,
-    isVideoMode,
-    isKlingVideoModel,
-    isKling26VideoModel,
-    isHailuoVideoModel,
-    isUpscaleModel,
-    isKlingProVideoSelection,
-    handleModelModeChange: handleFalModelModeChange,
-    handleFalModelChange,
-    handleFalVideoDurationChange,
-    handleHailuoVariantChange,
-    handleKlingVariantChange,
-    handleKling26AudioChange,
-    handleFalImageSizeChange,
-    handleFalAspectRatioChange,
-    handleFalResolutionChange,
-    handleFalNumImagesChange,
-    handleFalScaleFactorChange,
-    handleFalNoiseScaleChange,
-    handleFalCreativityChange,
-    setFalModelMode,
-    setFalImageModelId,
-    setFalVideoModelId,
-    setFalImageSizeSelection,
-    setFalAspectRatioSelection,
-    setFalResolutionSelection,
-    setFalNumImages,
-    setFalScaleFactor,
-    setFalNoiseScale,
-    setFalCreativity,
+    falModelMode,                // Current FAL model mode ('image' | 'video')
+    falModelId,                  // Selected FAL model ID
+    falImageModelId,             // Selected FAL image model ID
+    falVideoModelId,             // Selected FAL video model ID
+    falVideoDuration,            // Video duration selection for FAL
+    hailuoVariant,               // Hailuo model variant ('standard' | 'pro')
+    klingVariant,                // Kling model variant ('standard' | 'pro')
+    kling26AudioSelection,       // Audio selection for Kling 2.6
+    falImageSizeSelection,       // Image size selection for FAL
+    falAspectRatioSelection,     // Aspect ratio selection for FAL
+    falResolutionSelection,      // Resolution selection for FAL
+    falNumImages,                // Number of images to generate for FAL
+    falScaleFactor,              // Scale factor for upscaling models
+    falNoiseScale,               // Noise scale (SeedVR upscaler, etc.)
+    falCreativity,               // Creativity slider (Crystal upscaler, etc.)
+    isVideoMode,                 // True if FAL is in video mode
+    isKlingVideoModel,           // True if Kling video model is selected
+    isKling26VideoModel,         // True if Kling 2.6 video model is selected
+    isHailuoVideoModel,          // True if Hailuo video model is selected
+    isUpscaleModel,              // True if an upscaler model is selected
+    isKlingProVideoSelection,    // True if Kling Pro video is selected
+    handleModelModeChange: handleFalModelModeChange, // Handler for switching FAL mode
+    handleFalModelChange,                    // Handler for FAL model changes
+    handleFalVideoDurationChange,            // Handler for FAL video duration changes
+    handleHailuoVariantChange,               // Handler for Hailuo variant changes
+    handleKlingVariantChange,                // Handler for Kling variant changes
+    handleKling26AudioChange,                // Handler for Kling 2.6 audio changes
+    handleFalImageSizeChange,                // Handler for FAL image size changes
+    handleFalAspectRatioChange,              // Handler for FAL aspect ratio changes
+    handleFalResolutionChange,               // Handler for FAL resolution changes
+    handleFalNumImagesChange,                // Handler for number of images change
+    handleFalScaleFactorChange,              // Handler for scale factor changes
+    handleFalNoiseScaleChange,               // Handler for noise scale changes
+    handleFalCreativityChange,               // Handler for creativity changes
+    setFalModelMode,                         // Setter for FAL model mode
+    setFalImageModelId,                      // Setter for FAL image model ID
+    setFalVideoModelId,                      // Setter for FAL video model ID
+    setFalImageSizeSelection,                // Setter for FAL image size selection
+    setFalAspectRatioSelection,              // Setter for FAL aspect ratio selection
+    setFalResolutionSelection,               // Setter for FAL resolution selection
+    setFalNumImages,                         // Setter for FAL number of images
+    setFalScaleFactor,                       // Setter for FAL scale factor
+    setFalNoiseScale,                        // Setter for FAL noise scale
+    setFalCreativity,                        // Setter for FAL creativity
   } = useFalSettings({ apiProvider });
+
+  // State for Kling negative prompt (used for Kling/SDXL models)
   const [klingNegativePrompt, setKlingNegativePrompt] = useState<string>(KLING_DEFAULT_NEGATIVE_PROMPT);
+
+  // Toggles display of metadata overlays on canvas images
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
+
+  // State for toggling the file menu and debug log panels
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [isDebugLogOpen, setIsDebugLogOpen] = useState(false);
+
+  // State for storing and updating debug log entries
   const [debugLogEntries, setDebugLogEntries] = useState(() => getDebugLogs());
+
+  // Callbacks to programmatically trigger zoom in/out from controls
   const requestZoomIn = useCallback(() => {
     setZoomInTrigger(prev => prev + 1);
   }, []);
@@ -168,6 +195,7 @@ export default function App() {
     setZoomOutTrigger(prev => prev + 1);
   }, []);
 
+  // Shows a toast when the reference image limit is reached for the current model.
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
     const totalLimit = maxReferenceImages + 1;
     setToastMessage(`${getFalModelLabel(falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
@@ -312,8 +340,21 @@ export default function App() {
     setError,
   });
 
+  const {
+    duplicateNote: handleDuplicateNote,
+    duplicateImage: handleDuplicateImage,
+  } = useDuplicateCanvasMedia({
+    displayedImages,
+    displayedNotes,
+    setState,
+    setSelectedImageIds,
+    setSelectedNoteIds,
+    setReferenceImageIds,
+    setVideoLastFrameImageId,
+  });
+
+  // Enforce reference image limits whenever the active model changes.
   useEffect(() => {
-    // Enforce reference image limits whenever the active model changes.
     const maxReferenceImages = getMaxReferenceImages(falModelId);
     setReferenceImageIds(prevIds => {
       if (prevIds.length <= maxReferenceImages) {
@@ -324,21 +365,25 @@ export default function App() {
     });
   }, [falModelId, showReferenceLimitToast]);
 
+  // Clear video last frame selection if not in Kling Pro Video mode
   useEffect(() => {
     if (!isKlingProVideoSelection && videoLastFrameImageId) {
       setVideoLastFrameImageId(null);
     }
   }, [isKlingProVideoSelection, videoLastFrameImageId]);
 
+  // Memoized lookup of the currently selected primary image object
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
     return images.find(img => img.id === primaryImageId) || null;
   }, [images, primaryImageId]);
 
+  // If the primary image is a valid image canvas media, expose it for use
   const activePrimaryImage = useMemo(() => {
     return isImageCanvasMedia(primaryImage) ? primaryImage : null;
   }, [primaryImage]);
 
+  // Subscribes to debug log updates for live debug log panel
   useEffect(() => {
     const unsubscribe = subscribeToDebugLogs(setDebugLogEntries);
     return unsubscribe;
@@ -835,7 +880,9 @@ export default function App() {
           onConfirmCrop={handleConfirmCrop}
           onCancelCrop={handleCancelCrop}
           onNoteCopy={handleNoteCopy}
+          onNoteDuplicate={handleDuplicateNote}
           onImagePromptCopy={handleImagePromptCopy}
+          onImageDuplicate={handleDuplicateImage}
           onRerunGeneration={handleRerunGeneration}
           showMetadataOverlay={showMetadataOverlay}
           transformMode={transformMode}
