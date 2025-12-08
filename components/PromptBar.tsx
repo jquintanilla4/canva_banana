@@ -75,6 +75,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
   const [showKlingSuggestions, setShowKlingSuggestions] = React.useState(false);
+  const [suggestionPosition, setSuggestionPosition] = React.useState<{ left: number; top: number } | null>(null);
 
   const handleSubmitShortcut = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -161,8 +162,28 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     const charBeforeCaret = value.charAt(Math.max(0, caret - 1));
     if (charBeforeCaret === '@') {
       setShowKlingSuggestions(true);
+      const textarea = textareaRef.current;
+      if (textarea) {
+        const { offsetLeft, offsetTop } = textarea;
+        const lineHeight = parseFloat(window.getComputedStyle(textarea).lineHeight || '16');
+        const font = window.getComputedStyle(textarea).font || `${window.getComputedStyle(textarea).fontSize} ${window.getComputedStyle(textarea).fontFamily}`;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const textUntilCaret = value.slice(0, caret);
+        let caretX = 0;
+        if (ctx) {
+          ctx.font = font;
+          const lines = textUntilCaret.split('\n');
+          const currentLine = lines[lines.length - 1] ?? '';
+          caretX = ctx.measureText(currentLine).width;
+        }
+        const lineIndex = textUntilCaret.split('\n').length - 1;
+        const top = offsetTop + lineIndex * lineHeight + lineHeight;
+        setSuggestionPosition({ left: offsetLeft + caretX + 14, top });
+      }
     } else {
       setShowKlingSuggestions(false);
+      setSuggestionPosition(null);
     }
   };
 
@@ -249,9 +270,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               style={{ minHeight: '92px', maxHeight: '269px' }}
               aria-label="Prompt input"
             />
-            {showKlingSuggestions && klingOptions.length > 0 && (
-              <div className="relative px-[0.79rem]">
-                <div className="absolute z-20 mt-1 w-40 rounded-md border border-gray-700 bg-gray-800 shadow-lg">
+            {showKlingSuggestions && klingOptions.length > 0 && suggestionPosition && (
+              <div className="absolute z-20" style={{ left: suggestionPosition.left, top: suggestionPosition.top }}>
+                <div className="mt-1 w-40 rounded-md border border-gray-700 bg-gray-800 shadow-lg">
                   {klingOptions.map(option => (
                     <button
                       key={option}
