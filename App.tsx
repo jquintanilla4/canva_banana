@@ -42,6 +42,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useGenerationGuards } from './hooks/useGenerationGuards';
 import { useImageResize } from './hooks/useImageResize';
 import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
+import { useKlingReferenceHelpers } from './hooks/useKlingReferenceHelpers';
 import type { FalModelMode } from './services/modelConfig';
 
 // Type guard for CanvasImage elements that are images
@@ -202,6 +203,8 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2000);
   }, [falModelId, setToastMessage]);
 
+  const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
+
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const {
     selectedImageIds,
@@ -224,6 +227,7 @@ export default function App() {
     falVideoModelId,
     klingVariant,
     isKlingProVideoSelection,
+    isKlingImageModel: isKlingModel,
     onError: setError,
     onReferenceLimit: showReferenceLimitToast,
   });
@@ -668,6 +672,7 @@ export default function App() {
     setTool,
     requestZoomIn,
     requestZoomOut,
+    onDelete: handleDelete,
   });
 
   const handleUploadClick = () => {
@@ -705,8 +710,12 @@ export default function App() {
   const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelId);
   const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
   const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-  const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
   const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
+
+  const { referenceOrderLabels: klingReferenceOrderLabels } = useKlingReferenceHelpers({
+    isKlingModel,
+    referenceImageIds,
+  });
 
   // Validation layer for prompt submission that enforces provider/model-specific rules.
   const {
@@ -857,6 +866,7 @@ export default function App() {
           selectedImageIds={selectedImageIds}
           selectedNoteIds={selectedNoteIds}
           referenceImageIds={referenceImageIds}
+          referenceImageOrderLabels={klingReferenceOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
           tailSelectionEnabled={isKlingProVideoSelection}
           onImageSelect={handleImageSelection}
@@ -958,13 +968,15 @@ export default function App() {
           onModelModeChange={handleModelModeChange}
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
-          promptPlaceholder={promptPlaceholderText}
+          promptPlaceholder={isKlingModel ? 'Describe your generation, use @ to reference images... (Cmd/Ctrl + Enter to generate)' : promptPlaceholderText}
           showNegativePrompt={shouldShowKlingNegativePrompt}
           negativePrompt={klingNegativePrompt}
           onNegativePromptChange={setKlingNegativePrompt}
           negativePromptPlaceholder="Describe what the video should avoid... (optional)"
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
+          klingSuggestionsEnabled={isKlingModel}
+          klingReferenceCount={referenceImageIds.length || (hasSingleImageSelected ? 1 : 0)}
         />
       )}
     </div>

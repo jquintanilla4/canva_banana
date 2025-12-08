@@ -10,6 +10,7 @@ type SelectionOptions = {
   falVideoModelId: FalVideoModelId;
   klingVariant: KlingVariant;
   isKlingProVideoSelection: boolean;
+  isKlingImageModel: boolean;
   onError: (message: string) => void;
   onReferenceLimit: (maxReferenceImages: number) => void;
 };
@@ -26,6 +27,7 @@ export const useSelectionState = (options: SelectionOptions) => {
     falVideoModelId,
     klingVariant,
     isKlingProVideoSelection,
+    isKlingImageModel,
     onError,
     onReferenceLimit,
   } = options;
@@ -124,6 +126,17 @@ export const useSelectionState = (options: SelectionOptions) => {
       return;
     }
 
+    const applyKlingReferences = (nextSelectedIds: string[]) => {
+      if (!isKlingImageModel) {
+        return;
+      }
+      const maxReferenceImages = getMaxReferenceImages(falModelId);
+      if (nextSelectedIds.length > maxReferenceImages) {
+        onReferenceLimit(maxReferenceImages);
+      }
+      setReferenceImageIds(nextSelectedIds.slice(0, maxReferenceImages));
+    };
+
     if (!imageId) {
       if (!multi) {
         setSelectedImageIds([]);
@@ -135,13 +148,19 @@ export const useSelectionState = (options: SelectionOptions) => {
     }
 
     if (multi) {
-      setReferenceImageIds([]);
+      if (!isKlingImageModel) {
+        setReferenceImageIds([]);
+      }
       setVideoLastFrameImageId(null);
       setSelectedImageIds(prevIds => {
+        let nextSelectedIds: string[];
         if (prevIds.includes(imageId)) {
-          return prevIds.filter(id => id !== imageId);
+          nextSelectedIds = prevIds.filter(id => id !== imageId);
+        } else {
+          nextSelectedIds = [...prevIds, imageId];
         }
-        return [...prevIds, imageId];
+        applyKlingReferences(nextSelectedIds);
+        return nextSelectedIds;
       });
       return;
     }
@@ -155,7 +174,10 @@ export const useSelectionState = (options: SelectionOptions) => {
 
     setSelectedImageIds([imageId]);
     setSelectedNoteIds([]);
-    setReferenceImageIds([]);
+    applyKlingReferences([imageId]);
+    if (!isKlingImageModel) {
+      setReferenceImageIds([]);
+    }
     if (videoLastFrameImageId && videoLastFrameImageId === imageId) {
       setVideoLastFrameImageId(null);
     }
@@ -170,6 +192,8 @@ export const useSelectionState = (options: SelectionOptions) => {
     onError,
     onReferenceLimit,
     primaryImageId,
+    isKlingImageModel,
+    falModelId,
     selectedImageIds.length,
     videoLastFrameImageId,
   ]);

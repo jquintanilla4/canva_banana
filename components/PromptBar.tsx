@@ -39,6 +39,8 @@ interface PromptBarProps {
   negativePromptPlaceholder?: string;
   promptOutlineColor?: string;
   negativePromptOutlineColor?: string;
+  klingSuggestionsEnabled?: boolean;
+  klingReferenceCount?: number;
 }
 
 export const PromptBar: React.FC<PromptBarProps> = ({
@@ -63,6 +65,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   negativePromptPlaceholder,
   promptOutlineColor,
   negativePromptOutlineColor,
+  klingSuggestionsEnabled,
+  klingReferenceCount = 0,
 }) => {
   // Prompt input surface with dynamic model selectors and optional negative prompt for video flows.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -70,6 +74,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const wasLoading = useRef(isLoading);
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
+  const [showKlingSuggestions, setShowKlingSuggestions] = React.useState(false);
 
   const handleSubmitShortcut = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -138,6 +143,50 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       .join('|') ?? '',
   ]);
 
+  const klingOptions = React.useMemo(() => {
+    if (!klingSuggestionsEnabled) return [];
+    if (klingReferenceCount <= 1) {
+      return ['@Image'];
+    }
+    return Array.from({ length: klingReferenceCount }, (_, idx) => `@Image${idx + 1}`);
+  }, [klingReferenceCount, klingSuggestionsEnabled]);
+
+  const handlePromptChange = (value: string, selectionStart: number | null) => {
+    onPromptChange(value);
+    if (!klingSuggestionsEnabled || klingOptions.length === 0) {
+      setShowKlingSuggestions(false);
+      return;
+    }
+    const caret = selectionStart ?? value.length;
+    const charBeforeCaret = value.charAt(Math.max(0, caret - 1));
+    if (charBeforeCaret === '@') {
+      setShowKlingSuggestions(true);
+    } else {
+      setShowKlingSuggestions(false);
+    }
+  };
+
+  const insertKlingSuggestion = (suggestion: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const value = textarea.value;
+    const caret = textarea.selectionStart;
+    const startIdx = value.lastIndexOf('@', caret - 1);
+    if (startIdx === -1) {
+      return;
+    }
+    const before = value.slice(0, startIdx);
+    const after = value.slice(caret);
+    const nextValue = `${before}${suggestion}${after}`;
+    onPromptChange(nextValue);
+    const nextCaret = before.length + suggestion.length;
+    requestAnimationFrame(() => {
+      textarea.setSelectionRange(nextCaret, nextCaret);
+      textarea.focus();
+    });
+    setShowKlingSuggestions(false);
+  };
+
   const resolvedPlaceholder = promptPlaceholder ?? (
     inputDisabled
       ? "Upload or select an image to begin editing..."
@@ -191,7 +240,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             <textarea
               ref={textareaRef}
               value={prompt}
-              onChange={(e) => onPromptChange(e.target.value)}
+              onChange={(e) => handlePromptChange(e.target.value, e.target.selectionStart)}
               onKeyDown={handleSubmitShortcut}
               placeholder={resolvedPlaceholder}
               disabled={inputDisabled || isLoading}
@@ -200,6 +249,23 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               style={{ minHeight: '92px', maxHeight: '269px' }}
               aria-label="Prompt input"
             />
+            {showKlingSuggestions && klingOptions.length > 0 && (
+              <div className="relative px-[0.79rem]">
+                <div className="absolute z-20 mt-1 w-40 rounded-md border border-gray-700 bg-gray-800 shadow-lg">
+                  {klingOptions.map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => insertKlingSuggestion(option)}
+                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700"
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex flex-col gap-2 mt-[0.47rem] ml-[0.5rem]">
               <div className="relative flex flex-wrap items-center gap-3">
                 <div className="flex items-center bg-gray-800/80 rounded-full p-1">

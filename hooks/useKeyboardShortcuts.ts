@@ -6,6 +6,7 @@ type KeyboardShortcutsArgs = {
   setTool: (tool: Tool) => void;
   requestZoomIn: () => void;
   requestZoomOut: () => void;
+  onDelete?: () => void;
 };
 
 export function useKeyboardShortcuts({
@@ -13,6 +14,7 @@ export function useKeyboardShortcuts({
   setTool,
   requestZoomIn,
   requestZoomOut,
+  onDelete,
 }: KeyboardShortcutsArgs) {
   useEffect(() => {
     // Guard against hijacking shortcuts while typing in inputs.
@@ -42,6 +44,11 @@ export function useKeyboardShortcuts({
       }
 
       const key = event.key.toLowerCase();
+      if ((key === 'delete' || key === 'backspace') && onDelete) {
+        event.preventDefault();
+        onDelete();
+        return;
+      }
       if (key === 'v') {
         setTool(Tool.SELECTION);
         return;

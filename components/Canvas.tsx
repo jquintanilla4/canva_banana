@@ -17,6 +17,7 @@ interface CanvasProps {
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
+  referenceImageOrderLabels?: Record<string, string> | null;
   videoLastFrameImageId: string | null;
   tailSelectionEnabled: boolean;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean }) => void;
@@ -105,6 +106,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   selectedImageIds,
   selectedNoteIds,
   referenceImageIds,
+  referenceImageOrderLabels,
   videoLastFrameImageId,
   tailSelectionEnabled,
   onImageSelect,
@@ -566,6 +568,33 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([]);
       }
 
+      const referenceOrderLabel = referenceImageOrderLabels?.[image.id];
+      if (referenceOrderLabel) {
+        const badgePaddingX = 8 / scale;
+        const badgePaddingY = 6 / scale;
+        const badgeFontSize = 24 / scale;
+        ctx.font = `${badgeFontSize}px sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        const textWidth = ctx.measureText(referenceOrderLabel).width;
+        const badgeWidth = textWidth + badgePaddingX * 2;
+        const badgeHeight = badgeFontSize + badgePaddingY * 2;
+        const badgeX = baseX - padding;
+        const badgeY = baseY - padding - badgeHeight - 2 / scale;
+
+        const isPrimaryReference = selectedImageIds[0] === image.id;
+        ctx.fillStyle = isPrimaryReference ? 'rgba(14, 165, 233, 0.95)' : 'rgba(16, 185, 129, 0.92)';
+        ctx.strokeStyle = isPrimaryReference ? '#0ea5e9' : '#064e3b';
+        ctx.lineWidth = 1 / scale;
+        ctx.beginPath();
+        ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ecfdf3';
+        ctx.fillText(referenceOrderLabel, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
+      }
+
       ctx.restore();
     });
 
@@ -779,7 +808,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.drawImage(pathCanvas, 0, 0);
       }
     }
-  }, [cropMode, getImageCenter, getImageRotation, images, notes, paths, pan, referenceImageIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode, videoLastFrameImageId]);
+  }, [cropMode, getImageCenter, getImageRotation, images, notes, paths, pan, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode, videoLastFrameImageId]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;

@@ -688,6 +688,28 @@ export const useGeneration = (context: GenerationContext) => {
             : [];
 
           const hasKlingReference = referenceImageIdsForRun.length > 0;
+          let klingReferenceImages: HTMLImageElement[] | undefined;
+          if (isKlingModel && hasKlingReference) {
+            const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
+            const referenceCanvasImages = referenceImageIdsForRun
+              .filter(id => id !== primaryImageIdForRun)
+              .map(id => images.find(img => img.id === id))
+              .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
+              .slice(0, maxReferenceImages);
+
+            const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
+              if ((img.rotation ?? 0) === 0) {
+                return img.element;
+              }
+              const rasterized = await rasterizeImages([img]);
+              return rasterized.element;
+            };
+
+            if (referenceCanvasImages.length > 0) {
+              klingReferenceImages = await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
+              referenceIdsUsed = referenceCanvasImages.map(img => img.id);
+            }
+          }
 
           const falEditResult = await generateFalImageEdit({
             prompt: trimmedPrompt,
@@ -696,7 +718,7 @@ export const useGeneration = (context: GenerationContext) => {
             paths: shouldSendMask ? inpaintPaths : paths,
             imageDimensions: editImageDimensions,
             inpaintMode,
-            referenceImages: hasKlingReference ? [] : undefined,
+            referenceImages: klingReferenceImages,
           }, {
             modelId: falModelIdForRun,
             ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
