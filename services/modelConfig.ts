@@ -57,7 +57,7 @@ export const getHailuoActualModelId = (variant: HailuoVariant): string =>
 
 export const KLING_VARIANT_OPTIONS: ReadonlyArray<{ value: KlingVariant; label: string }> = [
   { value: 'standard', label: 'Standard' },
-  { value: 'pro', label: 'Pro' },
+  { value: 'pro', label: 'Pro (FFLF)' },
 ] as const;
 
 export const getKlingActualModelId = (variant: KlingVariant): string =>

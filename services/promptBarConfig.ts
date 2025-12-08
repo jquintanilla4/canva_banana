@@ -160,7 +160,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       ariaLabel: 'Select Kling 2.5 Turbo variant',
       options: [
         ...[{ value: 'standard', label: 'Standard' }],
-        ...[{ value: 'pro', label: 'Pro' }],
+        ...[{ value: 'pro', label: 'Pro (FFLF)' }],
       ],
       value: klingVariant,
       onChange: onKlingVariantChange,
