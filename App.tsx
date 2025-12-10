@@ -20,6 +20,7 @@ import {
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   getFalModelLabel,
   getMaxReferenceImages,
+  isKlingO1VideoModelId,
   isSeedreamModelId,
 } from './services/modelConfig';
 import {
@@ -43,6 +44,7 @@ import { useGenerationGuards } from './hooks/useGenerationGuards';
 import { useImageResize } from './hooks/useImageResize';
 import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
 import { useKlingReferenceHelpers } from './hooks/useKlingReferenceHelpers';
+import { useKlingPromptMentions } from './hooks/useKlingPromptMentions';
 import type { FalModelMode } from './services/modelConfig';
 
 // Type guard for CanvasImage elements that are images
@@ -136,6 +138,8 @@ export default function App() {
     falVideoDuration,            // Video duration selection for FAL
     hailuoVariant,               // Hailuo model variant ('standard' | 'pro')
     klingVariant,                // Kling model variant ('standard' | 'pro')
+    klingO1Variant,              // Kling O1 video variant selection
+    klingO1KeepAudio,            // Keep audio option for Kling O1 Edit
     kling26AudioSelection,       // Audio selection for Kling 2.6
     falImageSizeSelection,       // Image size selection for FAL
     falAspectRatioSelection,     // Aspect ratio selection for FAL
@@ -146,15 +150,19 @@ export default function App() {
     falCreativity,               // Creativity slider (Crystal upscaler, etc.)
     isVideoMode,                 // True if FAL is in video mode
     isKlingVideoModel,           // True if Kling video model is selected
+    isKlingO1VideoModel,         // True if Kling O1 video model is selected
     isKling26VideoModel,         // True if Kling 2.6 video model is selected
     isHailuoVideoModel,          // True if Hailuo video model is selected
     isUpscaleModel,              // True if an upscaler model is selected
     isKlingProVideoSelection,    // True if Kling Pro video is selected
+    isKlingO1EditMode,           // True if Kling O1 Edit variant is selected
     handleModelModeChange: handleFalModelModeChange, // Handler for switching FAL mode
     handleFalModelChange,                    // Handler for FAL model changes
     handleFalVideoDurationChange,            // Handler for FAL video duration changes
     handleHailuoVariantChange,               // Handler for Hailuo variant changes
     handleKlingVariantChange,                // Handler for Kling variant changes
+    handleKlingO1VariantChange,              // Handler for Kling O1 variant changes
+    handleKlingO1KeepAudioChange,            // Handler for Kling O1 keep audio changes
     handleKling26AudioChange,                // Handler for Kling 2.6 audio changes
     handleFalImageSizeChange,                // Handler for FAL image size changes
     handleFalAspectRatioChange,              // Handler for FAL aspect ratio changes
@@ -198,10 +206,19 @@ export default function App() {
 
   // Shows a toast when the reference image limit is reached for the current model.
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
+    if (isKlingO1VideoModelId(falModelId)) {
+      // Edit variant has 4 total limit, refI2V has 6
+      const baseLimit = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelId);
+      const totalLimit = baseLimit + 1;
+      const variantLabel = isKlingO1EditMode ? 'Kling O1 Edit' : 'Kling O1 Video';
+      setToastMessage(`${variantLabel} supports up to ${totalLimit} images total (source + references + elements). Slots remaining: ${Math.max(0, maxReferenceImages)} for references/elements.`);
+      setTimeout(() => setToastMessage(null), 2000);
+      return;
+    }
     const totalLimit = maxReferenceImages + 1;
     setToastMessage(`${getFalModelLabel(falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [falModelId, setToastMessage]);
+  }, [falModelId, isKlingO1EditMode, setToastMessage]);
 
   const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
 
@@ -210,13 +227,17 @@ export default function App() {
     selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
+    elementImageIds,
     videoLastFrameImageId,
+    sourceVideoId,
     primaryImageId,
     hasSingleImageSelected,
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
+    setElementImageIds,
     setVideoLastFrameImageId,
+    setSourceVideoId,
     handleImageSelection,
     handleNoteSelection,
   } = useSelectionState({
@@ -228,6 +249,8 @@ export default function App() {
     klingVariant,
     isKlingProVideoSelection,
     isKlingImageModel: isKlingModel,
+    isKlingO1VideoModel,
+    isKlingO1EditMode,
     onError: setError,
     onReferenceLimit: showReferenceLimitToast,
   });
@@ -257,6 +280,7 @@ export default function App() {
     selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
+    elementImageIds,
     videoLastFrameImageId,
     displayedImages,
     displayedNotes,
@@ -285,6 +309,7 @@ export default function App() {
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
+    setElementImageIds,
     setVideoLastFrameImageId,
     setError,
     setToastMessage,
@@ -359,7 +384,8 @@ export default function App() {
 
   // Enforce reference image limits whenever the active model changes.
   useEffect(() => {
-    const maxReferenceImages = getMaxReferenceImages(falModelId);
+    // Edit variant has 4 total limit, refI2V has 6
+    const maxReferenceImages = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelId);
     setReferenceImageIds(prevIds => {
       if (prevIds.length <= maxReferenceImages) {
         return prevIds;
@@ -367,7 +393,19 @@ export default function App() {
       showReferenceLimitToast(maxReferenceImages);
       return prevIds.slice(0, maxReferenceImages);
     });
-  }, [falModelId, showReferenceLimitToast]);
+    if (isKlingO1VideoModelId(falModelId)) {
+      setElementImageIds(prevIds => {
+        if (prevIds.length + referenceImageIds.length <= maxReferenceImages) {
+          return prevIds;
+        }
+        const maxElements = Math.max(0, maxReferenceImages - referenceImageIds.length);
+        showReferenceLimitToast(maxElements);
+        return prevIds.slice(0, maxElements);
+      });
+    } else if (elementImageIds.length > 0) {
+      setElementImageIds([]);
+    }
+  }, [elementImageIds.length, falModelId, isKlingO1EditMode, referenceImageIds.length, setElementImageIds, setReferenceImageIds, showReferenceLimitToast]);
 
   // Clear video last frame selection if not in Kling Pro Video mode
   useEffect(() => {
@@ -438,6 +476,7 @@ export default function App() {
     if (selectedImageIds.length) {
       setSelectedImageIds([]);
       setReferenceImageIds([]);
+      setElementImageIds([]);
       setVideoLastFrameImageId(null);
     }
     if (selectedNoteIds.length) {
@@ -644,13 +683,17 @@ export default function App() {
     falVideoDuration,
     hailuoVariant,
     klingVariant,
+    klingO1Variant,
+    klingO1KeepAudio,
     klingNegativePrompt,
     kling26AudioSelection,
     images,
     paths,
     inpaintMode,
     referenceImageIds,
+    elementImageIds,
     videoLastFrameImageId,
+    sourceVideoId,
     primaryImageId,
     activePrimaryImage,
     setError,
@@ -660,7 +703,9 @@ export default function App() {
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
+    setElementImageIds,
     setVideoLastFrameImageId,
+    setSourceVideoId,
     setToastMessage,
     setTool,
     setFalImageSizeSelection,
@@ -712,9 +757,32 @@ export default function App() {
   const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
 
-  const { referenceOrderLabels: klingReferenceOrderLabels } = useKlingReferenceHelpers({
-    isKlingModel,
+  const {
+    referenceOrderLabels: klingReferenceOrderLabels,
+    elementOrderLabels: klingElementOrderLabels,
+  } = useKlingReferenceHelpers({
+    labelReferences: isKlingModel || isKlingO1VideoModel,
+    primaryImageId,
     referenceImageIds,
+    labelElements: isKlingO1VideoModel,
+    elementImageIds,
+    isEditMode: isKlingO1EditMode,
+    sourceVideoId,
+  });
+
+  const primarySelectionMediaType = primaryImage?.mediaType ?? null;
+  const hasSourceVideoSelected = Boolean(sourceVideoId);
+
+  // Build prompt mention suggestions for Kling based on current reference/element selections.
+  const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
+    isKlingModel,
+    isKlingO1VideoModel,
+    isKlingO1EditMode,
+    referenceOrderLabels: klingReferenceOrderLabels,
+    elementOrderLabels: klingElementOrderLabels,
+    referenceImageIds,
+    hasSingleImageSelected,
+    primarySelectionMediaType,
   });
 
   // Validation layer for prompt submission that enforces provider/model-specific rules.
@@ -730,6 +798,8 @@ export default function App() {
     appMode,
     tool,
     prompt,
+    isKlingO1EditMode,
+    hasSourceVideo: hasSourceVideoSelected,
     isVideoMode,
     isUpscaleModel,
     isSeedreamModel,
@@ -758,11 +828,14 @@ export default function App() {
     isKlingModel,
     isUpscaleModel,
     isKlingVideoModel,
+    isKlingO1VideoModel,
     isKling26VideoModel,
     isHailuoVideoModel,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
+    klingO1Variant,
+    klingO1KeepAudio,
     kling26AudioSelection,
     falScaleFactor,
     falCreativity,
@@ -775,6 +848,8 @@ export default function App() {
     onHailuoVariantChange: handleHailuoVariantChange,
     onFalVideoDurationChange: handleFalVideoDurationChange,
     onKlingVariantChange: handleKlingVariantChange,
+    onKlingO1VariantChange: handleKlingO1VariantChange,
+    onKlingO1KeepAudioChange: handleKlingO1KeepAudioChange,
     onKling26AudioChange: handleKling26AudioChange,
     onFalScaleFactorChange: handleFalScaleFactorChange,
     onFalCreativityChange: handleFalCreativityChange,
@@ -795,8 +870,8 @@ export default function App() {
   // TSX (React with Tailwind CSS utility classes)
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
-      {/* Hidden file input for image uploads */}
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+      {/* Hidden file input for image/video uploads */}
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*,video/*" className="hidden" />
       {/* Hidden file input for snapshot imports */}
       <input
         type="file"
@@ -867,8 +942,13 @@ export default function App() {
           selectedNoteIds={selectedNoteIds}
           referenceImageIds={referenceImageIds}
           referenceImageOrderLabels={klingReferenceOrderLabels}
+          elementImageIds={elementImageIds}
+          elementImageOrderLabels={klingElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
+          sourceVideoId={sourceVideoId}
           tailSelectionEnabled={isKlingProVideoSelection}
+          isKlingO1EditMode={isKlingO1EditMode}
+          onError={setError}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}
           onCommit={handleCommit}
@@ -968,15 +1048,20 @@ export default function App() {
           onModelModeChange={handleModelModeChange}
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
-          promptPlaceholder={isKlingModel ? 'Describe your generation, use @ to reference images... (Cmd/Ctrl + Enter to generate)' : promptPlaceholderText}
+          promptPlaceholder={
+            isKlingModel || isKlingO1VideoModel
+              ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
+              : promptPlaceholderText
+          }
           showNegativePrompt={shouldShowKlingNegativePrompt}
           negativePrompt={klingNegativePrompt}
           onNegativePromptChange={setKlingNegativePrompt}
           negativePromptPlaceholder="Describe what the video should avoid... (optional)"
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
-          klingSuggestionsEnabled={isKlingModel}
-          klingReferenceCount={referenceImageIds.length || (hasSingleImageSelected ? 1 : 0)}
+          klingSuggestionsEnabled={isKlingModel || isKlingO1VideoModel}
+          klingReferenceCount={klingReferenceCount}
+          klingSuggestionOptions={klingPromptMentions}
         />
       )}
     </div>

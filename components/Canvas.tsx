@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode } from '../types';
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon } from './Icons';
+import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon } from './Icons';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -18,9 +19,14 @@ interface CanvasProps {
   selectedNoteIds: string[];
   referenceImageIds: string[];
   referenceImageOrderLabels?: Record<string, string> | null;
+  elementImageIds: string[];
+  elementImageOrderLabels?: Record<string, string> | null;
   videoLastFrameImageId: string | null;
+  sourceVideoId: string | null;
   tailSelectionEnabled: boolean;
-  onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean }) => void;
+  isKlingO1EditMode: boolean;
+  onError?: (message: string) => void;
+  onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
   onCommit: () => void;
   zoomToFitTrigger: number;
@@ -107,8 +113,13 @@ export const Canvas: React.FC<CanvasProps> = ({
   selectedNoteIds,
   referenceImageIds,
   referenceImageOrderLabels,
+  elementImageIds,
+  elementImageOrderLabels,
   videoLastFrameImageId,
+  sourceVideoId,
   tailSelectionEnabled,
+  isKlingO1EditMode,
+  onError,
   onImageSelect,
   onNoteSelect,
   onCommit,
@@ -548,7 +559,19 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
 
       const padding = 5 / scale;
-      if (selectedImageIds.includes(image.id)) {
+      if (elementImageIds.includes(image.id)) {
+        ctx.strokeStyle = '#a855f7'; // purple-500 for elements
+        ctx.lineWidth = 4 / scale;
+        ctx.setLineDash([6 / scale, 4 / scale]);
+        ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
+        ctx.setLineDash([]);
+      } else if (isKlingO1EditMode && sourceVideoId === image.id) {
+        ctx.strokeStyle = '#f97316'; // orange-500 for source video in edit mode
+        ctx.lineWidth = 4 / scale;
+        ctx.setLineDash([6 / scale, 4 / scale]);
+        ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
+        ctx.setLineDash([]);
+      } else if (selectedImageIds.includes(image.id)) {
         ctx.strokeStyle = '#0ea5e9'; // sky-500
         ctx.lineWidth = 4 / scale;
         ctx.setLineDash([6 / scale, 4 / scale]);
@@ -568,7 +591,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([]);
       }
 
-      const referenceOrderLabel = referenceImageOrderLabels?.[image.id];
+      const isSourceVideo = isKlingO1EditMode && sourceVideoId === image.id;
+      const referenceOrderLabel = isSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id];
       if (referenceOrderLabel) {
         const badgePaddingX = 8 / scale;
         const badgePaddingY = 6 / scale;
@@ -583,8 +607,18 @@ export const Canvas: React.FC<CanvasProps> = ({
         const badgeY = baseY - padding - badgeHeight - 2 / scale;
 
         const isPrimaryReference = selectedImageIds[0] === image.id;
-        ctx.fillStyle = isPrimaryReference ? 'rgba(14, 165, 233, 0.95)' : 'rgba(16, 185, 129, 0.92)';
-        ctx.strokeStyle = isPrimaryReference ? '#0ea5e9' : '#064e3b';
+        const badgeFillColor = isSourceVideo
+          ? 'rgba(249, 115, 22, 0.95)'
+          : isPrimaryReference
+            ? 'rgba(14, 165, 233, 0.95)'
+            : 'rgba(16, 185, 129, 0.92)';
+        const badgeStrokeColor = isSourceVideo
+          ? '#c2410c'
+          : isPrimaryReference
+            ? '#0ea5e9'
+            : '#064e3b';
+        ctx.fillStyle = badgeFillColor;
+        ctx.strokeStyle = badgeStrokeColor;
         ctx.lineWidth = 1 / scale;
         ctx.beginPath();
         ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
@@ -593,6 +627,32 @@ export const Canvas: React.FC<CanvasProps> = ({
 
         ctx.fillStyle = '#ecfdf3';
         ctx.fillText(referenceOrderLabel, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
+      }
+
+      const elementOrderLabel = elementImageOrderLabels?.[image.id];
+      if (elementOrderLabel) {
+        const badgePaddingX = 8 / scale;
+        const badgePaddingY = 6 / scale;
+        const badgeFontSize = 24 / scale;
+        ctx.font = `${badgeFontSize}px sans-serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        const textWidth = ctx.measureText(elementOrderLabel).width;
+        const badgeWidth = textWidth + badgePaddingX * 2;
+        const badgeHeight = badgeFontSize + badgePaddingY * 2;
+        const badgeX = baseX - padding;
+        const badgeY = baseY - padding - badgeHeight - 2 / scale;
+
+        ctx.fillStyle = 'rgba(139, 92, 246, 0.95)';
+        ctx.strokeStyle = '#5b21b6';
+        ctx.lineWidth = 1 / scale;
+        ctx.beginPath();
+        ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f5f3ff';
+        ctx.fillText(elementOrderLabel, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
       }
 
       ctx.restore();
@@ -808,7 +868,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.drawImage(pathCanvas, 0, 0);
       }
     }
-  }, [cropMode, getImageCenter, getImageRotation, images, notes, paths, pan, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode, videoLastFrameImageId]);
+  }, [cropMode, elementImageIds, elementImageOrderLabels, getImageCenter, getImageRotation, images, notes, paths, pan, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode, videoLastFrameImageId]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1104,6 +1164,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    containerRef.current?.focus({ preventScroll: true });
+
     if (cropMode) {
       const point = getTransformedPoint(e.clientX, e.clientY);
       const imageToCrop = images.find(img => img.id === cropMode.imageId);
@@ -1172,8 +1234,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     const isMultiSelectKey = e.metaKey || e.ctrlKey;
-    const wantsTailSelection = tailSelectionEnabled && !isMultiSelectKey && e.shiftKey;
-    const isReferenceToggle = !wantsTailSelection && !isMultiSelectKey && e.shiftKey;
+    const wantsTailSelection = tailSelectionEnabled && !isMultiSelectKey && e.shiftKey && !e.altKey;
+    const isElementToggle = e.altKey && !isMultiSelectKey;
+    const isReferenceToggle = !wantsTailSelection && !isMultiSelectKey && e.shiftKey && !isElementToggle;
 
     const beginDrag = (imageIdsToDrag: string[], noteIdsToDrag: string[]) => {
       const imagePositions: Record<string, Point> = {};
@@ -1246,6 +1309,10 @@ export const Canvas: React.FC<CanvasProps> = ({
           onImageSelect(image.id, { lastFrame: true });
           return;
         }
+        if (isElementToggle) {
+          onImageSelect(image.id, { element: true });
+          return;
+        }
         if (isReferenceToggle) {
           onImageSelect(image.id, { reference: true });
           return;
@@ -1286,6 +1353,24 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     if (activeTool === Tool.PAN) {
+      // Allow reference/element selection via shift/option-click even in PAN tool
+      if (isElementToggle || isReferenceToggle || wantsTailSelection) {
+        const image = getImageAtPoint(point);
+        if (image) {
+          if (wantsTailSelection) {
+            onImageSelect(image.id, { lastFrame: true });
+            return;
+          }
+          if (isElementToggle) {
+            onImageSelect(image.id, { element: true });
+            return;
+          }
+          if (isReferenceToggle) {
+            onImageSelect(image.id, { reference: true });
+            return;
+          }
+        }
+      }
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     } else if (activeTool === Tool.BRUSH || activeTool === Tool.ERASE) {
@@ -1715,27 +1800,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       setMarqueeCurrent(null);
     }
 
-    const dragDistance = dragStartPoint
-      ? Math.hypot(e.clientX - dragStartPoint.x, e.clientY - dragStartPoint.y)
-      : 0;
-    const DRAG_DEADZONE_PX = 3;
-    const didDrag = isDragging && dragDistance > DRAG_DEADZONE_PX;
-    const canToggleVideo = e.button !== 1 &&
-      !isDrawing &&
-      !isResizing &&
-      !isPanning &&
-      !isMarqueeSelecting &&
-      !cropMode &&
-      !transformMode &&
-      (!isDragging || !didDrag);
-    if (canToggleVideo) {
-      const point = getTransformedPoint(e.clientX, e.clientY);
-      const targetImage = getImageAtPoint(point);
-      if (targetImage && isVideoImage(targetImage)) {
-        toggleVideoPlayback(targetImage.id);
-      }
-    }
-
     // If we're releasing the middle mouse button, we're ending a temporary tool action.
     // This is handled separately to prevent it from interfering with an ongoing left-mouse-button action.
     if (e.button === 1) {
@@ -1835,6 +1899,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     return images.find(img => img.id === targetId) || null;
   }, [images, primarySelectedImageId, selectedImageIds.length]);
   const selectedImageIsVideo = selectedImage?.mediaType === 'video';
+  const selectedVideoIsPlaying = selectedImageIsVideo && selectedImage?.isPlaying;
   const selectedImagePrompt = selectedImage?.metadata?.prompt?.trim() ?? '';
   const selectedImageHasGeneration = Boolean(selectedImage?.metadata?.generation);
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
@@ -1875,10 +1940,80 @@ export const Canvas: React.FC<CanvasProps> = ({
     [dotRadius],
   );
 
+  const [isCapturingFrame, setIsCapturingFrame] = useState(false);
+
+  const captureVideoFrame = useCallback(async (videoId: string) => {
+    const target = images.find(img => img.id === videoId && isVideoImage(img));
+    if (!target) {
+      return;
+    }
+
+    const videoElement = target.element;
+    const captureWidth = videoElement.videoWidth || target.naturalWidth || target.width || 1;
+    const captureHeight = videoElement.videoHeight || target.naturalHeight || target.height || 1;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = captureWidth;
+    canvas.height = captureHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      onError?.('Could not capture frame: no canvas context available.');
+      return;
+    }
+    ctx.drawImage(videoElement, 0, 0, captureWidth, captureHeight);
+
+    setIsCapturingFrame(true);
+    try {
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) {
+        throw new Error('Failed to capture frame.');
+      }
+      const capturedImage = await loadImageFromBlob(blob);
+      const { naturalWidth, naturalHeight } = getNaturalSize(capturedImage);
+      const fileName = `video-frame-${Date.now()}.png`;
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      const displayWidth = target.width;
+      const displayHeight = target.height;
+      const margin = 20;
+      const newImage: CanvasImage = {
+        id: crypto.randomUUID(),
+        element: capturedImage,
+        mediaType: 'image',
+        x: target.x + target.width + margin,
+        y: target.y,
+        width: displayWidth,
+        height: displayHeight,
+        rotation: 0,
+        naturalWidth: naturalWidth || displayWidth,
+        naturalHeight: naturalHeight || displayHeight,
+        file,
+        isPlaying: false,
+        hasAudio: false,
+        metadata: {
+          source: 'derived',
+          prompt: target.metadata?.prompt,
+          generation: target.metadata?.generation,
+        },
+      };
+
+      onImagesChange([...images, newImage]);
+      onImageSelect(newImage.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to capture video frame.';
+      onError?.(message);
+    } finally {
+      setIsCapturingFrame(false);
+    }
+  }, [images, onError, onImageSelect, onImagesChange]);
+
+  /* eslint-disable jsx-a11y/no-noninteractive-tabindex */
   return (
+    /* Canvas needs focus for keyboard shortcuts (ESC deselect) */
     <div
       ref={containerRef}
       className="relative w-full h-full min-h-0 bg-black overflow-hidden"
+      tabIndex={0}
       style={{
         backgroundImage,
         backgroundSize: `${gridSpacing}px ${gridSpacing}px`,
@@ -1888,6 +2023,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onDoubleClick={handleDoubleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          onImageSelect(null);
+          onNoteSelect(null);
+        }
+      }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -1996,6 +2137,24 @@ export const Canvas: React.FC<CanvasProps> = ({
               </ActionButton>
             </>
           )}
+          {selectedImageIsVideo && (
+            <ActionButton
+              onClick={() => toggleVideoPlayback(selectedImage.id)}
+              disabled={false}
+              title={selectedVideoIsPlaying ? 'Pause Video' : 'Play Video'}
+            >
+              {selectedVideoIsPlaying ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
+            </ActionButton>
+          )}
+          {selectedImageIsVideo && (
+            <ActionButton
+              onClick={() => captureVideoFrame(selectedImage.id)}
+              disabled={isCapturingFrame}
+              title={isCapturingFrame ? 'Capturing frame...' : 'Capture current frame as image'}
+            >
+              <SnapshotIcon className="w-4 h-4" />
+            </ActionButton>
+          )}
           <ActionButton onClick={() => onStartTransform(selectedImage.id)} disabled={false} title="Transform Image (Shift for free transform)">
             <TransformIcon className="w-4 h-4" />
           </ActionButton>
@@ -2095,3 +2254,5 @@ export const Canvas: React.FC<CanvasProps> = ({
     </div>
   );
 };
+
+/* eslint-enable jsx-a11y/no-noninteractive-tabindex */

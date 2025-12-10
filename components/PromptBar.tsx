@@ -41,6 +41,7 @@ interface PromptBarProps {
   negativePromptOutlineColor?: string;
   klingSuggestionsEnabled?: boolean;
   klingReferenceCount?: number;
+  klingSuggestionOptions?: ReadonlyArray<string>;
 }
 
 export const PromptBar: React.FC<PromptBarProps> = ({
@@ -67,6 +68,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   negativePromptOutlineColor,
   klingSuggestionsEnabled,
   klingReferenceCount = 0,
+  klingSuggestionOptions = [],
 }) => {
   // Prompt input surface with dynamic model selectors and optional negative prompt for video flows.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -146,11 +148,17 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
   const klingOptions = React.useMemo(() => {
     if (!klingSuggestionsEnabled) return [];
-    if (klingReferenceCount <= 1) {
+    if (klingSuggestionOptions.length > 0) {
+      return [...klingSuggestionOptions];
+    }
+    if (klingReferenceCount <= 0) {
+      return [];
+    }
+    if (klingReferenceCount === 1) {
       return ['@Image'];
     }
     return Array.from({ length: klingReferenceCount }, (_, idx) => `@Image${idx + 1}`);
-  }, [klingReferenceCount, klingSuggestionsEnabled]);
+  }, [klingReferenceCount, klingSuggestionOptions, klingSuggestionsEnabled]);
 
   const handlePromptChange = (value: string, selectionStart: number | null) => {
     onPromptChange(value);
@@ -354,7 +362,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                       aria-label={control.ariaLabel}
                     >
                       {control.options.map(option => (
-                        <option key={option.value} value={option.value}>
+                        <option key={option.value} value={option.value} disabled={option.disabled}>
                           {option.label}
                         </option>
                       ))}

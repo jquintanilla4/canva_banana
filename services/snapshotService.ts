@@ -71,6 +71,7 @@ export type SnapshotManifestV2 = {
       selectedImageIds: string[];
       selectedNoteIds: string[];
       referenceImageIds: string[];
+      elementImageIds?: string[];
       videoLastFrameImageId?: string | null;
     } | undefined;
   };
@@ -128,6 +129,7 @@ export type SnapshotMetaState = {
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
+  elementImageIds?: string[];
   videoLastFrameImageId?: string | null;
 };
 

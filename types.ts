@@ -92,6 +92,8 @@ export type GenerationFalOptions = Partial<{
   videoDuration: FalVideoDuration;
   hailuoVariant: 'standard' | 'pro';
   klingVariant: 'standard' | 'pro';
+  klingO1Variant: 'refI2V' | 'edit' | 'fflf' | 'refV2V';
+  klingO1KeepAudio: boolean;
   negativePrompt: string;
   kling26Audio: boolean;
 }>;
@@ -106,7 +108,10 @@ export interface GenerationInputs {
   primaryImageId?: string;
   originalSourceImageId?: string;
   referenceImageIds?: string[];
+  elementImageIds?: string[];
   videoLastFrameImageId?: string;
+  sourceVideoId?: string;
+  url?: string;
   falOptions?: GenerationFalOptions;
 }
 

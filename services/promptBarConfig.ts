@@ -6,6 +6,7 @@ import type {
   FalVideoModelId,
   HailuoVariant,
   Kling26AudioSelectionValue,
+  KlingO1Variant,
   KlingVariant,
 } from './modelConfig';
 import {
@@ -24,6 +25,7 @@ import {
   getSeedreamImageSizeOptions,
   HAILUO_VARIANT_OPTIONS,
   KLING26_AUDIO_OPTIONS,
+  KLING_O1_VARIANT_OPTIONS,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
@@ -35,7 +37,7 @@ import {
 export type PromptBarModelControl = {
   id: string;
   ariaLabel: string;
-  options: ReadonlyArray<{ value: string; label: string }>;
+  options: ReadonlyArray<{ value: string; label: string; disabled?: boolean }>;
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
@@ -54,11 +56,14 @@ export type PromptBarControlsInput = {
   isKlingModel: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
+  isKlingO1VideoModel: boolean;
   isKling26VideoModel: boolean;
   isHailuoVideoModel: boolean;
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
+  klingO1Variant: KlingO1Variant;
+  klingO1KeepAudio: boolean;
   kling26AudioSelection: Kling26AudioSelectionValue;
   falScaleFactor: number;
   falCreativity: number;
@@ -71,6 +76,8 @@ export type PromptBarControlsInput = {
   onHailuoVariantChange: (value: string) => void;
   onFalVideoDurationChange: (value: string) => void;
   onKlingVariantChange: (value: string) => void;
+  onKlingO1VariantChange: (value: string) => void;
+  onKlingO1KeepAudioChange: (value: boolean) => void;
   onKling26AudioChange: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
@@ -97,11 +104,14 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isKlingModel,
     isUpscaleModel,
     isKlingVideoModel,
+    isKlingO1VideoModel,
     isKling26VideoModel,
     isHailuoVideoModel,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
+    klingO1Variant,
+    klingO1KeepAudio,
     kling26AudioSelection,
     falScaleFactor,
     falCreativity,
@@ -114,6 +124,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onHailuoVariantChange,
     onFalVideoDurationChange,
     onKlingVariantChange,
+    onKlingO1VariantChange,
+    onKlingO1KeepAudioChange,
     onKling26AudioChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
@@ -178,6 +190,48 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       onChange: onFalVideoDurationChange,
       disabled: isLoading,
     });
+  }
+
+  if (isKlingO1VideoModel) {
+    controls.push({
+      id: 'kling-o1-variant-select',
+      ariaLabel: 'Select Kling O1 Video variant',
+      options: KLING_O1_VARIANT_OPTIONS.map(option => ({
+        value: option.value,
+        label: option.label,
+        disabled: option.disabled,
+      })),
+      value: klingO1Variant,
+      onChange: onKlingO1VariantChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'kling-o1-video-duration-select',
+      ariaLabel: 'Select Kling O1 duration',
+      options: [
+        { value: '5', label: '5s' },
+        { value: '10', label: '10s' },
+      ],
+      value: falVideoDuration === '10' ? '10' : '5',
+      onChange: onFalVideoDurationChange,
+      disabled: isLoading,
+    });
+
+    // Keep audio toggle for edit variant
+    if (klingO1Variant === 'edit') {
+      controls.push({
+        id: 'kling-o1-keep-audio',
+        ariaLabel: 'Keep original audio',
+        options: [
+          { value: 'off', label: 'Mute' },
+          { value: 'on', label: 'Keep Audio' },
+        ],
+        value: klingO1KeepAudio ? 'on' : 'off',
+        onChange: (value: string) => onKlingO1KeepAudioChange(value === 'on'),
+        disabled: isLoading,
+      });
+    }
   }
 
   if (isKling26VideoModel) {

@@ -67,27 +67,48 @@ export function useCanvasMediaActions({
   const [transformMode, setTransformMode] = useState<TransformModeState | null>(null);
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
 
-  // Adds dropped/uploaded images to the canvas and selects the last one placed.
+  // Adds dropped/uploaded images and videos to the canvas and selects the last one placed.
   const handleFilesDrop = useCallback((files: FileList, point: Point) => {
-    const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-    if (imageFiles.length === 0) return;
+    const mediaFiles = Array.from(files).filter(file =>
+      file.type.startsWith('image/') || file.type.startsWith('video/')
+    );
+    if (mediaFiles.length === 0) return;
 
-    let lastAddedImageId: string | null = null;
-    const newImages: CanvasImage[] = [];
-    let imagesProcessed = 0;
+    let lastAddedMediaId: string | null = null;
+    const newMedia: CanvasImage[] = [];
+    let mediaProcessed = 0;
 
-    imageFiles.forEach((file, index) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const { naturalWidth, naturalHeight } = getNaturalSize(img);
-          const displayWidth = img.width || naturalWidth;
-          const displayHeight = img.height || naturalHeight;
-          const newCanvasImage: CanvasImage = {
+    const processFile = async (file: File, index: number) => {
+      const isVideo = file.type.startsWith('video/');
+
+      if (isVideo) {
+        // Handle video file
+        try {
+          const videoElement = await loadMediaFromBlob(file, 'video') as HTMLVideoElement;
+          videoElement.pause();
+          videoElement.currentTime = 0;
+          videoElement.loop = true;
+          videoElement.muted = true;
+          videoElement.playsInline = true;
+
+          const { naturalWidth, naturalHeight } = getNaturalSize(videoElement);
+          const displayWidth = naturalWidth || 640;
+          const displayHeight = naturalHeight || 360;
+
+          // Try to detect audio
+          const audioTrackInfo = (videoElement as unknown as { audioTracks?: { length?: number } }).audioTracks;
+          const audioTrackCount = typeof audioTrackInfo?.length === 'number' ? audioTrackInfo.length : 0;
+          const webkitAudioDecodedByteCount = (videoElement as unknown as { webkitAudioDecodedByteCount?: number }).webkitAudioDecodedByteCount;
+          const hasAudio = Boolean(
+            (videoElement as unknown as { mozHasAudio?: boolean }).mozHasAudio ||
+            audioTrackCount > 0 ||
+            (typeof webkitAudioDecodedByteCount === 'number' && webkitAudioDecodedByteCount > 0)
+          );
+
+          const newCanvasVideo: CanvasImage = {
             id: crypto.randomUUID(),
-            element: img,
-            mediaType: 'image',
+            element: videoElement,
+            mediaType: 'video',
             x: point.x - (displayWidth / 2) + (index * 20),
             y: point.y - (displayHeight / 2) + (index * 20),
             width: displayWidth,
@@ -97,28 +118,68 @@ export function useCanvasMediaActions({
             naturalHeight,
             file: file,
             isPlaying: false,
-            hasAudio: false,
+            hasAudio,
             metadata: { source: 'imported' },
           };
-          newImages.push(newCanvasImage);
-          lastAddedImageId = newCanvasImage.id;
-          imagesProcessed++;
+          newMedia.push(newCanvasVideo);
+          lastAddedMediaId = newCanvasVideo.id;
+        } catch (err) {
+          console.error('Failed to load video:', err);
+        }
+      } else {
+        // Handle image file
+        const reader = new FileReader();
+        await new Promise<void>((resolve) => {
+          reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+              const { naturalWidth, naturalHeight } = getNaturalSize(img);
+              const displayWidth = img.width || naturalWidth;
+              const displayHeight = img.height || naturalHeight;
+              const newCanvasImage: CanvasImage = {
+                id: crypto.randomUUID(),
+                element: img,
+                mediaType: 'image',
+                x: point.x - (displayWidth / 2) + (index * 20),
+                y: point.y - (displayHeight / 2) + (index * 20),
+                width: displayWidth,
+                height: displayHeight,
+                rotation: 0,
+                naturalWidth,
+                naturalHeight,
+                file: file,
+                isPlaying: false,
+                hasAudio: false,
+                metadata: { source: 'imported' },
+              };
+              newMedia.push(newCanvasImage);
+              lastAddedMediaId = newCanvasImage.id;
+              resolve();
+            };
+            img.onerror = () => resolve();
+            img.src = event.target?.result as string;
+          };
+          reader.onerror = () => resolve();
+          reader.readAsDataURL(file);
+        });
+      }
 
-          if (imagesProcessed === imageFiles.length) {
-            setState(prevState => ({
-              ...prevState,
-              images: [...prevState.images, ...newImages],
-              paths: [],
-            }));
-            setSelectedImageIds(lastAddedImageId ? [lastAddedImageId] : []);
-            setSelectedNoteIds([]);
-            setReferenceImageIds([]);
-            setTool(Tool.SELECTION);
-          }
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
+      mediaProcessed++;
+      if (mediaProcessed === mediaFiles.length) {
+        setState(prevState => ({
+          ...prevState,
+          images: [...prevState.images, ...newMedia],
+          paths: [],
+        }));
+        setSelectedImageIds(lastAddedMediaId ? [lastAddedMediaId] : []);
+        setSelectedNoteIds([]);
+        setReferenceImageIds([]);
+        setTool(Tool.SELECTION);
+      }
+    };
+
+    mediaFiles.forEach((file, index) => {
+      processFile(file, index);
     });
   }, [setReferenceImageIds, setSelectedImageIds, setSelectedNoteIds, setState, setTool]);
 

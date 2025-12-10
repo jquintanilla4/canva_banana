@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera } from 'react-icons/fa';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
 import { RxCursorArrow } from 'react-icons/rx';
 import type { IconBaseProps } from 'react-icons';
@@ -38,3 +38,6 @@ export const TransformIcon = FaExpand as React.FC<IconProps>;
 export const RerunIcon = FaSyncAlt as React.FC<IconProps>;
 export const ResizeIcon = FaRulerCombined as React.FC<IconProps>;
 export const DuplicateIcon = FaRegClone as React.FC<IconProps>;
+export const PlayIcon = FaPlay as React.FC<IconProps>;
+export const PauseIcon = FaPause as React.FC<IconProps>;
+export const SnapshotIcon = FaCamera as React.FC<IconProps>;

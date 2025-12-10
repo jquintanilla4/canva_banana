@@ -113,6 +113,11 @@ interface GenerateVideoOptions {
   cfgScale?: number;
   tailImage?: HTMLImageElement;
   generateAudio?: boolean;
+  referenceImages?: HTMLImageElement[];
+  elementImages?: HTMLImageElement[];
+  klingO1Variant?: string;
+  sourceVideoUrl?: string;
+  keepAudio?: boolean;
 }
 
 const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
@@ -177,6 +182,8 @@ export const KLING_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/imag
 export const KLING_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video';
 export const KLING_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
 export const KLING_26_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/image-to-video';
+export const KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/o1/reference-to-video';
+export const KLING_O1_VIDEO_EDIT_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/edit';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -331,6 +338,12 @@ const createTransparentPlaceholderUrl = async (): Promise<string> => {
 const uploadImageElementToFal = async (image: HTMLImageElement): Promise<string> => {
   const canvas = imageToCanvas(image);
   return uploadCanvasToFal(canvas);
+};
+
+// Upload a video file to FAL storage and return the URL
+export const uploadVideoToFal = async (videoFile: File): Promise<string> => {
+  ensureFalClientConfigured();
+  return fal.storage.upload(videoFile);
 };
 
 const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimensions: ImageDimensions) => {
@@ -1014,16 +1027,199 @@ export const generateImage = async (
 
 export const generateImageToVideo = async (
   prompt: string,
-  image: HTMLImageElement,
+  image: HTMLImageElement | null,
   options: GenerateVideoOptions = {},
 ): Promise<{ videoUrl: string; requestId?: string }> => {
   ensureFalClientConfigured();
 
-  const imageUrl = await uploadImageElementToFal(image);
   const modelId = options.modelId || HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
+  const duration = options.duration;
+  const isKlingO1VideoModel = modelId === KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID || modelId === KLING_O1_VIDEO_EDIT_MODEL_ID;
+  const referenceImages = Array.isArray(options.referenceImages) ? options.referenceImages : [];
+  const elementImages = Array.isArray(options.elementImages) ? options.elementImages : [];
+  const isEditVariant = options.klingO1Variant === 'edit';
+
+  // Kling O1 Video Edit variant - requires video_url, optional image_urls and elements
+  if (isKlingO1VideoModel && isEditVariant) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Kling O1 Video Edit requires a source video.');
+    }
+
+    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
+    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img)));
+    const elementsPayload = elementUrls.map(url => ({
+      frontal_image_url: url,
+      reference_image_urls: [url],
+    }));
+
+    // Max 4 total (elements + reference images) when using video
+    const totalImageCount = referenceUrls.length + elementsPayload.length;
+    if (totalImageCount > 4) {
+      throw new Error('Kling O1 Video Edit supports up to 4 images total (references + elements).');
+    }
+
+    let latestRequestId: string | undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      prompt,
+      video_url: options.sourceVideoUrl,
+      ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
+      ...(elementsPayload.length ? { elements: elementsPayload } : {}),
+      ...(typeof options.keepAudio === 'boolean' ? { keep_audio: options.keepAudio } : {}),
+    };
+
+    const editModelId = KLING_O1_VIDEO_EDIT_MODEL_ID;
+    logFalEvent('outbound', editModelId, 'Outbound request (fal.subscribe)', {
+      input: inputPayload,
+    });
+
+    let result: Awaited<ReturnType<typeof fal.subscribe>>;
+    try {
+      result = await fal.subscribe(editModelId, {
+        input: inputPayload,
+        logs: true,
+        onQueueUpdate: update => {
+          const queueUpdate = update as unknown as FalQueueUpdate;
+          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+          if (resolvedRequestId) {
+            latestRequestId = resolvedRequestId;
+          }
+          logFalEvent('inbound', editModelId, 'Queue update', {
+            status: queueUpdate.status,
+            position: queueUpdate.position,
+            eta: queueUpdate.eta,
+            requestId: resolvedRequestId,
+            logs: normalizedLogs.map(log => log?.message ?? ''),
+          });
+          options.onQueueUpdate?.({
+            ...queueUpdate,
+            requestId: resolvedRequestId || '',
+            logs: normalizedLogs,
+          });
+        },
+      });
+    } catch (error) {
+      logFalEvent('error', editModelId, 'Request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logFalEvent('inbound', editModelId, 'Result received', {
+      requestId: result?.requestId || latestRequestId,
+      data: (result?.data as Record<string, unknown>) ?? undefined,
+    });
+
+    const data = result?.data as { video?: string | { url?: string } } | undefined;
+    const videoEntry = data?.video;
+    const videoUrl = typeof videoEntry === 'string'
+      ? videoEntry
+      : videoEntry && typeof videoEntry.url === 'string'
+        ? videoEntry.url
+        : null;
+
+    if (!videoUrl) {
+      throw new Error('Fal.ai API did not return a video.');
+    }
+
+    const requestId = result?.requestId || latestRequestId;
+
+    return { videoUrl, requestId };
+  }
+
+  // Non-edit variants require an image
+  if (!image) {
+    throw new Error('Image is required for video generation.');
+  }
+  const imageUrl = await uploadImageElementToFal(image);
+
+  if (isKlingO1VideoModel) {
+    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
+    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img)));
+    const elementsPayload = elementUrls.map(url => ({
+      frontal_image_url: url,
+      // API expects reference_image_urls; reuse the frontal view when no alternates exist.
+      reference_image_urls: [url],
+    }));
+    const totalImages = 1 + referenceUrls.length + elementsPayload.length;
+    if (totalImages > 7) {
+      throw new Error('Kling O1 Video supports up to 7 images (start + references + elements).');
+    }
+
+    let latestRequestId: string | undefined;
+
+    const variant = options.klingO1Variant;
+    const inputPayload: Record<string, unknown> = {
+      prompt,
+      image_urls: [imageUrl, ...referenceUrls],
+      ...(duration ? { duration } : {}),
+      ...(elementsPayload.length ? { elements: elementsPayload } : {}),
+      ...(variant ? { variant } : {}),
+    };
+
+    logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
+      input: inputPayload,
+      ...(variant ? { variant } : {}),
+    });
+
+    let result: Awaited<ReturnType<typeof fal.subscribe>>;
+    try {
+      result = await fal.subscribe(modelId, {
+        input: inputPayload,
+        logs: true,
+        onQueueUpdate: update => {
+          const queueUpdate = update as unknown as FalQueueUpdate;
+          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+          if (resolvedRequestId) {
+            latestRequestId = resolvedRequestId;
+          }
+          logFalEvent('inbound', modelId, 'Queue update', {
+            status: queueUpdate.status,
+            position: queueUpdate.position,
+            eta: queueUpdate.eta,
+            requestId: resolvedRequestId,
+            logs: normalizedLogs.map(log => log?.message ?? ''),
+          });
+          options.onQueueUpdate?.({
+            ...queueUpdate,
+            requestId: resolvedRequestId || '',
+            logs: normalizedLogs,
+          });
+        },
+      });
+    } catch (error) {
+      logFalEvent('error', modelId, 'Request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logFalEvent('inbound', modelId, 'Result received', {
+      requestId: result?.requestId || latestRequestId,
+      data: (result?.data as Record<string, unknown>) ?? undefined,
+    });
+
+    const data = result?.data as { video?: string | { url?: string } } | undefined;
+    const videoEntry = data?.video;
+    const videoUrl = typeof videoEntry === 'string'
+      ? videoEntry
+      : videoEntry && typeof videoEntry.url === 'string'
+        ? videoEntry.url
+        : null;
+
+    if (!videoUrl) {
+      throw new Error('Fal.ai API did not return a video.');
+    }
+
+    const requestId = result?.requestId || latestRequestId;
+
+    return { videoUrl, requestId };
+  }
+
   const isHailuoVideoModel = modelId.includes('hailuo-2.3');
   const promptOptimizer = options.promptOptimizer ?? (isHailuoVideoModel ? true : undefined);
-  const duration = options.duration;
   const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
   const cfgScale = typeof options.cfgScale === 'number' && Number.isFinite(options.cfgScale)
     ? options.cfgScale

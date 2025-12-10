@@ -10,11 +10,14 @@ import {
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
+  KLING_O1_VIDEO_MODEL_ID,
+  KLING_O1_VIDEO_EDIT_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
+  isKlingO1VideoModelId,
   isFalImageModelId,
   isFalVideoModelId,
   normalizeFalModelId,
@@ -32,6 +35,7 @@ import type {
   FalVideoModelId,
   HailuoVariant,
   Kling26AudioSelectionValue,
+  KlingO1Variant,
   KlingVariant,
 } from '../services/modelConfig';
 
@@ -43,10 +47,12 @@ type FalDerivedState = {
   falModelId: FalModelId;
   isVideoMode: boolean;
   isKlingVideoModel: boolean;
+  isKlingO1VideoModel: boolean;
   isKling26VideoModel: boolean;
   isHailuoVideoModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
+  isKlingO1EditMode: boolean;
 };
 
 type FalHandlers = {
@@ -55,6 +61,8 @@ type FalHandlers = {
   handleFalVideoDurationChange: (value: string) => void;
   handleHailuoVariantChange: (value: string) => void;
   handleKlingVariantChange: (value: string) => void;
+  handleKlingO1VariantChange: (value: string) => void;
+  handleKlingO1KeepAudioChange: (value: boolean) => void;
   handleKling26AudioChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
@@ -72,6 +80,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   falVideoDuration: FalVideoDuration;
   hailuoVariant: HailuoVariant;
   klingVariant: KlingVariant;
+  klingO1Variant: KlingO1Variant;
+  klingO1KeepAudio: boolean;
   kling26AudioSelection: Kling26AudioSelectionValue;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
@@ -86,6 +96,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setFalVideoDuration: Dispatch<SetStateAction<FalVideoDuration>>;
   setHailuoVariant: Dispatch<SetStateAction<HailuoVariant>>;
   setKlingVariant: Dispatch<SetStateAction<KlingVariant>>;
+  setKlingO1Variant: Dispatch<SetStateAction<KlingO1Variant>>;
+  setKlingO1KeepAudio: Dispatch<SetStateAction<boolean>>;
   setKling26AudioSelection: Dispatch<SetStateAction<Kling26AudioSelectionValue>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
@@ -104,6 +116,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [falVideoDuration, setFalVideoDuration] = useState<FalVideoDuration>('6');
   const [hailuoVariant, setHailuoVariant] = useState<HailuoVariant>('standard');
   const [klingVariant, setKlingVariant] = useState<KlingVariant>('standard');
+  const [klingO1Variant, setKlingO1Variant] = useState<KlingO1Variant>('refI2V');
+  const [klingO1KeepAudio, setKlingO1KeepAudio] = useState<boolean>(false);
   const [kling26AudioSelection, setKling26AudioSelection] = useState<Kling26AudioSelectionValue>('placeholder');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
@@ -119,10 +133,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   );
   const isVideoMode = falModelMode === 'video';
   const isKlingVideoModel = isVideoMode && falVideoModelId === KLING_VIDEO_MODEL_ID;
+  const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelId);
   const isKling26VideoModel = isVideoMode && falVideoModelId === KLING_26_VIDEO_MODEL_ID;
   const isHailuoVideoModel = isVideoMode && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
+  const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
   const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID || falModelId === SEEDREAM_V45_MODEL_ID;
 
   // Non-FAL providers cannot use video mode; reset when switching providers.
@@ -144,7 +160,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       setFalVideoDuration(prev => (prev === '10' ? '10' : '6'));
       return;
     }
-    if (falVideoModelId === KLING_VIDEO_MODEL_ID || falVideoModelId === KLING_26_VIDEO_MODEL_ID) {
+    if (falVideoModelId === KLING_VIDEO_MODEL_ID || falVideoModelId === KLING_26_VIDEO_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_EDIT_MODEL_ID) {
       setFalVideoDuration(prev => (prev === '10' ? '10' : '5'));
     }
   }, [falVideoModelId]);
@@ -250,6 +266,15 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setKlingVariant(variant);
   }, []);
 
+  const handleKlingO1VariantChange = useCallback((value: string) => {
+    const variant: KlingO1Variant = value === 'edit' || value === 'fflf' || value === 'refV2V' ? value : 'refI2V';
+    setKlingO1Variant(variant);
+  }, []);
+
+  const handleKlingO1KeepAudioChange = useCallback((value: boolean) => {
+    setKlingO1KeepAudio(value);
+  }, []);
+
   const handleKling26AudioChange = useCallback((value: string) => {
     if (value === 'on') {
       setKling26AudioSelection('on');
@@ -324,6 +349,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     falVideoDuration,
     hailuoVariant,
     klingVariant,
+    klingO1Variant,
+    klingO1KeepAudio,
     kling26AudioSelection,
     falImageSizeSelection,
     falAspectRatioSelection,
@@ -334,15 +361,19 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     falCreativity,
     isVideoMode,
     isKlingVideoModel,
+    isKlingO1VideoModel,
     isKling26VideoModel,
     isHailuoVideoModel,
     isUpscaleModel,
     isKlingProVideoSelection,
+    isKlingO1EditMode,
     handleModelModeChange,
     handleFalModelChange,
     handleFalVideoDurationChange,
     handleHailuoVariantChange,
     handleKlingVariantChange,
+    handleKlingO1VariantChange,
+    handleKlingO1KeepAudioChange,
     handleKling26AudioChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
@@ -357,6 +388,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setFalVideoDuration,
     setHailuoVariant,
     setKlingVariant,
+    setKlingO1Variant,
+    setKlingO1KeepAudio,
     setKling26AudioSelection,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,

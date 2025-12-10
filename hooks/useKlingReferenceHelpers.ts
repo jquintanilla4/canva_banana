@@ -1,24 +1,59 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 
 type KlingReferenceHelpersInput = {
-  isKlingModel: boolean;
+  labelReferences: boolean;
+  primaryImageId?: string | null;
   referenceImageIds: string[];
+  labelElements?: boolean;
+  elementImageIds?: string[];
+  isEditMode?: boolean;
+  sourceVideoId?: string | null;
 };
 
-// Handles Kling-specific reference labeling so App.tsx stays lean.
+// Handles Kling-specific reference and element labeling so App.tsx stays lean.
 export const useKlingReferenceHelpers = ({
-  isKlingModel,
+  labelReferences,
+  primaryImageId,
   referenceImageIds,
+  labelElements = false,
+  elementImageIds = [],
+  isEditMode = false,
+  sourceVideoId = null,
 }: KlingReferenceHelpersInput) => {
-  const badgeLabels = useMemo(() => {
-    if (!isKlingModel || referenceImageIds.length <= 1) {
+  const referenceOrderLabels = useMemo(() => {
+    if (!labelReferences) {
       return null;
     }
-    return referenceImageIds.reduce<Record<string, string>>((acc, id, index) => {
+    // In edit mode, don't include primaryImageId (which is the source video) in labels
+    // Reference images start from @Image1
+    const orderedIds = isEditMode
+      ? referenceImageIds
+      : [
+          ...(primaryImageId ? [primaryImageId] : []),
+          ...referenceImageIds,
+        ];
+    const labels: Record<string, string> = orderedIds.reduce<Record<string, string>>((acc, id, index) => {
       acc[id] = `@Image${index + 1}`;
       return acc;
     }, {});
-  }, [isKlingModel, referenceImageIds]);
+    if (isEditMode && sourceVideoId) {
+      labels[sourceVideoId] = 'Video';
+    }
+    if (Object.keys(labels).length === 0) {
+      return null;
+    }
+    return labels;
+  }, [isEditMode, labelReferences, primaryImageId, referenceImageIds, sourceVideoId]);
 
-  return { referenceOrderLabels: badgeLabels };
+  const elementOrderLabels = useMemo(() => {
+    if (!labelElements || elementImageIds.length === 0) {
+      return null;
+    }
+    return elementImageIds.reduce<Record<string, string>>((acc, id, index) => {
+      acc[id] = `@Element${index + 1}`;
+      return acc;
+    }, {});
+  }, [elementImageIds, labelElements]);
+
+  return { referenceOrderLabels, elementOrderLabels };
 };

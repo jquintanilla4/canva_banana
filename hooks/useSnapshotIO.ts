@@ -58,6 +58,7 @@ type SnapshotIOArgs = {
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
+  elementImageIds: string[];
   videoLastFrameImageId: string | null;
   displayedImages: CanvasImage[];
   displayedNotes: CanvasNote[];
@@ -86,6 +87,7 @@ type SnapshotIOArgs = {
   setSelectedImageIds: Dispatch<SetStateAction<string[]>>;
   setSelectedNoteIds: Dispatch<SetStateAction<string[]>>;
   setReferenceImageIds: Dispatch<SetStateAction<string[]>>;
+  setElementImageIds: Dispatch<SetStateAction<string[]>>;
   setVideoLastFrameImageId: Dispatch<SetStateAction<string | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
   setToastMessage: Dispatch<SetStateAction<string | null>>;
@@ -118,6 +120,7 @@ export function useSnapshotIO({
   selectedImageIds,
   selectedNoteIds,
   referenceImageIds,
+  elementImageIds,
   videoLastFrameImageId,
   displayedImages,
   displayedNotes,
@@ -146,6 +149,7 @@ export function useSnapshotIO({
   setSelectedImageIds,
   setSelectedNoteIds,
   setReferenceImageIds,
+  setElementImageIds,
   setVideoLastFrameImageId,
   setError,
   setToastMessage,
@@ -173,6 +177,7 @@ export function useSnapshotIO({
       selectedImageIds: [...selectedImageIds],
       selectedNoteIds: [...selectedNoteIds],
       referenceImageIds: [...referenceImageIds],
+      ...(elementImageIds.length ? { elementImageIds: [...elementImageIds] } : {}),
       ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
     };
 
@@ -198,6 +203,7 @@ export function useSnapshotIO({
     falNoiseScale,
     falNumImages,
     falResolutionSelection,
+    elementImageIds,
     falScaleFactor,
     inpaintMode,
     prompt,
@@ -341,6 +347,7 @@ export function useSnapshotIO({
         setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
+        setElementImageIds(Array.isArray(meta.elementImageIds) ? [...meta.elementImageIds] : []);
         if (typeof meta.videoLastFrameImageId === 'string' && meta.videoLastFrameImageId.length > 0) {
           setVideoLastFrameImageId(meta.videoLastFrameImageId);
         } else {
@@ -350,6 +357,7 @@ export function useSnapshotIO({
         setSelectedImageIds([]);
         setSelectedNoteIds([]);
         setReferenceImageIds([]);
+        setElementImageIds([]);
         setVideoLastFrameImageId(null);
       }
 
@@ -391,6 +399,7 @@ export function useSnapshotIO({
     setInpaintMode,
     setPrompt,
     setReferenceImageIds,
+    setElementImageIds,
     setSelectedImageIds,
     setSelectedNoteIds,
     setTool,
