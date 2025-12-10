@@ -756,6 +756,19 @@ export default function App() {
   const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
   const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
+  const isAnnotateModeDisabled = (isVideoMode && !isHailuoVideoModel) || isReveModel || isUpscaleModel;
+  const isInpaintModeDisabled = isVideoMode || isReveModel || isUpscaleModel;
+
+  useEffect(() => {
+    if (appMode === 'INPAINT' && isInpaintModeDisabled) {
+      const fallbackMode: AppMode = isAnnotateModeDisabled ? 'CANVAS' : 'ANNOTATE';
+      handleModeChange(fallbackMode);
+      return;
+    }
+    if (appMode === 'ANNOTATE' && isAnnotateModeDisabled) {
+      handleModeChange('CANVAS');
+    }
+  }, [appMode, handleModeChange, isAnnotateModeDisabled, isInpaintModeDisabled]);
 
   const {
     referenceOrderLabels: klingReferenceOrderLabels,
@@ -921,6 +934,8 @@ export default function App() {
           onRemoveBackground={handleBackgroundRemoval}
           isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
           isBackgroundRemovalLoading={isRemovingBackground}
+          isAnnotateModeDisabled={isAnnotateModeDisabled}
+          isInpaintModeDisabled={isInpaintModeDisabled}
         />
       )}
 

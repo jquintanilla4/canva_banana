@@ -31,6 +31,8 @@ interface ToolbarProps {
   isBackgroundRemovalLoading: boolean;
   onResize: () => void;
   isResizeDisabled: boolean;
+  isAnnotateModeDisabled?: boolean;
+  isInpaintModeDisabled?: boolean;
 }
 
 const ToolButton: React.FC<{
@@ -57,13 +59,15 @@ const ModeButton: React.FC<{
   isActive: boolean;
   onClick: () => void;
   children: React.ReactNode;
-}> = ({ label, isActive, onClick, children }) => (
+  disabled?: boolean;
+}> = ({ label, isActive, onClick, children, disabled }) => (
   <button
     onClick={onClick}
     className={`flex h-8 items-center px-3 text-sm font-semibold rounded-md transition-colors duration-200 ${
       isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
-    }`}
+    } disabled:opacity-50 disabled:cursor-not-allowed`}
     title={label}
+    disabled={disabled}
   >
     {children}
   </button>
@@ -116,6 +120,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isBackgroundRemovalLoading,
   onResize,
   isResizeDisabled,
+  isAnnotateModeDisabled = false,
+  isInpaintModeDisabled = false,
 }) => {
   // Main control bar: switches modes/tools and exposes canvas actions (undo, clear, upload, background removal).
   const isBrushToolActive = activeTool === Tool.BRUSH;
@@ -133,8 +139,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     <header className="absolute top-0 left-1/2 -translate-x-1/2 z-10 mt-4 px-3 py-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex h-12 items-center space-x-4">
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
         <ModeButton label="Canvas Mode" isActive={appMode === 'CANVAS'} onClick={() => onModeChange('CANVAS')}>Canvas</ModeButton>
-        <ModeButton label="Annotate Mode" isActive={appMode === 'ANNOTATE'} onClick={() => onModeChange('ANNOTATE')}>Annotate</ModeButton>
-        <ModeButton label="Inpaint Mode" isActive={appMode === 'INPAINT'} onClick={() => onModeChange('INPAINT')}>Inpaint</ModeButton>
+        <ModeButton
+          label="Annotate Mode"
+          isActive={appMode === 'ANNOTATE'}
+          onClick={() => onModeChange('ANNOTATE')}
+          disabled={isAnnotateModeDisabled}
+        >
+          Annotate
+        </ModeButton>
+        <ModeButton
+          label="Inpaint Mode"
+          isActive={appMode === 'INPAINT'}
+          onClick={() => onModeChange('INPAINT')}
+          disabled={isInpaintModeDisabled}
+        >
+          Inpaint
+        </ModeButton>
       </div>
 
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
