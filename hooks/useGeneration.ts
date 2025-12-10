@@ -221,6 +221,8 @@ export const useGeneration = (context: GenerationContext) => {
     const isKlingVideoModel = isVideoMode && falVideoModelIdForRun === KLING_VIDEO_MODEL_ID;
     const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelIdForRun);
     const isKlingO1EditMode = isKlingO1VideoModel && klingO1VariantForRun === 'edit';
+    const isKlingO1RefV2VMode = isKlingO1VideoModel && klingO1VariantForRun === 'refV2V';
+    const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
     const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
     const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
     const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
@@ -232,7 +234,7 @@ export const useGeneration = (context: GenerationContext) => {
     const hasKlingNegativePrompt = normalizedKlingNegativePrompt.length > 0;
     const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary;
     const requiresPrompt = !(usingFal && isUpscaleModel);
-    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1EditMode;
+    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1VideoInputMode;
     const generationKind: GenerationKind = overrideKind
       ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
 
@@ -316,20 +318,20 @@ export const useGeneration = (context: GenerationContext) => {
       try {
         // In Ref-i2v, ensure a still image is selected (videos must be captured to images first)
         const primarySelection = primaryImageIdForRun ? images.find(img => img.id === primaryImageIdForRun) : null;
-        if (isKlingO1VideoModel && !isKlingO1EditMode && primarySelection?.mediaType === 'video') {
+        if (isKlingO1VideoModel && !isKlingO1VideoInputMode && primarySelection?.mediaType === 'video') {
           setError('Kling O1 Ref-i2v requires a still image. Capture a frame from the video and select that snapshot instead.');
           return;
         }
 
-        // For edit mode, get source video URL; for other modes, require starting frame image
+        // For edit/refV2V modes, get source video URL; for other modes, require starting frame image
         let sourceVideo: CanvasImage | null = null;
         let sourceVideoUrlForRequest: string | undefined;
-        if (isKlingO1EditMode) {
+        if (isKlingO1VideoInputMode) {
           sourceVideo = sourceVideoIdForRun
             ? images.find(img => img.id === sourceVideoIdForRun && img.mediaType === 'video')
             : null;
           if (!sourceVideo) {
-            throw new Error('Select a video on the canvas to edit.');
+            throw new Error(isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.');
           }
           // Get video URL from generation metadata, or upload if it's an imported video
           sourceVideoUrlForRequest = sourceVideo.metadata?.generation?.url;
@@ -345,7 +347,7 @@ export const useGeneration = (context: GenerationContext) => {
         } else if (!activePrimary) {
           throw new Error('Unable to find the starting frame for this video.');
         }
-        const videoSourceImage = isKlingO1EditMode ? null : activePrimary?.element as HTMLImageElement;
+        const videoSourceImage = isKlingO1VideoInputMode ? null : activePrimary?.element as HTMLImageElement;
         const referenceImagesForRun = referenceImageIdsForRun
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia)
@@ -363,13 +365,11 @@ export const useGeneration = (context: GenerationContext) => {
             setError('Element images must be still images.');
             return;
           }
-          const maxSupportImages = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelIdForRun);
-          const totalImageCount = isKlingO1EditMode
-            ? referenceImagesForRun.length + elementImagesForRun.length
-            : referenceImagesForRun.length + elementImagesForRun.length;
+          const maxSupportImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelIdForRun);
+          const totalImageCount = referenceImagesForRun.length + elementImagesForRun.length;
           if (totalImageCount > maxSupportImages) {
-            setError(isKlingO1EditMode
-              ? 'Kling O1 Video Edit supports up to 4 images total (references + elements).'
+            setError(isKlingO1VideoInputMode
+              ? `Kling O1 Video ${isKlingO1EditMode ? 'Edit' : 'Ref-v2v'} supports up to 4 images total (references + elements).`
               : 'Kling O1 Video supports up to 7 images total (start + references + elements).');
             return;
           }
@@ -401,9 +401,13 @@ export const useGeneration = (context: GenerationContext) => {
             referenceImages: referenceImagesForRun,
             elementImages: elementImagesForRun,
             klingO1Variant: klingO1VariantForRun,
-            ...(isKlingO1EditMode ? {
+            ...(isKlingO1VideoInputMode ? {
               sourceVideoUrl: sourceVideoUrlForRequest,
               keepAudio: klingO1KeepAudioForRun,
+              ...(isKlingO1RefV2VMode ? {
+                duration: videoDurationForRun,
+                aspectRatio: falAspectRatioSelectionForRun === 'default' ? 'auto' : falAspectRatioSelectionForRun,
+              } : {}),
             } : {}),
           } : {}),
           onQueueUpdate: (update: FalQueueUpdate) => {
@@ -515,13 +519,14 @@ export const useGeneration = (context: GenerationContext) => {
                   ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
                   : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameIdForMetadata ? { videoLastFrameImageId: videoLastFrameIdForMetadata } : {}),
-                ...(isKlingO1EditMode && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
+                ...(isKlingO1VideoInputMode && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
                 falOptions: {
                   ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
                   ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
                   ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
                   ...(isKlingO1VideoModel ? { klingO1Variant: klingO1VariantForRun } : {}),
-                  ...(isKlingO1EditMode ? { klingO1KeepAudio: klingO1KeepAudioForRun } : {}),
+                  ...(isKlingO1VideoInputMode ? { klingO1KeepAudio: klingO1KeepAudioForRun } : {}),
+                  ...(isKlingO1RefV2VMode ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
                   ...((isKlingVideoModel || isKling26VideoModel) && hasKlingNegativePrompt ? { negativePrompt: normalizedKlingNegativePrompt } : {}),
                   ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                 },

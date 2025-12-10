@@ -23,7 +23,8 @@ export const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.
 export const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video' as const;
 export const KLING_O1_VIDEO_MODEL_ID = 'fal-ai/kling-video/o1/reference-to-video' as const;
 export const KLING_O1_VIDEO_EDIT_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/edit' as const;
-export const KLING_O1_VIDEO_MODEL_IDS = [KLING_O1_VIDEO_MODEL_ID, KLING_O1_VIDEO_EDIT_MODEL_ID] as const;
+export const KLING_O1_VIDEO_REF_V2V_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/reference' as const;
+export const KLING_O1_VIDEO_MODEL_IDS = [KLING_O1_VIDEO_MODEL_ID, KLING_O1_VIDEO_EDIT_MODEL_ID, KLING_O1_VIDEO_REF_V2V_MODEL_ID] as const;
 export const KLING_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-video' as const;
 export const KLING_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video' as const;
 export const KLING_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video' as const;
@@ -71,15 +72,18 @@ export const getKlingActualModelId = (variant: KlingVariant): string =>
 export const KLING_O1_VARIANT_OPTIONS: ReadonlyArray<{ value: KlingO1Variant; label: string; disabled?: boolean }> = [
   { value: 'refI2V', label: 'Ref-i2v' },
   { value: 'edit', label: 'Edit' },
+  { value: 'refV2V', label: 'Ref-v2v' },
   { value: 'fflf', label: 'FFLF', disabled: true },
-  { value: 'refV2V', label: 'Ref-v2v', disabled: true },
 ] as const;
 
-export const getKlingO1VideoEndpoint = (variant: KlingO1Variant): string =>
-  variant === 'edit' ? KLING_O1_VIDEO_EDIT_MODEL_ID : KLING_O1_VIDEO_MODEL_ID;
+export const getKlingO1VideoEndpoint = (variant: KlingO1Variant): string => {
+  if (variant === 'edit') return KLING_O1_VIDEO_EDIT_MODEL_ID;
+  if (variant === 'refV2V') return KLING_O1_VIDEO_REF_V2V_MODEL_ID;
+  return KLING_O1_VIDEO_MODEL_ID;
+};
 
 export const isKlingO1VideoModelId = (value: string | undefined): value is typeof KLING_O1_VIDEO_MODEL_IDS[number] =>
-  value === KLING_O1_VIDEO_MODEL_ID || value === KLING_O1_VIDEO_EDIT_MODEL_ID;
+  value === KLING_O1_VIDEO_MODEL_ID || value === KLING_O1_VIDEO_EDIT_MODEL_ID || value === KLING_O1_VIDEO_REF_V2V_MODEL_ID;
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
 export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
@@ -255,18 +259,19 @@ export const KLING26_AUDIO_OPTIONS: ReadonlyArray<{ value: Kling26AudioSelection
 
 export const FAL_IMAGE_SIZE_DEFAULT_OPTION = 'default';
 export const DEFAULT_MAX_REFERENCE_IMAGES = 13;
-export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID, number>> = {
+export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | typeof KLING_O1_VIDEO_REF_V2V_MODEL_ID, number>> = {
   [SEEDREAM_MODEL_ID]: 7,
   [SEEDREAM_V45_MODEL_ID]: 8,
   [KLING_IMAGE_MODEL_ID]: 10,
   [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [KLING_O1_VIDEO_MODEL_ID]: 6,
   [KLING_O1_VIDEO_EDIT_MODEL_ID]: 4,
+  [KLING_O1_VIDEO_REF_V2V_MODEL_ID]: 4,
   [KLING_VIDEO_MODEL_ID]: 0,
   [KLING_26_VIDEO_MODEL_ID]: 0,
 };
 
-export const getMaxReferenceImages = (modelId: FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | undefined): number =>
+export const getMaxReferenceImages = (modelId: FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | typeof KLING_O1_VIDEO_REF_V2V_MODEL_ID | undefined): number =>
   modelId && MODEL_REFERENCE_IMAGE_LIMITS[modelId] !== undefined
     ? MODEL_REFERENCE_IMAGE_LIMITS[modelId] as number
     : DEFAULT_MAX_REFERENCE_IMAGES;

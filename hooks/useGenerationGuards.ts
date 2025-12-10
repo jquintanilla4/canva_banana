@@ -8,6 +8,7 @@ type Args = {
   tool: Tool;
   prompt: string;
   isKlingO1EditMode: boolean;
+  isKlingO1RefV2VMode?: boolean;
   hasSourceVideo: boolean;
   isVideoMode: boolean;
   isUpscaleModel: boolean;
@@ -40,6 +41,7 @@ export function useGenerationGuards({
   tool,
   prompt,
   isKlingO1EditMode,
+  isKlingO1RefV2VMode = false,
   hasSourceVideo,
   isVideoMode,
   isUpscaleModel,
@@ -55,12 +57,13 @@ export function useGenerationGuards({
   hasInpaintMask,
   activePrimaryImage,
 }: Args): GenerationGuardsResult {
+  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
     const usingFal = apiProvider === 'fal';
     const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
     const hasPrimaryImage = Boolean(activePrimaryImage);
-    const isTextToImage = !hasPrimaryImage && !(isVideoMode && isKlingO1EditMode && hasSourceVideo);
+    const isTextToImage = !hasPrimaryImage && !(isVideoMode && isKlingO1VideoInputMode && hasSourceVideo);
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
     const isNumImagesInvalid =
@@ -70,8 +73,8 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && isUpscaleModel);
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingO1EditMode && !hasPrimaryImage;
-    const requiresSourceVideoForEdit = usingFal && isVideoMode && isKlingO1EditMode && !hasSourceVideo;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingO1VideoInputMode && !hasPrimaryImage;
+    const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isKlingO1VideoInputMode && !hasSourceVideo;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
       (usingFal && isReveModel) ||
       (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
@@ -82,16 +85,20 @@ export function useGenerationGuards({
       (shouldValidateFalOptions && isNumImagesInvalid) ||
       requiresSelectedImageForUpscale ||
       requiresSelectedImageForVideo ||
-      requiresSourceVideoForEdit ||
+      requiresSourceVideoForVideoInput ||
       editConstraintsActive;
 
     const promptPlaceholderText = isVideoMode
       ? (hasPrimaryImage
         ? 'Describe the motion or scene you want this image to turn into...'
-        : isKlingO1EditMode
+        : isKlingO1VideoInputMode
           ? (hasSourceVideo
-            ? 'Describe how you want to edit this video...'
-            : 'Select a video to edit, then describe the changes...')
+            ? (isKlingO1EditMode
+              ? 'Describe how you want to edit this video...'
+              : 'Describe the next shot based on this reference video...')
+            : (isKlingO1EditMode
+              ? 'Select a video to edit, then describe the changes...'
+              : 'Select a reference video, then describe the next shot...'))
           : 'Select an image and describe the video you want to create...')
       : usingFal && isUpscaleModel
         ? `Prompt disabled for ${getFalModelLabel(falModelId)}. Select an image and scale factor.`
@@ -122,6 +129,7 @@ export function useGenerationGuards({
     isKling26VideoModel,
     isKlingModel,
     isKlingO1EditMode,
+    isKlingO1VideoInputMode,
     isKlingVideoModel,
     isReveModel,
     isSeedreamModel,

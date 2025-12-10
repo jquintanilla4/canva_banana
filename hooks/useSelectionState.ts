@@ -23,6 +23,7 @@ type SelectionOptions = {
   onReferenceLimit: (maxReferenceImages: number) => void;
   isKlingO1VideoModel: boolean;
   isKlingO1EditMode: boolean;
+  isKlingO1RefV2VMode: boolean;
 };
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
@@ -40,9 +41,11 @@ export const useSelectionState = (options: SelectionOptions) => {
     isKlingImageModel,
     isKlingO1VideoModel,
     isKlingO1EditMode,
+    isKlingO1RefV2VMode,
     onError,
     onReferenceLimit,
   } = options;
+  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -69,12 +72,12 @@ export const useSelectionState = (options: SelectionOptions) => {
     setSourceVideoId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
   }, [elementImageIds.length, images, referenceImageIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId]);
 
-  // Clear sourceVideoId when leaving edit mode
+  // Clear sourceVideoId when leaving video input mode (edit/refV2V)
   useEffect(() => {
-    if (!isKlingO1EditMode && sourceVideoId) {
+    if (!isKlingO1VideoInputMode && sourceVideoId) {
       setSourceVideoId(null);
     }
-  }, [isKlingO1EditMode, sourceVideoId]);
+  }, [isKlingO1VideoInputMode, sourceVideoId]);
 
   useEffect(() => {
     if (!isKlingO1VideoModel) {
@@ -83,8 +86,8 @@ export const useSelectionState = (options: SelectionOptions) => {
       }
       return;
     }
-    // Edit variant has a 4 total limit (elements + references), refI2V has 6
-    const baseMaxReferenceImages = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelId);
+    // Edit/refV2V variants have a 4 total limit (elements + references), refI2V has 6
+    const baseMaxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
     const maxReferences = Math.max(0, baseMaxReferenceImages - elementImageIds.length);
     setReferenceImageIds(prev => {
       if (prev.length <= maxReferences) {
@@ -93,14 +96,14 @@ export const useSelectionState = (options: SelectionOptions) => {
       onReferenceLimit(maxReferences);
       return prev.slice(0, maxReferences);
     });
-  }, [elementImageIds.length, falModelId, isKlingO1EditMode, isKlingO1VideoModel, onReferenceLimit]);
+  }, [elementImageIds.length, falModelId, isKlingO1VideoInputMode, isKlingO1VideoModel, onReferenceLimit]);
 
   useEffect(() => {
     if (!isKlingO1VideoModel) {
       return;
     }
-    // Edit variant has a 4 total limit (elements + references), refI2V has 6
-    const baseMaxReferenceImages = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelId);
+    // Edit/refV2V variants have a 4 total limit (elements + references), refI2V has 6
+    const baseMaxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
     const maxElements = Math.max(0, baseMaxReferenceImages - referenceImageIds.length);
     setElementImageIds(prev => {
       if (prev.length <= maxElements) {
@@ -109,7 +112,7 @@ export const useSelectionState = (options: SelectionOptions) => {
       onReferenceLimit(maxElements);
       return prev.slice(0, maxElements);
     });
-  }, [falModelId, isKlingO1EditMode, isKlingO1VideoModel, onReferenceLimit, referenceImageIds.length]);
+  }, [falModelId, isKlingO1VideoInputMode, isKlingO1VideoModel, onReferenceLimit, referenceImageIds.length]);
 
   const handleImageSelection = useCallback((
     imageId: string | null,
@@ -179,8 +182,8 @@ export const useSelectionState = (options: SelectionOptions) => {
         setElementImageIds([]);
         return;
       }
-      // Edit variant has a 4 total limit (elements + references), refI2V has 6
-      const baseMaxReferenceImages = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelId);
+      // Edit/refV2V variants have a 4 total limit (elements + references), refI2V has 6
+      const baseMaxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
       const maxElements = Math.max(0, baseMaxReferenceImages - referenceImageIds.length);
       setReferenceImageIds(prev => prev.filter(id => id !== imageId));
       setElementImageIds(prevIds => {
@@ -205,8 +208,8 @@ export const useSelectionState = (options: SelectionOptions) => {
         return;
       }
       // Reference images power Kling prompts; enforce per-model limits.
-      // Edit variant has a 4 total limit (elements + references), refI2V has 6
-      const baseMaxReferenceImages = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelId);
+      // Edit/refV2V variants have a 4 total limit (elements + references), refI2V has 6
+      const baseMaxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
       const maxReferenceImages = isKlingO1VideoSelection
         ? Math.max(0, baseMaxReferenceImages - elementImageIds.length)
         : baseMaxReferenceImages;
@@ -278,15 +281,15 @@ export const useSelectionState = (options: SelectionOptions) => {
         setElementImageIds([]);
       }
       setVideoLastFrameImageId(null);
-      // Clicking the same item again in edit mode clears sourceVideoId
-      if (isKlingO1EditMode && targetImage?.mediaType === 'video' && sourceVideoId === imageId) {
+      // Clicking the same item again in video input mode clears sourceVideoId
+      if (isKlingO1VideoInputMode && targetImage?.mediaType === 'video' && sourceVideoId === imageId) {
         setSourceVideoId(null);
       }
       return;
     }
 
-    // In Kling O1 Edit mode, single-clicking a video sets it as the source video
-    if (isKlingO1EditMode && targetImage?.mediaType === 'video') {
+    // In Kling O1 video input modes (Edit/Ref-v2v), single-clicking a video sets it as the source video
+    if (isKlingO1VideoInputMode && targetImage?.mediaType === 'video') {
       setSourceVideoId(imageId);
       setSelectedImageIds([imageId]);
       setSelectedNoteIds([]);
@@ -322,7 +325,7 @@ export const useSelectionState = (options: SelectionOptions) => {
     elementImageIds.length,
     selectedImageIds.length,
     videoLastFrameImageId,
-    isKlingO1EditMode,
+    isKlingO1VideoInputMode,
     sourceVideoId,
   ]);
 

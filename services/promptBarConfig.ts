@@ -218,8 +218,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       disabled: isLoading,
     });
 
-    // Keep audio toggle for edit variant
-    if (klingO1Variant === 'edit') {
+    // Keep audio toggle for edit and refV2V variants (both accept video input)
+    if (klingO1Variant === 'edit' || klingO1Variant === 'refV2V') {
       controls.push({
         id: 'kling-o1-keep-audio',
         ariaLabel: 'Keep original audio',

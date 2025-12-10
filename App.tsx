@@ -156,6 +156,7 @@ export default function App() {
     isUpscaleModel,              // True if an upscaler model is selected
     isKlingProVideoSelection,    // True if Kling Pro video is selected
     isKlingO1EditMode,           // True if Kling O1 Edit variant is selected
+    isKlingO1RefV2VMode,         // True if Kling O1 Ref-v2v variant is selected
     handleModelModeChange: handleFalModelModeChange, // Handler for switching FAL mode
     handleFalModelChange,                    // Handler for FAL model changes
     handleFalVideoDurationChange,            // Handler for FAL video duration changes
@@ -205,12 +206,13 @@ export default function App() {
   }, []);
 
   // Shows a toast when the reference image limit is reached for the current model.
+  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
     if (isKlingO1VideoModelId(falModelId)) {
-      // Edit variant has 4 total limit, refI2V has 6
-      const baseLimit = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelId);
+      // Edit/refV2V variants have 4 total limit, refI2V has 6
+      const baseLimit = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
       const totalLimit = baseLimit + 1;
-      const variantLabel = isKlingO1EditMode ? 'Kling O1 Edit' : 'Kling O1 Video';
+      const variantLabel = isKlingO1EditMode ? 'Kling O1 Edit' : isKlingO1RefV2VMode ? 'Kling O1 Ref-v2v' : 'Kling O1 Video';
       setToastMessage(`${variantLabel} supports up to ${totalLimit} images total (source + references + elements). Slots remaining: ${Math.max(0, maxReferenceImages)} for references/elements.`);
       setTimeout(() => setToastMessage(null), 2000);
       return;
@@ -218,7 +220,7 @@ export default function App() {
     const totalLimit = maxReferenceImages + 1;
     setToastMessage(`${getFalModelLabel(falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [falModelId, isKlingO1EditMode, setToastMessage]);
+  }, [falModelId, isKlingO1EditMode, isKlingO1RefV2VMode, isKlingO1VideoInputMode, setToastMessage]);
 
   const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
 
@@ -251,6 +253,7 @@ export default function App() {
     isKlingImageModel: isKlingModel,
     isKlingO1VideoModel,
     isKlingO1EditMode,
+    isKlingO1RefV2VMode,
     onError: setError,
     onReferenceLimit: showReferenceLimitToast,
   });
@@ -384,8 +387,8 @@ export default function App() {
 
   // Enforce reference image limits whenever the active model changes.
   useEffect(() => {
-    // Edit variant has 4 total limit, refI2V has 6
-    const maxReferenceImages = isKlingO1EditMode ? 4 : getMaxReferenceImages(falModelId);
+    // Edit/refV2V variants have 4 total limit, refI2V has 6
+    const maxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
     setReferenceImageIds(prevIds => {
       if (prevIds.length <= maxReferenceImages) {
         return prevIds;
@@ -405,7 +408,7 @@ export default function App() {
     } else if (elementImageIds.length > 0) {
       setElementImageIds([]);
     }
-  }, [elementImageIds.length, falModelId, isKlingO1EditMode, referenceImageIds.length, setElementImageIds, setReferenceImageIds, showReferenceLimitToast]);
+  }, [elementImageIds.length, falModelId, isKlingO1VideoInputMode, referenceImageIds.length, setElementImageIds, setReferenceImageIds, showReferenceLimitToast]);
 
   // Clear video last frame selection if not in Kling Pro Video mode
   useEffect(() => {
@@ -779,7 +782,7 @@ export default function App() {
     referenceImageIds,
     labelElements: isKlingO1VideoModel,
     elementImageIds,
-    isEditMode: isKlingO1EditMode,
+    isEditMode: isKlingO1VideoInputMode,
     sourceVideoId,
   });
 
@@ -791,6 +794,7 @@ export default function App() {
     isKlingModel,
     isKlingO1VideoModel,
     isKlingO1EditMode,
+    isKlingO1RefV2VMode,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds,
@@ -812,6 +816,7 @@ export default function App() {
     tool,
     prompt,
     isKlingO1EditMode,
+    isKlingO1RefV2VMode,
     hasSourceVideo: hasSourceVideoSelected,
     isVideoMode,
     isUpscaleModel,
@@ -962,7 +967,7 @@ export default function App() {
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
           tailSelectionEnabled={isKlingProVideoSelection}
-          isKlingO1EditMode={isKlingO1EditMode}
+          isKlingO1VideoInputMode={isKlingO1VideoInputMode}
           onError={setError}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}

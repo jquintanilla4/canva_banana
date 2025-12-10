@@ -118,6 +118,7 @@ interface GenerateVideoOptions {
   klingO1Variant?: string;
   sourceVideoUrl?: string;
   keepAudio?: boolean;
+  aspectRatio?: FalAspectRatioOption;
 }
 
 const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
@@ -184,6 +185,7 @@ export const KLING_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/
 export const KLING_26_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/image-to-video';
 export const KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/o1/reference-to-video';
 export const KLING_O1_VIDEO_EDIT_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/edit';
+export const KLING_O1_VIDEO_REF_V2V_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/reference';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -1034,10 +1036,11 @@ export const generateImageToVideo = async (
 
   const modelId = options.modelId || HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
   const duration = options.duration;
-  const isKlingO1VideoModel = modelId === KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID || modelId === KLING_O1_VIDEO_EDIT_MODEL_ID;
+  const isKlingO1VideoModel = modelId === KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID || modelId === KLING_O1_VIDEO_EDIT_MODEL_ID || modelId === KLING_O1_VIDEO_REF_V2V_MODEL_ID;
   const referenceImages = Array.isArray(options.referenceImages) ? options.referenceImages : [];
   const elementImages = Array.isArray(options.elementImages) ? options.elementImages : [];
   const isEditVariant = options.klingO1Variant === 'edit';
+  const isRefV2VVariant = options.klingO1Variant === 'refV2V';
 
   // Kling O1 Video Edit variant - requires video_url, optional image_urls and elements
   if (isKlingO1VideoModel && isEditVariant) {
@@ -1128,7 +1131,100 @@ export const generateImageToVideo = async (
     return { videoUrl, requestId };
   }
 
-  // Non-edit variants require an image
+  // Kling O1 Video Ref-v2v variant - requires video_url, supports duration and aspect_ratio
+  if (isKlingO1VideoModel && isRefV2VVariant) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Kling O1 Video Ref-v2v requires a source video.');
+    }
+
+    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
+    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img)));
+    const elementsPayload = elementUrls.map(url => ({
+      frontal_image_url: url,
+      reference_image_urls: [url],
+    }));
+
+    // Max 4 total (elements + reference images) when using video
+    const totalImageCount = referenceUrls.length + elementsPayload.length;
+    if (totalImageCount > 4) {
+      throw new Error('Kling O1 Video Ref-v2v supports up to 4 images total (references + elements).');
+    }
+
+    let latestRequestId: string | undefined;
+
+    const aspectRatioValue = options.aspectRatio && options.aspectRatio !== 'default' ? options.aspectRatio : 'auto';
+
+    const inputPayload: Record<string, unknown> = {
+      prompt,
+      video_url: options.sourceVideoUrl,
+      ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
+      ...(elementsPayload.length ? { elements: elementsPayload } : {}),
+      ...(typeof options.keepAudio === 'boolean' ? { keep_audio: options.keepAudio } : {}),
+      ...(duration ? { duration } : {}),
+      aspect_ratio: aspectRatioValue,
+    };
+
+    const refV2VModelId = KLING_O1_VIDEO_REF_V2V_MODEL_ID;
+    logFalEvent('outbound', refV2VModelId, 'Outbound request (fal.subscribe)', {
+      input: inputPayload,
+    });
+
+    let result: Awaited<ReturnType<typeof fal.subscribe>>;
+    try {
+      result = await fal.subscribe(refV2VModelId, {
+        input: inputPayload,
+        logs: true,
+        onQueueUpdate: update => {
+          const queueUpdate = update as unknown as FalQueueUpdate;
+          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+          if (resolvedRequestId) {
+            latestRequestId = resolvedRequestId;
+          }
+          logFalEvent('inbound', refV2VModelId, 'Queue update', {
+            status: queueUpdate.status,
+            position: queueUpdate.position,
+            eta: queueUpdate.eta,
+            requestId: resolvedRequestId,
+            logs: normalizedLogs.map(log => log?.message ?? ''),
+          });
+          options.onQueueUpdate?.({
+            ...queueUpdate,
+            requestId: resolvedRequestId || '',
+            logs: normalizedLogs,
+          });
+        },
+      });
+    } catch (error) {
+      logFalEvent('error', refV2VModelId, 'Request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logFalEvent('inbound', refV2VModelId, 'Result received', {
+      requestId: result?.requestId || latestRequestId,
+      data: (result?.data as Record<string, unknown>) ?? undefined,
+    });
+
+    const data = result?.data as { video?: string | { url?: string } } | undefined;
+    const videoEntry = data?.video;
+    const videoUrl = typeof videoEntry === 'string'
+      ? videoEntry
+      : videoEntry && typeof videoEntry.url === 'string'
+        ? videoEntry.url
+        : null;
+
+    if (!videoUrl) {
+      throw new Error('Fal.ai API did not return a video.');
+    }
+
+    const requestId = result?.requestId || latestRequestId;
+
+    return { videoUrl, requestId };
+  }
+
+  // Non-edit/refV2V variants require an image
   if (!image) {
     throw new Error('Image is required for video generation.');
   }

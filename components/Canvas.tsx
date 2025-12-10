@@ -24,7 +24,7 @@ interface CanvasProps {
   videoLastFrameImageId: string | null;
   sourceVideoId: string | null;
   tailSelectionEnabled: boolean;
-  isKlingO1EditMode: boolean;
+  isKlingO1VideoInputMode: boolean;
   onError?: (message: string) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
@@ -118,7 +118,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   videoLastFrameImageId,
   sourceVideoId,
   tailSelectionEnabled,
-  isKlingO1EditMode,
+  isKlingO1VideoInputMode,
   onError,
   onImageSelect,
   onNoteSelect,
@@ -565,8 +565,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([6 / scale, 4 / scale]);
         ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
         ctx.setLineDash([]);
-      } else if (isKlingO1EditMode && sourceVideoId === image.id) {
-        ctx.strokeStyle = '#f97316'; // orange-500 for source video in edit mode
+      } else if (isKlingO1VideoInputMode && sourceVideoId === image.id) {
+        ctx.strokeStyle = '#f97316'; // orange-500 for source video in video input mode
         ctx.lineWidth = 4 / scale;
         ctx.setLineDash([6 / scale, 4 / scale]);
         ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
@@ -591,7 +591,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([]);
       }
 
-      const isSourceVideo = isKlingO1EditMode && sourceVideoId === image.id;
+      const isSourceVideo = isKlingO1VideoInputMode && sourceVideoId === image.id;
       const referenceOrderLabel = isSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id];
       if (referenceOrderLabel) {
         const badgePaddingX = 8 / scale;

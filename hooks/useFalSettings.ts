@@ -12,6 +12,7 @@ import {
   KLING_IMAGE_MODEL_ID,
   KLING_O1_VIDEO_MODEL_ID,
   KLING_O1_VIDEO_EDIT_MODEL_ID,
+  KLING_O1_VIDEO_REF_V2V_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -53,6 +54,7 @@ type FalDerivedState = {
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
+  isKlingO1RefV2VMode: boolean;
 };
 
 type FalHandlers = {
@@ -139,6 +141,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
+  const isKlingO1RefV2VMode = isKlingO1VideoModel && klingO1Variant === 'refV2V';
   const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID || falModelId === SEEDREAM_V45_MODEL_ID;
 
   // Non-FAL providers cannot use video mode; reset when switching providers.
@@ -160,7 +163,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       setFalVideoDuration(prev => (prev === '10' ? '10' : '6'));
       return;
     }
-    if (falVideoModelId === KLING_VIDEO_MODEL_ID || falVideoModelId === KLING_26_VIDEO_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_EDIT_MODEL_ID) {
+    if (falVideoModelId === KLING_VIDEO_MODEL_ID || falVideoModelId === KLING_26_VIDEO_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_EDIT_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_REF_V2V_MODEL_ID) {
       setFalVideoDuration(prev => (prev === '10' ? '10' : '5'));
     }
   }, [falVideoModelId]);
@@ -367,6 +370,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,
+    isKlingO1RefV2VMode,
     handleModelModeChange,
     handleFalModelChange,
     handleFalVideoDurationChange,
