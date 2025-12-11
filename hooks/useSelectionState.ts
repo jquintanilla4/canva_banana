@@ -6,6 +6,7 @@ import {
   type FalModelId,
   type FalModelMode,
   type FalVideoModelId,
+  type KlingO1Variant,
   type KlingVariant,
 } from '../services/modelConfig';
 import type { ApiProviderId, CanvasImage, CanvasNote } from '../types';
@@ -17,6 +18,7 @@ type SelectionOptions = {
   falModelMode: FalModelMode;
   falVideoModelId: FalVideoModelId;
   klingVariant: KlingVariant;
+  klingO1Variant: KlingO1Variant;
   isKlingProVideoSelection: boolean;
   isKlingImageModel: boolean;
   onError: (message: string) => void;
@@ -34,18 +36,20 @@ export const useSelectionState = (options: SelectionOptions) => {
     images,
     apiProvider,
     falModelId,
-    falModelMode,
-    falVideoModelId,
-    klingVariant,
-    isKlingProVideoSelection,
-    isKlingImageModel,
-    isKlingO1VideoModel,
-    isKlingO1EditMode,
-    isKlingO1RefV2VMode,
+  falModelMode,
+  falVideoModelId,
+  klingVariant,
+  klingO1Variant,
+  isKlingProVideoSelection,
+  isKlingImageModel,
+  isKlingO1VideoModel,
+  isKlingO1EditMode,
+  isKlingO1RefV2VMode,
     onError,
-    onReferenceLimit,
-  } = options;
-  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+  onReferenceLimit,
+} = options;
+const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -137,7 +141,7 @@ export const useSelectionState = (options: SelectionOptions) => {
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection) {
+      if (!isKlingProVideoSelection && !isKlingO1FflfMode) {
         return;
       }
       if (!imageId) {
@@ -315,6 +319,7 @@ export const useSelectionState = (options: SelectionOptions) => {
     falVideoModelId,
     images,
     isKlingProVideoSelection,
+    isKlingO1FflfMode,
     klingVariant,
     onError,
     onReferenceLimit,

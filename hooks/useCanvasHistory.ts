@@ -2,13 +2,16 @@ import { useCallback, useState } from 'react';
 import type { CanvasImage, CanvasNote, Path } from '../types';
 
 export type AppState = { images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] };
+// CommitOverrides let callers provide already-updated slices (e.g., when state is staged elsewhere)
+// so the history snapshot captures that exact data instead of the last committed baseline.
+export type CommitOverrides = Partial<Pick<AppState, 'images' | 'paths' | 'notes'>>;
 
 const DEFAULT_MAX_HISTORY_SIZE = 30;
 
 // Compact string signature lets us skip storing identical states while keeping undo/redo fast.
 const getStateSignature = (state: AppState): string => {
   const imageSignature = state.images
-    .map(img => `${img.id},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height},${(img.rotation ?? 0).toFixed(3)}`)
+    .map(img => `${img.id},${img.mediaType},${img.isPlaying ? 1 : 0},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height},${(img.rotation ?? 0).toFixed(3)}`)
     .join(';');
   const pathSignature = state.paths.map(p => `${p.points.length},${p.tool}`).join(',');
   const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length}`).join(';');
@@ -63,17 +66,20 @@ export const useCanvasHistory = (
   }, [maxHistory]);
 
   // Merge any optimistic/live edits into history and clear the staging buffers.
-  const commit = useCallback(() => {
-    if (liveImages === null && livePaths === null && liveNotes === null) {
+  // Optional overrides are used when a caller already has the next slice handy (e.g., video play toggles)
+  // and wants to snapshot that immediately without waiting for live state to sync.
+  const commit = useCallback((overrides?: CommitOverrides) => {
+    const hasOverrides = Boolean(overrides && (overrides.images || overrides.paths || overrides.notes));
+    if (!hasOverrides && liveImages === null && livePaths === null && liveNotes === null) {
       return;
     }
 
     setHistoryState(current => {
       const prevState = current.history[current.index];
       const nextState: AppState = {
-        images: liveImages ?? prevState.images,
-        paths: livePaths ?? prevState.paths,
-        notes: liveNotes ?? prevState.notes,
+        images: overrides?.images ?? liveImages ?? prevState.images,
+        paths: overrides?.paths ?? livePaths ?? prevState.paths,
+        notes: overrides?.notes ?? liveNotes ?? prevState.notes,
       };
 
       if (getStateSignature(nextState) === getStateSignature(prevState)) {

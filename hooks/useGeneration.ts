@@ -12,6 +12,7 @@ import {
   getFalModelLabel,
   getHailuoActualModelId,
   getKlingActualModelId,
+  getKlingO1VideoEndpoint,
   getMaxReferenceImages,
   isKlingO1VideoModelId,
   getSeedreamTextToImageModelId,
@@ -225,6 +226,8 @@ export const useGeneration = (context: GenerationContext) => {
     const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
     const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
     const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
+    const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
+    const isKlingO1FflfMode = isKlingO1VideoModel && klingO1VariantForRun === 'fflf';
     const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
       ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
       : (isKlingVideoModel || isKling26VideoModel || isKlingO1VideoModel)
@@ -365,6 +368,10 @@ export const useGeneration = (context: GenerationContext) => {
             setError('Element images must be still images.');
             return;
           }
+          if (isKlingO1FflfMode && (referenceImagesForRun.length > 0 || elementImagesForRun.length > 0)) {
+            setError('Kling O1 FFLF only supports a start and end frame. Remove reference or element images.');
+            return;
+          }
           const maxSupportImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelIdForRun);
           const totalImageCount = referenceImagesForRun.length + elementImagesForRun.length;
           if (totalImageCount > maxSupportImages) {
@@ -375,7 +382,8 @@ export const useGeneration = (context: GenerationContext) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        if (isKlingVideoModel && klingVariantForRun === 'pro' && videoLastFrameImageIdForRun) {
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingO1FflfMode;
+        if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
             setError('Select a still image on the canvas to use as the ending frame.');
@@ -384,8 +392,10 @@ export const useGeneration = (context: GenerationContext) => {
           videoTailImageElement = tailFrame.element as HTMLImageElement;
         }
         const videoLastFrameIdForMetadata = videoTailImageElement ? videoLastFrameImageIdForRun : null;
-        const videoModelIdForRequest = actualHailuoModelId ?? actualKlingModelId ?? falVideoModelIdForRun;
-        const shouldSendDuration = isHailuoVideoModel ? isHailuoStandardVideoModel : (isKlingVideoModel || isKling26VideoModel);
+        const videoModelIdForRequest = actualHailuoModelId ?? actualKlingModelId ?? actualKlingO1ModelId ?? falVideoModelIdForRun;
+        const shouldSendDuration = isHailuoVideoModel
+          ? isHailuoStandardVideoModel
+          : (isKlingVideoModel || isKling26VideoModel || (isKlingO1VideoModel && !isKlingO1EditMode));
         const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
         const negativePromptForRequest = (isKlingVideoModel || isKling26VideoModel) && hasKlingNegativePrompt
           ? normalizedKlingNegativePrompt

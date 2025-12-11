@@ -6,6 +6,8 @@ import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon
 interface CanvasProps {
   images: CanvasImage[];
   onImagesChange: (images: CanvasImage[]) => void;
+  // onCommit accepts optional state overrides so callers can snapshot freshly-updated slices immediately.
+  onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[] }) => void;
   notes: CanvasNote[];
   onNotesChange: (notes: CanvasNote[]) => void;
   tool: Tool;
@@ -25,10 +27,10 @@ interface CanvasProps {
   sourceVideoId: string | null;
   tailSelectionEnabled: boolean;
   isKlingO1VideoInputMode: boolean;
+  isKlingO1FflfMode: boolean;
   onError?: (message: string) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
-  onCommit: () => void;
   zoomToFitTrigger: number;
   zoomInTrigger: number;
   zoomOutTrigger: number;
@@ -119,6 +121,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   sourceVideoId,
   tailSelectionEnabled,
   isKlingO1VideoInputMode,
+  isKlingO1FflfMode,
   onError,
   onImageSelect,
   onNoteSelect,
@@ -385,7 +388,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       return { ...img, isPlaying: nextIsPlaying };
     });
     onImagesChange(updatedImages);
-    onCommit();
+    // Snapshot the exact updated list so history reflects the single-click toggle immediately.
+    onCommit({ images: updatedImages });
   }, [images, isVideoImage, onCommit, onImagesChange]);
 
   const fitTextWithinBox = (
@@ -559,6 +563,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
 
       const padding = 5 / scale;
+      const isFflfSelectedVideo = isKlingO1FflfMode && image.mediaType === 'video' && selectedImageIds.includes(image.id);
+
       if (elementImageIds.includes(image.id)) {
         ctx.strokeStyle = '#a855f7'; // purple-500 for elements
         ctx.lineWidth = 4 / scale;
@@ -567,6 +573,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([]);
       } else if (isKlingO1VideoInputMode && sourceVideoId === image.id) {
         ctx.strokeStyle = '#f97316'; // orange-500 for source video in video input mode
+        ctx.lineWidth = 4 / scale;
+        ctx.setLineDash([6 / scale, 4 / scale]);
+        ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
+        ctx.setLineDash([]);
+      } else if (isFflfSelectedVideo) {
+        ctx.strokeStyle = '#f97316'; // orange-500 for FFLF video selection
         ctx.lineWidth = 4 / scale;
         ctx.setLineDash([6 / scale, 4 / scale]);
         ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
@@ -593,7 +605,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       const isSourceVideo = isKlingO1VideoInputMode && sourceVideoId === image.id;
       const referenceOrderLabel = isSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id];
-      if (referenceOrderLabel) {
+      const shouldShowReferenceBadge = !!referenceOrderLabel && (isSourceVideo || image.mediaType === 'image');
+      if (shouldShowReferenceBadge) {
         const badgePaddingX = 8 / scale;
         const badgePaddingY = 6 / scale;
         const badgeFontSize = 24 / scale;
@@ -868,7 +881,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.drawImage(pathCanvas, 0, 0);
       }
     }
-  }, [cropMode, elementImageIds, elementImageOrderLabels, getImageCenter, getImageRotation, images, notes, paths, pan, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode, videoLastFrameImageId]);
+  }, [cropMode, elementImageIds, elementImageOrderLabels, getImageCenter, getImageRotation, images, isKlingO1FflfMode, notes, paths, pan, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode, videoLastFrameImageId]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;

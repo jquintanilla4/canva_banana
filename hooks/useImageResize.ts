@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CanvasImage } from '../types';
-import type { AppState } from './useCanvasHistory';
+import type { AppState, CommitOverrides } from './useCanvasHistory';
 import { getNaturalSize, loadMediaFromBlob } from '../services/mediaService';
 
 type UseImageResizeArgs = {
   images: CanvasImage[];
   selectedImageIds: string[];
   setState: (updater: (prevState: AppState) => AppState) => void;
-  handleCommit: () => void;
+  // handleCommit may accept overrides from callers that already mutated slices.
+  handleCommit: (overrides?: CommitOverrides) => void;
   setToastMessage: (message: string | null) => void;
   setError: (message: string | null) => void;
 };

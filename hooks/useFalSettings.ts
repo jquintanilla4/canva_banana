@@ -13,6 +13,7 @@ import {
   KLING_O1_VIDEO_MODEL_ID,
   KLING_O1_VIDEO_EDIT_MODEL_ID,
   KLING_O1_VIDEO_REF_V2V_MODEL_ID,
+  KLING_O1_VIDEO_FFLF_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -163,7 +164,14 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       setFalVideoDuration(prev => (prev === '10' ? '10' : '6'));
       return;
     }
-    if (falVideoModelId === KLING_VIDEO_MODEL_ID || falVideoModelId === KLING_26_VIDEO_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_EDIT_MODEL_ID || falVideoModelId === KLING_O1_VIDEO_REF_V2V_MODEL_ID) {
+    if (
+      falVideoModelId === KLING_VIDEO_MODEL_ID
+      || falVideoModelId === KLING_26_VIDEO_MODEL_ID
+      || falVideoModelId === KLING_O1_VIDEO_MODEL_ID
+      || falVideoModelId === KLING_O1_VIDEO_EDIT_MODEL_ID
+      || falVideoModelId === KLING_O1_VIDEO_REF_V2V_MODEL_ID
+      || falVideoModelId === KLING_O1_VIDEO_FFLF_MODEL_ID
+    ) {
       setFalVideoDuration(prev => (prev === '10' ? '10' : '5'));
     }
   }, [falVideoModelId]);

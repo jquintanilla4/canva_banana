@@ -223,6 +223,7 @@ export default function App() {
   }, [falModelId, isKlingO1EditMode, isKlingO1RefV2VMode, isKlingO1VideoInputMode, setToastMessage]);
 
   const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
+  const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const {
@@ -249,6 +250,7 @@ export default function App() {
     falModelMode,
     falVideoModelId,
     klingVariant,
+    klingO1Variant,
     isKlingProVideoSelection,
     isKlingImageModel: isKlingModel,
     isKlingO1VideoModel,
@@ -410,18 +412,19 @@ export default function App() {
     }
   }, [elementImageIds.length, falModelId, isKlingO1VideoInputMode, referenceImageIds.length, setElementImageIds, setReferenceImageIds, showReferenceLimitToast]);
 
-  // Clear video last frame selection if not in Kling Pro Video mode
+  // Clear video last frame selection if not in a first/last-frame capable mode
   useEffect(() => {
-    if (!isKlingProVideoSelection && videoLastFrameImageId) {
+    if (!isKlingProVideoSelection && !isKlingO1FflfMode && videoLastFrameImageId) {
       setVideoLastFrameImageId(null);
     }
-  }, [isKlingProVideoSelection, videoLastFrameImageId]);
+  }, [isKlingO1FflfMode, isKlingProVideoSelection, videoLastFrameImageId]);
 
   // Memoized lookup of the currently selected primary image object
   const primaryImage = useMemo(() => {
     if (!primaryImageId) return null;
     return images.find(img => img.id === primaryImageId) || null;
   }, [images, primaryImageId]);
+  const primarySelectionMediaType = primaryImage?.mediaType ?? null;
 
   // If the primary image is a valid image canvas media, expose it for use
   const activePrimaryImage = useMemo(() => {
@@ -779,14 +782,16 @@ export default function App() {
   } = useKlingReferenceHelpers({
     labelReferences: isKlingModel || isKlingO1VideoModel,
     primaryImageId,
+    primaryImageMediaType: primarySelectionMediaType,
     referenceImageIds,
     labelElements: isKlingO1VideoModel,
     elementImageIds,
     isEditMode: isKlingO1VideoInputMode,
     sourceVideoId,
+    includeTailFrame: isKlingO1FflfMode,
+    tailImageId: videoLastFrameImageId,
   });
 
-  const primarySelectionMediaType = primaryImage?.mediaType ?? null;
   const hasSourceVideoSelected = Boolean(sourceVideoId);
 
   // Build prompt mention suggestions for Kling based on current reference/element selections.
@@ -966,8 +971,9 @@ export default function App() {
           elementImageOrderLabels={klingElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
-          tailSelectionEnabled={isKlingProVideoSelection}
+          tailSelectionEnabled={isKlingProVideoSelection || isKlingO1FflfMode}
           isKlingO1VideoInputMode={isKlingO1VideoInputMode}
+          isKlingO1FflfMode={isKlingO1FflfMode}
           onError={setError}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}

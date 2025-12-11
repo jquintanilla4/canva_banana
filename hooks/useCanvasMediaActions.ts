@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { getNaturalSize, loadMediaFromBlob } from '../services/mediaService';
 import { removeBackground as removeFalBackground } from '../services/falService';
+import type { AppState, CommitOverrides } from './useCanvasHistory';
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
 type TransformModeState = { imageId: string; };
@@ -18,7 +19,7 @@ type UseCanvasMediaActionsArgs = {
   displayedImages: CanvasImage[];
   hasSingleImageSelected: boolean;
   primaryImageId: string | null;
-  setState: Dispatch<SetStateAction<{ images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] }>>;
+  setState: Dispatch<SetStateAction<AppState>>;
   setSelectedImageIds: (ids: string[]) => void;
   setSelectedNoteIds: (ids: string[]) => void;
   setReferenceImageIds: (ids: string[]) => void;
@@ -26,7 +27,8 @@ type UseCanvasMediaActionsArgs = {
   setError: (message: string | null) => void;
   setToastMessage: (message: string | null) => void;
   setLiveImages: (images: CanvasImage[] | null) => void;
-  handleCommit: () => void;
+  // handleCommit can take overrides when a caller already has the next slices computed.
+  handleCommit: (overrides?: CommitOverrides) => void;
 };
 
 type UseCanvasMediaActionsResult = {
