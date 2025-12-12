@@ -33,6 +33,8 @@ import type {
   FalModelMode,
   FalResolutionSelectionValue,
   FalVideoModelId,
+  WanCreativity,
+  WanTargetResolution,
 } from '../services/modelConfig';
 import type { AppState } from './useCanvasHistory';
 
@@ -55,6 +57,8 @@ type SnapshotIOArgs = {
   falScaleFactor: number;
   falNoiseScale: number;
   falCreativity: number;
+  wanTargetResolution: WanTargetResolution;
+  wanCreativity: WanCreativity;
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
@@ -84,6 +88,8 @@ type SnapshotIOArgs = {
   setFalScaleFactor: Dispatch<SetStateAction<number>>;
   setFalNoiseScale: Dispatch<SetStateAction<number>>;
   setFalCreativity: Dispatch<SetStateAction<number>>;
+  setWanTargetResolution: Dispatch<SetStateAction<WanTargetResolution>>;
+  setWanCreativity: Dispatch<SetStateAction<WanCreativity>>;
   setSelectedImageIds: Dispatch<SetStateAction<string[]>>;
   setSelectedNoteIds: Dispatch<SetStateAction<string[]>>;
   setReferenceImageIds: Dispatch<SetStateAction<string[]>>;
@@ -117,6 +123,8 @@ export function useSnapshotIO({
   falScaleFactor,
   falNoiseScale,
   falCreativity,
+  wanTargetResolution,
+  wanCreativity,
   selectedImageIds,
   selectedNoteIds,
   referenceImageIds,
@@ -146,6 +154,8 @@ export function useSnapshotIO({
   setFalScaleFactor,
   setFalNoiseScale,
   setFalCreativity,
+  setWanTargetResolution,
+  setWanCreativity,
   setSelectedImageIds,
   setSelectedNoteIds,
   setReferenceImageIds,
@@ -174,6 +184,8 @@ export function useSnapshotIO({
       falScaleFactor,
       falNoiseScale,
       falCreativity,
+      wanTargetResolution,
+      wanCreativity,
       selectedImageIds: [...selectedImageIds],
       selectedNoteIds: [...selectedNoteIds],
       referenceImageIds: [...referenceImageIds],
@@ -196,9 +208,11 @@ export function useSnapshotIO({
     displayedNotes,
     displayedPaths,
     eraserSize,
-    falAspectRatioSelection,
-    falCreativity,
-    falImageSizeSelection,
+	    falAspectRatioSelection,
+	    falCreativity,
+	    wanTargetResolution,
+	    wanCreativity,
+	    falImageSizeSelection,
     falModelId,
     falNoiseScale,
     falNumImages,
@@ -338,13 +352,22 @@ export function useSnapshotIO({
           const roundedNoise = Math.round(normalizedNoise * 10) / 10;
           setFalNoiseScale(Math.min(1, Math.max(0.1, roundedNoise)));
         }
-        if (typeof meta.falCreativity === 'number') {
-          const normalizedCreativity = Number.isFinite(meta.falCreativity)
-            ? Math.round(meta.falCreativity * 2) / 2
-            : 0;
-          setFalCreativity(Math.min(10, Math.max(0, normalizedCreativity)));
-        }
-        setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
+	        if (typeof meta.falCreativity === 'number') {
+	          const normalizedCreativity = Number.isFinite(meta.falCreativity)
+	            ? Math.round(meta.falCreativity * 2) / 2
+	            : 0;
+	          setFalCreativity(Math.min(10, Math.max(0, normalizedCreativity)));
+	        }
+	        if (meta.wanTargetResolution === '720p' || meta.wanTargetResolution === '1080p') {
+	          setWanTargetResolution(meta.wanTargetResolution);
+	        }
+	        if (typeof meta.wanCreativity === 'number') {
+	          const normalizedWanCreativity = Number.isFinite(meta.wanCreativity)
+	            ? Math.round(meta.wanCreativity)
+	            : 1;
+	          setWanCreativity(Math.min(4, Math.max(0, normalizedWanCreativity)) as WanCreativity);
+	        }
+	        setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
         setElementImageIds(Array.isArray(meta.elementImageIds) ? [...meta.elementImageIds] : []);
@@ -386,9 +409,11 @@ export function useSnapshotIO({
     setBrushColor,
     setBrushSize,
     setEraserSize,
-    setFalAspectRatioSelection,
-    setFalCreativity,
-    setFalImageModelId,
+	    setFalAspectRatioSelection,
+	    setFalCreativity,
+	    setWanTargetResolution,
+	    setWanCreativity,
+	    setFalImageModelId,
     setFalImageSizeSelection,
     setFalModelMode,
     setFalNoiseScale,

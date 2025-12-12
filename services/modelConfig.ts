@@ -35,12 +35,32 @@ export const KLING_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-vide
 export const KLING_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video' as const;
 export const KLING_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video' as const;
 export const KLING_26_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/image-to-video' as const;
+export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 export type HailuoVariant = 'standard' | 'pro';
 export type KlingVariant = 'standard' | 'pro';
 export type KlingO1Variant = 'refI2V' | 'edit' | 'fflf' | 'refV2V';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
+export const WAN_DEFAULT_NEGATIVE_PROMPT =
+  'oversaturated, overexposed, static, blurry details, subtitles, stylized, artwork, painting, still frame, overall gray, worst quality, low quality, JPEG artifacts, ugly, mutated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, static motion, cluttered background, three legs, crowded background, walking backwards';
+
+export type WanTargetResolution = '720p' | '1080p';
+export type WanCreativity = 0 | 1 | 2 | 3 | 4;
+export type WanCreativitySelectionValue = `${WanCreativity}`;
+
+export const WAN_TARGET_RESOLUTION_OPTIONS: ReadonlyArray<{ value: WanTargetResolution; label: string }> = [
+  { value: '720p', label: '720p' },
+  { value: '1080p', label: '1080p' },
+] as const;
+
+export const WAN_CREATIVITY_OPTIONS: ReadonlyArray<{ value: WanCreativitySelectionValue; label: string }> = [
+  { value: '0', label: '0 - Minimal change' },
+  { value: '1', label: '1 - Subtle enhancement (default)' },
+  { value: '2', label: '2 - Medium enhancement' },
+  { value: '3', label: '3 - Strong enhancement' },
+  { value: '4', label: '4 - Maximum enhancement' },
+] as const;
 
 export const FAL_IMAGE_MODEL_OPTIONS = [
   { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
@@ -57,6 +77,7 @@ export const FAL_VIDEO_MODEL_OPTIONS = [
   { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
   { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
+  { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
 export const HAILUO_VARIANT_OPTIONS: ReadonlyArray<{ value: HailuoVariant; label: string }> = [
@@ -280,6 +301,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [KLING_O1_VIDEO_FFLF_MODEL_ID]: 6,
   [KLING_VIDEO_MODEL_ID]: 0,
   [KLING_26_VIDEO_MODEL_ID]: 0,
+  [WAN_VISION_ENHANCER_MODEL_ID]: 0,
 };
 
 export const getMaxReferenceImages = (modelId: FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | typeof KLING_O1_VIDEO_REF_V2V_MODEL_ID | undefined): number =>

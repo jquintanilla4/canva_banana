@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Tool } from '../types';
-import { getFalModelLabel } from '../services/modelConfig';
+import { getFalModelLabel, WAN_VISION_ENHANCER_MODEL_ID } from '../services/modelConfig';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -58,23 +58,26 @@ export function useGenerationGuards({
   activePrimaryImage,
 }: Args): GenerationGuardsResult {
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+  const isWanVideoInputMode = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
+  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
     const usingFal = apiProvider === 'fal';
     const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
     const hasPrimaryImage = Boolean(activePrimaryImage);
-    const isTextToImage = !hasPrimaryImage && !(isVideoMode && isKlingO1VideoInputMode && hasSourceVideo);
+    const isTextToImage = !hasPrimaryImage && !(isVideoMode && isVideoInputMode && hasSourceVideo);
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
       falNumImages < 1 ||
       falNumImages > 4;
-    const requiresPrompt = !(usingFal && isUpscaleModel);
+    const isWanPromptOptional = usingFal && isWanVideoInputMode;
+    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingO1VideoInputMode && !hasPrimaryImage;
-    const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isKlingO1VideoInputMode && !hasSourceVideo;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage;
+    const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
       (usingFal && isReveModel) ||
       (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
@@ -91,14 +94,18 @@ export function useGenerationGuards({
     const promptPlaceholderText = isVideoMode
       ? (hasPrimaryImage
         ? 'Describe the motion or scene you want this image to turn into...'
-        : isKlingO1VideoInputMode
+        : isVideoInputMode
           ? (hasSourceVideo
-            ? (isKlingO1EditMode
-              ? 'Describe how you want to edit this video...'
-              : 'Describe the next shot based on this reference video...')
-            : (isKlingO1EditMode
-              ? 'Select a video to edit, then describe the changes...'
-              : 'Select a reference video, then describe the next shot...'))
+            ? (isWanVideoInputMode
+              ? 'Describe how you want to enhance this video (optional)...'
+              : (isKlingO1EditMode
+                ? 'Describe how you want to edit this video...'
+                : 'Describe the next shot based on this reference video...'))
+            : (isWanVideoInputMode
+              ? 'Select a video to enhance, then optionally describe changes...'
+              : (isKlingO1EditMode
+                ? 'Select a video to edit, then describe the changes...'
+                : 'Select a reference video, then describe the next shot...')))
           : 'Select an image and describe the video you want to create...')
       : usingFal && isUpscaleModel
         ? `Prompt disabled for ${getFalModelLabel(falModelId)}. Select an image and scale factor.`
@@ -128,9 +135,9 @@ export function useGenerationGuards({
     isHailuoVideoModel,
     isKling26VideoModel,
     isKlingModel,
-    isKlingO1EditMode,
-    isKlingO1VideoInputMode,
-    isKlingVideoModel,
+	    isKlingO1EditMode,
+	    isKlingO1VideoInputMode,
+	    isKlingVideoModel,
     isReveModel,
     isSeedreamModel,
     isUpscaleModel,

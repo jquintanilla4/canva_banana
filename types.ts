@@ -95,6 +95,8 @@ export type GenerationFalOptions = Partial<{
   klingO1Variant: 'refI2V' | 'edit' | 'fflf' | 'refV2V';
   klingO1KeepAudio: boolean;
   negativePrompt: string;
+  wanTargetResolution: '720p' | '1080p';
+  wanCreativity: 0 | 1 | 2 | 3 | 4;
   kling26Audio: boolean;
 }>;
 

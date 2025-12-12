@@ -8,6 +8,8 @@ import type {
   Kling26AudioSelectionValue,
   KlingO1Variant,
   KlingVariant,
+  WanCreativity,
+  WanTargetResolution,
 } from './modelConfig';
 import {
   FAL_CRYSTAL_CREATIVITY_OPTIONS,
@@ -32,6 +34,9 @@ import {
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
+  WAN_CREATIVITY_OPTIONS,
+  WAN_TARGET_RESOLUTION_OPTIONS,
+  WAN_VISION_ENHANCER_MODEL_ID,
 } from './modelConfig';
 
 export type PromptBarModelControl = {
@@ -65,6 +70,8 @@ export type PromptBarControlsInput = {
   klingO1Variant: KlingO1Variant;
   klingO1KeepAudio: boolean;
   kling26AudioSelection: Kling26AudioSelectionValue;
+  wanTargetResolution: WanTargetResolution;
+  wanCreativity: WanCreativity;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -79,6 +86,8 @@ export type PromptBarControlsInput = {
   onKlingO1VariantChange: (value: string) => void;
   onKlingO1KeepAudioChange: (value: boolean) => void;
   onKling26AudioChange: (value: string) => void;
+  onWanTargetResolutionChange: (value: string) => void;
+  onWanCreativityChange: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -113,6 +122,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     klingO1Variant,
     klingO1KeepAudio,
     kling26AudioSelection,
+    wanTargetResolution,
+    wanCreativity,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -127,6 +138,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onKlingO1VariantChange,
     onKlingO1KeepAudioChange,
     onKling26AudioChange,
+    onWanTargetResolutionChange,
+    onWanCreativityChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -262,6 +275,27 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: KLING26_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: kling26AudioSelection,
       onChange: onKling26AudioChange,
+      disabled: isLoading,
+    });
+  }
+
+  const shouldShowWanControls = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
+  if (shouldShowWanControls) {
+    controls.push({
+      id: 'wan-target-resolution-select',
+      ariaLabel: 'Select Wan Vision Enhancer resolution',
+      options: WAN_TARGET_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wanTargetResolution,
+      onChange: onWanTargetResolutionChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan-creativity-select',
+      ariaLabel: 'Select Wan Vision Enhancer creativity',
+      options: WAN_CREATIVITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: `${wanCreativity}`,
+      onChange: onWanCreativityChange,
       disabled: isLoading,
     });
   }

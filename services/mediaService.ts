@@ -8,6 +8,21 @@ export const isVideoFileType = (fileType: string): boolean =>
 export const getMediaTypeFromFileType = (fileType: string): CanvasMediaType =>
   (isVideoFileType(fileType) ? 'video' : 'image');
 
+const VIDEO_OBJECT_URL_KEY = '__videoObjectUrl' as const;
+type VideoWithObjectUrl = HTMLVideoElement & { [key in typeof VIDEO_OBJECT_URL_KEY]?: string };
+
+export const getVideoObjectUrl = (element: HTMLVideoElement): string | undefined =>
+  (element as VideoWithObjectUrl)[VIDEO_OBJECT_URL_KEY];
+
+export const revokeVideoObjectUrl = (element: HTMLVideoElement): void => {
+  const url = getVideoObjectUrl(element);
+  if (!url) {
+    return;
+  }
+  URL.revokeObjectURL(url);
+  delete (element as VideoWithObjectUrl)[VIDEO_OBJECT_URL_KEY];
+};
+
 export const getNaturalSize = (element: HTMLImageElement | HTMLVideoElement) => {
   if (element instanceof HTMLVideoElement) {
     const naturalWidth = element.videoWidth || element.width || 1;
@@ -26,25 +41,25 @@ export const loadMediaFromBlob = (
 ): Promise<HTMLImageElement | HTMLVideoElement> => {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(blob);
-    const cleanup = () => URL.revokeObjectURL(objectUrl);
     if (mediaType === 'video') {
       const video = document.createElement('video');
+      (video as VideoWithObjectUrl)[VIDEO_OBJECT_URL_KEY] = objectUrl;
       video.loop = true;
       video.muted = true;
       video.playsInline = true;
       video.preload = 'auto';
       video.src = objectUrl;
       video.onloadeddata = () => {
-        cleanup();
         resolve(video);
       };
       video.onerror = (err) => {
-        cleanup();
+        URL.revokeObjectURL(objectUrl);
         reject(err ?? new Error('Failed to load video.'));
       };
       return;
     }
 
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
     const img = new Image();
     img.onload = () => {
       cleanup();

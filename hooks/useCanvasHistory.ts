@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CanvasImage, CanvasNote, Path } from '../types';
+import { getVideoObjectUrl } from '../services/mediaService';
 
 export type AppState = { images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] };
 // CommitOverrides let callers provide already-updated slices (e.g., when state is staged elsewhere)
@@ -31,6 +32,8 @@ export const useCanvasHistory = (
     history: [initialState],
     index: 0,
   }));
+
+  const prevVideoObjectUrlsRef = useRef<Set<string>>(new Set());
 
   const [liveImages, setLiveImages] = useState<CanvasImage[] | null>(null);
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
@@ -133,6 +136,48 @@ export const useCanvasHistory = (
 
   const canUndo = historyState.index > 0;
   const canRedo = historyState.index < historyState.history.length - 1;
+
+  // Revoke video object URLs once they are no longer referenced anywhere in history.
+  useEffect(() => {
+    const nextUrls = new Set<string>();
+    historyState.history.forEach(state => {
+      state.images.forEach(img => {
+        if (img.mediaType !== 'video') {
+          return;
+        }
+        const element = img.element;
+        if (!(element instanceof HTMLVideoElement)) {
+          return;
+        }
+        const url = getVideoObjectUrl(element);
+        if (url) {
+          nextUrls.add(url);
+        }
+      });
+    });
+
+    const prevUrls = prevVideoObjectUrlsRef.current;
+    prevUrls.forEach(url => {
+      if (!nextUrls.has(url)) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    prevVideoObjectUrlsRef.current = nextUrls;
+  }, [historyState.history]);
+
+  // Best-effort cleanup on tab close without breaking StrictMode remounts.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      prevVideoObjectUrlsRef.current.forEach(url => {
+        URL.revokeObjectURL(url);
+      });
+      prevVideoObjectUrlsRef.current.clear();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   return {
     images: currentState.images,

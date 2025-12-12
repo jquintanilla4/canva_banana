@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getMaxReferenceImages,
   KLING_VIDEO_MODEL_ID,
+  WAN_VISION_ENHANCER_MODEL_ID,
   isKlingO1VideoModelId,
   type FalModelId,
   type FalModelMode,
@@ -49,6 +50,9 @@ export const useSelectionState = (options: SelectionOptions) => {
   onReferenceLimit,
 } = options;
 const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+const isWanVideoInputMode =
+  apiProvider === 'fal' && falModelMode === 'video' && falVideoModelId === WAN_VISION_ENHANCER_MODEL_ID;
+const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode;
 const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -76,12 +80,12 @@ const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
     setSourceVideoId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
   }, [elementImageIds.length, images, referenceImageIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId]);
 
-  // Clear sourceVideoId when leaving video input mode (edit/refV2V)
+  // Clear sourceVideoId when leaving a video input mode (Kling O1 or Wan enhancer)
   useEffect(() => {
-    if (!isKlingO1VideoInputMode && sourceVideoId) {
+    if (!isVideoInputMode && sourceVideoId) {
       setSourceVideoId(null);
     }
-  }, [isKlingO1VideoInputMode, sourceVideoId]);
+  }, [isVideoInputMode, sourceVideoId]);
 
   useEffect(() => {
     if (!isKlingO1VideoModel) {
@@ -286,14 +290,14 @@ const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
       }
       setVideoLastFrameImageId(null);
       // Clicking the same item again in video input mode clears sourceVideoId
-      if (isKlingO1VideoInputMode && targetImage?.mediaType === 'video' && sourceVideoId === imageId) {
+      if (isVideoInputMode && targetImage?.mediaType === 'video' && sourceVideoId === imageId) {
         setSourceVideoId(null);
       }
       return;
     }
 
-    // In Kling O1 video input modes (Edit/Ref-v2v), single-clicking a video sets it as the source video
-    if (isKlingO1VideoInputMode && targetImage?.mediaType === 'video') {
+    // In video input modes, single-clicking a video sets it as the source video
+    if (isVideoInputMode && targetImage?.mediaType === 'video') {
       setSourceVideoId(imageId);
       setSelectedImageIds([imageId]);
       setSelectedNoteIds([]);
@@ -328,11 +332,12 @@ const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
     falModelId,
     referenceImageIds.length,
     elementImageIds.length,
-    selectedImageIds.length,
-    videoLastFrameImageId,
-    isKlingO1VideoInputMode,
-    sourceVideoId,
-  ]);
+	    selectedImageIds.length,
+	    videoLastFrameImageId,
+	    isKlingO1VideoInputMode,
+	    isVideoInputMode,
+	    sourceVideoId,
+	  ]);
 
   const handleNoteSelection = useCallback((
     noteId: string | null,

@@ -39,6 +39,8 @@ import type {
   Kling26AudioSelectionValue,
   KlingO1Variant,
   KlingVariant,
+  WanCreativity,
+  WanTargetResolution,
 } from '../services/modelConfig';
 
 type UseFalSettingsArgs = {
@@ -67,6 +69,8 @@ type FalHandlers = {
   handleKlingO1VariantChange: (value: string) => void;
   handleKlingO1KeepAudioChange: (value: boolean) => void;
   handleKling26AudioChange: (value: string) => void;
+  handleWanTargetResolutionChange: (value: string) => void;
+  handleWanCreativityChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -86,6 +90,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   klingO1Variant: KlingO1Variant;
   klingO1KeepAudio: boolean;
   kling26AudioSelection: Kling26AudioSelectionValue;
+  wanTargetResolution: WanTargetResolution;
+  wanCreativity: WanCreativity;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -102,6 +108,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setKlingO1Variant: Dispatch<SetStateAction<KlingO1Variant>>;
   setKlingO1KeepAudio: Dispatch<SetStateAction<boolean>>;
   setKling26AudioSelection: Dispatch<SetStateAction<Kling26AudioSelectionValue>>;
+  setWanTargetResolution: Dispatch<SetStateAction<WanTargetResolution>>;
+  setWanCreativity: Dispatch<SetStateAction<WanCreativity>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -122,6 +130,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [klingO1Variant, setKlingO1Variant] = useState<KlingO1Variant>('refI2V');
   const [klingO1KeepAudio, setKlingO1KeepAudio] = useState<boolean>(false);
   const [kling26AudioSelection, setKling26AudioSelection] = useState<Kling26AudioSelectionValue>('placeholder');
+  const [wanTargetResolution, setWanTargetResolution] = useState<WanTargetResolution>('720p');
+  const [wanCreativity, setWanCreativity] = useState<WanCreativity>(1);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -298,6 +308,20 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setKling26AudioSelection('placeholder');
   }, []);
 
+  const handleWanTargetResolutionChange = useCallback((value: string) => {
+    setWanTargetResolution(value === '1080p' ? '1080p' : '720p');
+  }, []);
+
+  const handleWanCreativityChange = useCallback((value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      setWanCreativity(1);
+      return;
+    }
+    const clamped = Math.min(4, Math.max(0, Math.round(parsed)));
+    setWanCreativity(clamped as WanCreativity);
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -363,6 +387,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     klingO1Variant,
     klingO1KeepAudio,
     kling26AudioSelection,
+    wanTargetResolution,
+    wanCreativity,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -387,6 +413,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleKlingO1VariantChange,
     handleKlingO1KeepAudioChange,
     handleKling26AudioChange,
+    handleWanTargetResolutionChange,
+    handleWanCreativityChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -403,6 +431,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setKlingO1Variant,
     setKlingO1KeepAudio,
     setKling26AudioSelection,
+    setWanTargetResolution,
+    setWanCreativity,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

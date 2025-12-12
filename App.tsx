@@ -15,7 +15,6 @@ import { clearDebugLogs, getDebugLogs, subscribeToDebugLogs } from './services/d
 import type { FalQueueJob } from './types';
 import {
   GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID,
-  KLING_DEFAULT_NEGATIVE_PROMPT,
   KLING_IMAGE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   getFalModelLabel,
@@ -45,6 +44,7 @@ import { useImageResize } from './hooks/useImageResize';
 import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
 import { useKlingReferenceHelpers } from './hooks/useKlingReferenceHelpers';
 import { useKlingPromptMentions } from './hooks/useKlingPromptMentions';
+import { useVideoNegativePrompt } from './hooks/useVideoNegativePrompt';
 import type { FalModelMode } from './services/modelConfig';
 
 // Type guard for CanvasImage elements that are images
@@ -141,6 +141,8 @@ export default function App() {
     klingO1Variant,              // Kling O1 video variant selection
     klingO1KeepAudio,            // Keep audio option for Kling O1 Edit
     kling26AudioSelection,       // Audio selection for Kling 2.6
+    wanTargetResolution,         // Wan Vision Enhancer output resolution
+    wanCreativity,               // Wan Vision Enhancer creativity
     falImageSizeSelection,       // Image size selection for FAL
     falAspectRatioSelection,     // Aspect ratio selection for FAL
     falResolutionSelection,      // Resolution selection for FAL
@@ -150,10 +152,10 @@ export default function App() {
     falCreativity,               // Creativity slider (Crystal upscaler, etc.)
     isVideoMode,                 // True if FAL is in video mode
     isKlingVideoModel,           // True if Kling video model is selected
-    isKlingO1VideoModel,         // True if Kling O1 video model is selected
-    isKling26VideoModel,         // True if Kling 2.6 video model is selected
-    isHailuoVideoModel,          // True if Hailuo video model is selected
-    isUpscaleModel,              // True if an upscaler model is selected
+	    isKlingO1VideoModel,         // True if Kling O1 video model is selected
+	    isKling26VideoModel,         // True if Kling 2.6 video model is selected
+	    isHailuoVideoModel,          // True if Hailuo video model is selected
+	    isUpscaleModel,              // True if an upscaler model is selected
     isKlingProVideoSelection,    // True if Kling Pro video is selected
     isKlingO1EditMode,           // True if Kling O1 Edit variant is selected
     isKlingO1RefV2VMode,         // True if Kling O1 Ref-v2v variant is selected
@@ -165,6 +167,8 @@ export default function App() {
     handleKlingO1VariantChange,              // Handler for Kling O1 variant changes
     handleKlingO1KeepAudioChange,            // Handler for Kling O1 keep audio changes
     handleKling26AudioChange,                // Handler for Kling 2.6 audio changes
+    handleWanTargetResolutionChange,         // Handler for Wan Vision Enhancer resolution changes
+    handleWanCreativityChange,               // Handler for Wan Vision Enhancer creativity changes
     handleFalImageSizeChange,                // Handler for FAL image size changes
     handleFalAspectRatioChange,              // Handler for FAL aspect ratio changes
     handleFalResolutionChange,               // Handler for FAL resolution changes
@@ -179,13 +183,18 @@ export default function App() {
     setFalAspectRatioSelection,              // Setter for FAL aspect ratio selection
     setFalResolutionSelection,               // Setter for FAL resolution selection
     setFalNumImages,                         // Setter for FAL number of images
-    setFalScaleFactor,                       // Setter for FAL scale factor
-    setFalNoiseScale,                        // Setter for FAL noise scale
-    setFalCreativity,                        // Setter for FAL creativity
-  } = useFalSettings({ apiProvider });
+	    setFalScaleFactor,                       // Setter for FAL scale factor
+	    setFalNoiseScale,                        // Setter for FAL noise scale
+	    setFalCreativity,                        // Setter for FAL creativity
+	    setWanTargetResolution,                  // Setter for Wan Vision Enhancer resolution
+	    setWanCreativity,                        // Setter for Wan Vision Enhancer creativity
+	  } = useFalSettings({ apiProvider });
 
-  // State for Kling negative prompt (used for Kling/SDXL models)
-  const [klingNegativePrompt, setKlingNegativePrompt] = useState<string>(KLING_DEFAULT_NEGATIVE_PROMPT);
+  const {
+    videoNegativePrompt,
+    setVideoNegativePrompt,
+    shouldShowVideoNegativePrompt,
+  } = useVideoNegativePrompt({ isVideoMode, falVideoModelId });
 
   // Toggles display of metadata overlays on canvas images
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
@@ -243,22 +252,22 @@ export default function App() {
     setSourceVideoId,
     handleImageSelection,
     handleNoteSelection,
-  } = useSelectionState({
-    images,
-    apiProvider,
-    falModelId,
-    falModelMode,
-    falVideoModelId,
-    klingVariant,
-    klingO1Variant,
-    isKlingProVideoSelection,
-    isKlingImageModel: isKlingModel,
-    isKlingO1VideoModel,
-    isKlingO1EditMode,
-    isKlingO1RefV2VMode,
-    onError: setError,
-    onReferenceLimit: showReferenceLimitToast,
-  });
+	  } = useSelectionState({
+	    images,
+	    apiProvider,
+	    falModelId,
+	    falModelMode,
+	    falVideoModelId,
+	    klingVariant,
+	    klingO1Variant,
+	    isKlingProVideoSelection,
+	    isKlingImageModel: isKlingModel,
+		    isKlingO1VideoModel,
+		    isKlingO1EditMode,
+		    isKlingO1RefV2VMode,
+		    onError: setError,
+	    onReferenceLimit: showReferenceLimitToast,
+	  });
 
   // Handles snapshot import/export so canvases can be saved, loaded, or shared.
   const {
@@ -279,10 +288,12 @@ export default function App() {
     falAspectRatioSelection,
     falResolutionSelection,
     falNumImages,
-    falScaleFactor,
-    falNoiseScale,
-    falCreativity,
-    selectedImageIds,
+	    falScaleFactor,
+	    falNoiseScale,
+	    falCreativity,
+	    wanTargetResolution,
+	    wanCreativity,
+	    selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
     elementImageIds,
@@ -308,10 +319,12 @@ export default function App() {
     setFalAspectRatioSelection,
     setFalResolutionSelection,
     setFalNumImages,
-    setFalScaleFactor,
-    setFalNoiseScale,
-    setFalCreativity,
-    setSelectedImageIds,
+	    setFalScaleFactor,
+	    setFalNoiseScale,
+	    setFalCreativity,
+	    setWanTargetResolution,
+	    setWanCreativity,
+	    setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
     setElementImageIds,
@@ -688,12 +701,14 @@ export default function App() {
     falCreativity,
     falVideoDuration,
     hailuoVariant,
-    klingVariant,
-    klingO1Variant,
-    klingO1KeepAudio,
-    klingNegativePrompt,
-    kling26AudioSelection,
-    images,
+	    klingVariant,
+	    klingO1Variant,
+	    klingO1KeepAudio,
+	    kling26AudioSelection,
+	    videoNegativePrompt,
+	    wanTargetResolution,
+	    wanCreativity,
+	    images,
     paths,
     inpaintMode,
     referenceImageIds,
@@ -828,13 +843,13 @@ export default function App() {
     isSeedreamModel,
     isGeminiModel,
     isReveModel,
-    isKlingModel,
-    isKlingVideoModel,
-    isKling26VideoModel,
-    isHailuoVideoModel,
-    falModelId,
-    falNumImages,
-    hasInpaintMask,
+	    isKlingModel,
+		    isKlingVideoModel,
+		    isKling26VideoModel,
+		    isHailuoVideoModel,
+		    falModelId,
+	    falNumImages,
+	    hasInpaintMask,
     activePrimaryImage,
   });
 
@@ -850,19 +865,21 @@ export default function App() {
     isReveModel,
     isKlingModel,
     isUpscaleModel,
-    isKlingVideoModel,
-    isKlingO1VideoModel,
-    isKling26VideoModel,
-    isHailuoVideoModel,
-    hailuoVariant,
-    falVideoDuration,
-    klingVariant,
-    klingO1Variant,
-    klingO1KeepAudio,
-    kling26AudioSelection,
-    falScaleFactor,
-    falCreativity,
-    falNoiseScale,
+	    isKlingVideoModel,
+		    isKlingO1VideoModel,
+		    isKling26VideoModel,
+		    isHailuoVideoModel,
+		    hailuoVariant,
+		    falVideoDuration,
+		    klingVariant,
+	    klingO1Variant,
+	    klingO1KeepAudio,
+	    kling26AudioSelection,
+	    wanTargetResolution,
+	    wanCreativity,
+	    falScaleFactor,
+	    falCreativity,
+	    falNoiseScale,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -871,12 +888,14 @@ export default function App() {
     onHailuoVariantChange: handleHailuoVariantChange,
     onFalVideoDurationChange: handleFalVideoDurationChange,
     onKlingVariantChange: handleKlingVariantChange,
-    onKlingO1VariantChange: handleKlingO1VariantChange,
-    onKlingO1KeepAudioChange: handleKlingO1KeepAudioChange,
-    onKling26AudioChange: handleKling26AudioChange,
-    onFalScaleFactorChange: handleFalScaleFactorChange,
-    onFalCreativityChange: handleFalCreativityChange,
-    onFalNoiseScaleChange: handleFalNoiseScaleChange,
+	    onKlingO1VariantChange: handleKlingO1VariantChange,
+	    onKlingO1KeepAudioChange: handleKlingO1KeepAudioChange,
+	    onKling26AudioChange: handleKling26AudioChange,
+	    onWanTargetResolutionChange: handleWanTargetResolutionChange,
+	    onWanCreativityChange: handleWanCreativityChange,
+	    onFalScaleFactorChange: handleFalScaleFactorChange,
+	    onFalCreativityChange: handleFalCreativityChange,
+	    onFalNoiseScaleChange: handleFalNoiseScaleChange,
     onFalImageSizeChange: handleFalImageSizeChange,
     onFalAspectRatioChange: handleFalAspectRatioChange,
     onFalResolutionChange: handleFalResolutionChange,
@@ -885,9 +904,8 @@ export default function App() {
     isNumImagesInvalid,
   });
   const promptBarModelOptions = getPromptBarModelOptions(falModelMode);
-  const shouldShowKlingNegativePrompt = isKlingVideoModel || isKling26VideoModel;
-  const promptOutlineColor = shouldShowKlingNegativePrompt ? '#34d399' : undefined;
-  const negativePromptOutlineColor = shouldShowKlingNegativePrompt ? '#f87171' : undefined;
+  const promptOutlineColor = shouldShowVideoNegativePrompt ? '#34d399' : undefined;
+  const negativePromptOutlineColor = shouldShowVideoNegativePrompt ? '#f87171' : undefined;
 
 
   // TSX (React with Tailwind CSS utility classes)
@@ -1079,9 +1097,9 @@ export default function App() {
               ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
               : promptPlaceholderText
           }
-          showNegativePrompt={shouldShowKlingNegativePrompt}
-          negativePrompt={klingNegativePrompt}
-          onNegativePromptChange={setKlingNegativePrompt}
+          showNegativePrompt={shouldShowVideoNegativePrompt}
+          negativePrompt={videoNegativePrompt}
+          onNegativePromptChange={setVideoNegativePrompt}
           negativePromptPlaceholder="Describe what the video should avoid... (optional)"
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}

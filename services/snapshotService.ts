@@ -65,12 +65,14 @@ export type SnapshotManifestV2 = {
       falAspectRatioSelection: string;
       falResolutionSelection: string;
       falNumImages: number;
-      falScaleFactor: number;
-      falNoiseScale: number;
-      falCreativity: number;
-      selectedImageIds: string[];
-      selectedNoteIds: string[];
-      referenceImageIds: string[];
+	      falScaleFactor: number;
+	      falNoiseScale: number;
+	      falCreativity: number;
+	      wanTargetResolution?: string;
+	      wanCreativity?: number;
+	      selectedImageIds: string[];
+	      selectedNoteIds: string[];
+	      referenceImageIds: string[];
       elementImageIds?: string[];
       videoLastFrameImageId?: string | null;
     } | undefined;
@@ -126,6 +128,8 @@ export type SnapshotMetaState = {
   falScaleFactor: number;
   falNoiseScale: number;
   falCreativity: number;
+  wanTargetResolution?: string;
+  wanCreativity?: number;
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
@@ -603,6 +607,16 @@ export const normalizeSnapshotImageMetadata = (
       const negativePrompt = (typed as { negativePrompt?: unknown }).negativePrompt;
       if (typeof negativePrompt === 'string' && negativePrompt.trim().length > 0) {
         normalizedOptions.negativePrompt = negativePrompt.trim();
+      }
+
+      const wanTargetResolution = (typed as { wanTargetResolution?: unknown }).wanTargetResolution;
+      if (wanTargetResolution === '720p' || wanTargetResolution === '1080p') {
+        normalizedOptions.wanTargetResolution = wanTargetResolution;
+      }
+
+      const wanCreativityRaw = normalizeNumberOption((typed as { wanCreativity?: unknown }).wanCreativity, 0, 4);
+      if (wanCreativityRaw !== undefined) {
+        normalizedOptions.wanCreativity = Math.round(wanCreativityRaw) as 0 | 1 | 2 | 3 | 4;
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;

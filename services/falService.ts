@@ -110,6 +110,8 @@ interface GenerateVideoOptions {
   modelId?: string;
   duration?: FalVideoDuration;
   negativePrompt?: string;
+  targetResolution?: '720p' | '1080p';
+  creativity?: number;
   cfgScale?: number;
   tailImage?: HTMLImageElement;
   generateAudio?: boolean;
@@ -187,6 +189,7 @@ export const KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/o1/refer
 export const KLING_O1_VIDEO_EDIT_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/edit';
 export const KLING_O1_VIDEO_REF_V2V_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/reference';
 export const KLING_O1_VIDEO_FFLF_MODEL_ID = 'fal-ai/kling-video/o1/image-to-video';
+export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -1226,6 +1229,88 @@ export const generateImageToVideo = async (
 
     const requestId = result?.requestId || latestRequestId;
 
+    return { videoUrl, requestId };
+  }
+
+  const isWanVisionEnhancerModel = modelId === WAN_VISION_ENHANCER_MODEL_ID;
+  if (isWanVisionEnhancerModel) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Wan Vision Enhancer requires a source video.');
+    }
+
+    let latestRequestId: string | undefined;
+    const trimmedPrompt = prompt.trim();
+    const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
+    const targetResolution = options.targetResolution === '720p' || options.targetResolution === '1080p'
+      ? options.targetResolution
+      : undefined;
+    const creativity = typeof options.creativity === 'number' && Number.isFinite(options.creativity)
+      ? Math.min(4, Math.max(0, Math.round(options.creativity)))
+      : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      video_url: options.sourceVideoUrl,
+      ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
+      ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+      ...(targetResolution ? { target_resolution: targetResolution } : {}),
+      ...(creativity !== undefined ? { creativity } : {}),
+    };
+
+    logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
+      input: inputPayload,
+    });
+
+    let result: Awaited<ReturnType<typeof fal.subscribe>>;
+    try {
+      result = await fal.subscribe(modelId, {
+        input: inputPayload,
+        logs: true,
+        onQueueUpdate: update => {
+          const queueUpdate = update as unknown as FalQueueUpdate;
+          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+          if (resolvedRequestId) {
+            latestRequestId = resolvedRequestId;
+          }
+          logFalEvent('inbound', modelId, 'Queue update', {
+            status: queueUpdate.status,
+            position: queueUpdate.position,
+            eta: queueUpdate.eta,
+            requestId: resolvedRequestId,
+            logs: normalizedLogs.map(log => log?.message ?? ''),
+          });
+          options.onQueueUpdate?.({
+            ...queueUpdate,
+            requestId: resolvedRequestId || '',
+            logs: normalizedLogs,
+          });
+        },
+      });
+    } catch (error) {
+      logFalEvent('error', modelId, 'Request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logFalEvent('inbound', modelId, 'Result received', {
+      requestId: result?.requestId || latestRequestId,
+      data: (result?.data as Record<string, unknown>) ?? undefined,
+    });
+
+    const data = result?.data as { video?: string | { url?: string } } | undefined;
+    const videoEntry = data?.video;
+    const videoUrl = typeof videoEntry === 'string'
+      ? videoEntry
+      : videoEntry && typeof videoEntry.url === 'string'
+        ? videoEntry.url
+        : null;
+
+    if (!videoUrl) {
+      throw new Error('Fal.ai API did not return a video.');
+    }
+
+    const requestId = result?.requestId || latestRequestId;
     return { videoUrl, requestId };
   }
 
