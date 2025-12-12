@@ -1,59 +1,85 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   getMaxReferenceImages,
   KLING_VIDEO_MODEL_ID,
+  KLING_IMAGE_MODEL_ID,
+  WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   isKlingO1VideoModelId,
-  type FalModelId,
-  type FalModelMode,
-  type FalVideoModelId,
-  type KlingO1Variant,
-  type KlingVariant,
 } from '../services/modelConfig';
 import type { ApiProviderId, CanvasImage, CanvasNote } from '../types';
+import type { UseFalSettingsResult } from './useFalSettings';
+
+type SelectionFalSettings = Pick<
+  UseFalSettingsResult,
+  | 'falModelId'
+  | 'falModelMode'
+  | 'falVideoModelId'
+  | 'klingVariant'
+  | 'klingO1Variant'
+  | 'isVideoMode'
+  | 'isKlingProVideoSelection'
+  | 'isKlingO1VideoModel'
+  | 'isKlingO1EditMode'
+  | 'isKlingO1RefV2VMode'
+>;
 
 type SelectionOptions = {
   images: CanvasImage[];
   apiProvider: ApiProviderId;
-  falModelId: FalModelId;
-  falModelMode: FalModelMode;
-  falVideoModelId: FalVideoModelId;
-  klingVariant: KlingVariant;
-  klingO1Variant: KlingO1Variant;
-  isKlingProVideoSelection: boolean;
-  isKlingImageModel: boolean;
+  fal: SelectionFalSettings;
   onError: (message: string) => void;
   onReferenceLimit: (maxReferenceImages: number) => void;
-  isKlingO1VideoModel: boolean;
-  isKlingO1EditMode: boolean;
-  isKlingO1RefV2VMode: boolean;
+};
+
+export type SelectionStateResult = {
+  selectedImageIds: string[];
+  selectedNoteIds: string[];
+  referenceImageIds: string[];
+  elementImageIds: string[];
+  videoLastFrameImageId: string | null;
+  sourceVideoId: string | null;
+  primaryImageId: string | null;
+  primaryImage: CanvasImage | null;
+  primarySelectionMediaType: CanvasImage['mediaType'] | null;
+  activePrimaryImage: (CanvasImage & { element: HTMLImageElement }) | null;
+  hasSingleImageSelected: boolean;
+  setSelectedImageIds: Dispatch<SetStateAction<string[]>>;
+  setSelectedNoteIds: Dispatch<SetStateAction<string[]>>;
+  setReferenceImageIds: Dispatch<SetStateAction<string[]>>;
+  setElementImageIds: Dispatch<SetStateAction<string[]>>;
+  setVideoLastFrameImageId: Dispatch<SetStateAction<string | null>>;
+  setSourceVideoId: Dispatch<SetStateAction<string | null>>;
+  handleImageSelection: (imageId: string | null, multi?: boolean) => void;
+  handleNoteSelection: (noteId: string | null, multi?: boolean) => void;
 };
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
   !!img && img.mediaType === 'image';
 
-export const useSelectionState = (options: SelectionOptions) => {
+export const useSelectionState = (options: SelectionOptions): SelectionStateResult => {
+  const { images, apiProvider, fal, onError, onReferenceLimit } = options;
   const {
-    images,
-    apiProvider,
     falModelId,
-  falModelMode,
-  falVideoModelId,
-  klingVariant,
-  klingO1Variant,
-  isKlingProVideoSelection,
-  isKlingImageModel,
-  isKlingO1VideoModel,
-  isKlingO1EditMode,
-  isKlingO1RefV2VMode,
-    onError,
-  onReferenceLimit,
-} = options;
-const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
-const isWanVideoInputMode =
-  apiProvider === 'fal' && falModelMode === 'video' && falVideoModelId === WAN_VISION_ENHANCER_MODEL_ID;
-const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode;
-const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
+    falModelMode,
+    falVideoModelId,
+    klingVariant,
+    klingO1Variant,
+    isVideoMode,
+    isKlingProVideoSelection,
+    isKlingO1VideoModel,
+    isKlingO1EditMode,
+    isKlingO1RefV2VMode,
+  } = fal;
+
+  const isKlingImageModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
+  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+  const isWanVideoInputMode =
+    apiProvider === 'fal'
+    && falModelMode === 'video'
+    && (falVideoModelId === WAN_VISION_ENHANCER_MODEL_ID || falVideoModelId === WAN_ANIMATE_MODEL_ID);
+  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode;
+  const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -65,6 +91,17 @@ const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
   const primaryImageId = useMemo(() => selectedImageIds[0] ?? null, [selectedImageIds]);
   const primaryNoteId = useMemo(() => selectedNoteIds[0] ?? null, [selectedNoteIds]);
   const hasSingleImageSelected = selectedImageIds.length === 1;
+
+  const primaryImage = useMemo(() => {
+    if (!primaryImageId) {
+      return null;
+    }
+    return images.find(img => img.id === primaryImageId) || null;
+  }, [images, primaryImageId]);
+  const primarySelectionMediaType = primaryImage?.mediaType ?? null;
+  const activePrimaryImage = useMemo(() => (
+    isImageCanvasMedia(primaryImage) ? primaryImage : null
+  ), [primaryImage]);
 
   // Ensure selections stay valid when images are deleted or imported.
   useEffect(() => {
@@ -105,6 +142,21 @@ const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
       return prev.slice(0, maxReferences);
     });
   }, [elementImageIds.length, falModelId, isKlingO1VideoInputMode, isKlingO1VideoModel, onReferenceLimit]);
+
+  // For non-Kling O1 models, keep references within per-model limits.
+  useEffect(() => {
+    if (isKlingO1VideoModel) {
+      return;
+    }
+    const maxReferenceImages = getMaxReferenceImages(falModelId);
+    setReferenceImageIds(prev => {
+      if (prev.length <= maxReferenceImages) {
+        return prev;
+      }
+      onReferenceLimit(maxReferenceImages);
+      return prev.slice(0, maxReferenceImages);
+    });
+  }, [falModelId, isKlingO1VideoModel, onReferenceLimit, setReferenceImageIds]);
 
   useEffect(() => {
     if (!isKlingO1VideoModel) {
@@ -389,7 +441,9 @@ const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
     videoLastFrameImageId,
     sourceVideoId,
     primaryImageId,
-    primaryNoteId,
+    primaryImage,
+    primarySelectionMediaType,
+    activePrimaryImage,
     hasSingleImageSelected,
     setSelectedImageIds,
     setSelectedNoteIds,

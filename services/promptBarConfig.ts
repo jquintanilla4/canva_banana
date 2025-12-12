@@ -8,6 +8,11 @@ import type {
   Kling26AudioSelectionValue,
   KlingO1Variant,
   KlingVariant,
+  WanAnimateQualitySelectionValue,
+  WanAnimateResolutionSelectionValue,
+  WanAnimateShiftSelectionValue,
+  WanAnimateStepsSelectionValue,
+  WanAnimateVariant,
   WanCreativity,
   WanTargetResolution,
 } from './modelConfig';
@@ -34,6 +39,12 @@ import {
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
+  WAN_ANIMATE_MODEL_ID,
+  WAN_ANIMATE_QUALITY_OPTIONS,
+  WAN_ANIMATE_RESOLUTION_OPTIONS,
+  WAN_ANIMATE_SHIFT_OPTIONS,
+  WAN_ANIMATE_STEPS_OPTIONS,
+  WAN_ANIMATE_VARIANT_OPTIONS,
   WAN_CREATIVITY_OPTIONS,
   WAN_TARGET_RESOLUTION_OPTIONS,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -41,6 +52,8 @@ import {
 
 export type PromptBarModelControl = {
   id: string;
+  prefixLabel?: string;
+  hideSelectedValue?: boolean;
   ariaLabel: string;
   options: ReadonlyArray<{ value: string; label: string; disabled?: boolean }>;
   value: string;
@@ -64,6 +77,7 @@ export type PromptBarControlsInput = {
   isKlingO1VideoModel: boolean;
   isKling26VideoModel: boolean;
   isHailuoVideoModel: boolean;
+  isWanAnimateVideoModel: boolean;
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
@@ -72,6 +86,12 @@ export type PromptBarControlsInput = {
   kling26AudioSelection: Kling26AudioSelectionValue;
   wanTargetResolution: WanTargetResolution;
   wanCreativity: WanCreativity;
+  wanAnimateVariant: WanAnimateVariant;
+  wanAnimateSteps: WanAnimateStepsSelectionValue;
+  wanAnimateResolution: WanAnimateResolutionSelectionValue;
+  wanAnimateShift: WanAnimateShiftSelectionValue;
+  wanAnimateQuality: WanAnimateQualitySelectionValue;
+  wanAnimateUseTurbo: boolean;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -88,6 +108,12 @@ export type PromptBarControlsInput = {
   onKling26AudioChange: (value: string) => void;
   onWanTargetResolutionChange: (value: string) => void;
   onWanCreativityChange: (value: string) => void;
+  onWanAnimateVariantChange: (value: string) => void;
+  onWanAnimateStepsChange: (value: string) => void;
+  onWanAnimateResolutionChange: (value: string) => void;
+  onWanAnimateShiftChange: (value: string) => void;
+  onWanAnimateQualityChange: (value: string) => void;
+  onWanAnimateTurboChange: (value: boolean) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -116,6 +142,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isKlingO1VideoModel,
     isKling26VideoModel,
     isHailuoVideoModel,
+    isWanAnimateVideoModel,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
@@ -124,6 +151,12 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     kling26AudioSelection,
     wanTargetResolution,
     wanCreativity,
+    wanAnimateVariant,
+    wanAnimateSteps,
+    wanAnimateResolution,
+    wanAnimateShift,
+    wanAnimateQuality,
+    wanAnimateUseTurbo,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -140,6 +173,12 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onKling26AudioChange,
     onWanTargetResolutionChange,
     onWanCreativityChange,
+    onWanAnimateVariantChange,
+    onWanAnimateStepsChange,
+    onWanAnimateResolutionChange,
+    onWanAnimateShiftChange,
+    onWanAnimateQualityChange,
+    onWanAnimateTurboChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -275,6 +314,79 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: KLING26_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: kling26AudioSelection,
       onChange: onKling26AudioChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (isWanAnimateVideoModel) {
+    controls.push({
+      id: 'wan-animate-variant-select',
+      ariaLabel: 'Select Wan Animate variant',
+      options: WAN_ANIMATE_VARIANT_OPTIONS.map(option => ({
+        value: option.value,
+        label: option.label,
+        disabled: option.disabled,
+      })),
+      value: wanAnimateVariant,
+      onChange: onWanAnimateVariantChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan-animate-steps-select',
+      prefixLabel: 'Steps',
+      hideSelectedValue: true,
+      ariaLabel: 'Select Wan Animate steps',
+      options: WAN_ANIMATE_STEPS_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wanAnimateSteps,
+      onChange: onWanAnimateStepsChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan-animate-resolution-select',
+      prefixLabel: 'Resolution',
+      hideSelectedValue: true,
+      ariaLabel: 'Select Wan Animate resolution',
+      options: WAN_ANIMATE_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wanAnimateResolution,
+      onChange: onWanAnimateResolutionChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan-animate-shift-select',
+      prefixLabel: 'Shift',
+      hideSelectedValue: true,
+      ariaLabel: 'Select Wan Animate shift',
+      options: WAN_ANIMATE_SHIFT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wanAnimateShift,
+      onChange: onWanAnimateShiftChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan-animate-quality-select',
+      prefixLabel: 'Quality',
+      hideSelectedValue: true,
+      ariaLabel: 'Select Wan Animate quality',
+      options: WAN_ANIMATE_QUALITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wanAnimateQuality,
+      onChange: onWanAnimateQualityChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan-animate-turbo-select',
+      prefixLabel: 'Turbo',
+      hideSelectedValue: true,
+      ariaLabel: 'Toggle Wan Animate turbo',
+      options: [
+        { value: 'off', label: 'OFF' },
+        { value: 'on', label: 'ON' },
+      ],
+      value: wanAnimateUseTurbo ? 'on' : 'off',
+      onChange: (value: string) => onWanAnimateTurboChange(value === 'on'),
       disabled: isLoading,
     });
   }

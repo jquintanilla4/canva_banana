@@ -110,6 +110,11 @@ interface GenerateVideoOptions {
   modelId?: string;
   duration?: FalVideoDuration;
   negativePrompt?: string;
+  numInferenceSteps?: number;
+  resolution?: '480p' | '580p' | '720p';
+  shift?: number;
+  videoQuality?: 'high' | 'maximum';
+  useTurbo?: boolean;
   targetResolution?: '720p' | '1080p';
   creativity?: number;
   cfgScale?: number;
@@ -189,6 +194,8 @@ export const KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/o1/refer
 export const KLING_O1_VIDEO_EDIT_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/edit';
 export const KLING_O1_VIDEO_REF_V2V_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/reference';
 export const KLING_O1_VIDEO_FFLF_MODEL_ID = 'fal-ai/kling-video/o1/image-to-video';
+export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace';
+export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
@@ -1229,6 +1236,106 @@ export const generateImageToVideo = async (
 
     const requestId = result?.requestId || latestRequestId;
 
+    return { videoUrl, requestId };
+  }
+
+  const isWanAnimateModel = modelId === WAN_ANIMATE_REPLACE_MODEL_ID;
+  if (isWanAnimateModel) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Wan Animate Replace requires a source video.');
+    }
+    if (!image) {
+      throw new Error('Wan Animate Replace requires a still image.');
+    }
+
+    let latestRequestId: string | undefined;
+
+    const imageUrl = await uploadImageElementToFal(image);
+
+    const numInferenceStepsRaw = typeof options.numInferenceSteps === 'number'
+      ? options.numInferenceSteps
+      : Number(options.numInferenceSteps);
+    const numInferenceSteps = Number.isFinite(numInferenceStepsRaw)
+      ? Math.min(40, Math.max(2, Math.round(numInferenceStepsRaw)))
+      : undefined;
+
+    const resolution = options.resolution === '480p' || options.resolution === '580p' || options.resolution === '720p'
+      ? options.resolution
+      : undefined;
+
+    const shiftRaw = typeof options.shift === 'number' ? options.shift : Number(options.shift);
+    const shift = Number.isFinite(shiftRaw)
+      ? Math.min(10, Math.max(1, Math.round(shiftRaw * 10) / 10))
+      : undefined;
+
+    const videoQuality = options.videoQuality === 'maximum' ? 'maximum' : options.videoQuality === 'high' ? 'high' : undefined;
+    const useTurbo = typeof options.useTurbo === 'boolean' ? options.useTurbo : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      video_url: options.sourceVideoUrl,
+      image_url: imageUrl,
+      ...(numInferenceSteps !== undefined ? { num_inference_steps: numInferenceSteps } : {}),
+      ...(resolution ? { resolution } : {}),
+      ...(shift !== undefined ? { shift } : {}),
+      ...(videoQuality ? { video_quality: videoQuality } : {}),
+      ...(useTurbo !== undefined ? { use_turbo: useTurbo } : {}),
+    };
+
+    logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
+      input: inputPayload,
+    });
+
+    let result: Awaited<ReturnType<typeof fal.subscribe>>;
+    try {
+      result = await fal.subscribe(modelId, {
+        input: inputPayload,
+        logs: true,
+        onQueueUpdate: update => {
+          const queueUpdate = update as unknown as FalQueueUpdate;
+          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+          if (resolvedRequestId) {
+            latestRequestId = resolvedRequestId;
+          }
+          logFalEvent('inbound', modelId, 'Queue update', {
+            status: queueUpdate.status,
+            position: queueUpdate.position,
+            eta: queueUpdate.eta,
+            requestId: resolvedRequestId,
+            logs: normalizedLogs.map(log => log?.message ?? ''),
+          });
+          options.onQueueUpdate?.({
+            ...queueUpdate,
+            requestId: resolvedRequestId || '',
+            logs: normalizedLogs,
+          });
+        },
+      });
+    } catch (error) {
+      logFalEvent('error', modelId, 'Request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logFalEvent('inbound', modelId, 'Result received', {
+      requestId: result?.requestId || latestRequestId,
+      data: (result?.data as Record<string, unknown>) ?? undefined,
+    });
+
+    const data = result?.data as { video?: string | { url?: string } } | undefined;
+    const videoEntry = data?.video;
+    const videoUrl = typeof videoEntry === 'string'
+      ? videoEntry
+      : videoEntry && typeof videoEntry.url === 'string'
+        ? videoEntry.url
+        : null;
+
+    if (!videoUrl) {
+      throw new Error('Fal.ai API did not return a video.');
+    }
+
+    const requestId = result?.requestId || latestRequestId;
     return { videoUrl, requestId };
   }
 

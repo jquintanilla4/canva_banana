@@ -9,6 +9,8 @@ interface ModelOption {
 
 interface FalModelControlConfig {
   id: string;
+  prefixLabel?: string;
+  hideSelectedValue?: boolean;
   ariaLabel: string;
   options: ReadonlyArray<ModelOption>;
   value: string;
@@ -342,32 +344,77 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                   <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
                 </div>
                 {modelControls?.map(control => (
-                  <div className="relative" key={control.id}>
-                    <label className="sr-only" htmlFor={control.id}>
-                      {control.ariaLabel}
-                    </label>
-                    <select
-                      id={control.id}
-                      ref={el => {
-                        if (el) {
-                          controlSelectRefs.current.set(control.id, el);
-                        } else {
-                          controlSelectRefs.current.delete(control.id);
-                        }
-                      }}
-                      value={control.value}
-                      onChange={(e) => control.onChange(e.target.value)}
-                      disabled={control.disabled}
-                      className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
-                      aria-label={control.ariaLabel}
-                    >
-                      {control.options.map(option => (
-                        <option key={option.value} value={option.value} disabled={option.disabled}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
+                  <div className="relative flex items-center gap-1" key={control.id}>
+                    {control.hideSelectedValue ? (
+                      <div
+                        className={`relative inline-flex items-center focus-within:outline-none ${control.disabled ? 'opacity-60' : ''}`}
+                      >
+                        <span
+                          className={`text-sm px-[0.4rem] pr-[1.8rem] py-[0.34rem] select-none ${control.disabled ? 'text-gray-400' : 'text-white'}`}
+                        >
+                          {control.prefixLabel ?? ''}
+                        </span>
+                        <label className="sr-only" htmlFor={control.id}>
+                          {control.ariaLabel}
+                        </label>
+                        <select
+                          id={control.id}
+                          ref={el => {
+                            // Avoid autosizing hidden-value selects; their visual width is driven by the label.
+                            if (el) {
+                              controlSelectRefs.current.delete(control.id);
+                            }
+                          }}
+                          value={control.value}
+                          onChange={(e) => control.onChange(e.target.value)}
+                          disabled={control.disabled}
+                          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 disabled:cursor-not-allowed"
+                          aria-label={control.ariaLabel}
+                        >
+                          {control.options.map(option => (
+                            <option key={option.value} value={option.value} disabled={option.disabled}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDownIcon
+                          className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80"
+                          aria-hidden="true"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        {control.prefixLabel && <span className="text-sm text-gray-200">{control.prefixLabel}</span>}
+                        <label className="sr-only" htmlFor={control.id}>
+                          {control.ariaLabel}
+                        </label>
+                        <select
+                          id={control.id}
+                          ref={el => {
+                            if (el) {
+                              controlSelectRefs.current.set(control.id, el);
+                            } else {
+                              controlSelectRefs.current.delete(control.id);
+                            }
+                          }}
+                          value={control.value}
+                          onChange={(e) => control.onChange(e.target.value)}
+                          disabled={control.disabled}
+                          className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
+                          aria-label={control.ariaLabel}
+                        >
+                          {control.options.map(option => (
+                            <option key={option.value} value={option.value} disabled={option.disabled}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDownIcon
+                          className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80"
+                          aria-hidden="true"
+                        />
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

@@ -97,6 +97,12 @@ export type GenerationFalOptions = Partial<{
   negativePrompt: string;
   wanTargetResolution: '720p' | '1080p';
   wanCreativity: 0 | 1 | 2 | 3 | 4;
+  wanAnimateVariant: 'replace' | 'move';
+  wanAnimateSteps: '10' | '20' | '30' | '40';
+  wanAnimateResolution: '480p' | '580p' | '720p';
+  wanAnimateShift: '5.0' | '6.0' | '7.0' | '8.0' | '9.0' | '10.0';
+  wanAnimateQuality: 'high' | 'maximum';
+  wanAnimateUseTurbo: boolean;
   kling26Audio: boolean;
 }>;
 

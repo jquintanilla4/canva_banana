@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Tool } from '../types';
-import { getFalModelLabel, WAN_VISION_ENHANCER_MODEL_ID } from '../services/modelConfig';
+import { getFalModelLabel, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID } from '../services/modelConfig';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -58,7 +58,9 @@ export function useGenerationGuards({
   activePrimaryImage,
 }: Args): GenerationGuardsResult {
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
-  const isWanVideoInputMode = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
+  const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
+  const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
+  const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
@@ -77,6 +79,7 @@ export function useGenerationGuards({
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
     const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage;
+    const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasPrimaryImage;
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
       (usingFal && isReveModel) ||
@@ -88,25 +91,30 @@ export function useGenerationGuards({
       (shouldValidateFalOptions && isNumImagesInvalid) ||
       requiresSelectedImageForUpscale ||
       requiresSelectedImageForVideo ||
+      requiresSelectedImageForWanAnimate ||
       requiresSourceVideoForVideoInput ||
       editConstraintsActive;
 
     const promptPlaceholderText = isVideoMode
-      ? (hasPrimaryImage
-        ? 'Describe the motion or scene you want this image to turn into...'
-        : isVideoInputMode
-          ? (hasSourceVideo
-            ? (isWanVideoInputMode
-              ? 'Describe how you want to enhance this video (optional)...'
-              : (isKlingO1EditMode
-                ? 'Describe how you want to edit this video...'
-                : 'Describe the next shot based on this reference video...'))
-            : (isWanVideoInputMode
-              ? 'Select a video to enhance, then optionally describe changes...'
-              : (isKlingO1EditMode
-                ? 'Select a video to edit, then describe the changes...'
-                : 'Select a reference video, then describe the next shot...')))
-          : 'Select an image and describe the video you want to create...')
+      ? (isWanAnimateVideoModel
+        ? (hasSourceVideo
+          ? (hasPrimaryImage ? 'Optionally describe changes for this replacement...' : 'Select a still image to replace the character...')
+          : 'Select a video to replace a character, then select a still image...')
+        : (hasPrimaryImage
+          ? 'Describe the motion or scene you want this image to turn into...'
+          : isVideoInputMode
+            ? (hasSourceVideo
+              ? (isWanVideoInputMode
+                ? 'Describe how you want to enhance this video (optional)...'
+                : (isKlingO1EditMode
+                  ? 'Describe how you want to edit this video...'
+                  : 'Describe the next shot based on this reference video...'))
+              : (isWanVideoInputMode
+                ? 'Select a video to enhance, then optionally describe changes...'
+                : (isKlingO1EditMode
+                  ? 'Select a video to edit, then describe the changes...'
+                  : 'Select a reference video, then describe the next shot...')))
+            : 'Select an image and describe the video you want to create...'))
       : usingFal && isUpscaleModel
         ? `Prompt disabled for ${getFalModelLabel(falModelId)}. Select an image and scale factor.`
         : isTextToImage
@@ -138,6 +146,7 @@ export function useGenerationGuards({
 	    isKlingO1EditMode,
 	    isKlingO1VideoInputMode,
 	    isKlingVideoModel,
+	    isWanAnimateVideoModel,
     isReveModel,
     isSeedreamModel,
     isUpscaleModel,

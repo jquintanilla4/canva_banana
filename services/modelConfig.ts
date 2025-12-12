@@ -35,6 +35,8 @@ export const KLING_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-vide
 export const KLING_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video' as const;
 export const KLING_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video' as const;
 export const KLING_26_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/image-to-video' as const;
+export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace' as const;
+export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
@@ -77,6 +79,7 @@ export const FAL_VIDEO_MODEL_OPTIONS = [
   { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
   { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
+  { value: WAN_ANIMATE_MODEL_ID, label: 'Wan Animate' },
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
@@ -115,6 +118,51 @@ export const isKlingO1VideoModelId = (value: string | undefined): value is typeo
   || value === KLING_O1_VIDEO_EDIT_MODEL_ID
   || value === KLING_O1_VIDEO_REF_V2V_MODEL_ID
   || value === KLING_O1_VIDEO_FFLF_MODEL_ID;
+
+export type WanAnimateVariant = 'replace' | 'move';
+export type WanAnimateStepsSelectionValue = '10' | '20' | '30' | '40';
+export type WanAnimateResolutionSelectionValue = '480p' | '580p' | '720p';
+export type WanAnimateShiftSelectionValue = '5.0' | '6.0' | '7.0' | '8.0' | '9.0' | '10.0';
+export type WanAnimateQualitySelectionValue = 'high' | 'maximum';
+
+export const WAN_ANIMATE_VARIANT_OPTIONS: ReadonlyArray<{ value: WanAnimateVariant; label: string; disabled?: boolean }> = [
+  { value: 'replace', label: 'Keep BG' },
+  { value: 'move', label: 'Replace BG', disabled: true },
+] as const;
+
+export const WAN_ANIMATE_STEPS_OPTIONS: ReadonlyArray<{ value: WanAnimateStepsSelectionValue; label: string }> = [
+  { value: '10', label: '10' },
+  { value: '20', label: '20' },
+  { value: '30', label: '30' },
+  { value: '40', label: '40' },
+] as const;
+
+export const WAN_ANIMATE_RESOLUTION_OPTIONS: ReadonlyArray<{ value: WanAnimateResolutionSelectionValue; label: string }> = [
+  { value: '480p', label: '480p' },
+  { value: '580p', label: '580p' },
+  { value: '720p', label: '720p' },
+] as const;
+
+export const WAN_ANIMATE_SHIFT_OPTIONS: ReadonlyArray<{ value: WanAnimateShiftSelectionValue; label: string }> = [
+  { value: '5.0', label: '5.0' },
+  { value: '6.0', label: '6.0' },
+  { value: '7.0', label: '7.0' },
+  { value: '8.0', label: '8.0' },
+  { value: '9.0', label: '9.0' },
+  { value: '10.0', label: '10.0' },
+] as const;
+
+export const WAN_ANIMATE_QUALITY_OPTIONS: ReadonlyArray<{ value: WanAnimateQualitySelectionValue; label: string }> = [
+  { value: 'high', label: 'High' },
+  { value: 'maximum', label: 'Max' },
+] as const;
+
+export const getWanAnimateVideoEndpoint = (variant: WanAnimateVariant): string => {
+  if (variant === 'move') {
+    return WAN_ANIMATE_REPLACE_MODEL_ID;
+  }
+  return WAN_ANIMATE_REPLACE_MODEL_ID;
+};
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
 export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
@@ -301,6 +349,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [KLING_O1_VIDEO_FFLF_MODEL_ID]: 6,
   [KLING_VIDEO_MODEL_ID]: 0,
   [KLING_26_VIDEO_MODEL_ID]: 0,
+  [WAN_ANIMATE_MODEL_ID]: 0,
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,
 };
 

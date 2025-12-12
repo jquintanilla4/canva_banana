@@ -70,6 +70,12 @@ export type SnapshotManifestV2 = {
 	      falCreativity: number;
 	      wanTargetResolution?: string;
 	      wanCreativity?: number;
+	      wanAnimateVariant?: string;
+	      wanAnimateSteps?: string;
+	      wanAnimateResolution?: string;
+	      wanAnimateShift?: string;
+	      wanAnimateQuality?: string;
+	      wanAnimateUseTurbo?: boolean;
 	      selectedImageIds: string[];
 	      selectedNoteIds: string[];
 	      referenceImageIds: string[];
@@ -130,6 +136,12 @@ export type SnapshotMetaState = {
   falCreativity: number;
   wanTargetResolution?: string;
   wanCreativity?: number;
+  wanAnimateVariant?: string;
+  wanAnimateSteps?: string;
+  wanAnimateResolution?: string;
+  wanAnimateShift?: string;
+  wanAnimateQuality?: string;
+  wanAnimateUseTurbo?: boolean;
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
@@ -617,6 +629,36 @@ export const normalizeSnapshotImageMetadata = (
       const wanCreativityRaw = normalizeNumberOption((typed as { wanCreativity?: unknown }).wanCreativity, 0, 4);
       if (wanCreativityRaw !== undefined) {
         normalizedOptions.wanCreativity = Math.round(wanCreativityRaw) as 0 | 1 | 2 | 3 | 4;
+      }
+
+      const wanAnimateVariantValue = (typed as { wanAnimateVariant?: unknown }).wanAnimateVariant;
+      if (wanAnimateVariantValue === 'replace' || wanAnimateVariantValue === 'move') {
+        normalizedOptions.wanAnimateVariant = wanAnimateVariantValue;
+      }
+
+      const wanAnimateStepsValue = (typed as { wanAnimateSteps?: unknown }).wanAnimateSteps;
+      if (wanAnimateStepsValue === '10' || wanAnimateStepsValue === '20' || wanAnimateStepsValue === '30' || wanAnimateStepsValue === '40') {
+        normalizedOptions.wanAnimateSteps = wanAnimateStepsValue;
+      }
+
+      const wanAnimateResolutionValue = (typed as { wanAnimateResolution?: unknown }).wanAnimateResolution;
+      if (wanAnimateResolutionValue === '480p' || wanAnimateResolutionValue === '580p' || wanAnimateResolutionValue === '720p') {
+        normalizedOptions.wanAnimateResolution = wanAnimateResolutionValue;
+      }
+
+      const wanAnimateShiftValue = (typed as { wanAnimateShift?: unknown }).wanAnimateShift;
+      if (wanAnimateShiftValue === '5.0' || wanAnimateShiftValue === '6.0' || wanAnimateShiftValue === '7.0' || wanAnimateShiftValue === '8.0' || wanAnimateShiftValue === '9.0' || wanAnimateShiftValue === '10.0') {
+        normalizedOptions.wanAnimateShift = wanAnimateShiftValue;
+      }
+
+      const wanAnimateQualityValue = (typed as { wanAnimateQuality?: unknown }).wanAnimateQuality;
+      if (wanAnimateQualityValue === 'high' || wanAnimateQualityValue === 'maximum') {
+        normalizedOptions.wanAnimateQuality = wanAnimateQualityValue;
+      }
+
+      const wanAnimateUseTurboValue = (typed as { wanAnimateUseTurbo?: unknown }).wanAnimateUseTurbo;
+      if (typeof wanAnimateUseTurboValue === 'boolean') {
+        normalizedOptions.wanAnimateUseTurbo = wanAnimateUseTurboValue;
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;

@@ -25,22 +25,14 @@ import {
   isFalVideoModelId,
   normalizeFalModelId,
 } from '../services/modelConfig';
-import type {
-  FalAspectRatioSelectionValue,
-  FalImageModelId,
-  FalImageSizeSelectionValue,
-  FalModelId,
-  FalModelMode,
-  FalResolutionSelectionValue,
-  FalVideoModelId,
-  WanCreativity,
-  WanTargetResolution,
-} from '../services/modelConfig';
+import type { WanCreativity } from '../services/modelConfig';
+import type { UseFalSettingsResult } from './useFalSettings';
+import type { SelectionStateResult } from './useSelectionState';
 import type { AppState } from './useCanvasHistory';
 
 type ApiProvider = ApiProviderId;
 
-type SnapshotIOArgs = {
+type SnapshotUIBindings = {
   appMode: AppMode;
   tool: Tool;
   brushSize: number;
@@ -49,27 +41,6 @@ type SnapshotIOArgs = {
   prompt: string;
   inpaintMode: InpaintMode;
   apiProvider: ApiProvider;
-  falModelId: FalModelId;
-  falImageSizeSelection: FalImageSizeSelectionValue;
-  falAspectRatioSelection: FalAspectRatioSelectionValue;
-  falResolutionSelection: FalResolutionSelectionValue;
-  falNumImages: number;
-  falScaleFactor: number;
-  falNoiseScale: number;
-  falCreativity: number;
-  wanTargetResolution: WanTargetResolution;
-  wanCreativity: WanCreativity;
-  selectedImageIds: string[];
-  selectedNoteIds: string[];
-  referenceImageIds: string[];
-  elementImageIds: string[];
-  videoLastFrameImageId: string | null;
-  displayedImages: CanvasImage[];
-  displayedNotes: CanvasNote[];
-  displayedPaths: Path[];
-  resetHistory: (state: AppState) => void;
-  providerAvailability: Record<ApiProvider, boolean>;
-  availableProviders: ApiProvider[];
   setAppMode: Dispatch<SetStateAction<AppMode>>;
   setTool: Dispatch<SetStateAction<Tool>>;
   setBrushSize: Dispatch<SetStateAction<number>>;
@@ -78,26 +49,21 @@ type SnapshotIOArgs = {
   setPrompt: Dispatch<SetStateAction<string>>;
   setInpaintMode: Dispatch<SetStateAction<InpaintMode>>;
   setApiProvider: Dispatch<SetStateAction<ApiProvider>>;
-  setFalModelMode: Dispatch<SetStateAction<FalModelMode>>;
-  setFalImageModelId: Dispatch<SetStateAction<FalImageModelId>>;
-  setFalVideoModelId: Dispatch<SetStateAction<FalVideoModelId>>;
-  setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
-  setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
-  setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
-  setFalNumImages: Dispatch<SetStateAction<number>>;
-  setFalScaleFactor: Dispatch<SetStateAction<number>>;
-  setFalNoiseScale: Dispatch<SetStateAction<number>>;
-  setFalCreativity: Dispatch<SetStateAction<number>>;
-  setWanTargetResolution: Dispatch<SetStateAction<WanTargetResolution>>;
-  setWanCreativity: Dispatch<SetStateAction<WanCreativity>>;
-  setSelectedImageIds: Dispatch<SetStateAction<string[]>>;
-  setSelectedNoteIds: Dispatch<SetStateAction<string[]>>;
-  setReferenceImageIds: Dispatch<SetStateAction<string[]>>;
-  setElementImageIds: Dispatch<SetStateAction<string[]>>;
-  setVideoLastFrameImageId: Dispatch<SetStateAction<string | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
   setToastMessage: Dispatch<SetStateAction<string | null>>;
   setIsFileMenuOpen: Dispatch<SetStateAction<boolean>>;
+};
+
+type SnapshotIOArgs = {
+  ui: SnapshotUIBindings;
+  fal: UseFalSettingsResult;
+  selection: SelectionStateResult;
+  displayedImages: CanvasImage[];
+  displayedNotes: CanvasNote[];
+  displayedPaths: Path[];
+  resetHistory: (state: AppState) => void;
+  providerAvailability: Record<ApiProvider, boolean>;
+  availableProviders: ApiProvider[];
 };
 
 type SnapshotIOResult = {
@@ -107,64 +73,87 @@ type SnapshotIOResult = {
 };
 
 export function useSnapshotIO({
-  appMode,
-  tool,
-  brushSize,
-  eraserSize,
-  brushColor,
-  prompt,
-  inpaintMode,
-  apiProvider,
-  falModelId,
-  falImageSizeSelection,
-  falAspectRatioSelection,
-  falResolutionSelection,
-  falNumImages,
-  falScaleFactor,
-  falNoiseScale,
-  falCreativity,
-  wanTargetResolution,
-  wanCreativity,
-  selectedImageIds,
-  selectedNoteIds,
-  referenceImageIds,
-  elementImageIds,
-  videoLastFrameImageId,
+  ui,
+  fal,
+  selection,
   displayedImages,
   displayedNotes,
   displayedPaths,
   resetHistory,
   providerAvailability,
   availableProviders,
-  setAppMode,
-  setTool,
-  setBrushSize,
-  setEraserSize,
-  setBrushColor,
-  setPrompt,
-  setInpaintMode,
-  setApiProvider,
-  setFalModelMode,
-  setFalImageModelId,
-  setFalVideoModelId,
-  setFalImageSizeSelection,
-  setFalAspectRatioSelection,
-  setFalResolutionSelection,
-  setFalNumImages,
-  setFalScaleFactor,
-  setFalNoiseScale,
-  setFalCreativity,
-  setWanTargetResolution,
-  setWanCreativity,
-  setSelectedImageIds,
-  setSelectedNoteIds,
-  setReferenceImageIds,
-  setElementImageIds,
-  setVideoLastFrameImageId,
-  setError,
-  setToastMessage,
-  setIsFileMenuOpen,
 }: SnapshotIOArgs): SnapshotIOResult {
+  const {
+    appMode,
+    tool,
+    brushSize,
+    eraserSize,
+    brushColor,
+    prompt,
+    inpaintMode,
+    apiProvider,
+    setAppMode,
+    setTool,
+    setBrushSize,
+    setEraserSize,
+    setBrushColor,
+    setPrompt,
+    setInpaintMode,
+    setApiProvider,
+    setError,
+    setToastMessage,
+    setIsFileMenuOpen,
+  } = ui;
+
+  const {
+    falModelId,
+    falImageSizeSelection,
+    falAspectRatioSelection,
+    falResolutionSelection,
+    falNumImages,
+    falScaleFactor,
+    falNoiseScale,
+    falCreativity,
+    wanTargetResolution,
+    wanCreativity,
+    wanAnimateVariant,
+    wanAnimateSteps,
+    wanAnimateResolution,
+    wanAnimateShift,
+    wanAnimateQuality,
+    wanAnimateUseTurbo,
+    setFalModelMode,
+    setFalImageModelId,
+    setFalVideoModelId,
+    setFalImageSizeSelection,
+    setFalAspectRatioSelection,
+    setFalResolutionSelection,
+    setFalNumImages,
+    setFalScaleFactor,
+    setFalNoiseScale,
+    setFalCreativity,
+    setWanTargetResolution,
+    setWanCreativity,
+    setWanAnimateVariant,
+    setWanAnimateSteps,
+    setWanAnimateResolution,
+    setWanAnimateShift,
+    setWanAnimateQuality,
+    setWanAnimateUseTurbo,
+  } = fal;
+
+  const {
+    selectedImageIds,
+    selectedNoteIds,
+    referenceImageIds,
+    elementImageIds,
+    videoLastFrameImageId,
+    setSelectedImageIds,
+    setSelectedNoteIds,
+    setReferenceImageIds,
+    setElementImageIds,
+    setVideoLastFrameImageId,
+  } = selection;
   // Serialize current canvas state plus UI settings into a binary snapshot for export/share.
   const buildSnapshotBinary = useCallback(async (): Promise<SnapshotBinary> => {
     const meta: SnapshotMetaState = {
@@ -186,6 +175,12 @@ export function useSnapshotIO({
       falCreativity,
       wanTargetResolution,
       wanCreativity,
+      wanAnimateVariant,
+      wanAnimateSteps,
+      wanAnimateResolution,
+      wanAnimateShift,
+      wanAnimateQuality,
+      wanAnimateUseTurbo,
       selectedImageIds: [...selectedImageIds],
       selectedNoteIds: [...selectedNoteIds],
       referenceImageIds: [...referenceImageIds],
@@ -212,6 +207,12 @@ export function useSnapshotIO({
 	    falCreativity,
 	    wanTargetResolution,
 	    wanCreativity,
+	    wanAnimateVariant,
+	    wanAnimateSteps,
+	    wanAnimateResolution,
+	    wanAnimateShift,
+	    wanAnimateQuality,
+	    wanAnimateUseTurbo,
 	    falImageSizeSelection,
     falModelId,
     falNoiseScale,
@@ -367,6 +368,24 @@ export function useSnapshotIO({
 	            : 1;
 	          setWanCreativity(Math.min(4, Math.max(0, normalizedWanCreativity)) as WanCreativity);
 	        }
+	        if (meta.wanAnimateVariant === 'replace' || meta.wanAnimateVariant === 'move') {
+	          setWanAnimateVariant(meta.wanAnimateVariant);
+	        }
+	        if (meta.wanAnimateSteps === '10' || meta.wanAnimateSteps === '20' || meta.wanAnimateSteps === '30' || meta.wanAnimateSteps === '40') {
+	          setWanAnimateSteps(meta.wanAnimateSteps);
+	        }
+	        if (meta.wanAnimateResolution === '480p' || meta.wanAnimateResolution === '580p' || meta.wanAnimateResolution === '720p') {
+	          setWanAnimateResolution(meta.wanAnimateResolution);
+	        }
+	        if (meta.wanAnimateShift === '5.0' || meta.wanAnimateShift === '6.0' || meta.wanAnimateShift === '7.0' || meta.wanAnimateShift === '8.0' || meta.wanAnimateShift === '9.0' || meta.wanAnimateShift === '10.0') {
+	          setWanAnimateShift(meta.wanAnimateShift);
+	        }
+	        if (meta.wanAnimateQuality === 'high' || meta.wanAnimateQuality === 'maximum') {
+	          setWanAnimateQuality(meta.wanAnimateQuality);
+	        }
+	        if (typeof meta.wanAnimateUseTurbo === 'boolean') {
+	          setWanAnimateUseTurbo(meta.wanAnimateUseTurbo);
+	        }
 	        setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
@@ -413,6 +432,12 @@ export function useSnapshotIO({
 	    setFalCreativity,
 	    setWanTargetResolution,
 	    setWanCreativity,
+	    setWanAnimateVariant,
+	    setWanAnimateSteps,
+	    setWanAnimateResolution,
+	    setWanAnimateShift,
+	    setWanAnimateQuality,
+	    setWanAnimateUseTurbo,
 	    setFalImageModelId,
     setFalImageSizeSelection,
     setFalModelMode,

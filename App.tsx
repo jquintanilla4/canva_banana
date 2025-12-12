@@ -4,15 +4,13 @@ import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
 import {
   Tool,
-  CanvasImage,
   InpaintMode,
   AppMode,
   ApiProviderId,
 } from './types';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
-import { clearDebugLogs, getDebugLogs, subscribeToDebugLogs } from './services/debugLog';
-import type { FalQueueJob } from './types';
+import { clearDebugLogs } from './services/debugLog';
 import {
   GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
@@ -45,10 +43,10 @@ import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
 import { useKlingReferenceHelpers } from './hooks/useKlingReferenceHelpers';
 import { useKlingPromptMentions } from './hooks/useKlingPromptMentions';
 import { useVideoNegativePrompt } from './hooks/useVideoNegativePrompt';
+import { useFalQueueJobs } from './hooks/useFalQueueJobs';
+import { useDebugLogState } from './hooks/useDebugLogState';
 import type { FalModelMode } from './services/modelConfig';
 
-// Type guard for CanvasImage elements that are images
-const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } => !!img && img.mediaType === 'image';
 // Type alias for API providers
 type ApiProvider = ApiProviderId;
 // Defines preferred order of API providers
@@ -123,88 +121,31 @@ export default function App() {
   // State for currently selected API provider (e.g., 'google', 'fal')
   const [apiProvider, setApiProvider] = useState<ApiProvider>(DEFAULT_API_PROVIDER);
 
-  // State for tracking the queue of FAL (FastAI Lab) jobs
-  const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
-
-  // Ref to store timeouts for auto-dismissing FAL job notifications, mapped by job ID
-  const falAutoDismissTimeouts = useRef<Map<string, number>>(new Map());
+  // FAL job queue state + auto-dismiss handling.
+  const { falJobs, setFalJobs, dismissFalJob: handleDismissFalJob } = useFalQueueJobs();
 
   // FAL model and option state/handlers (image/video mode, variants, sliders, etc.)
-  const {
-    falModelMode,                // Current FAL model mode ('image' | 'video')
-    falModelId,                  // Selected FAL model ID
-    falImageModelId,             // Selected FAL image model ID
-    falVideoModelId,             // Selected FAL video model ID
-    falVideoDuration,            // Video duration selection for FAL
-    hailuoVariant,               // Hailuo model variant ('standard' | 'pro')
-    klingVariant,                // Kling model variant ('standard' | 'pro')
-    klingO1Variant,              // Kling O1 video variant selection
-    klingO1KeepAudio,            // Keep audio option for Kling O1 Edit
-    kling26AudioSelection,       // Audio selection for Kling 2.6
-    wanTargetResolution,         // Wan Vision Enhancer output resolution
-    wanCreativity,               // Wan Vision Enhancer creativity
-    falImageSizeSelection,       // Image size selection for FAL
-    falAspectRatioSelection,     // Aspect ratio selection for FAL
-    falResolutionSelection,      // Resolution selection for FAL
-    falNumImages,                // Number of images to generate for FAL
-    falScaleFactor,              // Scale factor for upscaling models
-    falNoiseScale,               // Noise scale (SeedVR upscaler, etc.)
-    falCreativity,               // Creativity slider (Crystal upscaler, etc.)
-    isVideoMode,                 // True if FAL is in video mode
-    isKlingVideoModel,           // True if Kling video model is selected
-	    isKlingO1VideoModel,         // True if Kling O1 video model is selected
-	    isKling26VideoModel,         // True if Kling 2.6 video model is selected
-	    isHailuoVideoModel,          // True if Hailuo video model is selected
-	    isUpscaleModel,              // True if an upscaler model is selected
-    isKlingProVideoSelection,    // True if Kling Pro video is selected
-    isKlingO1EditMode,           // True if Kling O1 Edit variant is selected
-    isKlingO1RefV2VMode,         // True if Kling O1 Ref-v2v variant is selected
-    handleModelModeChange: handleFalModelModeChange, // Handler for switching FAL mode
-    handleFalModelChange,                    // Handler for FAL model changes
-    handleFalVideoDurationChange,            // Handler for FAL video duration changes
-    handleHailuoVariantChange,               // Handler for Hailuo variant changes
-    handleKlingVariantChange,                // Handler for Kling variant changes
-    handleKlingO1VariantChange,              // Handler for Kling O1 variant changes
-    handleKlingO1KeepAudioChange,            // Handler for Kling O1 keep audio changes
-    handleKling26AudioChange,                // Handler for Kling 2.6 audio changes
-    handleWanTargetResolutionChange,         // Handler for Wan Vision Enhancer resolution changes
-    handleWanCreativityChange,               // Handler for Wan Vision Enhancer creativity changes
-    handleFalImageSizeChange,                // Handler for FAL image size changes
-    handleFalAspectRatioChange,              // Handler for FAL aspect ratio changes
-    handleFalResolutionChange,               // Handler for FAL resolution changes
-    handleFalNumImagesChange,                // Handler for number of images change
-    handleFalScaleFactorChange,              // Handler for scale factor changes
-    handleFalNoiseScaleChange,               // Handler for noise scale changes
-    handleFalCreativityChange,               // Handler for creativity changes
-    setFalModelMode,                         // Setter for FAL model mode
-    setFalImageModelId,                      // Setter for FAL image model ID
-    setFalVideoModelId,                      // Setter for FAL video model ID
-    setFalImageSizeSelection,                // Setter for FAL image size selection
-    setFalAspectRatioSelection,              // Setter for FAL aspect ratio selection
-    setFalResolutionSelection,               // Setter for FAL resolution selection
-    setFalNumImages,                         // Setter for FAL number of images
-	    setFalScaleFactor,                       // Setter for FAL scale factor
-	    setFalNoiseScale,                        // Setter for FAL noise scale
-	    setFalCreativity,                        // Setter for FAL creativity
-	    setWanTargetResolution,                  // Setter for Wan Vision Enhancer resolution
-	    setWanCreativity,                        // Setter for Wan Vision Enhancer creativity
-	  } = useFalSettings({ apiProvider });
+  const fal = useFalSettings({ apiProvider });
 
   const {
     videoNegativePrompt,
     setVideoNegativePrompt,
     shouldShowVideoNegativePrompt,
-  } = useVideoNegativePrompt({ isVideoMode, falVideoModelId });
+  } = useVideoNegativePrompt({ isVideoMode: fal.isVideoMode, falVideoModelId: fal.falVideoModelId });
 
   // Toggles display of metadata overlays on canvas images
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
 
   // State for toggling the file menu and debug log panels
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
-  const [isDebugLogOpen, setIsDebugLogOpen] = useState(false);
-
-  // State for storing and updating debug log entries
-  const [debugLogEntries, setDebugLogEntries] = useState(() => getDebugLogs());
+  const {
+    isDebugLogOpen,
+    debugLogEntries,
+    openDebugLogPanel,
+    closeDebugLogPanel,
+  } = useDebugLogState({
+    onOpen: () => setIsFileMenuOpen(false),
+  });
 
   // Callbacks to programmatically trigger zoom in/out from controls
   const requestZoomIn = useCallback(() => {
@@ -215,26 +156,34 @@ export default function App() {
   }, []);
 
   // Shows a toast when the reference image limit is reached for the current model.
-  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+  const isKlingO1VideoInputMode = fal.isKlingO1EditMode || fal.isKlingO1RefV2VMode;
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
-    if (isKlingO1VideoModelId(falModelId)) {
+    if (isKlingO1VideoModelId(fal.falModelId)) {
       // Edit/refV2V variants have 4 total limit, refI2V has 6
-      const baseLimit = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
+      const baseLimit = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(fal.falModelId);
       const totalLimit = baseLimit + 1;
-      const variantLabel = isKlingO1EditMode ? 'Kling O1 Edit' : isKlingO1RefV2VMode ? 'Kling O1 Ref-v2v' : 'Kling O1 Video';
+      const variantLabel = fal.isKlingO1EditMode ? 'Kling O1 Edit' : fal.isKlingO1RefV2VMode ? 'Kling O1 Ref-v2v' : 'Kling O1 Video';
       setToastMessage(`${variantLabel} supports up to ${totalLimit} images total (source + references + elements). Slots remaining: ${Math.max(0, maxReferenceImages)} for references/elements.`);
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
     const totalLimit = maxReferenceImages + 1;
-    setToastMessage(`${getFalModelLabel(falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
+    setToastMessage(`${getFalModelLabel(fal.falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [falModelId, isKlingO1EditMode, isKlingO1RefV2VMode, isKlingO1VideoInputMode, setToastMessage]);
+  }, [fal.falModelId, fal.isKlingO1EditMode, fal.isKlingO1RefV2VMode, isKlingO1VideoInputMode, setToastMessage]);
 
-  const isKlingModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
-  const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
+  const isKlingModel = !fal.isVideoMode && fal.falModelId === KLING_IMAGE_MODEL_ID;
+  const isKlingO1FflfMode = fal.isKlingO1VideoModel && fal.klingO1Variant === 'fflf';
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
+  const selection = useSelectionState({
+    images,
+    apiProvider,
+    fal,
+    onError: setError,
+    onReferenceLimit: showReferenceLimitToast,
+  });
+
   const {
     selectedImageIds,
     selectedNoteIds,
@@ -243,6 +192,8 @@ export default function App() {
     videoLastFrameImageId,
     sourceVideoId,
     primaryImageId,
+    primarySelectionMediaType,
+    activePrimaryImage,
     hasSingleImageSelected,
     setSelectedImageIds,
     setSelectedNoteIds,
@@ -252,22 +203,7 @@ export default function App() {
     setSourceVideoId,
     handleImageSelection,
     handleNoteSelection,
-	  } = useSelectionState({
-	    images,
-	    apiProvider,
-	    falModelId,
-	    falModelMode,
-	    falVideoModelId,
-	    klingVariant,
-	    klingO1Variant,
-	    isKlingProVideoSelection,
-	    isKlingImageModel: isKlingModel,
-		    isKlingO1VideoModel,
-		    isKlingO1EditMode,
-		    isKlingO1RefV2VMode,
-		    onError: setError,
-	    onReferenceLimit: showReferenceLimitToast,
-	  });
+  } = selection;
 
   // Handles snapshot import/export so canvases can be saved, loaded, or shared.
   const {
@@ -275,63 +211,35 @@ export default function App() {
     importSnapshotFromFile: handleImportSnapshotFromFile,
     importSnapshotWithPicker,
   } = useSnapshotIO({
-    appMode,
-    tool,
-    brushSize,
-    eraserSize,
-    brushColor,
-    prompt,
-    inpaintMode,
-    apiProvider,
-    falModelId,
-    falImageSizeSelection,
-    falAspectRatioSelection,
-    falResolutionSelection,
-    falNumImages,
-	    falScaleFactor,
-	    falNoiseScale,
-	    falCreativity,
-	    wanTargetResolution,
-	    wanCreativity,
-	    selectedImageIds,
-    selectedNoteIds,
-    referenceImageIds,
-    elementImageIds,
-    videoLastFrameImageId,
+    ui: {
+      appMode,
+      tool,
+      brushSize,
+      eraserSize,
+      brushColor,
+      prompt,
+      inpaintMode,
+      apiProvider,
+      setAppMode,
+      setTool,
+      setBrushSize,
+      setEraserSize,
+      setBrushColor,
+      setPrompt,
+      setInpaintMode,
+      setApiProvider,
+      setError,
+      setToastMessage,
+      setIsFileMenuOpen,
+    },
+    fal,
+    selection,
     displayedImages,
     displayedNotes,
     displayedPaths,
     resetHistory,
     providerAvailability,
     availableProviders: AVAILABLE_PROVIDERS,
-    setAppMode,
-    setTool,
-    setBrushSize,
-    setEraserSize,
-    setBrushColor,
-    setPrompt,
-    setInpaintMode,
-    setApiProvider,
-    setFalModelMode,
-    setFalImageModelId,
-    setFalVideoModelId,
-    setFalImageSizeSelection,
-    setFalAspectRatioSelection,
-    setFalResolutionSelection,
-    setFalNumImages,
-	    setFalScaleFactor,
-	    setFalNoiseScale,
-	    setFalCreativity,
-	    setWanTargetResolution,
-	    setWanCreativity,
-	    setSelectedImageIds,
-    setSelectedNoteIds,
-    setReferenceImageIds,
-    setElementImageIds,
-    setVideoLastFrameImageId,
-    setError,
-    setToastMessage,
-    setIsFileMenuOpen,
   });
 
   // Canvas media utilities: uploads, cropping, transforms, downloads, and background removal.
@@ -400,61 +308,18 @@ export default function App() {
     setVideoLastFrameImageId,
   });
 
-  // Enforce reference image limits whenever the active model changes.
-  useEffect(() => {
-    // Edit/refV2V variants have 4 total limit, refI2V has 6
-    const maxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
-    setReferenceImageIds(prevIds => {
-      if (prevIds.length <= maxReferenceImages) {
-        return prevIds;
-      }
-      showReferenceLimitToast(maxReferenceImages);
-      return prevIds.slice(0, maxReferenceImages);
-    });
-    if (isKlingO1VideoModelId(falModelId)) {
-      setElementImageIds(prevIds => {
-        if (prevIds.length + referenceImageIds.length <= maxReferenceImages) {
-          return prevIds;
-        }
-        const maxElements = Math.max(0, maxReferenceImages - referenceImageIds.length);
-        showReferenceLimitToast(maxElements);
-        return prevIds.slice(0, maxElements);
-      });
-    } else if (elementImageIds.length > 0) {
-      setElementImageIds([]);
-    }
-  }, [elementImageIds.length, falModelId, isKlingO1VideoInputMode, referenceImageIds.length, setElementImageIds, setReferenceImageIds, showReferenceLimitToast]);
-
   // Clear video last frame selection if not in a first/last-frame capable mode
   useEffect(() => {
-    if (!isKlingProVideoSelection && !isKlingO1FflfMode && videoLastFrameImageId) {
+    if (!fal.isKlingProVideoSelection && !isKlingO1FflfMode && videoLastFrameImageId) {
       setVideoLastFrameImageId(null);
     }
-  }, [isKlingO1FflfMode, isKlingProVideoSelection, videoLastFrameImageId]);
-
-  // Memoized lookup of the currently selected primary image object
-  const primaryImage = useMemo(() => {
-    if (!primaryImageId) return null;
-    return images.find(img => img.id === primaryImageId) || null;
-  }, [images, primaryImageId]);
-  const primarySelectionMediaType = primaryImage?.mediaType ?? null;
-
-  // If the primary image is a valid image canvas media, expose it for use
-  const activePrimaryImage = useMemo(() => {
-    return isImageCanvasMedia(primaryImage) ? primaryImage : null;
-  }, [primaryImage]);
-
-  // Subscribes to debug log updates for live debug log panel
-  useEffect(() => {
-    const unsubscribe = subscribeToDebugLogs(setDebugLogEntries);
-    return unsubscribe;
-  }, []);
+  }, [isKlingO1FflfMode, fal.isKlingProVideoSelection, videoLastFrameImageId]);
 
   const handleModelModeChange = useCallback((mode: FalModelMode) => {
-    handleFalModelModeChange(mode);
+    fal.handleModelModeChange(mode);
     // Model mode changes can invalidate reference selections, so reset them.
     setReferenceImageIds([]);
-  }, [handleFalModelModeChange, setReferenceImageIds]);
+  }, [fal.handleModelModeChange, setReferenceImageIds]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const snapshotInputRef = useRef<HTMLInputElement>(null);
@@ -584,85 +449,12 @@ export default function App() {
     setIsFileMenuOpen(prev => !prev);
   }, []);
 
-  const openDebugLogPanel = useCallback(() => {
-    setIsDebugLogOpen(true);
-    setIsFileMenuOpen(false);
-  }, []);
-
-  const closeDebugLogPanel = useCallback(() => {
-    setIsDebugLogOpen(false);
-  }, []);
-
   const handleImportSnapshot = useCallback(() => {
     importSnapshotWithPicker(() => {
       closeFileMenu();
       snapshotInputRef.current?.click();
     });
   }, [closeFileMenu, importSnapshotWithPicker]);
-
-  const handleDismissFalJob = useCallback((jobId: string) => {
-    const timeoutId = falAutoDismissTimeouts.current.get(jobId);
-    if (timeoutId !== undefined) {
-      window.clearTimeout(timeoutId);
-      falAutoDismissTimeouts.current.delete(jobId);
-    }
-
-    setFalJobs(prev => prev.filter(job => job.id !== jobId));
-  }, [setFalJobs]);
-
-  useEffect(() => {
-    const timeoutMap = falAutoDismissTimeouts.current;
-
-    timeoutMap.forEach((timeoutId, jobId) => {
-      const job = falJobs.find(j => j.id === jobId);
-      if (!job || job.status !== 'COMPLETED') {
-        window.clearTimeout(timeoutId);
-        timeoutMap.delete(jobId);
-      }
-    });
-
-    falJobs.forEach(job => {
-      if (job.status !== 'COMPLETED') {
-        return;
-      }
-
-      if (timeoutMap.has(job.id)) {
-        return;
-      }
-
-      // Auto-dismiss completed FAL jobs after a short delay to keep the queue tidy.
-      const timeoutId = window.setTimeout(() => {
-        timeoutMap.delete(job.id);
-        setFalJobs(prev => prev.filter(j => j.id !== job.id));
-      }, 1000);
-
-      timeoutMap.set(job.id, timeoutId);
-    });
-  }, [falJobs, setFalJobs]);
-
-  useEffect(() => {
-    return () => {
-      falAutoDismissTimeouts.current.forEach(timeoutId => {
-        window.clearTimeout(timeoutId);
-      });
-      falAutoDismissTimeouts.current.clear();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isDebugLogOpen) {
-      return;
-    }
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsDebugLogOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [isDebugLogOpen]);
 
   useEffect(() => {
     if (!isResizeToastOpen) return;
@@ -688,49 +480,19 @@ export default function App() {
     appMode,
     tool,
     prompt,
-    apiProvider,
-    falModelMode,
-    falImageModelId,
-    falVideoModelId,
-    falImageSizeSelection,
-    falAspectRatioSelection,
-    falResolutionSelection,
-    falNumImages,
-    falScaleFactor,
-    falNoiseScale,
-    falCreativity,
-    falVideoDuration,
-    hailuoVariant,
-	    klingVariant,
-	    klingO1Variant,
-	    klingO1KeepAudio,
-	    kling26AudioSelection,
-	    videoNegativePrompt,
-	    wanTargetResolution,
-	    wanCreativity,
-	    images,
-    paths,
     inpaintMode,
-    referenceImageIds,
-    elementImageIds,
-    videoLastFrameImageId,
-    sourceVideoId,
-    primaryImageId,
-    activePrimaryImage,
+    apiProvider,
+    fal,
+    selection,
+    images,
+    paths,
+    videoNegativePrompt,
     setError,
     setIsLoading,
     setFalJobs,
     setState,
-    setSelectedImageIds,
-    setSelectedNoteIds,
-    setReferenceImageIds,
-    setElementImageIds,
-    setVideoLastFrameImageId,
-    setSourceVideoId,
     setToastMessage,
     setTool,
-    setFalImageSizeSelection,
-    setFalAspectRatioSelection,
   });
 
   useKeyboardShortcuts({
@@ -773,12 +535,12 @@ export default function App() {
   const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
   const usingFal = apiProvider === 'fal';
-  const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelId);
-  const isGeminiModel = !isVideoMode && falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
-  const isReveModel = !isVideoMode && falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+  const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
+  const isGeminiModel = !fal.isVideoMode && fal.falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+  const isReveModel = !fal.isVideoMode && fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
-  const isAnnotateModeDisabled = (isVideoMode && !isHailuoVideoModel) || isReveModel || isUpscaleModel;
-  const isInpaintModeDisabled = isVideoMode || isReveModel || isUpscaleModel;
+  const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isUpscaleModel;
+  const isInpaintModeDisabled = fal.isVideoMode || isReveModel || fal.isUpscaleModel;
 
   useEffect(() => {
     if (appMode === 'INPAINT' && isInpaintModeDisabled) {
@@ -795,11 +557,11 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || isKlingO1VideoModel,
+    labelReferences: isKlingModel || fal.isKlingO1VideoModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
     referenceImageIds,
-    labelElements: isKlingO1VideoModel,
+    labelElements: fal.isKlingO1VideoModel,
     elementImageIds,
     isEditMode: isKlingO1VideoInputMode,
     sourceVideoId,
@@ -812,9 +574,9 @@ export default function App() {
   // Build prompt mention suggestions for Kling based on current reference/element selections.
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
     isKlingModel,
-    isKlingO1VideoModel,
-    isKlingO1EditMode,
-    isKlingO1RefV2VMode,
+    isKlingO1VideoModel: fal.isKlingO1VideoModel,
+    isKlingO1EditMode: fal.isKlingO1EditMode,
+    isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds,
@@ -835,20 +597,20 @@ export default function App() {
     appMode,
     tool,
     prompt,
-    isKlingO1EditMode,
-    isKlingO1RefV2VMode,
+    isKlingO1EditMode: fal.isKlingO1EditMode,
+    isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
     hasSourceVideo: hasSourceVideoSelected,
-    isVideoMode,
-    isUpscaleModel,
+    isVideoMode: fal.isVideoMode,
+    isUpscaleModel: fal.isUpscaleModel,
     isSeedreamModel,
     isGeminiModel,
     isReveModel,
 	    isKlingModel,
-		    isKlingVideoModel,
-		    isKling26VideoModel,
-		    isHailuoVideoModel,
-		    falModelId,
-	    falNumImages,
+		    isKlingVideoModel: fal.isKlingVideoModel,
+		    isKling26VideoModel: fal.isKling26VideoModel,
+		    isHailuoVideoModel: fal.isHailuoVideoModel,
+		    falModelId: fal.falModelId,
+	    falNumImages: fal.falNumImages,
 	    hasInpaintMask,
     activePrimaryImage,
   });
@@ -856,54 +618,67 @@ export default function App() {
   // Derive UI controls for the prompt bar based on provider, model, and mode selections.
   const promptBarModelControls = buildPromptBarModelControls({
     apiProvider,
-    falModelId,
-    falModelMode,
-    isVideoMode,
+    falModelId: fal.falModelId,
+    falModelMode: fal.falModelMode,
+    isVideoMode: fal.isVideoMode,
     usingFal,
     isSeedreamModel,
     isGeminiModel,
     isReveModel,
     isKlingModel,
-    isUpscaleModel,
-	    isKlingVideoModel,
-		    isKlingO1VideoModel,
-		    isKling26VideoModel,
-		    isHailuoVideoModel,
-		    hailuoVariant,
-		    falVideoDuration,
-		    klingVariant,
-	    klingO1Variant,
-	    klingO1KeepAudio,
-	    kling26AudioSelection,
-	    wanTargetResolution,
-	    wanCreativity,
-	    falScaleFactor,
-	    falCreativity,
-	    falNoiseScale,
-    falImageSizeSelection,
-    falAspectRatioSelection,
-    falResolutionSelection,
-    falNumImages,
+    isUpscaleModel: fal.isUpscaleModel,
+	    isKlingVideoModel: fal.isKlingVideoModel,
+		    isKlingO1VideoModel: fal.isKlingO1VideoModel,
+		    isKling26VideoModel: fal.isKling26VideoModel,
+		    isHailuoVideoModel: fal.isHailuoVideoModel,
+		    isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
+		    hailuoVariant: fal.hailuoVariant,
+		    falVideoDuration: fal.falVideoDuration,
+		    klingVariant: fal.klingVariant,
+	    klingO1Variant: fal.klingO1Variant,
+	    klingO1KeepAudio: fal.klingO1KeepAudio,
+	    kling26AudioSelection: fal.kling26AudioSelection,
+	    wanTargetResolution: fal.wanTargetResolution,
+	    wanCreativity: fal.wanCreativity,
+	    wanAnimateVariant: fal.wanAnimateVariant,
+	    wanAnimateSteps: fal.wanAnimateSteps,
+	    wanAnimateResolution: fal.wanAnimateResolution,
+	    wanAnimateShift: fal.wanAnimateShift,
+	    wanAnimateQuality: fal.wanAnimateQuality,
+	    wanAnimateUseTurbo: fal.wanAnimateUseTurbo,
+	    falScaleFactor: fal.falScaleFactor,
+	    falCreativity: fal.falCreativity,
+	    falNoiseScale: fal.falNoiseScale,
+    falImageSizeSelection: fal.falImageSizeSelection,
+    falAspectRatioSelection: fal.falAspectRatioSelection,
+    falResolutionSelection: fal.falResolutionSelection,
+    falNumImages: fal.falNumImages,
     isLoading,
-    onHailuoVariantChange: handleHailuoVariantChange,
-    onFalVideoDurationChange: handleFalVideoDurationChange,
-    onKlingVariantChange: handleKlingVariantChange,
-	    onKlingO1VariantChange: handleKlingO1VariantChange,
-	    onKlingO1KeepAudioChange: handleKlingO1KeepAudioChange,
-	    onKling26AudioChange: handleKling26AudioChange,
-	    onWanTargetResolutionChange: handleWanTargetResolutionChange,
-	    onWanCreativityChange: handleWanCreativityChange,
-	    onFalScaleFactorChange: handleFalScaleFactorChange,
-	    onFalCreativityChange: handleFalCreativityChange,
-	    onFalNoiseScaleChange: handleFalNoiseScaleChange,
-    onFalImageSizeChange: handleFalImageSizeChange,
-    onFalAspectRatioChange: handleFalAspectRatioChange,
-    onFalResolutionChange: handleFalResolutionChange,
-    onFalNumImagesChange: handleFalNumImagesChange,
+    onHailuoVariantChange: fal.handleHailuoVariantChange,
+    onFalVideoDurationChange: fal.handleFalVideoDurationChange,
+    onKlingVariantChange: fal.handleKlingVariantChange,
+	    onKlingO1VariantChange: fal.handleKlingO1VariantChange,
+	    onKlingO1KeepAudioChange: fal.handleKlingO1KeepAudioChange,
+	    onKling26AudioChange: fal.handleKling26AudioChange,
+	    onWanTargetResolutionChange: fal.handleWanTargetResolutionChange,
+	    onWanCreativityChange: fal.handleWanCreativityChange,
+	    onWanAnimateVariantChange: fal.handleWanAnimateVariantChange,
+	    onWanAnimateStepsChange: fal.handleWanAnimateStepsChange,
+	    onWanAnimateResolutionChange: fal.handleWanAnimateResolutionChange,
+	    onWanAnimateShiftChange: fal.handleWanAnimateShiftChange,
+	    onWanAnimateQualityChange: fal.handleWanAnimateQualityChange,
+	    onWanAnimateTurboChange: fal.handleWanAnimateTurboChange,
+	    onFalScaleFactorChange: fal.handleFalScaleFactorChange,
+	    onFalCreativityChange: fal.handleFalCreativityChange,
+	    onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
+    onFalImageSizeChange: fal.handleFalImageSizeChange,
+    onFalAspectRatioChange: fal.handleFalAspectRatioChange,
+    onFalResolutionChange: fal.handleFalResolutionChange,
+    onFalNumImagesChange: fal.handleFalNumImagesChange,
     shouldValidateFalOptions,
     isNumImagesInvalid,
   });
-  const promptBarModelOptions = getPromptBarModelOptions(falModelMode);
+  const promptBarModelOptions = getPromptBarModelOptions(fal.falModelMode);
   const promptOutlineColor = shouldShowVideoNegativePrompt ? '#34d399' : undefined;
   const negativePromptOutlineColor = shouldShowVideoNegativePrompt ? '#f87171' : undefined;
 
@@ -989,7 +764,7 @@ export default function App() {
           elementImageOrderLabels={klingElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
-          tailSelectionEnabled={isKlingProVideoSelection || isKlingO1FflfMode}
+          tailSelectionEnabled={fal.isKlingProVideoSelection || isKlingO1FflfMode}
           isKlingO1VideoInputMode={isKlingO1VideoInputMode}
           isKlingO1FflfMode={isKlingO1FflfMode}
           onError={setError}
@@ -1085,15 +860,15 @@ export default function App() {
           inputDisabled={disablePromptInput}
           submitDisabled={submitDisabled}
           modelOptions={promptBarModelOptions}
-          selectedModel={falModelId}
-          onModelChange={handleFalModelChange}
+          selectedModel={fal.falModelId}
+          onModelChange={fal.handleFalModelChange}
           modelSelectDisabled={apiProvider !== 'fal' || isLoading}
-          modelMode={falModelMode}
+          modelMode={fal.falModelMode}
           onModelModeChange={handleModelModeChange}
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
           promptPlaceholder={
-            isKlingModel || isKlingO1VideoModel
+            isKlingModel || fal.isKlingO1VideoModel
               ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
               : promptPlaceholderText
           }
@@ -1103,7 +878,7 @@ export default function App() {
           negativePromptPlaceholder="Describe what the video should avoid... (optional)"
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
-          klingSuggestionsEnabled={isKlingModel || isKlingO1VideoModel}
+          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
         />

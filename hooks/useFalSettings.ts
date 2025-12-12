@@ -15,6 +15,7 @@ import {
   KLING_O1_VIDEO_REF_V2V_MODEL_ID,
   KLING_O1_VIDEO_FFLF_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
+  WAN_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
@@ -39,6 +40,11 @@ import type {
   Kling26AudioSelectionValue,
   KlingO1Variant,
   KlingVariant,
+  WanAnimateQualitySelectionValue,
+  WanAnimateResolutionSelectionValue,
+  WanAnimateShiftSelectionValue,
+  WanAnimateStepsSelectionValue,
+  WanAnimateVariant,
   WanCreativity,
   WanTargetResolution,
 } from '../services/modelConfig';
@@ -54,6 +60,7 @@ type FalDerivedState = {
   isKlingO1VideoModel: boolean;
   isKling26VideoModel: boolean;
   isHailuoVideoModel: boolean;
+  isWanAnimateVideoModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -71,6 +78,12 @@ type FalHandlers = {
   handleKling26AudioChange: (value: string) => void;
   handleWanTargetResolutionChange: (value: string) => void;
   handleWanCreativityChange: (value: string) => void;
+  handleWanAnimateVariantChange: (value: string) => void;
+  handleWanAnimateStepsChange: (value: string) => void;
+  handleWanAnimateResolutionChange: (value: string) => void;
+  handleWanAnimateShiftChange: (value: string) => void;
+  handleWanAnimateQualityChange: (value: string) => void;
+  handleWanAnimateTurboChange: (value: boolean) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -92,6 +105,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   kling26AudioSelection: Kling26AudioSelectionValue;
   wanTargetResolution: WanTargetResolution;
   wanCreativity: WanCreativity;
+  wanAnimateVariant: WanAnimateVariant;
+  wanAnimateSteps: WanAnimateStepsSelectionValue;
+  wanAnimateResolution: WanAnimateResolutionSelectionValue;
+  wanAnimateShift: WanAnimateShiftSelectionValue;
+  wanAnimateQuality: WanAnimateQualitySelectionValue;
+  wanAnimateUseTurbo: boolean;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -110,6 +129,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setKling26AudioSelection: Dispatch<SetStateAction<Kling26AudioSelectionValue>>;
   setWanTargetResolution: Dispatch<SetStateAction<WanTargetResolution>>;
   setWanCreativity: Dispatch<SetStateAction<WanCreativity>>;
+  setWanAnimateVariant: Dispatch<SetStateAction<WanAnimateVariant>>;
+  setWanAnimateSteps: Dispatch<SetStateAction<WanAnimateStepsSelectionValue>>;
+  setWanAnimateResolution: Dispatch<SetStateAction<WanAnimateResolutionSelectionValue>>;
+  setWanAnimateShift: Dispatch<SetStateAction<WanAnimateShiftSelectionValue>>;
+  setWanAnimateQuality: Dispatch<SetStateAction<WanAnimateQualitySelectionValue>>;
+  setWanAnimateUseTurbo: Dispatch<SetStateAction<boolean>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -132,6 +157,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [kling26AudioSelection, setKling26AudioSelection] = useState<Kling26AudioSelectionValue>('placeholder');
   const [wanTargetResolution, setWanTargetResolution] = useState<WanTargetResolution>('720p');
   const [wanCreativity, setWanCreativity] = useState<WanCreativity>(1);
+  const [wanAnimateVariant, setWanAnimateVariant] = useState<WanAnimateVariant>('replace');
+  const [wanAnimateSteps, setWanAnimateSteps] = useState<WanAnimateStepsSelectionValue>('20');
+  const [wanAnimateResolution, setWanAnimateResolution] = useState<WanAnimateResolutionSelectionValue>('480p');
+  const [wanAnimateShift, setWanAnimateShift] = useState<WanAnimateShiftSelectionValue>('5.0');
+  const [wanAnimateQuality, setWanAnimateQuality] = useState<WanAnimateQualitySelectionValue>('high');
+  const [wanAnimateUseTurbo, setWanAnimateUseTurbo] = useState<boolean>(false);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -149,6 +180,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelId);
   const isKling26VideoModel = isVideoMode && falVideoModelId === KLING_26_VIDEO_MODEL_ID;
   const isHailuoVideoModel = isVideoMode && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+  const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -322,6 +354,36 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWanCreativity(clamped as WanCreativity);
   }, []);
 
+  const handleWanAnimateVariantChange = useCallback((value: string) => {
+    setWanAnimateVariant(value === 'move' ? 'move' : 'replace');
+  }, []);
+
+  const handleWanAnimateStepsChange = useCallback((value: string) => {
+    if (value === '10' || value === '20' || value === '30' || value === '40') {
+      setWanAnimateSteps(value);
+    }
+  }, []);
+
+  const handleWanAnimateResolutionChange = useCallback((value: string) => {
+    if (value === '480p' || value === '580p' || value === '720p') {
+      setWanAnimateResolution(value);
+    }
+  }, []);
+
+  const handleWanAnimateShiftChange = useCallback((value: string) => {
+    if (value === '5.0' || value === '6.0' || value === '7.0' || value === '8.0' || value === '9.0' || value === '10.0') {
+      setWanAnimateShift(value);
+    }
+  }, []);
+
+  const handleWanAnimateQualityChange = useCallback((value: string) => {
+    setWanAnimateQuality(value === 'maximum' ? 'maximum' : 'high');
+  }, []);
+
+  const handleWanAnimateTurboChange = useCallback((value: boolean) => {
+    setWanAnimateUseTurbo(Boolean(value));
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -389,6 +451,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     kling26AudioSelection,
     wanTargetResolution,
     wanCreativity,
+    wanAnimateVariant,
+    wanAnimateSteps,
+    wanAnimateResolution,
+    wanAnimateShift,
+    wanAnimateQuality,
+    wanAnimateUseTurbo,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -401,6 +469,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isKlingO1VideoModel,
     isKling26VideoModel,
     isHailuoVideoModel,
+    isWanAnimateVideoModel,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,
@@ -415,6 +484,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleKling26AudioChange,
     handleWanTargetResolutionChange,
     handleWanCreativityChange,
+    handleWanAnimateVariantChange,
+    handleWanAnimateStepsChange,
+    handleWanAnimateResolutionChange,
+    handleWanAnimateShiftChange,
+    handleWanAnimateQualityChange,
+    handleWanAnimateTurboChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -433,6 +508,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setKling26AudioSelection,
     setWanTargetResolution,
     setWanCreativity,
+    setWanAnimateVariant,
+    setWanAnimateSteps,
+    setWanAnimateResolution,
+    setWanAnimateShift,
+    setWanAnimateQuality,
+    setWanAnimateUseTurbo,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,
