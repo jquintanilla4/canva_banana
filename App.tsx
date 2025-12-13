@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
+import { RecordingOverlay } from './components/RecordingOverlay';
 import {
   Tool,
   InpaintMode,
@@ -38,6 +39,8 @@ import { useFalSettings } from './hooks/useFalSettings';
 import { useSnapshotIO } from './hooks/useSnapshotIO';
 import { useCanvasMediaActions } from './hooks/useCanvasMediaActions';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useAudioRecording } from './hooks/useAudioRecording';
+import { generateWaveformImage, loadAudioFromBlob } from './services/audioService';
 import { useGenerationGuards } from './hooks/useGenerationGuards';
 import { useImageResize } from './hooks/useImageResize';
 import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
@@ -127,6 +130,15 @@ export default function App() {
 
   // FAL model and option state/handlers (image/video mode, variants, sliders, etc.)
   const fal = useFalSettings({ apiProvider });
+
+  // Audio recording state
+  const {
+    isRecording,
+    recordingDuration,
+    startRecording,
+    stopRecording,
+    error: recordingError,
+  } = useAudioRecording();
 
   const {
     videoNegativePrompt,
@@ -378,6 +390,82 @@ export default function App() {
     setZoomToFitTrigger(c => c + 1);
   }, []);
 
+  // Handle audio recording toggle
+  const handleRecordToggle = useCallback(async () => {
+    if (isRecording) {
+      const audioBlob = await stopRecording();
+      if (audioBlob) {
+        try {
+          // Generate waveform from the recording
+          const displayWidth = 400;
+          const displayHeight = 80;
+          const audioElement = await loadAudioFromBlob(audioBlob);
+          const { dataUrl: waveformImageData, duration } = await generateWaveformImage(
+            audioBlob,
+            displayWidth,
+            displayHeight
+          );
+
+          // Create waveform image element
+          const waveformImg = new Image();
+          await new Promise<void>((resolve, reject) => {
+            waveformImg.onload = () => resolve();
+            waveformImg.onerror = () => reject(new Error('Failed to load waveform image'));
+            waveformImg.src = waveformImageData;
+          });
+
+          // Create the audio file
+          const file = new File([audioBlob], `recording-${Date.now()}.webm`, { type: audioBlob.type });
+
+          // Add to canvas at center
+          const newCanvasAudio = {
+            id: crypto.randomUUID(),
+            element: waveformImg,
+            mediaType: 'audio' as const,
+            x: (window.innerWidth / 2) - (displayWidth / 2),
+            y: (window.innerHeight / 2) - (displayHeight / 2),
+            width: displayWidth,
+            height: displayHeight,
+            rotation: 0,
+            naturalWidth: displayWidth,
+            naturalHeight: displayHeight,
+            file,
+            isPlaying: false,
+            hasAudio: true,
+            audioElement,
+            waveformImageData,
+            audioDuration: duration,
+            currentPlaybackTime: 0,
+            metadata: { source: 'imported' as const },
+          };
+
+          setState(prevState => ({
+            ...prevState,
+            images: [...prevState.images, newCanvasAudio],
+          }));
+          setSelectedImageIds([newCanvasAudio.id]);
+          setSelectedNoteIds([]);
+          setReferenceImageIds([]);
+          setTool(Tool.SELECTION);
+          setToastMessage('Recording saved');
+          setTimeout(() => setToastMessage(null), 2000);
+        } catch (err) {
+          console.error('Failed to process recording:', err);
+          setError('Failed to process recording.');
+        }
+      }
+    } else {
+      await startRecording();
+    }
+  }, [isRecording, stopRecording, startRecording, setState, setTool]);
+
+  // Propagate recording errors to main error state
+  useEffect(() => {
+    if (recordingError) {
+      setError(recordingError);
+    }
+  }, [recordingError]);
+
   // Allow stacking order tweaks without re-rendering everything else.
   const handleImageOrderChange = useCallback((imageId: string, direction: 'up' | 'down') => {
     setState(prevState => {
@@ -507,6 +595,7 @@ export default function App() {
     requestZoomIn,
     requestZoomOut,
     onDelete: handleDelete,
+    onRecordToggle: handleRecordToggle,
   });
 
   const handleUploadClick = () => {
@@ -694,8 +783,8 @@ export default function App() {
   // TSX (React with Tailwind CSS utility classes)
   return (
     <div className="h-screen w-screen bg-gray-800 text-white flex flex-col overflow-hidden">
-      {/* Hidden file input for image/video uploads */}
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*,video/*" className="hidden" />
+      {/* Hidden file input for image/video/audio uploads */}
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*,video/*,audio/*" className="hidden" />
       {/* Hidden file input for snapshot imports */}
       <input
         type="file"
@@ -747,8 +836,13 @@ export default function App() {
           isBackgroundRemovalLoading={isRemovingBackground}
           isAnnotateModeDisabled={isAnnotateModeDisabled}
           isInpaintModeDisabled={isInpaintModeDisabled}
+          isRecording={isRecording}
+          onRecordToggle={handleRecordToggle}
         />
       )}
+
+      {/* Recording overlay */}
+      <RecordingOverlay duration={recordingDuration} visible={isRecording} />
 
       {/* Main drawing area */}
       <main className="relative flex-1 min-h-0">

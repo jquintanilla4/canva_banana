@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode } from '../types';
 import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
+import { formatDuration } from '../services/audioService';
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon } from './Icons';
 
 interface CanvasProps {
@@ -265,6 +266,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const isVideoImage = (img: CanvasImage): img is CanvasImage & { element: HTMLVideoElement } =>
     img.mediaType === 'video';
 
+  const isAudioImage = (img: CanvasImage): img is CanvasImage & { audioElement: HTMLAudioElement } =>
+    img.mediaType === 'audio' && !!img.audioElement;
+
   const getNoteAtPoint = useCallback((point: Point): CanvasNote | null => {
     for (let i = notes.length - 1; i >= 0; i--) {
       const note = notes[i];
@@ -365,34 +369,55 @@ export const Canvas: React.FC<CanvasProps> = ({
     return lines;
   };
 
-  const toggleVideoPlayback = useCallback((videoId: string) => {
-    const target = images.find(img => img.id === videoId && isVideoImage(img));
-    if (!target) {
+  const toggleMediaPlayback = useCallback((mediaId: string) => {
+    const target = images.find(img => img.id === mediaId);
+    if (!target) return;
+
+    // Handle video playback
+    if (isVideoImage(target)) {
+      const videoElement = target.element;
+      const nextIsPlaying = !target.isPlaying;
+      videoElement.loop = true;
+      videoElement.playsInline = true;
+
+      if (nextIsPlaying) {
+        const playPromise = videoElement.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(err => console.error('Failed to play video', err));
+        }
+      } else {
+        videoElement.pause();
+      }
+
+      const updatedImages = images.map(img => {
+        if (img.id !== mediaId) return img;
+        return { ...img, isPlaying: nextIsPlaying };
+      });
+      onImagesChange(updatedImages);
+      onCommit({ images: updatedImages });
       return;
     }
 
-    const videoElement = target.element;
-    const nextIsPlaying = !target.isPlaying;
-    videoElement.loop = true;
-    videoElement.playsInline = true;
+    // Handle audio playback
+    if (isAudioImage(target)) {
+      const audioElement = target.audioElement;
+      const nextIsPlaying = !target.isPlaying;
+      audioElement.loop = true;
 
-    if (nextIsPlaying) {
-      const playPromise = videoElement.play();
-      if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(err => console.error('Failed to play video', err));
+      if (nextIsPlaying) {
+        audioElement.play().catch(err => console.error('Failed to play audio', err));
+      } else {
+        audioElement.pause();
       }
-    } else {
-      videoElement.pause();
-    }
 
-    const updatedImages = images.map(img => {
-      if (img.id !== videoId) return img;
-      return { ...img, isPlaying: nextIsPlaying };
-    });
-    onImagesChange(updatedImages);
-    // Snapshot the exact updated list so history reflects the single-click toggle immediately.
-    onCommit({ images: updatedImages });
-  }, [images, isVideoImage, onCommit, onImagesChange]);
+      const updatedImages = images.map(img => {
+        if (img.id !== mediaId) return img;
+        return { ...img, isPlaying: nextIsPlaying };
+      });
+      onImagesChange(updatedImages);
+      onCommit({ images: updatedImages });
+    }
+  }, [images, isVideoImage, isAudioImage, onCommit, onImagesChange]);
 
   const fitTextWithinBox = (
     context: CanvasRenderingContext2D,
@@ -494,6 +519,29 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       ctx.drawImage(image.element, baseX, baseY, image.width, image.height);
 
+      // Draw playhead for audio objects
+      if (image.mediaType === 'audio' && image.audioDuration && image.currentPlaybackTime !== undefined) {
+        const progress = image.currentPlaybackTime / image.audioDuration;
+        const playheadX = baseX + (image.width * progress);
+
+        // Draw playhead line
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2 / scale;
+        ctx.beginPath();
+        ctx.moveTo(playheadX, baseY);
+        ctx.lineTo(playheadX, baseY + image.height);
+        ctx.stroke();
+
+        // Draw playhead triangle marker at top
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(playheadX, baseY);
+        ctx.lineTo(playheadX - 6 / scale, baseY - 8 / scale);
+        ctx.lineTo(playheadX + 6 / scale, baseY - 8 / scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+
       const metadata = image.metadata;
       const promptText = metadata?.prompt?.trim() ?? '';
       const modelLabel = metadata?.modelLabel?.trim() ?? '';
@@ -591,6 +639,43 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([6 / scale, 4 / scale]);
         ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
         ctx.setLineDash([]);
+      } else if (selectedImageIds.includes(image.id) && image.mediaType === 'audio') {
+        ctx.strokeStyle = '#eab308'; // yellow-500 for audio
+        ctx.lineWidth = 4 / scale;
+        ctx.setLineDash([6 / scale, 4 / scale]);
+        ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
+        ctx.setLineDash([]);
+
+        // Draw audio duration badge
+        if (image.audioDuration) {
+          const currentTime = image.currentPlaybackTime ?? 0;
+          const totalTime = image.audioDuration;
+          const durationText = image.isPlaying
+            ? `${formatDuration(currentTime)}/${formatDuration(totalTime)}`
+            : formatDuration(totalTime);
+
+          const badgePaddingX = 8 / scale;
+          const badgePaddingY = 6 / scale;
+          const badgeFontSize = 24 / scale;
+          ctx.font = `bold ${badgeFontSize}px sans-serif`;
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'left';
+          const textWidth = ctx.measureText(durationText).width;
+          const badgeWidth = textWidth + badgePaddingX * 2;
+          const badgeHeight = badgeFontSize + badgePaddingY * 2;
+          const badgeX = baseX - padding;
+          const badgeY = baseY - padding - badgeHeight - 2 / scale;
+
+          // Yellow background to match selection
+          ctx.fillStyle = 'rgba(234, 179, 8, 0.95)'; // yellow-500
+          ctx.beginPath();
+          ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4 / scale);
+          ctx.fill();
+
+          // Dark text for contrast
+          ctx.fillStyle = '#000000';
+          ctx.fillText(durationText, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
+        }
       } else if (selectedImageIds.includes(image.id)) {
         ctx.strokeStyle = '#0ea5e9'; // sky-500
         ctx.lineWidth = 4 / scale;
@@ -1094,21 +1179,34 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [draw]);
 
   useEffect(() => {
-    const hasPlayingVideo = images.some(img => img.mediaType === 'video' && img.isPlaying);
-    if (!hasPlayingVideo) {
+    const hasPlayingMedia = images.some(img =>
+      (img.mediaType === 'video' || img.mediaType === 'audio') && img.isPlaying
+    );
+    if (!hasPlayingMedia) {
       return;
     }
 
     let rafId = requestAnimationFrame(() => {});
 
     const tick = () => {
+      // Update currentPlaybackTime for playing audio items
+      const needsUpdate = images.some(img => img.mediaType === 'audio' && img.isPlaying && img.audioElement);
+      if (needsUpdate) {
+        const updatedImages = images.map(img => {
+          if (img.mediaType === 'audio' && img.isPlaying && img.audioElement) {
+            return { ...img, currentPlaybackTime: img.audioElement.currentTime };
+          }
+          return img;
+        });
+        onImagesChange(updatedImages);
+      }
       draw();
       rafId = requestAnimationFrame(tick);
     };
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [draw, images]);
+  }, [draw, images, onImagesChange]);
 
   useEffect(() => {
     images.forEach(img => {
@@ -1921,7 +2019,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     return images.find(img => img.id === targetId) || null;
   }, [images, primarySelectedImageId, selectedImageIds.length]);
   const selectedImageIsVideo = selectedImage?.mediaType === 'video';
+  const selectedImageIsAudio = selectedImage?.mediaType === 'audio';
   const selectedVideoIsPlaying = selectedImageIsVideo && selectedImage?.isPlaying;
+  const selectedAudioIsPlaying = selectedImageIsAudio && selectedImage?.isPlaying;
+  const selectedMediaIsPlaying = selectedVideoIsPlaying || selectedAudioIsPlaying;
   const selectedImagePrompt = selectedImage?.metadata?.prompt?.trim() ?? '';
   const selectedImageHasGeneration = Boolean(selectedImage?.metadata?.generation);
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
@@ -2159,13 +2260,13 @@ export const Canvas: React.FC<CanvasProps> = ({
               </ActionButton>
             </>
           )}
-          {selectedImageIsVideo && (
+          {(selectedImageIsVideo || selectedImageIsAudio) && (
             <ActionButton
-              onClick={() => toggleVideoPlayback(selectedImage.id)}
+              onClick={() => toggleMediaPlayback(selectedImage.id)}
               disabled={false}
-              title={selectedVideoIsPlaying ? 'Pause Video' : 'Play Video'}
+              title={selectedMediaIsPlaying ? 'Pause' : 'Play'}
             >
-              {selectedVideoIsPlaying ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
+              {selectedMediaIsPlaying ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
             </ActionButton>
           )}
           {selectedImageIsVideo && (
@@ -2177,13 +2278,17 @@ export const Canvas: React.FC<CanvasProps> = ({
               <SnapshotIcon className="w-4 h-4" />
             </ActionButton>
           )}
-          <ActionButton onClick={() => onStartTransform(selectedImage.id)} disabled={false} title="Transform Image (Shift for free transform)">
+          <ActionButton
+            onClick={() => onStartTransform(selectedImage.id)}
+            disabled={selectedImageIsAudio}
+            title={selectedImageIsAudio ? 'Transform is not available for audio' : 'Transform Image (Shift for free transform)'}
+          >
             <TransformIcon className="w-4 h-4" />
           </ActionButton>
           <ActionButton
             onClick={() => onStartCrop(selectedImage.id)}
-            disabled={selectedImageIsVideo}
-            title={selectedImageIsVideo ? 'Cropping is only available for images' : 'Crop Image'}
+            disabled={selectedImageIsVideo || selectedImageIsAudio}
+            title={selectedImageIsVideo || selectedImageIsAudio ? 'Cropping is not available for this media type' : 'Crop Image'}
           >
             <CropIcon className="w-4 h-4" />
           </ActionButton>

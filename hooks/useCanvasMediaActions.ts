@@ -8,6 +8,7 @@ import {
   Tool,
 } from '../types';
 import { getNaturalSize, loadMediaFromBlob } from '../services/mediaService';
+import { loadAudioFromBlob, generateWaveformImage } from '../services/audioService';
 import { removeBackground as removeFalBackground } from '../services/falService';
 import type { AppState, CommitOverrides } from './useCanvasHistory';
 
@@ -69,10 +70,10 @@ export function useCanvasMediaActions({
   const [transformMode, setTransformMode] = useState<TransformModeState | null>(null);
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
 
-  // Adds dropped/uploaded images and videos to the canvas and selects the last one placed.
+  // Adds dropped/uploaded images, videos, and audio to the canvas and selects the last one placed.
   const handleFilesDrop = useCallback((files: FileList, point: Point) => {
     const mediaFiles = Array.from(files).filter(file =>
-      file.type.startsWith('image/') || file.type.startsWith('video/')
+      file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/')
     );
     if (mediaFiles.length === 0) return;
 
@@ -82,6 +83,7 @@ export function useCanvasMediaActions({
 
     const processFile = async (file: File, index: number) => {
       const isVideo = file.type.startsWith('video/');
+      const isAudio = file.type.startsWith('audio/');
 
       if (isVideo) {
         // Handle video file
@@ -127,6 +129,54 @@ export function useCanvasMediaActions({
           lastAddedMediaId = newCanvasVideo.id;
         } catch (err) {
           console.error('Failed to load video:', err);
+        }
+      } else if (isAudio) {
+        // Handle audio file
+        try {
+          const audioElement = await loadAudioFromBlob(file);
+          const duration = audioElement.duration;
+
+          // Generate waveform image
+          const displayWidth = 400;
+          const displayHeight = 80;
+          const { dataUrl: waveformImageData } = await generateWaveformImage(
+            file,
+            displayWidth,
+            displayHeight
+          );
+
+          // Create waveform image element for canvas rendering
+          const waveformImg = new Image();
+          await new Promise<void>((resolve, reject) => {
+            waveformImg.onload = () => resolve();
+            waveformImg.onerror = () => reject(new Error('Failed to load waveform image'));
+            waveformImg.src = waveformImageData;
+          });
+
+          const newCanvasAudio: CanvasImage = {
+            id: crypto.randomUUID(),
+            element: waveformImg,
+            mediaType: 'audio',
+            x: point.x - (displayWidth / 2) + (index * 20),
+            y: point.y - (displayHeight / 2) + (index * 20),
+            width: displayWidth,
+            height: displayHeight,
+            rotation: 0,
+            naturalWidth: displayWidth,
+            naturalHeight: displayHeight,
+            file: file,
+            isPlaying: false,
+            hasAudio: true,
+            audioElement,
+            waveformImageData,
+            audioDuration: duration,
+            currentPlaybackTime: 0,
+            metadata: { source: 'imported' },
+          };
+          newMedia.push(newCanvasAudio);
+          lastAddedMediaId = newCanvasAudio.id;
+        } catch (err) {
+          console.error('Failed to load audio:', err);
         }
       } else {
         // Handle image file
@@ -199,6 +249,23 @@ export function useCanvasMediaActions({
     const imageToDownload = images.find(img => img.id === primaryImageId);
     if (!imageToDownload) return;
 
+    // Handle audio downloads
+    if (imageToDownload.mediaType === 'audio' && imageToDownload.audioElement) {
+      const objectUrl = imageToDownload.file ? URL.createObjectURL(imageToDownload.file) : null;
+      if (!objectUrl) {
+        setError('No downloadable source found for this audio.');
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = imageToDownload.file.name || 'audio.webm';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      return;
+    }
+
     const mediaElement = imageToDownload.element;
     const fallbackHref = mediaElement instanceof HTMLVideoElement
       ? (mediaElement.currentSrc || mediaElement.src)
@@ -212,7 +279,12 @@ export function useCanvasMediaActions({
 
     const link = document.createElement('a');
     link.href = href;
-    link.download = imageToDownload.file.name || (imageToDownload.mediaType === 'video' ? 'video.mp4' : 'download.png');
+    const getDownloadName = () => {
+      if (imageToDownload.file.name) return imageToDownload.file.name;
+      if (imageToDownload.mediaType === 'video') return 'video.mp4';
+      return 'download.png';
+    };
+    link.download = getDownloadName();
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

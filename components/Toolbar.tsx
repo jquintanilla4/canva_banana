@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tool, InpaintMode, AppMode } from '../types';
-import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon } from './Icons';
+import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon } from './Icons';
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -33,6 +33,8 @@ interface ToolbarProps {
   isResizeDisabled: boolean;
   isAnnotateModeDisabled?: boolean;
   isInpaintModeDisabled?: boolean;
+  isRecording: boolean;
+  onRecordToggle: () => void;
 }
 
 const ToolButton: React.FC<{
@@ -122,6 +124,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isResizeDisabled,
   isAnnotateModeDisabled = false,
   isInpaintModeDisabled = false,
+  isRecording,
+  onRecordToggle,
 }) => {
   // Main control bar: switches modes/tools and exposes canvas actions (undo, clear, upload, background removal).
   const isBrushToolActive = activeTool === Tool.BRUSH;
@@ -170,6 +174,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
          <ToolButton label="Note (N)" isActive={activeTool === Tool.NOTE} onClick={() => onToolChange(Tool.NOTE)}>
           <NoteIcon className="w-4 h-4" />
         </ToolButton>
+        <button
+          onClick={onRecordToggle}
+          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
+            isRecording ? 'bg-red-600 animate-pulse text-white' : 'bg-gray-700 hover:bg-gray-600 text-white'
+          }`}
+          title={isRecording ? 'Stop Recording' : 'Record Audio (M)'}
+        >
+          {isRecording ? <StopIcon className="w-4 h-4" /> : <MicrophoneIcon className="w-4 h-4" />}
+        </button>
         <ToolButton label="Brush (B)" isActive={activeTool === Tool.BRUSH} onClick={() => onToolChange(Tool.BRUSH)} disabled={appMode === 'CANVAS'}>
           <BrushIcon className="w-4 h-4" />
         </ToolButton>

@@ -5,8 +5,11 @@ import { getImageBounds, getImageRotation } from '../utils/canvasGeometry';
 export const isVideoFileType = (fileType: string): boolean =>
   typeof fileType === 'string' && /video\//.test(fileType);
 
+export const isAudioFileType = (fileType: string): boolean =>
+  typeof fileType === 'string' && /audio\//.test(fileType);
+
 export const getMediaTypeFromFileType = (fileType: string): CanvasMediaType =>
-  (isVideoFileType(fileType) ? 'video' : 'image');
+  isVideoFileType(fileType) ? 'video' : isAudioFileType(fileType) ? 'audio' : 'image';
 
 const VIDEO_OBJECT_URL_KEY = '__videoObjectUrl' as const;
 type VideoWithObjectUrl = HTMLVideoElement & { [key in typeof VIDEO_OBJECT_URL_KEY]?: string };

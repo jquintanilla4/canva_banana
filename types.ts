@@ -42,7 +42,7 @@ export interface CanvasImageMetadata {
   generation?: GenerationInputs;
 }
 
-export type CanvasMediaType = 'image' | 'video';
+export type CanvasMediaType = 'image' | 'video' | 'audio';
 
 export type FalImageSizePreset =
   | 'square_hd'
@@ -139,6 +139,11 @@ export interface CanvasImage {
   isPlaying?: boolean;
   hasAudio?: boolean;
   metadata?: CanvasImageMetadata;
+  // Audio-specific properties
+  audioElement?: HTMLAudioElement;
+  waveformImageData?: string;
+  audioDuration?: number;
+  currentPlaybackTime?: number;
 }
 
 export interface CanvasNote {

@@ -7,6 +7,7 @@ type KeyboardShortcutsArgs = {
   requestZoomIn: () => void;
   requestZoomOut: () => void;
   onDelete?: () => void;
+  onRecordToggle?: () => void;
 };
 
 export function useKeyboardShortcuts({
@@ -15,6 +16,7 @@ export function useKeyboardShortcuts({
   requestZoomIn,
   requestZoomOut,
   onDelete,
+  onRecordToggle,
 }: KeyboardShortcutsArgs) {
   useEffect(() => {
     // Guard against hijacking shortcuts while typing in inputs.
@@ -73,6 +75,11 @@ export function useKeyboardShortcuts({
         setTool(Tool.ERASE);
         return;
       }
+      if (key === 'm' && onRecordToggle) {
+        event.preventDefault();
+        onRecordToggle();
+        return;
+      }
       if (!event.metaKey && !event.ctrlKey && (key === '-' || key === '_')) {
         event.preventDefault();
         requestZoomOut();
@@ -88,5 +95,5 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [onGenerate, requestZoomIn, requestZoomOut, setTool]);
+  }, [onGenerate, onRecordToggle, requestZoomIn, requestZoomOut, setTool]);
 }
