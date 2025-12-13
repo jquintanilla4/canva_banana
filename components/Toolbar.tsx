@@ -186,7 +186,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <ToolButton label="Brush (B)" isActive={activeTool === Tool.BRUSH} onClick={() => onToolChange(Tool.BRUSH)} disabled={appMode === 'CANVAS'}>
           <BrushIcon className="w-4 h-4" />
         </ToolButton>
-        <ToolButton label="Erase (E)" isActive={activeTool === Tool.ERASE} onClick={() => onToolChange(Tool.ERASE)}>
+        <ToolButton
+          label={appMode === 'CANVAS' ? 'Erase (E) • Only available in Annotate/Inpaint mode' : 'Erase (E)'}
+          isActive={activeTool === Tool.ERASE}
+          onClick={() => onToolChange(Tool.ERASE)}
+          disabled={appMode === 'CANVAS'}
+        >
           <EraseIcon className="w-4 h-4" />
         </ToolButton>
         <button

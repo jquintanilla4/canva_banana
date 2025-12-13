@@ -591,6 +591,7 @@ export default function App() {
 
   useKeyboardShortcuts({
     onGenerate: handleGenerate,
+    appMode,
     setTool,
     requestZoomIn,
     requestZoomOut,

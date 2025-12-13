@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { Tool } from '../types';
+import { AppMode, Tool } from '../types';
 
 type KeyboardShortcutsArgs = {
   onGenerate: () => void;
+  appMode: AppMode;
   setTool: (tool: Tool) => void;
   requestZoomIn: () => void;
   requestZoomOut: () => void;
@@ -12,6 +13,7 @@ type KeyboardShortcutsArgs = {
 
 export function useKeyboardShortcuts({
   onGenerate,
+  appMode,
   setTool,
   requestZoomIn,
   requestZoomOut,
@@ -68,11 +70,15 @@ export function useKeyboardShortcuts({
         return;
       }
       if (key === 'b') {
-        setTool(Tool.BRUSH);
+        if (appMode !== 'CANVAS') {
+          setTool(Tool.BRUSH);
+        }
         return;
       }
       if (key === 'e') {
-        setTool(Tool.ERASE);
+        if (appMode !== 'CANVAS') {
+          setTool(Tool.ERASE);
+        }
         return;
       }
       if (key === 'm' && onRecordToggle) {
@@ -95,5 +101,5 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [onGenerate, onRecordToggle, requestZoomIn, requestZoomOut, setTool]);
+  }, [appMode, onGenerate, onRecordToggle, requestZoomIn, requestZoomOut, setTool]);
 }
