@@ -2034,7 +2034,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     /* Canvas needs focus for keyboard shortcuts (ESC deselect) */
     <div
       ref={containerRef}
-      className="relative w-full h-full min-h-0 bg-black overflow-hidden"
+      className="relative w-full h-full min-h-0 bg-black overflow-hidden outline-none focus:outline-none"
       tabIndex={0}
       style={{
         backgroundImage,
