@@ -14,6 +14,7 @@ import { clearDebugLogs } from './services/debugLog';
 import {
   GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
+  ONE_TO_ALL_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   getFalModelLabel,
   getMaxReferenceImages,
@@ -164,6 +165,11 @@ export default function App() {
       const totalLimit = baseLimit + 1;
       const variantLabel = fal.isKlingO1EditMode ? 'Kling O1 Edit' : fal.isKlingO1RefV2VMode ? 'Kling O1 Ref-v2v' : 'Kling O1 Video';
       setToastMessage(`${variantLabel} supports up to ${totalLimit} images total (source + references + elements). Slots remaining: ${Math.max(0, maxReferenceImages)} for references/elements.`);
+      setTimeout(() => setToastMessage(null), 2000);
+      return;
+    }
+    if (fal.falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID && maxReferenceImages === 0) {
+      setToastMessage('Tip: Shift-click toggles reference selection. For One-to-All Animation, click the pose video, then click the image to animate (Cmd/Ctrl+click for multi-select).');
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
@@ -628,7 +634,7 @@ export default function App() {
     isKlingModel,
     isUpscaleModel: fal.isUpscaleModel,
 	    isKlingVideoModel: fal.isKlingVideoModel,
-		    isKlingO1VideoModel: fal.isKlingO1VideoModel,
+	    isKlingO1VideoModel: fal.isKlingO1VideoModel,
 		    isKling26VideoModel: fal.isKling26VideoModel,
 		    isHailuoVideoModel: fal.isHailuoVideoModel,
 		    isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
@@ -643,6 +649,7 @@ export default function App() {
 	    wanAnimateVariant: fal.wanAnimateVariant,
 	    wanAnimateSteps: fal.wanAnimateSteps,
 	    wanAnimateResolution: fal.wanAnimateResolution,
+        oneToAllAnimateResolution: fal.oneToAllAnimateResolution,
 	    wanAnimateShift: fal.wanAnimateShift,
 	    wanAnimateQuality: fal.wanAnimateQuality,
 	    wanAnimateUseTurbo: fal.wanAnimateUseTurbo,
@@ -665,6 +672,7 @@ export default function App() {
 	    onWanAnimateVariantChange: fal.handleWanAnimateVariantChange,
 	    onWanAnimateStepsChange: fal.handleWanAnimateStepsChange,
 	    onWanAnimateResolutionChange: fal.handleWanAnimateResolutionChange,
+        onOneToAllAnimateResolutionChange: fal.handleOneToAllAnimateResolutionChange,
 	    onWanAnimateShiftChange: fal.handleWanAnimateShiftChange,
 	    onWanAnimateQualityChange: fal.handleWanAnimateQualityChange,
 	    onWanAnimateTurboChange: fal.handleWanAnimateTurboChange,
@@ -767,6 +775,7 @@ export default function App() {
           tailSelectionEnabled={fal.isKlingProVideoSelection || isKlingO1FflfMode}
           isKlingO1VideoInputMode={isKlingO1VideoInputMode}
           isKlingO1FflfMode={isKlingO1FflfMode}
+          isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel}
           onError={setError}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}

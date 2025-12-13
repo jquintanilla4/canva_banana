@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import type { FalQueueJob } from '../types';
 
 type UseFalQueueJobsResult = {
   falJobs: FalQueueJob[];
-  setFalJobs: React.Dispatch<React.SetStateAction<FalQueueJob[]>>;
+  setFalJobs: Dispatch<SetStateAction<FalQueueJob[]>>;
   dismissFalJob: (jobId: string) => void;
 };
 

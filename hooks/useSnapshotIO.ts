@@ -7,8 +7,8 @@ import type {
   CanvasNote,
   InpaintMode,
   Path,
-  Tool,
 } from '../types';
+import { Tool } from '../types';
 import {
   snapshotBinaryToBlob,
   writeSnapshotBinary,
@@ -119,6 +119,7 @@ export function useSnapshotIO({
     wanAnimateVariant,
     wanAnimateSteps,
     wanAnimateResolution,
+    oneToAllAnimateResolution,
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
@@ -137,6 +138,7 @@ export function useSnapshotIO({
     setWanAnimateVariant,
     setWanAnimateSteps,
     setWanAnimateResolution,
+    setOneToAllAnimateResolution,
     setWanAnimateShift,
     setWanAnimateQuality,
     setWanAnimateUseTurbo,
@@ -178,6 +180,7 @@ export function useSnapshotIO({
       wanAnimateVariant,
       wanAnimateSteps,
       wanAnimateResolution,
+      oneToAllAnimateResolution,
       wanAnimateShift,
       wanAnimateQuality,
       wanAnimateUseTurbo,
@@ -210,6 +213,7 @@ export function useSnapshotIO({
 	    wanAnimateVariant,
 	    wanAnimateSteps,
 	    wanAnimateResolution,
+      oneToAllAnimateResolution,
 	    wanAnimateShift,
 	    wanAnimateQuality,
 	    wanAnimateUseTurbo,
@@ -377,6 +381,9 @@ export function useSnapshotIO({
 	        if (meta.wanAnimateResolution === '480p' || meta.wanAnimateResolution === '580p' || meta.wanAnimateResolution === '720p') {
 	          setWanAnimateResolution(meta.wanAnimateResolution);
 	        }
+          if (meta.oneToAllAnimateResolution === '480p' || meta.oneToAllAnimateResolution === '580p' || meta.oneToAllAnimateResolution === '720p') {
+            setOneToAllAnimateResolution(meta.oneToAllAnimateResolution);
+          }
 	        if (meta.wanAnimateShift === '5.0' || meta.wanAnimateShift === '6.0' || meta.wanAnimateShift === '7.0' || meta.wanAnimateShift === '8.0' || meta.wanAnimateShift === '9.0' || meta.wanAnimateShift === '10.0') {
 	          setWanAnimateShift(meta.wanAnimateShift);
 	        }
@@ -435,6 +442,7 @@ export function useSnapshotIO({
 	    setWanAnimateVariant,
 	    setWanAnimateSteps,
 	    setWanAnimateResolution,
+      setOneToAllAnimateResolution,
 	    setWanAnimateShift,
 	    setWanAnimateQuality,
 	    setWanAnimateUseTurbo,

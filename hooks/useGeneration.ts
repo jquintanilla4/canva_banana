@@ -8,6 +8,7 @@ import {
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
+  ONE_TO_ALL_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -139,6 +140,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wanAnimateVariant,
     wanAnimateSteps,
     wanAnimateResolution,
+    oneToAllAnimateResolution,
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
@@ -197,6 +199,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    const wanAnimateShiftForRun = falOptionsOverride.wanAnimateShift ?? wanAnimateShift;
 	    const wanAnimateQualityForRun = falOptionsOverride.wanAnimateQuality ?? wanAnimateQuality;
 	    const wanAnimateUseTurboForRun = falOptionsOverride.wanAnimateUseTurbo ?? wanAnimateUseTurbo;
+      const oneToAllAnimateResolutionForRun = falOptionsOverride.oneToAllAnimateResolution ?? oneToAllAnimateResolution;
 	    const kling26AudioOverride = falOptionsOverride.kling26Audio;
     const kling26AudioForRun = kling26AudioOverride !== undefined
       ? kling26AudioOverride
@@ -234,7 +237,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
 	    const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
 	    const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
+      const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
 	    const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
+      const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel;
 	    const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
 	    const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
 	    const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
@@ -245,14 +250,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? (falVideoDurationForRun === '10' ? '10' : '5')
         : undefined;
 	    const normalizedVideoNegativePrompt =
-	      (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel)
+	      (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel)
 	        ? videoNegativePromptForRun.trim()
 	        : '';
 	    const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
 	    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary;
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional));
-	    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1VideoInputMode && !isWanVideoInputMode;
+	    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1VideoInputMode && !isFalVideoInputMode;
 	    const generationKind: GenerationKind = overrideKind
 	      ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
 
@@ -271,23 +276,28 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
+    if (usingFal && isVideoMode && isOneToAllAnimateVideoModel && !activePrimary) {
+      setError('Select a still image to animate.');
+      return;
+    }
+
     if (isVideoMode) {
       const falJobId = crypto.randomUUID();
       const baseModelLabel = getFalModelLabel(falModelIdForRun);
       const klingO1VariantLabel = klingO1VariantForRun === 'refI2V'
         ? 'RefI2V'
         : klingO1VariantForRun.toUpperCase();
-      const jobModelLabel = isHailuoVideoModel
-        ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
-        : isKlingVideoModel
-          ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
-          : isKlingO1VideoModel
+	      const jobModelLabel = isHailuoVideoModel
+	        ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
+	        : isKlingVideoModel
+	          ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
+	          : isKlingO1VideoModel
             ? `${baseModelLabel} ${klingO1VariantLabel}`
             : isKling26VideoModel
               ? `${baseModelLabel} Pro`
-              : isWanAnimateVideoModel
-                ? `${baseModelLabel} ${wanAnimateVariantForRun === 'replace' ? 'Keep BG' : 'Replace BG'}`
-                : baseModelLabel;
+	              : isWanAnimateVideoModel
+	                ? `${baseModelLabel} ${wanAnimateVariantForRun === 'replace' ? 'Keep BG' : 'Replace BG'}`
+	                : baseModelLabel;
       const findNonOverlappingPlacement = (
         width: number,
         height: number,
@@ -351,11 +361,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Wan Animate Replace requires a still image. Capture a frame or upload an image.');
           return;
         }
+        if (isOneToAllAnimateVideoModel && primarySelection?.mediaType === 'video') {
+          setError('1-to-All Animate requires a still image. Capture a frame or upload an image.');
+          return;
+        }
 
 	        // For video-input modes (Kling O1 edit/refV2V or Wan enhancer), get source video URL; for other modes, require starting frame image
 	        let sourceVideo: CanvasImage | null = null;
 	        let sourceVideoUrlForRequest: string | undefined;
-	        if (isKlingO1VideoInputMode || isWanVideoInputMode) {
+	        if (isKlingO1VideoInputMode || isFalVideoInputMode) {
 	          sourceVideo = sourceVideoIdForRun
 	            ? images.find(img => img.id === sourceVideoIdForRun && img.mediaType === 'video')
 	            : null;
@@ -364,6 +378,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	              ? 'Select a video on the canvas to enhance.'
 	              : isWanAnimateVideoModel
 	                ? 'Select a video on the canvas to replace a character.'
+                  : isOneToAllAnimateVideoModel
+                    ? 'Select a video on the canvas to drive the animation.'
 	                : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
 	          }
 	          if (isWanVisionEnhancerVideoModel) {
@@ -387,9 +403,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
         } else if (!activePrimary) {
           throw new Error('Unable to find the starting frame for this video.');
         }
-	        const videoSourceImage = isWanAnimateVideoModel
+	        const videoSourceImage = (isWanAnimateVideoModel || isOneToAllAnimateVideoModel)
 	          ? activePrimary?.element as HTMLImageElement
-	          : (isKlingO1VideoInputMode || isWanVideoInputMode) ? null : activePrimary?.element as HTMLImageElement;
+	          : (isKlingO1VideoInputMode || isFalVideoInputMode) ? null : activePrimary?.element as HTMLImageElement;
         const referenceImagesForRun = referenceImageIdsForRun
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia)
@@ -436,6 +452,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ? isHailuoStandardVideoModel
           : (isKlingVideoModel || isKling26VideoModel || (isKlingO1VideoModel && !isKlingO1EditMode));
         const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
+        const oneToAllNegativePromptForRequest = isOneToAllAnimateVideoModel ? videoNegativePromptForRun.trim() : undefined;
         const negativePromptForRequest =
           (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel) && hasVideoNegativePrompt
             ? normalizedVideoNegativePrompt
@@ -444,7 +461,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const videoResult = await generateFalImageToVideo(trimmedPrompt, videoSourceImage, {
           modelId: videoModelIdForRequest,
           duration: durationForRequest,
-          negativePrompt: negativePromptForRequest,
+          negativePrompt: isOneToAllAnimateVideoModel ? oneToAllNegativePromptForRequest : negativePromptForRequest,
+          ...(isOneToAllAnimateVideoModel ? {
+            sourceVideoUrl: sourceVideoUrlForRequest,
+            resolution: oneToAllAnimateResolutionForRun,
+          } : {}),
           ...(videoTailImageElement ? { tailImage: videoTailImageElement } : {}),
           ...(generateAudioForRequest !== undefined ? { generateAudio: generateAudioForRequest } : {}),
           ...(isWanVisionEnhancerVideoModel ? {
@@ -582,7 +603,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
                   : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameIdForMetadata ? { videoLastFrameImageId: videoLastFrameIdForMetadata } : {}),
-                ...((isKlingO1VideoInputMode || isWanVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
+	                ...((isKlingO1VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
                 falOptions: {
                   ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
                   ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
@@ -602,6 +623,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     wanAnimateShift: wanAnimateShiftForRun,
                     wanAnimateQuality: wanAnimateQualityForRun,
                     wanAnimateUseTurbo: wanAnimateUseTurboForRun,
+                  } : {}),
+                  ...(isOneToAllAnimateVideoModel ? {
+                    oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
                   } : {}),
                   ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                 },
@@ -1037,6 +1061,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	                    wanAnimateQuality: wanAnimateQualityForRun,
 	                    wanAnimateUseTurbo: wanAnimateUseTurboForRun,
 	                  } : {}),
+                    ...(isOneToAllAnimateVideoModel ? {
+                      oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
+                    } : {}),
 	                  ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
 	                  ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
 	                },

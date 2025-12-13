@@ -15,6 +15,7 @@ import {
   KLING_O1_VIDEO_REF_V2V_MODEL_ID,
   KLING_O1_VIDEO_FFLF_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
+  ONE_TO_ALL_ANIMATE_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -61,6 +62,7 @@ type FalDerivedState = {
   isKling26VideoModel: boolean;
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
+  isOneToAllAnimateVideoModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -81,6 +83,7 @@ type FalHandlers = {
   handleWanAnimateVariantChange: (value: string) => void;
   handleWanAnimateStepsChange: (value: string) => void;
   handleWanAnimateResolutionChange: (value: string) => void;
+  handleOneToAllAnimateResolutionChange: (value: string) => void;
   handleWanAnimateShiftChange: (value: string) => void;
   handleWanAnimateQualityChange: (value: string) => void;
   handleWanAnimateTurboChange: (value: boolean) => void;
@@ -108,6 +111,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wanAnimateVariant: WanAnimateVariant;
   wanAnimateSteps: WanAnimateStepsSelectionValue;
   wanAnimateResolution: WanAnimateResolutionSelectionValue;
+  oneToAllAnimateResolution: WanAnimateResolutionSelectionValue;
   wanAnimateShift: WanAnimateShiftSelectionValue;
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
@@ -132,6 +136,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWanAnimateVariant: Dispatch<SetStateAction<WanAnimateVariant>>;
   setWanAnimateSteps: Dispatch<SetStateAction<WanAnimateStepsSelectionValue>>;
   setWanAnimateResolution: Dispatch<SetStateAction<WanAnimateResolutionSelectionValue>>;
+  setOneToAllAnimateResolution: Dispatch<SetStateAction<WanAnimateResolutionSelectionValue>>;
   setWanAnimateShift: Dispatch<SetStateAction<WanAnimateShiftSelectionValue>>;
   setWanAnimateQuality: Dispatch<SetStateAction<WanAnimateQualitySelectionValue>>;
   setWanAnimateUseTurbo: Dispatch<SetStateAction<boolean>>;
@@ -160,6 +165,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wanAnimateVariant, setWanAnimateVariant] = useState<WanAnimateVariant>('replace');
   const [wanAnimateSteps, setWanAnimateSteps] = useState<WanAnimateStepsSelectionValue>('20');
   const [wanAnimateResolution, setWanAnimateResolution] = useState<WanAnimateResolutionSelectionValue>('480p');
+  const [oneToAllAnimateResolution, setOneToAllAnimateResolution] = useState<WanAnimateResolutionSelectionValue>('480p');
   const [wanAnimateShift, setWanAnimateShift] = useState<WanAnimateShiftSelectionValue>('5.0');
   const [wanAnimateQuality, setWanAnimateQuality] = useState<WanAnimateQualitySelectionValue>('high');
   const [wanAnimateUseTurbo, setWanAnimateUseTurbo] = useState<boolean>(false);
@@ -181,6 +187,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isKling26VideoModel = isVideoMode && falVideoModelId === KLING_26_VIDEO_MODEL_ID;
   const isHailuoVideoModel = isVideoMode && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
+  const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -370,6 +377,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleOneToAllAnimateResolutionChange = useCallback((value: string) => {
+    if (value === '480p' || value === '580p' || value === '720p') {
+      setOneToAllAnimateResolution(value);
+    }
+  }, []);
+
   const handleWanAnimateShiftChange = useCallback((value: string) => {
     if (value === '5.0' || value === '6.0' || value === '7.0' || value === '8.0' || value === '9.0' || value === '10.0') {
       setWanAnimateShift(value);
@@ -454,6 +467,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wanAnimateVariant,
     wanAnimateSteps,
     wanAnimateResolution,
+    oneToAllAnimateResolution,
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
@@ -470,6 +484,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isKling26VideoModel,
     isHailuoVideoModel,
     isWanAnimateVideoModel,
+    isOneToAllAnimateVideoModel,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,
@@ -487,6 +502,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWanAnimateVariantChange,
     handleWanAnimateStepsChange,
     handleWanAnimateResolutionChange,
+    handleOneToAllAnimateResolutionChange,
     handleWanAnimateShiftChange,
     handleWanAnimateQualityChange,
     handleWanAnimateTurboChange,
@@ -511,6 +527,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWanAnimateVariant,
     setWanAnimateSteps,
     setWanAnimateResolution,
+    setOneToAllAnimateResolution,
     setWanAnimateShift,
     setWanAnimateQuality,
     setWanAnimateUseTurbo,

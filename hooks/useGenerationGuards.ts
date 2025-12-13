@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Tool } from '../types';
-import { getFalModelLabel, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID } from '../services/modelConfig';
+import { getFalModelLabel, ONE_TO_ALL_ANIMATE_MODEL_ID, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID, type FalModelId } from '../services/modelConfig';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -60,8 +60,10 @@ export function useGenerationGuards({
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
+  const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
-  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode;
+  const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel;
+  const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
     const usingFal = apiProvider === 'fal';
@@ -80,6 +82,7 @@ export function useGenerationGuards({
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
     const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasPrimaryImage;
+    const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasPrimaryImage;
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
       (usingFal && isReveModel) ||
@@ -92,6 +95,7 @@ export function useGenerationGuards({
       requiresSelectedImageForUpscale ||
       requiresSelectedImageForVideo ||
       requiresSelectedImageForWanAnimate ||
+      requiresSelectedImageForOneToAll ||
       requiresSourceVideoForVideoInput ||
       editConstraintsActive;
 
@@ -100,6 +104,12 @@ export function useGenerationGuards({
         ? (hasSourceVideo
           ? (hasPrimaryImage ? 'Optionally describe changes for this replacement...' : 'Select a still image to replace the character...')
           : 'Select a video to replace a character, then select a still image...')
+        : isOneToAllAnimateVideoModel
+          ? (!hasSourceVideo
+            ? 'Select a pose video, then select a reference image to animate...'
+            : (hasPrimaryImage
+              ? 'Describe the motion or scene you want to animate...'
+              : 'Select a reference image to animate...'))
         : (hasPrimaryImage
           ? 'Describe the motion or scene you want this image to turn into...'
           : isVideoInputMode
@@ -116,7 +126,7 @@ export function useGenerationGuards({
                   : 'Select a reference video, then describe the next shot...')))
             : 'Select an image and describe the video you want to create...'))
       : usingFal && isUpscaleModel
-        ? `Prompt disabled for ${getFalModelLabel(falModelId)}. Select an image and scale factor.`
+        ? `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select an image and scale factor.`
         : isTextToImage
           ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
           : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
@@ -147,6 +157,7 @@ export function useGenerationGuards({
 	    isKlingO1VideoInputMode,
 	    isKlingVideoModel,
 	    isWanAnimateVideoModel,
+      isOneToAllAnimateVideoModel,
     isReveModel,
     isSeedreamModel,
     isUpscaleModel,

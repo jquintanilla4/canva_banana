@@ -3,6 +3,7 @@ import {
   getMaxReferenceImages,
   KLING_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
+  ONE_TO_ALL_ANIMATE_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   isKlingO1VideoModelId,
@@ -77,7 +78,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const isWanVideoInputMode =
     apiProvider === 'fal'
     && falModelMode === 'video'
-    && (falVideoModelId === WAN_VISION_ENHANCER_MODEL_ID || falVideoModelId === WAN_ANIMATE_MODEL_ID);
+    && (
+      falVideoModelId === WAN_VISION_ENHANCER_MODEL_ID
+      || falVideoModelId === WAN_ANIMATE_MODEL_ID
+      || falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID
+    );
   const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
 
@@ -117,7 +122,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setSourceVideoId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
   }, [elementImageIds.length, images, referenceImageIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId]);
 
-  // Clear sourceVideoId when leaving a video input mode (Kling O1 or Wan enhancer)
+  // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All).
   useEffect(() => {
     if (!isVideoInputMode && sourceVideoId) {
       setSourceVideoId(null);
@@ -183,11 +188,18 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     const isKlingVideoSelection = apiProvider === 'fal'
       && falModelMode === 'video'
       && falVideoModelId === KLING_VIDEO_MODEL_ID;
+    const isOneToAllVideoSelection = apiProvider === 'fal'
+      && falModelMode === 'video'
+      && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
     const isKlingO1VideoSelection = apiProvider === 'fal'
       && falModelMode === 'video'
       && isKlingO1VideoModelId(falVideoModelId);
 
     if (reference && targetImage?.mediaType === 'video') {
+      if (isOneToAllVideoSelection) {
+        onReferenceLimit(0);
+        return;
+      }
       onError('Reference images must be still images.');
       return;
     }

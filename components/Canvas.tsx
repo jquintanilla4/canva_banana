@@ -28,6 +28,7 @@ interface CanvasProps {
   tailSelectionEnabled: boolean;
   isKlingO1VideoInputMode: boolean;
   isKlingO1FflfMode: boolean;
+  isWanAnimateVideoInputMode: boolean;
   onError?: (message: string) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
@@ -122,6 +123,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   tailSelectionEnabled,
   isKlingO1VideoInputMode,
   isKlingO1FflfMode,
+  isWanAnimateVideoInputMode,
   onError,
   onImageSelect,
   onNoteSelect,
@@ -577,6 +579,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([6 / scale, 4 / scale]);
         ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
         ctx.setLineDash([]);
+      } else if (isWanAnimateVideoInputMode && sourceVideoId === image.id) {
+        ctx.strokeStyle = '#f97316'; // orange-500 for source video in WAN animate mode
+        ctx.lineWidth = 4 / scale;
+        ctx.setLineDash([6 / scale, 4 / scale]);
+        ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
+        ctx.setLineDash([]);
       } else if (isFflfSelectedVideo) {
         ctx.strokeStyle = '#f97316'; // orange-500 for FFLF video selection
         ctx.lineWidth = 4 / scale;
@@ -603,9 +611,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.setLineDash([]);
       }
 
-      const isSourceVideo = isKlingO1VideoInputMode && sourceVideoId === image.id;
-      const referenceOrderLabel = isSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id];
-      const shouldShowReferenceBadge = !!referenceOrderLabel && (isSourceVideo || image.mediaType === 'image');
+      const isSourceVideo = (isKlingO1VideoInputMode || isWanAnimateVideoInputMode) && sourceVideoId === image.id;
+      const isKlingSourceVideo = isKlingO1VideoInputMode && sourceVideoId === image.id;
+      const referenceOrderLabel = isKlingSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id];
+      const shouldShowReferenceBadge = !!referenceOrderLabel && (isKlingSourceVideo || image.mediaType === 'image');
       if (shouldShowReferenceBadge) {
         const badgePaddingX = 8 / scale;
         const badgePaddingY = 6 / scale;
@@ -620,12 +629,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         const badgeY = baseY - padding - badgeHeight - 2 / scale;
 
         const isPrimaryReference = selectedImageIds[0] === image.id;
-        const badgeFillColor = isSourceVideo
+        const badgeFillColor = isKlingSourceVideo
           ? 'rgba(249, 115, 22, 0.95)'
           : isPrimaryReference
             ? 'rgba(14, 165, 233, 0.95)'
             : 'rgba(16, 185, 129, 0.92)';
-        const badgeStrokeColor = isSourceVideo
+        const badgeStrokeColor = isKlingSourceVideo
           ? '#c2410c'
           : isPrimaryReference
             ? '#0ea5e9'
@@ -881,7 +890,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         ctx.drawImage(pathCanvas, 0, 0);
       }
     }
-  }, [cropMode, elementImageIds, elementImageOrderLabels, getImageCenter, getImageRotation, images, isKlingO1FflfMode, notes, paths, pan, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, transformMode, videoLastFrameImageId]);
+  }, [cropMode, elementImageIds, elementImageOrderLabels, getImageCenter, getImageRotation, images, isKlingO1FflfMode, isKlingO1VideoInputMode, isWanAnimateVideoInputMode, notes, paths, pan, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;

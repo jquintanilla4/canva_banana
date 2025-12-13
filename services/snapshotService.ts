@@ -73,6 +73,7 @@ export type SnapshotManifestV2 = {
 	      wanAnimateVariant?: string;
 	      wanAnimateSteps?: string;
 	      wanAnimateResolution?: string;
+        oneToAllAnimateResolution?: string;
 	      wanAnimateShift?: string;
 	      wanAnimateQuality?: string;
 	      wanAnimateUseTurbo?: boolean;
@@ -139,6 +140,7 @@ export type SnapshotMetaState = {
   wanAnimateVariant?: string;
   wanAnimateSteps?: string;
   wanAnimateResolution?: string;
+  oneToAllAnimateResolution?: string;
   wanAnimateShift?: string;
   wanAnimateQuality?: string;
   wanAnimateUseTurbo?: boolean;
@@ -644,6 +646,11 @@ export const normalizeSnapshotImageMetadata = (
       const wanAnimateResolutionValue = (typed as { wanAnimateResolution?: unknown }).wanAnimateResolution;
       if (wanAnimateResolutionValue === '480p' || wanAnimateResolutionValue === '580p' || wanAnimateResolutionValue === '720p') {
         normalizedOptions.wanAnimateResolution = wanAnimateResolutionValue;
+      }
+
+      const oneToAllAnimateResolutionValue = (typed as { oneToAllAnimateResolution?: unknown }).oneToAllAnimateResolution;
+      if (oneToAllAnimateResolutionValue === '480p' || oneToAllAnimateResolutionValue === '580p' || oneToAllAnimateResolutionValue === '720p') {
+        normalizedOptions.oneToAllAnimateResolution = oneToAllAnimateResolutionValue;
       }
 
       const wanAnimateShiftValue = (typed as { wanAnimateShift?: unknown }).wanAnimateShift;

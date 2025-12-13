@@ -10,6 +10,11 @@ import {
   FalVideoDuration,
 } from '../types';
 import { addDebugLog } from './debugLog';
+import {
+  ONE_TO_ALL_ANIMATE_MODEL_ID,
+  ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
+  WAN_ANIMATE_MOVE_MODEL_ID,
+} from './modelConfig';
 
 // Wrapper around @fal-ai/client that normalizes queue updates and surfaces debug logs for the UI.
 interface GenerateImageEditParams {
@@ -78,6 +83,71 @@ const resolveQueueRequestId = (update: FalQueueUpdate, fallback?: string): strin
       ? (update as { request_id?: string }).request_id
       : undefined;
   return requestId || fallback;
+};
+
+const subscribeForVideoUrl = async (
+  modelId: string,
+  inputPayload: Record<string, unknown>,
+  options: Pick<GenerateVideoOptions, 'onQueueUpdate'>,
+): Promise<{ videoUrl: string; requestId?: string }> => {
+  let latestRequestId: string | undefined;
+
+  logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
+    input: inputPayload,
+  });
+
+  let result: Awaited<ReturnType<typeof fal.subscribe>>;
+  try {
+    result = await fal.subscribe(modelId, {
+      input: inputPayload,
+      logs: true,
+      onQueueUpdate: update => {
+        const queueUpdate = update as unknown as FalQueueUpdate;
+        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+        if (resolvedRequestId) {
+          latestRequestId = resolvedRequestId;
+        }
+        logFalEvent('inbound', modelId, 'Queue update', {
+          status: queueUpdate.status,
+          position: queueUpdate.position,
+          eta: queueUpdate.eta,
+          requestId: resolvedRequestId,
+          logs: normalizedLogs.map(log => log?.message ?? ''),
+        });
+        options.onQueueUpdate?.({
+          ...queueUpdate,
+          requestId: resolvedRequestId || '',
+          logs: normalizedLogs,
+        });
+      },
+    });
+  } catch (error) {
+    logFalEvent('error', modelId, 'Request failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+
+  logFalEvent('inbound', modelId, 'Result received', {
+    requestId: result?.requestId || latestRequestId,
+    data: (result?.data as Record<string, unknown>) ?? undefined,
+  });
+
+  const data = result?.data as { video?: string | { url?: string } } | undefined;
+  const videoEntry = data?.video;
+  const videoUrl = typeof videoEntry === 'string'
+    ? videoEntry
+    : videoEntry && typeof videoEntry.url === 'string'
+      ? videoEntry.url
+      : null;
+
+  if (!videoUrl) {
+    throw new Error('Fal.ai API did not return a video.');
+  }
+
+  const requestId = result?.requestId || latestRequestId;
+  return { videoUrl, requestId };
 };
 
 interface GenerateImageEditOptions {
@@ -1239,16 +1309,49 @@ export const generateImageToVideo = async (
     return { videoUrl, requestId };
   }
 
-  const isWanAnimateModel = modelId === WAN_ANIMATE_REPLACE_MODEL_ID;
-  if (isWanAnimateModel) {
+  const isOneToAllAnimateModel = modelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
+  if (isOneToAllAnimateModel) {
     if (!options.sourceVideoUrl) {
-      throw new Error('Wan Animate Replace requires a source video.');
+      throw new Error('1-to-All Animate requires a source video.');
     }
     if (!image) {
-      throw new Error('Wan Animate Replace requires a still image.');
+      throw new Error('1-to-All Animate requires a still image.');
     }
 
-    let latestRequestId: string | undefined;
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('1-to-All Animate requires a prompt.');
+    }
+
+    const negativePrompt = typeof options.negativePrompt === 'string'
+      ? options.negativePrompt.trim()
+      : ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT;
+
+    const imageUrl = await uploadImageElementToFal(image);
+
+    const resolution = options.resolution === '480p' || options.resolution === '580p' || options.resolution === '720p'
+      ? options.resolution
+      : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      negative_prompt: negativePrompt,
+      image_url: imageUrl,
+      video_url: options.sourceVideoUrl,
+      ...(resolution ? { resolution } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  const isWanAnimateEndpoint = modelId === WAN_ANIMATE_REPLACE_MODEL_ID || modelId === WAN_ANIMATE_MOVE_MODEL_ID;
+  if (isWanAnimateEndpoint) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Wan Animate requires a source video.');
+    }
+    if (!image) {
+      throw new Error('Wan Animate requires a still image.');
+    }
 
     const imageUrl = await uploadImageElementToFal(image);
 
@@ -1281,62 +1384,7 @@ export const generateImageToVideo = async (
       ...(useTurbo !== undefined ? { use_turbo: useTurbo } : {}),
     };
 
-    logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
-      input: inputPayload,
-    });
-
-    let result: Awaited<ReturnType<typeof fal.subscribe>>;
-    try {
-      result = await fal.subscribe(modelId, {
-        input: inputPayload,
-        logs: true,
-        onQueueUpdate: update => {
-          const queueUpdate = update as unknown as FalQueueUpdate;
-          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-          if (resolvedRequestId) {
-            latestRequestId = resolvedRequestId;
-          }
-          logFalEvent('inbound', modelId, 'Queue update', {
-            status: queueUpdate.status,
-            position: queueUpdate.position,
-            eta: queueUpdate.eta,
-            requestId: resolvedRequestId,
-            logs: normalizedLogs.map(log => log?.message ?? ''),
-          });
-          options.onQueueUpdate?.({
-            ...queueUpdate,
-            requestId: resolvedRequestId || '',
-            logs: normalizedLogs,
-          });
-        },
-      });
-    } catch (error) {
-      logFalEvent('error', modelId, 'Request failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-
-    logFalEvent('inbound', modelId, 'Result received', {
-      requestId: result?.requestId || latestRequestId,
-      data: (result?.data as Record<string, unknown>) ?? undefined,
-    });
-
-    const data = result?.data as { video?: string | { url?: string } } | undefined;
-    const videoEntry = data?.video;
-    const videoUrl = typeof videoEntry === 'string'
-      ? videoEntry
-      : videoEntry && typeof videoEntry.url === 'string'
-        ? videoEntry.url
-        : null;
-
-    if (!videoUrl) {
-      throw new Error('Fal.ai API did not return a video.');
-    }
-
-    const requestId = result?.requestId || latestRequestId;
-    return { videoUrl, requestId };
+    return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
   const isWanVisionEnhancerModel = modelId === WAN_VISION_ENHANCER_MODEL_ID;
