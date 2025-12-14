@@ -4,6 +4,7 @@ import {
   KLING_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
+  SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   isKlingO1VideoModelId,
@@ -23,6 +24,7 @@ type SelectionFalSettings = Pick<
   | 'isKlingO1VideoModel'
   | 'isKlingO1EditMode'
   | 'isKlingO1RefV2VMode'
+  | 'isLipsyncVideoModel'
 >;
 
 type SelectionOptions = {
@@ -40,6 +42,7 @@ export type SelectionStateResult = {
   elementImageIds: string[];
   videoLastFrameImageId: string | null;
   sourceVideoId: string | null;
+  sourceAudioId: string | null;
   primaryImageId: string | null;
   primaryImage: CanvasImage | null;
   primarySelectionMediaType: CanvasImage['mediaType'] | null;
@@ -51,6 +54,7 @@ export type SelectionStateResult = {
   setElementImageIds: Dispatch<SetStateAction<string[]>>;
   setVideoLastFrameImageId: Dispatch<SetStateAction<string | null>>;
   setSourceVideoId: Dispatch<SetStateAction<string | null>>;
+  setSourceAudioId: Dispatch<SetStateAction<string | null>>;
   handleImageSelection: (imageId: string | null, multi?: boolean) => void;
   handleNoteSelection: (noteId: string | null, multi?: boolean) => void;
 };
@@ -71,6 +75,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isKlingO1VideoModel,
     isKlingO1EditMode,
     isKlingO1RefV2VMode,
+    isLipsyncVideoModel,
   } = fal;
 
   const isKlingImageModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
@@ -83,7 +88,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       || falVideoModelId === WAN_ANIMATE_MODEL_ID
       || falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID
     );
-  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode;
+  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode || isLipsyncVideoModel;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -92,6 +97,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const [elementImageIds, setElementImageIds] = useState<string[]>([]);
   const [videoLastFrameImageId, setVideoLastFrameImageId] = useState<string | null>(null);
   const [sourceVideoId, setSourceVideoId] = useState<string | null>(null);
+  const [sourceAudioId, setSourceAudioId] = useState<string | null>(null);
 
   const primaryImageId = useMemo(() => selectedImageIds[0] ?? null, [selectedImageIds]);
   const primaryNoteId = useMemo(() => selectedNoteIds[0] ?? null, [selectedNoteIds]);
@@ -111,7 +117,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   // Ensure selections stay valid when images are deleted or imported.
   useEffect(() => {
     const imageIdSet = new Set(images.map(img => img.id));
-    if (imageIdSet.size === images.length && selectedImageIds.length === 0 && referenceImageIds.length === 0 && elementImageIds.length === 0 && !videoLastFrameImageId && !sourceVideoId) {
+    if (imageIdSet.size === images.length && selectedImageIds.length === 0 && referenceImageIds.length === 0 && elementImageIds.length === 0 && !videoLastFrameImageId && !sourceVideoId && !sourceAudioId) {
       return;
     }
 
@@ -120,14 +126,22 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setElementImageIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
     setVideoLastFrameImageId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
     setSourceVideoId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
-  }, [elementImageIds.length, images, referenceImageIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId]);
+    setSourceAudioId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
+  }, [elementImageIds.length, images, referenceImageIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
 
-  // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All).
+  // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All / Lip Sync).
   useEffect(() => {
     if (!isVideoInputMode && sourceVideoId) {
       setSourceVideoId(null);
     }
   }, [isVideoInputMode, sourceVideoId]);
+
+  // Clear sourceAudioId when leaving lip sync mode.
+  useEffect(() => {
+    if (!isLipsyncVideoModel && sourceAudioId) {
+      setSourceAudioId(null);
+    }
+  }, [isLipsyncVideoModel, sourceAudioId]);
 
   useEffect(() => {
     if (!isKlingO1VideoModel) {
@@ -357,12 +371,24 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       if (isVideoInputMode && targetImage?.mediaType === 'video' && sourceVideoId === imageId) {
         setSourceVideoId(null);
       }
+      // Clicking the same audio again in lip sync mode clears sourceAudioId
+      if (isLipsyncVideoModel && targetImage?.mediaType === 'audio' && sourceAudioId === imageId) {
+        setSourceAudioId(null);
+      }
       return;
     }
 
     // In video input modes, single-clicking a video sets it as the source video
     if (isVideoInputMode && targetImage?.mediaType === 'video') {
       setSourceVideoId(imageId);
+      setSelectedImageIds([imageId]);
+      setSelectedNoteIds([]);
+      return;
+    }
+
+    // In lip sync mode, single-clicking audio sets it as the source audio
+    if (isLipsyncVideoModel && targetImage?.mediaType === 'audio') {
+      setSourceAudioId(imageId);
       setSelectedImageIds([imageId]);
       setSelectedNoteIds([]);
       return;
@@ -401,6 +427,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
 	    isKlingO1VideoInputMode,
 	    isVideoInputMode,
 	    sourceVideoId,
+	    isLipsyncVideoModel,
+	    sourceAudioId,
 	  ]);
 
   const handleNoteSelection = useCallback((
@@ -452,6 +480,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     elementImageIds,
     videoLastFrameImageId,
     sourceVideoId,
+    sourceAudioId,
     primaryImageId,
     primaryImage,
     primarySelectionMediaType,
@@ -463,6 +492,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setElementImageIds,
     setVideoLastFrameImageId,
     setSourceVideoId,
+    setSourceAudioId,
     handleImageSelection,
     handleNoteSelection,
   };

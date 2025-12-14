@@ -10,6 +10,7 @@ import {
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
+  SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   getFalModelLabel,
@@ -36,6 +37,9 @@ import {
   type Kling26AudioSelectionValue,
   type KlingO1Variant,
   type KlingVariant,
+  type LipsyncAudioMode,
+  type LipsyncEmotion,
+  type LipsyncModelMode,
   type WanAnimateQualitySelectionValue,
   type WanAnimateResolutionSelectionValue,
   type WanAnimateShiftSelectionValue,
@@ -144,6 +148,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
+    lipsyncEmotion,
+    lipsyncModelMode,
+    lipsyncAudioMode,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -153,6 +160,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     elementImageIds,
     videoLastFrameImageId,
     sourceVideoId,
+    sourceAudioId,
     primaryImageId,
     activePrimaryImage,
     setSelectedImageIds,
@@ -238,8 +246,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
 	    const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
       const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
+      const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
 	    const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
-      const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel;
+      const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isLipsyncVideoModel;
 	    const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
 	    const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
 	    const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
@@ -279,6 +288,20 @@ export const useGeneration = (args: UseGenerationArgs) => {
     if (usingFal && isVideoMode && isOneToAllAnimateVideoModel && !activePrimary) {
       setError('Select a still image to animate.');
       return;
+    }
+
+    // Get sourceAudioId for lip sync mode
+    const sourceAudioIdForRun = generationOverride?.sourceAudioId ?? sourceAudioId;
+
+    if (usingFal && isVideoMode && isLipsyncVideoModel) {
+      if (!sourceVideoIdForRun) {
+        setError('Select a video on the canvas to lip sync.');
+        return;
+      }
+      if (!sourceAudioIdForRun) {
+        setError('Select an audio clip on the canvas for lip sync audio.');
+        return;
+      }
     }
 
     if (isVideoMode) {
@@ -380,6 +403,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	                ? 'Select a video on the canvas to replace a character.'
                   : isOneToAllAnimateVideoModel
                     ? 'Select a video on the canvas to drive the animation.'
+                  : isLipsyncVideoModel
+                    ? 'Select a video on the canvas to lip sync.'
 	                : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
 	          }
 	          if (isWanVisionEnhancerVideoModel) {
@@ -403,6 +428,22 @@ export const useGeneration = (args: UseGenerationArgs) => {
         } else if (!activePrimary) {
           throw new Error('Unable to find the starting frame for this video.');
         }
+
+        // For lip sync mode, get the audio URL
+        let sourceAudioUrlForRequest: string | undefined;
+        if (isLipsyncVideoModel && sourceAudioIdForRun) {
+          const sourceAudio = images.find(img => img.id === sourceAudioIdForRun && img.mediaType === 'audio');
+          if (!sourceAudio) {
+            throw new Error('Select an audio clip on the canvas for lip sync.');
+          }
+          if (!sourceAudio.file) {
+            throw new Error('The selected audio does not have a file to upload.');
+          }
+          setToastMessage('Uploading audio...');
+          sourceAudioUrlForRequest = await uploadVideoToFal(sourceAudio.file);
+          setToastMessage(null);
+        }
+
 	        const videoSourceImage = (isWanAnimateVideoModel || isOneToAllAnimateVideoModel)
 	          ? activePrimary?.element as HTMLImageElement
 	          : (isKlingO1VideoInputMode || isFalVideoInputMode) ? null : activePrimary?.element as HTMLImageElement;
@@ -493,6 +534,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 aspectRatio: falAspectRatioSelectionForRun === 'default' ? 'auto' : falAspectRatioSelectionForRun,
               } : {}),
             } : {}),
+          } : {}),
+          ...(isLipsyncVideoModel ? {
+            sourceVideoUrl: sourceVideoUrlForRequest,
+            sourceAudioUrl: sourceAudioUrlForRequest,
+            lipsyncEmotion: lipsyncEmotion,
+            lipsyncModelMode: lipsyncModelMode,
+            lipsyncAudioMode: lipsyncAudioMode,
           } : {}),
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
@@ -626,6 +674,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   } : {}),
                   ...(isOneToAllAnimateVideoModel ? {
                     oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
+                  } : {}),
+                  ...(isLipsyncVideoModel ? {
+                    lipsyncEmotion: lipsyncEmotion,
+                    lipsyncModelMode: lipsyncModelMode,
+                    lipsyncAudioMode: lipsyncAudioMode,
                   } : {}),
                   ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                 },
@@ -1132,6 +1185,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    videoNegativePrompt,
 	    wanTargetResolution,
 	    wanCreativity,
+	    lipsyncEmotion,
+	    lipsyncModelMode,
+	    lipsyncAudioMode,
 	    images,
     paths,
     referenceImageIds,
@@ -1139,6 +1195,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     videoLastFrameImageId,
     primaryImageId,
     activePrimaryImage,
+    sourceAudioId,
     setError,
     setIsLoading,
     setFalJobs,

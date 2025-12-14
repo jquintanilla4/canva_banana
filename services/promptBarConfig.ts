@@ -8,6 +8,9 @@ import type {
   Kling26AudioSelectionValue,
   KlingO1Variant,
   KlingVariant,
+  LipsyncAudioMode,
+  LipsyncEmotion,
+  LipsyncModelMode,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -36,9 +39,13 @@ import {
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
+  LIPSYNC_AUDIO_MODE_OPTIONS,
+  LIPSYNC_EMOTION_OPTIONS,
+  LIPSYNC_MODEL_MODE_OPTIONS,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
+  SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_ANIMATE_QUALITY_OPTIONS,
   WAN_ANIMATE_RESOLUTION_OPTIONS,
@@ -79,6 +86,7 @@ export type PromptBarControlsInput = {
   isKling26VideoModel: boolean;
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
+  isLipsyncVideoModel: boolean;
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
@@ -94,6 +102,9 @@ export type PromptBarControlsInput = {
   wanAnimateShift: WanAnimateShiftSelectionValue;
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
+  lipsyncEmotion: LipsyncEmotion;
+  lipsyncModelMode: LipsyncModelMode;
+  lipsyncAudioMode: LipsyncAudioMode;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -117,6 +128,9 @@ export type PromptBarControlsInput = {
   onWanAnimateShiftChange: (value: string) => void;
   onWanAnimateQualityChange: (value: string) => void;
   onWanAnimateTurboChange: (value: boolean) => void;
+  onLipsyncEmotionChange: (value: string) => void;
+  onLipsyncModelModeChange: (value: string) => void;
+  onLipsyncAudioModeChange: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -146,6 +160,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isKling26VideoModel,
     isHailuoVideoModel,
     isWanAnimateVideoModel,
+    isLipsyncVideoModel,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
@@ -161,6 +176,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
+    lipsyncEmotion,
+    lipsyncModelMode,
+    lipsyncAudioMode,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -184,6 +202,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onWanAnimateShiftChange,
     onWanAnimateQualityChange,
     onWanAnimateTurboChange,
+    onLipsyncEmotionChange,
+    onLipsyncModelModeChange,
+    onLipsyncAudioModeChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -406,6 +427,41 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: WAN_ANIMATE_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: oneToAllAnimateResolution,
       onChange: onOneToAllAnimateResolutionChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (isLipsyncVideoModel) {
+    controls.push({
+      id: 'lipsync-emotion-select',
+      prefixLabel: 'Emotion',
+      hideSelectedValue: true,
+      ariaLabel: 'Select lip sync emotion',
+      options: LIPSYNC_EMOTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: lipsyncEmotion,
+      onChange: onLipsyncEmotionChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'lipsync-mode-select',
+      prefixLabel: 'Mode',
+      hideSelectedValue: true,
+      ariaLabel: 'Select lip sync mode',
+      options: LIPSYNC_MODEL_MODE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: lipsyncModelMode,
+      onChange: onLipsyncModelModeChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'lipsync-audio-select',
+      prefixLabel: 'Audio',
+      hideSelectedValue: true,
+      ariaLabel: 'Select lip sync audio mode',
+      options: LIPSYNC_AUDIO_MODE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: lipsyncAudioMode,
+      onChange: onLipsyncAudioModeChange,
       disabled: isLoading,
     });
   }

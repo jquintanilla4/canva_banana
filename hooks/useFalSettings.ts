@@ -16,6 +16,7 @@ import {
   KLING_O1_VIDEO_FFLF_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
+  SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -41,6 +42,9 @@ import type {
   Kling26AudioSelectionValue,
   KlingO1Variant,
   KlingVariant,
+  LipsyncAudioMode,
+  LipsyncEmotion,
+  LipsyncModelMode,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -63,6 +67,7 @@ type FalDerivedState = {
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
   isOneToAllAnimateVideoModel: boolean;
+  isLipsyncVideoModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -87,6 +92,9 @@ type FalHandlers = {
   handleWanAnimateShiftChange: (value: string) => void;
   handleWanAnimateQualityChange: (value: string) => void;
   handleWanAnimateTurboChange: (value: boolean) => void;
+  handleLipsyncEmotionChange: (value: string) => void;
+  handleLipsyncModelModeChange: (value: string) => void;
+  handleLipsyncAudioModeChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -115,6 +123,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wanAnimateShift: WanAnimateShiftSelectionValue;
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
+  lipsyncEmotion: LipsyncEmotion;
+  lipsyncModelMode: LipsyncModelMode;
+  lipsyncAudioMode: LipsyncAudioMode;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -140,6 +151,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWanAnimateShift: Dispatch<SetStateAction<WanAnimateShiftSelectionValue>>;
   setWanAnimateQuality: Dispatch<SetStateAction<WanAnimateQualitySelectionValue>>;
   setWanAnimateUseTurbo: Dispatch<SetStateAction<boolean>>;
+  setLipsyncEmotion: Dispatch<SetStateAction<LipsyncEmotion>>;
+  setLipsyncModelMode: Dispatch<SetStateAction<LipsyncModelMode>>;
+  setLipsyncAudioMode: Dispatch<SetStateAction<LipsyncAudioMode>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -169,6 +183,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wanAnimateShift, setWanAnimateShift] = useState<WanAnimateShiftSelectionValue>('5.0');
   const [wanAnimateQuality, setWanAnimateQuality] = useState<WanAnimateQualitySelectionValue>('high');
   const [wanAnimateUseTurbo, setWanAnimateUseTurbo] = useState<boolean>(false);
+  const [lipsyncEmotion, setLipsyncEmotion] = useState<LipsyncEmotion>('neutral');
+  const [lipsyncModelMode, setLipsyncModelMode] = useState<LipsyncModelMode>('face');
+  const [lipsyncAudioMode, setLipsyncAudioMode] = useState<LipsyncAudioMode>('bounce');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -188,6 +205,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isHailuoVideoModel = isVideoMode && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
+  const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -397,6 +415,27 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWanAnimateUseTurbo(Boolean(value));
   }, []);
 
+  const handleLipsyncEmotionChange = useCallback((value: string) => {
+    const valid = ['happy', 'angry', 'sad', 'neutral', 'disgusted', 'surprised'] as const;
+    if (valid.includes(value as LipsyncEmotion)) {
+      setLipsyncEmotion(value as LipsyncEmotion);
+    }
+  }, []);
+
+  const handleLipsyncModelModeChange = useCallback((value: string) => {
+    const valid = ['lips', 'face', 'head'] as const;
+    if (valid.includes(value as LipsyncModelMode)) {
+      setLipsyncModelMode(value as LipsyncModelMode);
+    }
+  }, []);
+
+  const handleLipsyncAudioModeChange = useCallback((value: string) => {
+    const valid = ['cut_off', 'loop', 'bounce', 'silence', 'remap'] as const;
+    if (valid.includes(value as LipsyncAudioMode)) {
+      setLipsyncAudioMode(value as LipsyncAudioMode);
+    }
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -471,6 +510,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
+    lipsyncEmotion,
+    lipsyncModelMode,
+    lipsyncAudioMode,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -485,6 +527,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isHailuoVideoModel,
     isWanAnimateVideoModel,
     isOneToAllAnimateVideoModel,
+    isLipsyncVideoModel,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,
@@ -506,6 +549,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWanAnimateShiftChange,
     handleWanAnimateQualityChange,
     handleWanAnimateTurboChange,
+    handleLipsyncEmotionChange,
+    handleLipsyncModelModeChange,
+    handleLipsyncAudioModeChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -531,6 +577,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWanAnimateShift,
     setWanAnimateQuality,
     setWanAnimateUseTurbo,
+    setLipsyncEmotion,
+    setLipsyncModelMode,
+    setLipsyncAudioMode,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

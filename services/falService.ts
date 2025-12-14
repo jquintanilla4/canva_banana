@@ -13,7 +13,11 @@ import { addDebugLog } from './debugLog';
 import {
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
+  SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MOVE_MODEL_ID,
+  type LipsyncAudioMode,
+  type LipsyncEmotion,
+  type LipsyncModelMode,
 } from './modelConfig';
 
 // Wrapper around @fal-ai/client that normalizes queue updates and surfaces debug logs for the UI.
@@ -194,8 +198,12 @@ interface GenerateVideoOptions {
   elementImages?: HTMLImageElement[];
   klingO1Variant?: string;
   sourceVideoUrl?: string;
+  sourceAudioUrl?: string;
   keepAudio?: boolean;
   aspectRatio?: FalAspectRatioOption;
+  lipsyncEmotion?: LipsyncEmotion;
+  lipsyncModelMode?: LipsyncModelMode;
+  lipsyncAudioMode?: LipsyncAudioMode;
 }
 
 const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
@@ -1339,6 +1347,31 @@ export const generateImageToVideo = async (
       image_url: imageUrl,
       video_url: options.sourceVideoUrl,
       ...(resolution ? { resolution } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  // Lip Sync (React-1) - requires video_url and audio_url
+  const isLipsyncModel = modelId === SYNC_LIPSYNC_MODEL_ID;
+  if (isLipsyncModel) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Lip Sync requires a source video.');
+    }
+    if (!options.sourceAudioUrl) {
+      throw new Error('Lip Sync requires a source audio.');
+    }
+
+    const emotion = options.lipsyncEmotion || 'neutral';
+    const modelMode = options.lipsyncModelMode || 'face';
+    const lipsyncMode = options.lipsyncAudioMode || 'bounce';
+
+    const inputPayload: Record<string, unknown> = {
+      video_url: options.sourceVideoUrl,
+      audio_url: options.sourceAudioUrl,
+      emotion,
+      model_mode: modelMode,
+      lipsync_mode: lipsyncMode,
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);

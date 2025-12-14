@@ -40,6 +40,7 @@ export const WAN_ANIMATE_MOVE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/move' as c
 export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as const;
 export const ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as const;
+export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 export type HailuoVariant = 'standard' | 'pro';
@@ -85,6 +86,7 @@ export const FAL_VIDEO_MODEL_OPTIONS = [
   { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
   { value: WAN_ANIMATE_MODEL_ID, label: 'Wan Animate' },
   { value: ONE_TO_ALL_ANIMATE_MODEL_ID, label: '1-to-All Animate' },
+  { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
@@ -168,6 +170,33 @@ export const getWanAnimateVideoEndpoint = (variant: WanAnimateVariant): string =
   }
   return WAN_ANIMATE_REPLACE_MODEL_ID;
 };
+
+export type LipsyncEmotion = 'happy' | 'angry' | 'sad' | 'neutral' | 'disgusted' | 'surprised';
+export type LipsyncModelMode = 'lips' | 'face' | 'head';
+export type LipsyncAudioMode = 'cut_off' | 'loop' | 'bounce' | 'silence' | 'remap';
+
+export const LIPSYNC_EMOTION_OPTIONS: ReadonlyArray<{ value: LipsyncEmotion; label: string }> = [
+  { value: 'neutral', label: 'Neutral' },
+  { value: 'happy', label: 'Happy' },
+  { value: 'angry', label: 'Angry' },
+  { value: 'sad', label: 'Sad' },
+  { value: 'disgusted', label: 'Disgusted' },
+  { value: 'surprised', label: 'Surprised' },
+] as const;
+
+export const LIPSYNC_MODEL_MODE_OPTIONS: ReadonlyArray<{ value: LipsyncModelMode; label: string }> = [
+  { value: 'face', label: 'Face' },
+  { value: 'lips', label: 'Lips' },
+  { value: 'head', label: 'Head' },
+] as const;
+
+export const LIPSYNC_AUDIO_MODE_OPTIONS: ReadonlyArray<{ value: LipsyncAudioMode; label: string }> = [
+  { value: 'bounce', label: 'Bounce' },
+  { value: 'cut_off', label: 'Cut off' },
+  { value: 'loop', label: 'Loop' },
+  { value: 'silence', label: 'Silence' },
+  { value: 'remap', label: 'Remap' },
+] as const;
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
 export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
@@ -357,6 +386,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [WAN_ANIMATE_MODEL_ID]: 0,
   [ONE_TO_ALL_ANIMATE_MODEL_ID]: 0,
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,
+  [SYNC_LIPSYNC_MODEL_ID]: 0,
 };
 
 export const getMaxReferenceImages = (modelId: FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | typeof KLING_O1_VIDEO_REF_V2V_MODEL_ID | undefined): number =>
