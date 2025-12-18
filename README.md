@@ -20,6 +20,7 @@ _Work in progress, expect bugs_
   - Session persistence
 - **Keyboard Shortcuts** - Speed up workflow with hotkeys for common actions
 - **Metadata Overlays** - View generation parameters for AI-created images
+- **Blind Test Mode** - Anonymize model names with random codenames for unbiased A/B testing
 - **Debug Panel** - Advanced logging and error monitoring
 
 ## Run Locally
@@ -85,3 +86,11 @@ _Work in progress, expect bugs_
 - Click `Transform` to show an orange bounding box with drag handles. Corners scale uniformly; edges scale along one axis; the top circle rotates.
 - Default drag keeps the aspect ratio. Hold Shift while dragging any handle to free-transform (non-uniform scale) for stretching or squashing.
 - Press Enter/Escape or click the orange `Transform` button again to exit and keep the changes.
+
+### Blind Test Mode
+Use Blind Test Mode for unbiased model comparisons:
+- Click the spy icon (left of the info icon) in the bottom-right toolbar to enable
+- All model names in dropdowns become random codenames (e.g., "Swift Falcon", "Silent Panther")
+- Codenames stay consistent within a session but reset on page refresh
+- Click the icon again to reveal the real model names
+- Metadata overlays still show original model names for reference after testing

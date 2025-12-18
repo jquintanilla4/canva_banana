@@ -26,6 +26,7 @@ import {
   buildPromptBarModelControls,
   getPromptBarModelOptions,
 } from './services/promptBarConfig';
+import { applyBlindTestMode, type BlindTestMapping } from './services/blindTestService';
 import { isOverlapping } from './utils/canvasGeometry';
 import { FileMenu } from './components/FileMenu';
 import { ViewToolbar } from './components/ViewToolbar';
@@ -148,6 +149,10 @@ export default function App() {
 
   // Toggles display of metadata overlays on canvas images
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
+
+  // Blind test mode: anonymizes model names in dropdowns with random codenames
+  const [blindTestEnabled, setBlindTestEnabled] = useState(false);
+  const blindTestMappingRef = useRef<BlindTestMapping>(new Map());
 
   // State for toggling the file menu and debug log panels
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
@@ -818,7 +823,12 @@ export default function App() {
     shouldValidateFalOptions,
     isNumImagesInvalid,
   });
-  const promptBarModelOptions = getPromptBarModelOptions(fal.falModelMode);
+  const rawModelOptions = getPromptBarModelOptions(fal.falModelMode);
+  const promptBarModelOptions = applyBlindTestMode(
+    rawModelOptions,
+    blindTestMappingRef.current,
+    blindTestEnabled,
+  );
   const promptOutlineColor = shouldShowVideoNegativePrompt ? '#34d399' : undefined;
   const negativePromptOutlineColor = shouldShowVideoNegativePrompt ? '#f87171' : undefined;
 
@@ -949,6 +959,8 @@ export default function App() {
           disabled={images.length === 0 && notes.length === 0}
           metadataVisible={showMetadataOverlay}
           onToggleMetadata={() => setShowMetadataOverlay(prev => !prev)}
+          blindTestEnabled={blindTestEnabled}
+          onToggleBlindTest={() => setBlindTestEnabled(prev => !prev)}
         />
       </main>
 
