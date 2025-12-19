@@ -1,5 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import type { CanvasImage, CanvasNote } from '../types';
+import { loadAudioFromBlob } from '../services/audioService';
+import { loadMediaFromBlob } from '../services/mediaService';
 import type { AppState } from './useCanvasHistory';
 
 type DuplicateArgs = {
@@ -55,25 +57,65 @@ export function useDuplicateCanvasMedia({
       return;
     }
 
-    const clonedElement = sourceImage.element.cloneNode(true) as typeof sourceImage.element;
-    if (clonedElement instanceof HTMLVideoElement) {
-      clonedElement.currentTime = 0;
-      clonedElement.pause();
-    }
-
     const offsetY = sourceImage.height + 20;
-    const duplicatedImage: CanvasImage = {
-      ...sourceImage,
-      id: crypto.randomUUID(),
-      element: clonedElement,
-      y: sourceImage.y + offsetY,
+    const duplicatedId = crypto.randomUUID();
+    const commitDuplicate = (overrides: Partial<CanvasImage>) => {
+      const duplicatedImage: CanvasImage = {
+        ...sourceImage,
+        ...overrides,
+        id: duplicatedId,
+        y: sourceImage.y + offsetY,
+      };
+
+      setState(prev => ({
+        ...prev,
+        images: [...prev.images, duplicatedImage],
+      }));
+      focusSelection({ imageId: duplicatedImage.id });
     };
 
-    setState(prev => ({
-      ...prev,
-      images: [...prev.images, duplicatedImage],
-    }));
-    focusSelection({ imageId: duplicatedImage.id });
+    // Rehydrate elements from the file to avoid cloning revoked blob URLs.
+    void (async () => {
+      try {
+        if (sourceImage.mediaType === 'audio') {
+          let waveformElement = sourceImage.element;
+          if (sourceImage.waveformImageData) {
+            const waveformImg = new Image();
+            await new Promise<void>((resolve, reject) => {
+              waveformImg.onload = () => resolve();
+              waveformImg.onerror = () => reject(new Error('Failed to load waveform image.'));
+              waveformImg.src = sourceImage.waveformImageData;
+            });
+            waveformElement = waveformImg;
+          }
+
+          const audioElement = await loadAudioFromBlob(sourceImage.file);
+          commitDuplicate({
+            element: waveformElement,
+            audioElement,
+            isPlaying: false,
+            currentPlaybackTime: 0,
+          });
+          return;
+        }
+
+        const element = await loadMediaFromBlob(
+          sourceImage.file,
+          sourceImage.mediaType === 'video' ? 'video' : 'image',
+        );
+        if (element instanceof HTMLVideoElement) {
+          element.currentTime = 0;
+          element.pause();
+          element.loop = true;
+          element.muted = true;
+          element.playsInline = true;
+        }
+
+        commitDuplicate({ element, isPlaying: false });
+      } catch (err) {
+        console.error('Failed to duplicate media:', err);
+      }
+    })();
   }, [displayedImages, focusSelection, setState]);
 
   return { duplicateNote, duplicateImage };

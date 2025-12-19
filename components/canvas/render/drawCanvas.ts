@@ -76,6 +76,13 @@ export function drawCanvas({
     ctx.translate(center.x, center.y);
     ctx.rotate(rotation);
 
+    if (image.element instanceof HTMLImageElement) {
+      if (!image.element.complete || image.element.naturalWidth === 0 || image.element.naturalHeight === 0) {
+        ctx.restore();
+        return;
+      }
+    }
+
     if (isVideoImage(image) && image.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
       ctx.restore();
       return;
