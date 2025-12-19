@@ -206,6 +206,8 @@ interface GenerateVideoOptions {
   lipsyncAudioMode?: LipsyncAudioMode;
 }
 
+const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit';
+const NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-pro';
 const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
 const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview';
 const LEGACY_NANO_BANANA_EDIT_MODEL_ID = 'fal-ai/nano-banana/edit';
@@ -213,15 +215,15 @@ const LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana';
 
 const normalizeModelId = (modelId: string | undefined): string | undefined => {
   if (modelId === LEGACY_NANO_BANANA_EDIT_MODEL_ID) {
-    return GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+    return NANO_BANANA_PRO_EDIT_MODEL_ID;
   }
   if (modelId === LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID) {
-    return GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+    return NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   }
   return modelId;
 };
 
-const FAL_MODEL_ID = normalizeModelId(process.env.FAL_MODEL_ID) || GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+const FAL_MODEL_ID = normalizeModelId(process.env.FAL_MODEL_ID) || NANO_BANANA_PRO_EDIT_MODEL_ID;
 const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit';
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image';
 const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit';
@@ -628,6 +630,7 @@ export const generateImageEdit = async ({
   const numImagesOption = options.numImages;
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
   const isKlingModel = modelId === KLING_IMAGE_MODEL_ID;
+  const isNanoBananaProModel = modelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
   const normalizedResolutionOption: FalResolutionOption = isKlingModel && resolutionOption === '4K' ? '2K' : resolutionOption;
 
   const body: {
@@ -662,7 +665,7 @@ export const generateImageEdit = async ({
     } else {
       body.image_size = imageSizeOption;
     }
-  } else if (modelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID || isKlingModel) {
+  } else if (modelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID || isNanoBananaProModel || isKlingModel) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }
@@ -964,9 +967,10 @@ export const generateImage = async (
   const modelId = normalizeModelId(options.modelId) || GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
   const isGeminiTextToImage = modelId === GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+  const isNanoBananaTextToImage = modelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
-  const supportsAspectRatio = isGeminiTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
-  const supportsResolution = isGeminiTextToImage || isKlingTextToImage;
+  const supportsAspectRatio = isGeminiTextToImage || isNanoBananaTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
+  const supportsResolution = isGeminiTextToImage || isNanoBananaTextToImage || isKlingTextToImage;
   const numImagesOption = options.numImages;
   const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
   const imageSizeOption: FalImageSizeOption = rawImageSizeOption;
@@ -1014,7 +1018,7 @@ export const generateImage = async (
     } else if (imageSizeOption !== 'default') {
       body.image_size = imageSizeOption;
     }
-  } else if (isGeminiTextToImage || isKlingTextToImage) {
+  } else if (isGeminiTextToImage || isNanoBananaTextToImage || isKlingTextToImage) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }

@@ -7,6 +7,8 @@ import {
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
+  NANO_BANANA_PRO_EDIT_MODEL_ID,
+  NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
@@ -227,6 +229,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isVideoMode = usingFal && falModelModeForRun === 'video';
     const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelIdForRun);
     const isGeminiModel = !isVideoMode && falModelIdForRun === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+    const isNanoBananaProModel = !isVideoMode && falModelIdForRun === NANO_BANANA_PRO_EDIT_MODEL_ID;
+    const isNanoBananaModel = isNanoBananaProModel || isGeminiModel;
     const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
     const normalizedFalResolutionSelectionForRun =
@@ -730,13 +734,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
-    const shouldValidateFalOptions = usingFal && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
+    const shouldValidateFalOptions = usingFal && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel);
     const isNumImagesInvalid =
       !Number.isFinite(falNumImagesForRun) ||
       falNumImagesForRun < 1 ||
       falNumImagesForRun > 4;
     const normalizedFalNumImages = Math.min(4, Math.max(1, Math.floor(Number.isFinite(falNumImagesForRun) ? falNumImagesForRun : 1)));
-    const googleAspectRatio = isGeminiModel && falAspectRatioSelectionForRun !== 'default'
+    const googleAspectRatio = isNanoBananaModel && falAspectRatioSelectionForRun !== 'default'
       ? falAspectRatioSelectionForRun
       : undefined;
 
@@ -855,7 +859,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ? REVE_TEXT_TO_IMAGE_MODEL_ID
               : isKlingModel
                 ? KLING_IMAGE_MODEL_ID
-                : GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+                : isNanoBananaProModel
+                  ? NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
+                  : GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
 
           let klingReferenceImages: HTMLImageElement[] | undefined;
           if (isKlingModel) {
@@ -889,8 +895,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isGeminiModel || isReveModel || isKlingModel || isSeedreamModel) ? falAspectRatioSelectionForRun : 'default',
-            ...(isGeminiModel ? { resolution: falResolutionSelectionForRun } : {}),
+            aspectRatio: (isNanoBananaModel || isReveModel || isKlingModel || isSeedreamModel) ? falAspectRatioSelectionForRun : 'default',
+            ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(isKlingModel ? { resolution: normalizedFalResolutionSelectionForRun } : {}),
             ...(isSeedreamModel ? { imageSize: falImageSizeSelectionForRun } : {}),
             ...(klingReferenceImages ? { referenceImages: klingReferenceImages } : {}),
@@ -951,9 +957,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ? paths.filter(path => path.tool === Tool.INPAINT)
             : [];
 
-          const hasKlingReference = referenceImageIdsForRun.length > 0;
-          let klingReferenceImages: HTMLImageElement[] | undefined;
-          if (isKlingModel && hasKlingReference) {
+          const hasEditReferences = referenceImageIdsForRun.length > 0;
+          const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel;
+          let editReferenceImages: HTMLImageElement[] | undefined;
+          if (supportsEditReferenceImages && hasEditReferences) {
             const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
             const referenceCanvasImages = referenceImageIdsForRun
               .filter(id => id !== primaryImageIdForRun)
@@ -970,7 +977,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             };
 
             if (referenceCanvasImages.length > 0) {
-              klingReferenceImages = await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
+              editReferenceImages = await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
               referenceIdsUsed = referenceCanvasImages.map(img => img.id);
             }
           }
@@ -982,7 +989,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             paths: shouldSendMask ? inpaintPaths : paths,
             imageDimensions: editImageDimensions,
             inpaintMode,
-            referenceImages: klingReferenceImages,
+            referenceImages: editReferenceImages,
           }, {
             modelId: falModelIdForRun,
             ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),

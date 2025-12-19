@@ -8,6 +8,8 @@ import type {
 } from '../types';
 
 // Central registry of supported model IDs plus helpers for validation/labeling in the UI.
+export const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit' as const;
+export const NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-pro' as const;
 export const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit' as const;
 export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
@@ -70,7 +72,8 @@ export const WAN_CREATIVITY_OPTIONS: ReadonlyArray<{ value: WanCreativitySelecti
 ] as const;
 
 export const FAL_IMAGE_MODEL_OPTIONS = [
-  { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
+  { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
+  { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'Gemini 3 Pro Image Preview' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream v4.5' },
   { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
@@ -248,14 +251,14 @@ export const isGenerationKind = (value: unknown): value is GenerationKind =>
 const LEGACY_NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
   if (value === LEGACY_NANO_BANANA_MODEL_ID) {
-    return GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+    return NANO_BANANA_PRO_EDIT_MODEL_ID;
   }
   return isFalModelId(value) ? value : undefined;
 };
 
 export const ENV_FAL_MODEL_ID = normalizeFalModelId(process.env.FAL_MODEL_ID);
 export const DEFAULT_FAL_IMAGE_MODEL_ID: FalImageModelId =
-  isFalImageModelId(ENV_FAL_MODEL_ID) ? ENV_FAL_MODEL_ID : GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
+  isFalImageModelId(ENV_FAL_MODEL_ID) ? ENV_FAL_MODEL_ID : NANO_BANANA_PRO_EDIT_MODEL_ID;
 export const DEFAULT_FAL_VIDEO_MODEL_ID: FalVideoModelId = HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
 
 export const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
@@ -365,6 +368,7 @@ export const KLING26_AUDIO_OPTIONS: ReadonlyArray<{ value: Kling26AudioSelection
 export const FAL_IMAGE_SIZE_DEFAULT_OPTION = 'default';
 export const DEFAULT_MAX_REFERENCE_IMAGES = 13;
 export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | typeof KLING_O1_VIDEO_REF_V2V_MODEL_ID | typeof KLING_O1_VIDEO_FFLF_MODEL_ID, number>> = {
+  [NANO_BANANA_PRO_EDIT_MODEL_ID]: 14,
   [SEEDREAM_MODEL_ID]: 7,
   [SEEDREAM_V45_MODEL_ID]: 8,
   [KLING_IMAGE_MODEL_ID]: 10,
