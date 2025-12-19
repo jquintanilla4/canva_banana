@@ -233,24 +233,19 @@ const isSeedreamEditModelId = (modelId: string | undefined): modelId is Seedream
 const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID] as const;
 const isSeedreamTextToImageModelId = (modelId: string | undefined): boolean =>
   !!modelId && (SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(modelId);
-const isSeedreamV45ModelId = (modelId: string | undefined): boolean =>
-  modelId === SEEDREAM_V45_MODEL_ID || modelId === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID;
 const SEEDREAM_CUSTOM_SIZE_MAP = {
-  '1280x720': { width: 1280, height: 720 },
-  '1920x1080': { width: 1920, height: 1080 },
+  '2560x1440': { width: 2560, height: 1440 },
+  '1440x2560': { width: 1440, height: 2560 },
 } as const;
 type SeedreamCustomSizeKey = keyof typeof SEEDREAM_CUSTOM_SIZE_MAP;
 const isSeedreamCustomSize = (value: unknown): value is SeedreamCustomSizeKey =>
-  value === '1280x720' || value === '1920x1080';
+  value === '2560x1440' || value === '1440x2560';
 const getSeedreamCustomSize = (value: string | undefined) =>
   isSeedreamCustomSize(value) ? SEEDREAM_CUSTOM_SIZE_MAP[value] : undefined;
 const resolveSeedreamCustomSizeForModel = (
-  modelId: string | undefined,
+  _modelId: string | undefined,
   imageSizeOption: FalImageSizeOption | FalAspectRatioOption,
 ): { width: number; height: number } | undefined => {
-  if (isSeedreamV45ModelId(modelId)) {
-    return undefined;
-  }
   const baseSize = getSeedreamCustomSize(imageSizeOption);
   if (!baseSize) {
     return undefined;
@@ -624,10 +619,7 @@ export const generateImageEdit = async ({
   const modelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
   const isSeedreamModel = isSeedreamEditModelId(modelId);
   const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
-  const imageSizeOption: FalImageSizeOption =
-    isSeedreamModel && isSeedreamV45ModelId(modelId) && isSeedreamCustomSize(rawImageSizeOption)
-      ? 'default'
-      : rawImageSizeOption;
+  const imageSizeOption: FalImageSizeOption = rawImageSizeOption;
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
   const seedreamCustomSize = isSeedreamModel
     ? (resolveSeedreamCustomSizeForModel(modelId, imageSizeOption)
@@ -977,10 +969,7 @@ export const generateImage = async (
   const supportsResolution = isGeminiTextToImage || isKlingTextToImage;
   const numImagesOption = options.numImages;
   const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
-  const imageSizeOption: FalImageSizeOption =
-    isSeedreamTextToImage && isSeedreamV45ModelId(modelId) && isSeedreamCustomSize(rawImageSizeOption)
-      ? 'default'
-      : rawImageSizeOption;
+  const imageSizeOption: FalImageSizeOption = rawImageSizeOption;
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
   const seedreamCustomSize = isSeedreamTextToImage
     ? (resolveSeedreamCustomSizeForModel(modelId, imageSizeOption)

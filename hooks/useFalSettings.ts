@@ -28,7 +28,6 @@ import {
   normalizeFalModelId,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
-  isSeedreamV45ModelId,
 } from '../services/modelConfig';
 import type {
   FalAspectRatioSelectionValue,
@@ -289,10 +288,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       return;
     }
     if (!isSeedreamModel) {
-      return;
-    }
-    if (isSeedreamV45ModelId(falModelId) && (falImageSizeSelection === '1280x720' || falImageSizeSelection === '1920x1080')) {
-      setFalImageSizeSelection('default');
       return;
     }
     const validImageSizeOptions = getSeedreamImageSizeOptions(falModelId).map(option => option.value);
