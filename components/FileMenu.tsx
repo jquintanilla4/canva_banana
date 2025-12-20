@@ -7,6 +7,9 @@ type FileMenuProps = {
   onClose: () => void;
   onImportSnapshot: () => void;
   onExportSnapshot: () => void;
+  onOpenBackups: () => void;
+  autosaveEnabled: boolean;
+  onToggleAutosave: () => void;
   onOpenDebugLog: () => void;
 };
 
@@ -16,6 +19,9 @@ export const FileMenu: React.FC<FileMenuProps> = ({
   onClose,
   onImportSnapshot,
   onExportSnapshot,
+  onOpenBackups,
+  autosaveEnabled,
+  onToggleAutosave,
   onOpenDebugLog,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -62,7 +68,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
       {isOpen && (
         <div
           role="menu"
-          className="mt-2 w-40 rounded-md border border-gray-700 bg-gray-900/95 shadow-lg overflow-hidden"
+          className="mt-2 w-44 rounded-md border border-gray-700 bg-gray-900/95 shadow-lg overflow-hidden"
         >
           <button
             type="button"
@@ -79,6 +85,25 @@ export const FileMenu: React.FC<FileMenuProps> = ({
             className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
           >
             Export Snapshot
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={onOpenBackups}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+          >
+            Backups...
+          </button>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={autosaveEnabled}
+            onClick={onToggleAutosave}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors flex items-center justify-between gap-2"
+          >
+            {/* Toggle to opt out of autosave (default is enabled). */}
+            <span>Autosave</span>
+            <span className="text-xs uppercase text-gray-400">{autosaveEnabled ? 'On' : 'Off'}</span>
           </button>
           <button
             type="button"

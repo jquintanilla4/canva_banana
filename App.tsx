@@ -3,6 +3,7 @@ import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
 import { RecordingOverlay } from './components/RecordingOverlay';
+import { BackupsModal } from './components/BackupsModal';
 import {
   Tool,
   InpaintMode,
@@ -50,6 +51,7 @@ import { useKlingPromptMentions } from './hooks/useKlingPromptMentions';
 import { useVideoNegativePrompt } from './hooks/useVideoNegativePrompt';
 import { useFalQueueJobs } from './hooks/useFalQueueJobs';
 import { useDebugLogState } from './hooks/useDebugLogState';
+import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
 import type { FalModelMode } from './services/modelConfig';
 
 // Type alias for API providers
@@ -156,6 +158,13 @@ export default function App() {
 
   // State for toggling the file menu and debug log panels
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
+  // Autosave is opt-out; user can disable it in the file menu.
+  const [autosaveEnabled, setAutosaveEnabled] = useState(true);
+  // Increment after each successful generation to trigger autosave.
+  const [generationTick, setGenerationTick] = useState(0);
+  const [isBackupsOpen, setIsBackupsOpen] = useState(false);
+  const [backupSessions, setBackupSessions] = useState<BackupSessionSummary[]>([]);
+  const [isBackupsLoading, setIsBackupsLoading] = useState(false);
   const {
     isDebugLogOpen,
     debugLogEntries,
@@ -235,6 +244,7 @@ export default function App() {
     exportSnapshot: handleExportSnapshot,
     importSnapshotFromFile: handleImportSnapshotFromFile,
     importSnapshotWithPicker,
+    autosaveSnapshot,
   } = useSnapshotIO({
     ui: {
       appMode,
@@ -265,7 +275,10 @@ export default function App() {
     resetHistory,
     providerAvailability,
     availableProviders: AVAILABLE_PROVIDERS,
+    autosaveEnabled,
   });
+  // Keep latest autosave function in a ref to avoid effect churn.
+  const autosaveSnapshotRef = useRef(autosaveSnapshot);
 
   // Canvas media utilities: uploads, cropping, transforms, downloads, and background removal.
   const {
@@ -550,6 +563,57 @@ export default function App() {
     setIsFileMenuOpen(prev => !prev);
   }, []);
 
+  // Toggle autosave setting from the hamburger menu.
+  const handleToggleAutosave = useCallback(() => {
+    setAutosaveEnabled(prev => !prev);
+  }, []);
+
+  const handleGenerationComplete = useCallback(() => {
+    setGenerationTick(prev => prev + 1);
+  }, []);
+
+  const openBackupsModal = useCallback(() => {
+    setIsFileMenuOpen(false);
+    setIsBackupsOpen(true);
+  }, []);
+
+  const closeBackupsModal = useCallback(() => {
+    setIsBackupsOpen(false);
+  }, []);
+
+  const refreshBackups = useCallback(async () => {
+    setIsBackupsLoading(true);
+    try {
+      const sessions = await listBackupSessions();
+      setBackupSessions(sessions);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Failed to load backups.';
+      setError(message);
+    } finally {
+      setIsBackupsLoading(false);
+    }
+  }, [setError]);
+
+  const handleRestoreBackup = useCallback(async (sessionId: string) => {
+    try {
+      const session = await getBackupSession(sessionId);
+      if (!session) {
+        setError('Backup not found.');
+        return;
+      }
+      const backupFile = new File([session.blob], session.fileName, {
+        type: session.blob.type || 'application/octet-stream',
+      });
+      await handleImportSnapshotFromFile(backupFile);
+      setIsBackupsOpen(false);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Failed to restore backup.';
+      setError(message);
+    }
+  }, [handleImportSnapshotFromFile, setError]);
+
   const handleImportSnapshot = useCallback(() => {
     importSnapshotWithPicker(() => {
       closeFileMenu();
@@ -594,7 +658,27 @@ export default function App() {
     setState,
     setToastMessage,
     setTool,
+    onGenerationComplete: handleGenerationComplete,
   });
+
+  useEffect(() => {
+    autosaveSnapshotRef.current = autosaveSnapshot;
+  }, [autosaveSnapshot]);
+
+  useEffect(() => {
+    if (generationTick === 0) {
+      return;
+    }
+    // Autosave after the generation is committed to state.
+    autosaveSnapshotRef.current();
+  }, [generationTick]);
+
+  useEffect(() => {
+    if (!isBackupsOpen) {
+      return;
+    }
+    refreshBackups();
+  }, [isBackupsOpen, refreshBackups]);
 
   useKeyboardShortcuts({
     onGenerate: handleGenerate,
@@ -853,6 +937,9 @@ export default function App() {
         onClose={closeFileMenu}
         onImportSnapshot={handleImportSnapshot}
         onExportSnapshot={handleExportSnapshot}
+        onOpenBackups={openBackupsModal}
+        autosaveEnabled={autosaveEnabled}
+        onToggleAutosave={handleToggleAutosave}
         onOpenDebugLog={openDebugLogPanel}
       />
 
@@ -971,6 +1058,13 @@ export default function App() {
       {toastMessage && (
         <StatusBanner message={toastMessage} variant="success" />
       )}
+      <BackupsModal
+        isOpen={isBackupsOpen}
+        isLoading={isBackupsLoading}
+        sessions={backupSessions}
+        onClose={closeBackupsModal}
+        onRestore={handleRestoreBackup}
+      />
       {isResizeToastOpen && (
         <ImageResizeToast
           width={resizeWidth}

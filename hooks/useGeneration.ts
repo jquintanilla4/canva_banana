@@ -97,6 +97,7 @@ type UseGenerationArgs = {
   setState: (updater: (prevState: { images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] }) => { images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] }) => void;
   setToastMessage: (message: string | null) => void;
   setTool: (tool: Tool) => void;
+  onGenerationComplete?: () => void;
 };
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
@@ -148,6 +149,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setState,
     setToastMessage,
     setTool,
+    onGenerationComplete,
   } = args;
 
   const showTemporaryError = useCallback((message: string) => {
@@ -733,6 +735,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setTool(Tool.SELECTION);
 
           setToastMessage('Video added to canvas');
+          // Let autosave know a generation completed successfully.
+          onGenerationComplete?.();
         } catch (loadErr) {
           console.error('Failed to load generated video into canvas', loadErr);
           setToastMessage('Video ready! Open from the Fal Queue panel.');
@@ -1212,6 +1216,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       };
 
       await addGeneratedImages();
+      // Let autosave know a generation completed successfully.
+      onGenerationComplete?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An unknown error occurred.';
       const fileSizeMessage = usingFal && isKlingModel ? getFalFileSizeErrorMessage(message) : undefined;
@@ -1284,6 +1290,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setVideoLastFrameImageId,
     setToastMessage,
     setTool,
+    onGenerationComplete,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   ]);

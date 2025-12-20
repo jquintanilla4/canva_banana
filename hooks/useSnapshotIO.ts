@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   ApiProviderId,
@@ -17,6 +17,7 @@ import {
   buildSnapshotBinaryFromState,
   restoreSnapshotFromFile,
 } from '../services/snapshotService';
+import { pruneBackupSessions, saveBackupSession } from '../services/backupService';
 import {
   isFalAspectRatioSelectionValue,
   isFalImageModelId,
@@ -64,12 +65,20 @@ type SnapshotIOArgs = {
   resetHistory: (state: AppState) => void;
   providerAvailability: Record<ApiProvider, boolean>;
   availableProviders: ApiProvider[];
+  autosaveEnabled: boolean;
 };
 
 type SnapshotIOResult = {
   exportSnapshot: () => Promise<void>;
   importSnapshotFromFile: (file: File) => Promise<void>;
   importSnapshotWithPicker: (onFallback: () => void) => Promise<void>;
+  autosaveSnapshot: (stateOverride?: AppState) => void;
+};
+
+type AutosaveSessionInfo = {
+  id: string;
+  createdAt: number;
+  fileName: string;
 };
 
 export function useSnapshotIO({
@@ -82,6 +91,7 @@ export function useSnapshotIO({
   resetHistory,
   providerAvailability,
   availableProviders,
+  autosaveEnabled,
 }: SnapshotIOArgs): SnapshotIOResult {
   const {
     appMode,
@@ -104,6 +114,12 @@ export function useSnapshotIO({
     setToastMessage,
     setIsFileMenuOpen,
   } = ui;
+
+  // Persist file handles so autosave can keep writing without prompting each time.
+  const autosavePrimaryHandleRef = useRef<FileSystemFileHandle | null>(null);
+  const autosaveSessionRef = useRef<AutosaveSessionInfo | null>(null);
+  // Serialize autosave writes to avoid overlapping writes on rapid generations.
+  const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const {
     falModelId,
@@ -157,7 +173,12 @@ export function useSnapshotIO({
     setVideoLastFrameImageId,
   } = selection;
   // Serialize current canvas state plus UI settings into a binary snapshot for export/share.
-  const buildSnapshotBinary = useCallback(async (): Promise<SnapshotBinary> => {
+  const buildSnapshotBinary = useCallback(async (stateOverride?: AppState): Promise<SnapshotBinary> => {
+    const snapshotState = stateOverride ?? {
+      images: displayedImages,
+      notes: displayedNotes,
+      paths: displayedPaths,
+    };
     const meta: SnapshotMetaState = {
       appMode,
       tool,
@@ -192,9 +213,9 @@ export function useSnapshotIO({
     };
 
     return buildSnapshotBinaryFromState({
-      images: displayedImages,
-      notes: displayedNotes,
-      paths: displayedPaths,
+      images: snapshotState.images,
+      notes: snapshotState.notes,
+      paths: snapshotState.paths,
       meta,
     });
   }, [
@@ -233,7 +254,72 @@ export function useSnapshotIO({
     videoLastFrameImageId,
   ]);
 
+  // Wrap FileSystemFileHandle writes so callers don't repeat the write/close flow.
+  const writeSnapshotToHandle = useCallback(async (
+    handle: FileSystemFileHandle,
+    snapshotBinary: SnapshotBinary,
+  ): Promise<void> => {
+    const writable = await handle.createWritable();
+    try {
+      await writeSnapshotBinary(snapshotBinary, writable);
+    } finally {
+      await writable.close();
+    }
+  }, []);
+
+  // Best-effort autosave; no-op unless autosave is enabled and a session is active.
+  const autosaveSnapshot = useCallback((stateOverride?: AppState) => {
+    if (!autosaveEnabled) {
+      return;
+    }
+    const primaryHandle = autosavePrimaryHandleRef.current;
+    const session = autosaveSessionRef.current;
+    if (!session) {
+      return;
+    }
+    const snapshotState = stateOverride ?? {
+      images: displayedImages,
+      notes: displayedNotes,
+      paths: displayedPaths,
+    };
+
+    autosaveQueueRef.current = autosaveQueueRef.current
+      .catch(() => Promise.resolve())
+      .then(async () => {
+        // Rebuild the binary just-in-time so state stays fresh.
+        const snapshotBinary = await buildSnapshotBinary(snapshotState);
+        const backupBlob = snapshotBinaryToBlob(snapshotBinary);
+        if (primaryHandle) {
+          await writeSnapshotToHandle(primaryHandle, snapshotBinary);
+        }
+        // Save a local backup snapshot so users can restore recent sessions.
+        await saveBackupSession({
+          id: session.id,
+          createdAt: session.createdAt,
+          updatedAt: Date.now(),
+          fileName: session.fileName,
+          size: backupBlob.size,
+          blob: backupBlob,
+        });
+        await pruneBackupSessions(3);
+      })
+      .catch(err => {
+        console.error(err);
+        const message = err instanceof Error ? err.message : 'Autosave failed.';
+        setError(message);
+      });
+  }, [
+    autosaveEnabled,
+    buildSnapshotBinary,
+    displayedImages,
+    displayedNotes,
+    displayedPaths,
+    setError,
+    writeSnapshotToHandle,
+  ]);
+
   const exportSnapshot = useCallback(async () => {
+    let shouldClearError = true;
     try {
       const snapshotBinary = await buildSnapshotBinary();
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -250,9 +336,36 @@ export function useSnapshotIO({
             },
           ],
         });
-        const writable = await saveHandle.createWritable();
-        await writeSnapshotBinary(snapshotBinary, writable);
-        await writable.close();
+        await writeSnapshotToHandle(saveHandle as FileSystemFileHandle, snapshotBinary);
+
+        // Start a new autosave session whenever the user exports a snapshot.
+        const sessionId = crypto.randomUUID();
+        const sessionCreatedAt = Date.now();
+        const sessionFileName = saveHandle.name ?? suggestedName;
+        const backupBlob = snapshotBinaryToBlob(snapshotBinary);
+        autosaveSessionRef.current = {
+          id: sessionId,
+          createdAt: sessionCreatedAt,
+          fileName: sessionFileName,
+        };
+        autosavePrimaryHandleRef.current = saveHandle as FileSystemFileHandle;
+
+        try {
+          // Persist the initial backup so it shows up in the Backups dialog.
+          await saveBackupSession({
+            id: sessionId,
+            createdAt: sessionCreatedAt,
+            updatedAt: sessionCreatedAt,
+            fileName: sessionFileName,
+            size: backupBlob.size,
+            blob: backupBlob,
+          });
+          await pruneBackupSessions(3);
+        } catch (backupError) {
+          console.error(backupError);
+          setError('Snapshot exported, but the autosave backup could not be stored.');
+          shouldClearError = false;
+        }
       } else {
         const blob = snapshotBinaryToBlob(snapshotBinary);
         const url = URL.createObjectURL(blob);
@@ -263,9 +376,37 @@ export function useSnapshotIO({
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
+
+        const sessionId = crypto.randomUUID();
+        const sessionCreatedAt = Date.now();
+        autosaveSessionRef.current = {
+          id: sessionId,
+          createdAt: sessionCreatedAt,
+          fileName: suggestedName,
+        };
+        autosavePrimaryHandleRef.current = null;
+
+        try {
+          // Persist the initial backup so it shows up in the Backups dialog.
+          await saveBackupSession({
+            id: sessionId,
+            createdAt: sessionCreatedAt,
+            updatedAt: sessionCreatedAt,
+            fileName: suggestedName,
+            size: blob.size,
+            blob,
+          });
+          await pruneBackupSessions(3);
+        } catch (backupError) {
+          console.error(backupError);
+          setError('Snapshot exported, but the autosave backup could not be stored.');
+          shouldClearError = false;
+        }
       }
 
-      setError(null);
+      if (shouldClearError) {
+        setError(null);
+      }
       setToastMessage('Snapshot exported');
       setTimeout(() => setToastMessage(null), 2000);
     } catch (err) {
@@ -275,7 +416,7 @@ export function useSnapshotIO({
     } finally {
       setIsFileMenuOpen(false);
     }
-  }, [buildSnapshotBinary, setError, setIsFileMenuOpen, setToastMessage]);
+  }, [buildSnapshotBinary, setError, setIsFileMenuOpen, setToastMessage, writeSnapshotToHandle]);
 
   // Restore a snapshot file into state, validating each option before applying it.
   const importSnapshotFromFile = useCallback(async (file: File) => {
@@ -508,5 +649,6 @@ export function useSnapshotIO({
     exportSnapshot,
     importSnapshotFromFile,
     importSnapshotWithPicker,
+    autosaveSnapshot,
   };
 }
