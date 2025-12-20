@@ -13,7 +13,7 @@ type Args = {
   isVideoMode: boolean;
   isUpscaleModel: boolean;
   isSeedreamModel: boolean;
-  isGeminiModel: boolean;
+  isNanoBananaModel: boolean;
   isReveModel: boolean;
   isKlingModel: boolean;
   isKlingVideoModel: boolean;
@@ -46,7 +46,7 @@ export function useGenerationGuards({
   isVideoMode,
   isUpscaleModel,
   isSeedreamModel,
-  isGeminiModel,
+  isNanoBananaModel,
   isReveModel,
   isKlingModel,
   isKlingVideoModel,
@@ -71,7 +71,7 @@ export function useGenerationGuards({
     const hasPrimaryImage = Boolean(activePrimaryImage);
     const isTextToImage = !hasPrimaryImage && !(isVideoMode && isVideoInputMode && hasSourceVideo);
     const promptEmpty = prompt.trim().length === 0;
-    const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
+    const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel);
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
       falNumImages < 1 ||
@@ -149,7 +149,7 @@ export function useGenerationGuards({
     falNumImages,
     hasInpaintMask,
     hasSourceVideo,
-    isGeminiModel,
+    isNanoBananaModel,
     isHailuoVideoModel,
     isKling26VideoModel,
     isKlingModel,

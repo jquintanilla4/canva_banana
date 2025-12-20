@@ -13,7 +13,6 @@ import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
 import { clearDebugLogs } from './services/debugLog';
 import {
-  GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
@@ -640,10 +639,7 @@ export default function App() {
 
   const usingFal = apiProvider === 'fal';
   const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
-  const isGeminiModel = !fal.isVideoMode && (
-    fal.falModelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID
-    || fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID
-  );
+  const isNanoBananaModel = !fal.isVideoMode && fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
   const isReveModel = !fal.isVideoMode && fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
   const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isUpscaleModel;
@@ -743,7 +739,7 @@ export default function App() {
     isVideoMode: fal.isVideoMode,
     isUpscaleModel: fal.isUpscaleModel,
     isSeedreamModel,
-    isGeminiModel,
+    isNanoBananaModel,
     isReveModel,
 	    isKlingModel,
 		    isKlingVideoModel: fal.isKlingVideoModel,
@@ -763,7 +759,7 @@ export default function App() {
     isVideoMode: fal.isVideoMode,
     usingFal,
     isSeedreamModel,
-    isGeminiModel,
+    isNanoBananaModel,
     isReveModel,
     isKlingModel,
     isUpscaleModel: fal.isUpscaleModel,

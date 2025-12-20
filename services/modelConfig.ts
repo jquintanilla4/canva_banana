@@ -10,10 +10,8 @@ import type {
 // Central registry of supported model IDs plus helpers for validation/labeling in the UI.
 export const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit' as const;
 export const NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-pro' as const;
-export const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit' as const;
 export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
-export const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview' as const;
 export const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 export const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
 export const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
@@ -73,7 +71,6 @@ export const WAN_CREATIVITY_OPTIONS: ReadonlyArray<{ value: WanCreativitySelecti
 
 export const FAL_IMAGE_MODEL_OPTIONS = [
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
-  { value: GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID, label: 'Gemini 3 Pro Image Preview' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream v4.5' },
   { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
@@ -304,7 +301,7 @@ export const FAL_KLING_RESOLUTION_OPTIONS: ReadonlyArray<{ value: FalResolutionS
   { value: '2K', label: '2K' },
 ] as const;
 
-export const FAL_GEMINI_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+export const FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
   { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Auto (default)' },
   { value: '21:9', label: '21:9' },
@@ -353,7 +350,7 @@ export const FAL_SEEDREAM_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspect
 export const getSeedreamAspectRatioOptions = (_modelId: string | undefined) => FAL_SEEDREAM_ASPECT_RATIO_OPTIONS;
 
 export const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
-  ...FAL_GEMINI_ASPECT_RATIO_OPTIONS.map(option => option.value),
+  ...FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_KLING_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.map(option => option.value),

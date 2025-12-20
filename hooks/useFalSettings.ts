@@ -4,7 +4,7 @@ import {
   CRYSTAL_UPSCALER_MODEL_ID,
   DEFAULT_FAL_IMAGE_MODEL_ID,
   DEFAULT_FAL_VIDEO_MODEL_ID,
-  FAL_GEMINI_ASPECT_RATIO_OPTIONS,
+  FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_KLING_ASPECT_RATIO_OPTIONS,
   FAL_REVE_ASPECT_RATIO_OPTIONS,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
@@ -276,7 +276,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
         ? FAL_KLING_ASPECT_RATIO_OPTIONS
         : isSeedreamModel
           ? getSeedreamAspectRatioOptions(falModelId)
-          : FAL_GEMINI_ASPECT_RATIO_OPTIONS;
+          : FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS;
     const validOptions = aspectRatioOptions.map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
       setFalAspectRatioSelection('default');

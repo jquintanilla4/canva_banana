@@ -22,7 +22,7 @@ import type {
 import {
   FAL_CRYSTAL_CREATIVITY_OPTIONS,
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
-  FAL_GEMINI_ASPECT_RATIO_OPTIONS,
+  FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_KLING_ASPECT_RATIO_OPTIONS,
   FAL_KLING_RESOLUTION_OPTIONS,
@@ -77,7 +77,7 @@ export type PromptBarControlsInput = {
   isVideoMode: boolean;
   usingFal: boolean;
   isSeedreamModel: boolean;
-  isGeminiModel: boolean;
+  isNanoBananaModel: boolean;
   isReveModel: boolean;
   isKlingModel: boolean;
   isUpscaleModel: boolean;
@@ -151,7 +151,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isVideoMode,
     usingFal,
     isSeedreamModel,
-    isGeminiModel,
+    isNanoBananaModel,
     isReveModel,
     isKlingModel,
     isUpscaleModel,
@@ -533,13 +533,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
-  const supportsAspectRatioControl = isGeminiModel || isReveModel || isKlingModel || (isSeedreamModel && !shouldShowSeedreamImageSizeControl);
+  const supportsAspectRatioControl = isNanoBananaModel || isReveModel || isKlingModel || (isSeedreamModel && !shouldShowSeedreamImageSizeControl);
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || !isVideoMode);
   if (shouldShowAspectRatioControl) {
     const aspectRatioOptions = isReveModel
       ? FAL_REVE_ASPECT_RATIO_OPTIONS
-      : isGeminiModel
-        ? FAL_GEMINI_ASPECT_RATIO_OPTIONS
+      : isNanoBananaModel
+        ? FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS
         : isSeedreamModel
           ? getSeedreamAspectRatioOptions(falModelId)
           : FAL_KLING_ASPECT_RATIO_OPTIONS;
@@ -553,7 +553,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
-  const shouldShowResolutionControl = apiProvider === 'fal' && (isGeminiModel || isKlingModel);
+  const shouldShowResolutionControl = apiProvider === 'fal' && (isNanoBananaModel || isKlingModel);
   if (shouldShowResolutionControl) {
     const resolutionOptions = isKlingModel ? FAL_KLING_RESOLUTION_OPTIONS : FAL_RESOLUTION_OPTIONS;
     const resolutionValue = isKlingModel && falResolutionSelection === '4K' ? '2K' : falResolutionSelection;
@@ -567,7 +567,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
-  const shouldShowNumImagesControl = apiProvider === 'fal' && !isVideoMode && (isSeedreamModel || isGeminiModel || isReveModel || isKlingModel);
+  const shouldShowNumImagesControl = apiProvider === 'fal' && !isVideoMode && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel);
   if (shouldShowNumImagesControl) {
     controls.push({
       id: 'fal-num-images-select',

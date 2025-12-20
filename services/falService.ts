@@ -208,8 +208,6 @@ interface GenerateVideoOptions {
 
 const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit';
 const NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-pro';
-const GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview/edit';
-const GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/gemini-3-pro-image-preview';
 const LEGACY_NANO_BANANA_EDIT_MODEL_ID = 'fal-ai/nano-banana/edit';
 const LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana';
 
@@ -665,7 +663,7 @@ export const generateImageEdit = async ({
     } else {
       body.image_size = imageSizeOption;
     }
-  } else if (modelId === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID || isNanoBananaProModel || isKlingModel) {
+  } else if (isNanoBananaProModel || isKlingModel) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }
@@ -964,13 +962,12 @@ export const generateImage = async (
 ): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => {
   ensureFalClientConfigured();
 
-  const modelId = normalizeModelId(options.modelId) || GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+  const modelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
-  const isGeminiTextToImage = modelId === GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
   const isNanoBananaTextToImage = modelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
-  const supportsAspectRatio = isGeminiTextToImage || isNanoBananaTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
-  const supportsResolution = isGeminiTextToImage || isNanoBananaTextToImage || isKlingTextToImage;
+  const supportsAspectRatio = isNanoBananaTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
+  const supportsResolution = isNanoBananaTextToImage || isKlingTextToImage;
   const numImagesOption = options.numImages;
   const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
   const imageSizeOption: FalImageSizeOption = rawImageSizeOption;
@@ -1018,7 +1015,7 @@ export const generateImage = async (
     } else if (imageSizeOption !== 'default') {
       body.image_size = imageSizeOption;
     }
-  } else if (isGeminiTextToImage || isNanoBananaTextToImage || isKlingTextToImage) {
+  } else if (isNanoBananaTextToImage || isKlingTextToImage) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }

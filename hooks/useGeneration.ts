@@ -2,8 +2,6 @@ import { useCallback } from 'react';
 import type { Dispatch, SetStateAction, SyntheticEvent } from 'react';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
-  GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID,
-  GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
@@ -228,9 +226,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const usingFal = apiProviderForRun === 'fal';
     const isVideoMode = usingFal && falModelModeForRun === 'video';
     const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelIdForRun);
-    const isGeminiModel = !isVideoMode && falModelIdForRun === GEMINI_IMAGE_PREVIEW_EDIT_MODEL_ID;
     const isNanoBananaProModel = !isVideoMode && falModelIdForRun === NANO_BANANA_PRO_EDIT_MODEL_ID;
-    const isNanoBananaModel = isNanoBananaProModel || isGeminiModel;
+    const isNanoBananaModel = isNanoBananaProModel;
     const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
     const normalizedFalResolutionSelectionForRun =
@@ -751,7 +748,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       }
 
       if (usingFal && !isUpscaleModel && isReveModel) {
-        setError('Reve Image only supports text-to-image generation. Please switch to Gemini 3 Pro Image Preview or Seedream for edits.');
+        setError('Reve Image only supports text-to-image generation. Please switch to NanoBanana Pro or Seedream for edits.');
         return;
       }
 
@@ -861,7 +858,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 ? KLING_IMAGE_MODEL_ID
                 : isNanoBananaProModel
                   ? NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
-                  : GEMINI_IMAGE_PREVIEW_TEXT_TO_IMAGE_MODEL_ID;
+                  : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
 
           let klingReferenceImages: HTMLImageElement[] | undefined;
           if (isKlingModel) {

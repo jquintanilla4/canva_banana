@@ -1,5 +1,5 @@
 {
   "name": "Canva Banana 🍌",
-  "description": "An infinite canvas application that allows users to upload images, annotate or create inpainting masks, and leverage Google's Gemini 3 Pro Image Preview model to generate powerful image edits based on text prompts.",
+  "description": "An infinite canvas application that allows users to upload images, annotate or create inpainting masks, and leverage Fal.ai's NanoBanana Pro model to generate powerful image edits based on text prompts.",
   "requestFramePermissions": []
 }
