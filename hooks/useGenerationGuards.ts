@@ -24,6 +24,7 @@ type Args = {
   falNumImages: number;
   hasInpaintMask: boolean;
   activePrimaryImage: unknown;
+  hasSelectedStillImage: boolean;
 };
 
 export type GenerationGuardsResult = {
@@ -58,6 +59,7 @@ export function useGenerationGuards({
   falNumImages,
   hasInpaintMask,
   activePrimaryImage,
+  hasSelectedStillImage,
 }: Args): GenerationGuardsResult {
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
@@ -74,6 +76,9 @@ export function useGenerationGuards({
     const usingFal = apiProvider === 'fal';
     const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
     const hasPrimaryImage = Boolean(activePrimaryImage);
+    const hasWanAnimateStillImage = isWanAnimateVideoModel || isOneToAllAnimateVideoModel
+      ? hasSelectedStillImage
+      : hasPrimaryImage;
     const isTextToImage = !hasPrimaryImage && !(isVideoMode && isVideoInputMode && hasSourceVideo);
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel);
@@ -87,8 +92,8 @@ export function useGenerationGuards({
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
     const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage;
-    const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasPrimaryImage;
-    const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasPrimaryImage;
+    const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
+    const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const requiresSourceAudioForVideoInput = usingFal && isVideoMode && isAudioInputMode && !hasSourceAudio;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
@@ -113,18 +118,19 @@ export function useGenerationGuards({
           return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a video and audio clip to lip sync.`;
         }
         if (isWanAnimateVideoModel) {
-          if (hasSourceVideo) {
-            return hasPrimaryImage
-              ? 'Optionally describe changes for this replacement...'
-              : 'Select a still image to replace the character...';
+          if (!hasSourceVideo) {
+            return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a video to replace a character.`;
           }
-          return 'Select a video to replace a character, then select a still image...';
+          if (!hasWanAnimateStillImage) {
+            return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a still image to replace the character.`;
+          }
+          return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Ready to generate.`;
         }
         if (isOneToAllAnimateVideoModel) {
           if (!hasSourceVideo) {
             return 'Select a pose video, then select a reference image to animate...';
           }
-          return hasPrimaryImage
+          return hasWanAnimateStillImage
             ? 'Describe the motion or scene you want to animate...'
             : 'Select a reference image to animate...';
         }
@@ -165,7 +171,7 @@ export function useGenerationGuards({
         ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
         : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
     })();
-    const disablePromptInput = usingFal && (isUpscaleModel || isLipsyncVideoModel);
+    const disablePromptInput = usingFal && (isUpscaleModel || isLipsyncVideoModel || isWanAnimateVideoModel);
 
     return {
       submitDisabled,
@@ -182,6 +188,7 @@ export function useGenerationGuards({
     appMode,
     falModelId,
     falNumImages,
+    hasSelectedStillImage,
     hasInpaintMask,
     hasSourceAudio,
     hasSourceVideo,

@@ -133,6 +133,28 @@ const extractFalQueueLogMessages = (logs: FalQueueUpdate['logs']): string[] => {
   return [];
 };
 
+const resolveSelectedStillImageId = (
+  primaryImageId: string | null,
+  selectedImageIds: string[],
+  images: CanvasImage[],
+): string | null => {
+  if (primaryImageId) {
+    const primaryImage = images.find(img => img.id === primaryImageId);
+    if (primaryImage?.mediaType === 'image') {
+      return primaryImageId;
+    }
+  }
+
+  for (const imageId of selectedImageIds) {
+    const candidate = images.find(img => img.id === imageId);
+    if (candidate?.mediaType === 'image') {
+      return imageId;
+    }
+  }
+
+  return primaryImageId;
+};
+
 export const useGeneration = (args: UseGenerationArgs) => {
   const {
     appMode,
@@ -204,6 +226,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     videoLastFrameImageId,
     sourceVideoId,
     sourceAudioId,
+    selectedImageIds,
     primaryImageId,
     activePrimaryImage,
     setSelectedImageIds,
@@ -262,7 +285,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const infinitalkSeedValue = infinitalkSeedForRun === 'random'
       ? undefined
       : Number.isFinite(Number(infinitalkSeedForRun)) ? Number(infinitalkSeedForRun) : undefined;
-    const primaryImageIdForRun = generationOverride ? generationOverride.primaryImageId ?? null : primaryImageId;
+    const basePrimaryImageIdForRun = generationOverride ? generationOverride.primaryImageId ?? null : primaryImageId;
+    const shouldPreferSelectedStillImage = apiProviderForRun === 'fal'
+      && falModelModeForRun === 'video'
+      && !generationOverride
+      && (falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID || falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID);
+    const primaryImageIdForRun = shouldPreferSelectedStillImage
+      ? resolveSelectedStillImageId(basePrimaryImageIdForRun, selectedImageIds, images)
+      : basePrimaryImageIdForRun;
     const primaryImageForRun = primaryImageIdForRun
       ? images.find(img => img.id === primaryImageIdForRun) || null
       : null;
@@ -1334,6 +1364,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     referenceImageIds,
     elementImageIds,
     videoLastFrameImageId,
+    selectedImageIds,
     primaryImageId,
     activePrimaryImage,
     sourceAudioId,

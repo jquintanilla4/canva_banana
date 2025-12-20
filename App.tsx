@@ -245,6 +245,11 @@ export default function App() {
     handleNoteSelection,
   } = selection;
 
+  const hasSelectedStillImage = useMemo(
+    () => selectedImageIds.some(id => images.find(img => img.id === id)?.mediaType === 'image'),
+    [images, selectedImageIds],
+  );
+
   // Handles snapshot import/export so canvases can be saved, loaded, or shared.
   const {
     exportSnapshot: handleExportSnapshot,
@@ -837,10 +842,11 @@ export default function App() {
 		    isKlingVideoModel: fal.isKlingVideoModel,
 		    isKling26VideoModel: fal.isKling26VideoModel,
 		    isHailuoVideoModel: fal.isHailuoVideoModel,
-		    falModelId: fal.falModelId,
-	    falNumImages: fal.falNumImages,
-	    hasInpaintMask,
+    falModelId: fal.falModelId,
+    falNumImages: fal.falNumImages,
+    hasInpaintMask,
     activePrimaryImage,
+    hasSelectedStillImage,
   });
 
   // Derive UI controls for the prompt bar based on provider, model, and mode selections.
