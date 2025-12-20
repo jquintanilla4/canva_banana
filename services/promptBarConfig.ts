@@ -6,6 +6,7 @@ import type {
   FalVideoModelId,
   HailuoVariant,
   InfinitalkAccelerationSelectionValue,
+  InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
   InfinitalkSeedSelectionValue,
   Kling26AudioSelectionValue,
@@ -46,6 +47,7 @@ import {
   LIPSYNC_EMOTION_OPTIONS,
   LIPSYNC_MODEL_MODE_OPTIONS,
   INFINITALK_ACCELERATION_OPTIONS,
+  INFINITALK_DURATION_OPTIONS,
   INFINITALK_RESOLUTION_OPTIONS,
   INFINITALK_SEED_OPTIONS,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
@@ -115,6 +117,7 @@ export type PromptBarControlsInput = {
   infinitalkResolution: InfinitalkResolutionSelectionValue;
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
+  infinitalkDuration: InfinitalkDurationSelectionValue;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -144,6 +147,7 @@ export type PromptBarControlsInput = {
   onInfinitalkResolutionChange: (value: string) => void;
   onInfinitalkSeedChange: (value: string) => void;
   onInfinitalkAccelerationChange: (value: string) => void;
+  onInfinitalkDurationChange: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -196,6 +200,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
+    infinitalkDuration,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -225,6 +230,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onInfinitalkResolutionChange,
     onInfinitalkSeedChange,
     onInfinitalkAccelerationChange,
+    onInfinitalkDurationChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -487,6 +493,15 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }
 
   if (isInfinitalkVideoModel) {
+    controls.push({
+      id: 'infinitalk-duration-select',
+      ariaLabel: 'Select Infinitalk duration',
+      options: INFINITALK_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: infinitalkDuration,
+      onChange: onInfinitalkDurationChange,
+      disabled: isLoading,
+    });
+
     controls.push({
       id: 'infinitalk-resolution-select',
       prefixLabel: 'Resolution',

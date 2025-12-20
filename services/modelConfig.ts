@@ -179,6 +179,7 @@ export type LipsyncAudioMode = 'cut_off' | 'loop' | 'bounce' | 'silence' | 'rema
 export type InfinitalkResolutionSelectionValue = '480p' | '720p';
 export type InfinitalkSeedSelectionValue = '42' | 'random';
 export type InfinitalkAccelerationSelectionValue = 'none' | 'regular' | 'high';
+export type InfinitalkDurationSelectionValue = '5s' | '6s' | '10s' | '12s';
 
 export const LIPSYNC_EMOTION_OPTIONS: ReadonlyArray<{ value: LipsyncEmotion; label: string }> = [
   { value: 'neutral', label: 'Neutral' },
@@ -218,6 +219,21 @@ export const INFINITALK_ACCELERATION_OPTIONS: ReadonlyArray<{ value: InfinitalkA
   { value: 'regular', label: 'Regular' },
   { value: 'high', label: 'High' },
 ] as const;
+
+export const INFINITALK_DURATION_OPTIONS: ReadonlyArray<{ value: InfinitalkDurationSelectionValue; label: string }> = [
+  { value: '5s', label: '5s' },
+  { value: '6s', label: '6s' },
+  { value: '10s', label: '10s' },
+  { value: '12s', label: '12s' },
+] as const;
+
+// Map display duration to num_frames for Infinitalk API
+export const INFINITALK_DURATION_TO_NUM_FRAMES: Record<InfinitalkDurationSelectionValue, number> = {
+  '5s': 120,
+  '6s': 144,
+  '10s': 240,
+  '12s': 288,
+} as const;
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
 export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
@@ -267,6 +283,9 @@ export const isInfinitalkSeedSelectionValue = (value: unknown): value is Infinit
 
 export const isInfinitalkAccelerationSelectionValue = (value: unknown): value is InfinitalkAccelerationSelectionValue =>
   value === 'none' || value === 'regular' || value === 'high';
+
+export const isInfinitalkDurationSelectionValue = (value: unknown): value is InfinitalkDurationSelectionValue =>
+  value === '5s' || value === '6s' || value === '10s' || value === '12s';
 
 export const isApiProvider = (value: unknown): value is ApiProviderId =>
   value === 'google' || value === 'fal';

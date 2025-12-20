@@ -43,6 +43,7 @@ import type {
   KlingO1Variant,
   KlingVariant,
   InfinitalkAccelerationSelectionValue,
+  InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
   InfinitalkSeedSelectionValue,
   LipsyncAudioMode,
@@ -102,6 +103,7 @@ type FalHandlers = {
   handleInfinitalkResolutionChange: (value: string) => void;
   handleInfinitalkSeedChange: (value: string) => void;
   handleInfinitalkAccelerationChange: (value: string) => void;
+  handleInfinitalkDurationChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -136,6 +138,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   infinitalkResolution: InfinitalkResolutionSelectionValue;
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
+  infinitalkDuration: InfinitalkDurationSelectionValue;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -167,6 +170,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setInfinitalkResolution: Dispatch<SetStateAction<InfinitalkResolutionSelectionValue>>;
   setInfinitalkSeed: Dispatch<SetStateAction<InfinitalkSeedSelectionValue>>;
   setInfinitalkAcceleration: Dispatch<SetStateAction<InfinitalkAccelerationSelectionValue>>;
+  setInfinitalkDuration: Dispatch<SetStateAction<InfinitalkDurationSelectionValue>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -202,6 +206,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [infinitalkResolution, setInfinitalkResolution] = useState<InfinitalkResolutionSelectionValue>('480p');
   const [infinitalkSeed, setInfinitalkSeed] = useState<InfinitalkSeedSelectionValue>('42');
   const [infinitalkAcceleration, setInfinitalkAcceleration] = useState<InfinitalkAccelerationSelectionValue>('regular');
+  const [infinitalkDuration, setInfinitalkDuration] = useState<InfinitalkDurationSelectionValue>('5s');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -467,6 +472,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleInfinitalkDurationChange = useCallback((value: string) => {
+    if (value === '5s' || value === '6s' || value === '10s' || value === '12s') {
+      setInfinitalkDuration(value);
+    }
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -547,6 +558,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
+    infinitalkDuration,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -590,6 +602,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleInfinitalkResolutionChange,
     handleInfinitalkSeedChange,
     handleInfinitalkAccelerationChange,
+    handleInfinitalkDurationChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -621,6 +634,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,
+    setInfinitalkDuration,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

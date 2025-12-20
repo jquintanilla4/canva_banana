@@ -193,6 +193,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
+    infinitalkDuration,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -253,6 +254,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const infinitalkResolutionForRun = falOptionsOverride.infinitalkResolution ?? infinitalkResolution;
       const infinitalkSeedForRun = falOptionsOverride.infinitalkSeed ?? infinitalkSeed;
       const infinitalkAccelerationForRun = falOptionsOverride.infinitalkAcceleration ?? infinitalkAcceleration;
+      const infinitalkDurationForRun = falOptionsOverride.infinitalkDuration ?? infinitalkDuration;
 	    const kling26AudioOverride = falOptionsOverride.kling26Audio;
     const kling26AudioForRun = kling26AudioOverride !== undefined
       ? kling26AudioOverride
@@ -625,6 +627,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             resolution: infinitalkResolutionForRun,
             ...(infinitalkSeedValue !== undefined ? { seed: infinitalkSeedValue } : {}),
             acceleration: infinitalkAccelerationForRun,
+            infinitalkDuration: infinitalkDurationForRun,
           } : {}),
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
@@ -768,6 +771,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     infinitalkResolution: infinitalkResolutionForRun,
                     infinitalkSeed: infinitalkSeedForRun,
                     infinitalkAcceleration: infinitalkAccelerationForRun,
+                    infinitalkDuration: infinitalkDurationForRun,
                   } : {}),
                   ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                 },
@@ -1324,6 +1328,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
+    infinitalkDuration,
 	    images,
     paths,
     referenceImageIds,

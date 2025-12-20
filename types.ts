@@ -108,6 +108,7 @@ export type GenerationFalOptions = Partial<{
   infinitalkResolution: '480p' | '720p';
   infinitalkSeed: '42' | 'random';
   infinitalkAcceleration: 'none' | 'regular' | 'high';
+  infinitalkDuration: '5s' | '6s' | '10s' | '12s';
 }>;
 
 export interface GenerationInputs {

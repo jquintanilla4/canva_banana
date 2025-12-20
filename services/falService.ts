@@ -15,6 +15,8 @@ import {
   ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MOVE_MODEL_ID,
+  INFINITALK_DURATION_TO_NUM_FRAMES,
+  type InfinitalkDurationSelectionValue,
   type LipsyncAudioMode,
   type LipsyncEmotion,
   type LipsyncModelMode,
@@ -206,6 +208,7 @@ interface GenerateVideoOptions {
   lipsyncEmotion?: LipsyncEmotion;
   lipsyncModelMode?: LipsyncModelMode;
   lipsyncAudioMode?: LipsyncAudioMode;
+  infinitalkDuration?: InfinitalkDurationSelectionValue;
 }
 
 const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit';
@@ -1345,6 +1348,9 @@ export const generateImageToVideo = async (
     const seed = typeof options.seed === 'number' && Number.isFinite(options.seed)
       ? Math.floor(options.seed)
       : undefined;
+    const numFrames = options.infinitalkDuration
+      ? INFINITALK_DURATION_TO_NUM_FRAMES[options.infinitalkDuration]
+      : undefined;
 
     const inputPayload: Record<string, unknown> = {
       video_url: options.sourceVideoUrl,
@@ -1353,6 +1359,7 @@ export const generateImageToVideo = async (
       ...(resolution ? { resolution } : {}),
       ...(seed !== undefined ? { seed } : {}),
       ...(acceleration ? { acceleration } : {}),
+      ...(numFrames !== undefined ? { num_frames: numFrames } : {}),
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);
