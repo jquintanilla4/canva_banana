@@ -5,6 +5,9 @@ import type {
   FalResolutionSelectionValue,
   FalVideoModelId,
   HailuoVariant,
+  InfinitalkAccelerationSelectionValue,
+  InfinitalkResolutionSelectionValue,
+  InfinitalkSeedSelectionValue,
   Kling26AudioSelectionValue,
   KlingO1Variant,
   KlingVariant,
@@ -42,6 +45,9 @@ import {
   LIPSYNC_AUDIO_MODE_OPTIONS,
   LIPSYNC_EMOTION_OPTIONS,
   LIPSYNC_MODEL_MODE_OPTIONS,
+  INFINITALK_ACCELERATION_OPTIONS,
+  INFINITALK_RESOLUTION_OPTIONS,
+  INFINITALK_SEED_OPTIONS,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
@@ -87,6 +93,7 @@ export type PromptBarControlsInput = {
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
+  isInfinitalkVideoModel: boolean;
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
@@ -105,6 +112,9 @@ export type PromptBarControlsInput = {
   lipsyncEmotion: LipsyncEmotion;
   lipsyncModelMode: LipsyncModelMode;
   lipsyncAudioMode: LipsyncAudioMode;
+  infinitalkResolution: InfinitalkResolutionSelectionValue;
+  infinitalkSeed: InfinitalkSeedSelectionValue;
+  infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -131,6 +141,9 @@ export type PromptBarControlsInput = {
   onLipsyncEmotionChange: (value: string) => void;
   onLipsyncModelModeChange: (value: string) => void;
   onLipsyncAudioModeChange: (value: string) => void;
+  onInfinitalkResolutionChange: (value: string) => void;
+  onInfinitalkSeedChange: (value: string) => void;
+  onInfinitalkAccelerationChange: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -161,6 +174,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isHailuoVideoModel,
     isWanAnimateVideoModel,
     isLipsyncVideoModel,
+    isInfinitalkVideoModel,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
@@ -179,6 +193,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     lipsyncEmotion,
     lipsyncModelMode,
     lipsyncAudioMode,
+    infinitalkResolution,
+    infinitalkSeed,
+    infinitalkAcceleration,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -205,6 +222,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onLipsyncEmotionChange,
     onLipsyncModelModeChange,
     onLipsyncAudioModeChange,
+    onInfinitalkResolutionChange,
+    onInfinitalkSeedChange,
+    onInfinitalkAccelerationChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -462,6 +482,38 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: LIPSYNC_AUDIO_MODE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: lipsyncAudioMode,
       onChange: onLipsyncAudioModeChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (isInfinitalkVideoModel) {
+    controls.push({
+      id: 'infinitalk-resolution-select',
+      prefixLabel: 'Resolution',
+      ariaLabel: 'Select Infinitalk resolution',
+      options: INFINITALK_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: infinitalkResolution,
+      onChange: onInfinitalkResolutionChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'infinitalk-seed-select',
+      prefixLabel: 'Seed',
+      ariaLabel: 'Select Infinitalk seed',
+      options: INFINITALK_SEED_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: infinitalkSeed,
+      onChange: onInfinitalkSeedChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'infinitalk-acceleration-select',
+      prefixLabel: 'Acceleration',
+      ariaLabel: 'Select Infinitalk acceleration',
+      options: INFINITALK_ACCELERATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: infinitalkAcceleration,
+      onChange: onInfinitalkAccelerationChange,
       disabled: isLoading,
     });
   }

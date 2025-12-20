@@ -17,6 +17,7 @@ import {
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
+  INFINITALK_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -41,6 +42,9 @@ import type {
   Kling26AudioSelectionValue,
   KlingO1Variant,
   KlingVariant,
+  InfinitalkAccelerationSelectionValue,
+  InfinitalkResolutionSelectionValue,
+  InfinitalkSeedSelectionValue,
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
@@ -67,6 +71,7 @@ type FalDerivedState = {
   isWanAnimateVideoModel: boolean;
   isOneToAllAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
+  isInfinitalkVideoModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -94,6 +99,9 @@ type FalHandlers = {
   handleLipsyncEmotionChange: (value: string) => void;
   handleLipsyncModelModeChange: (value: string) => void;
   handleLipsyncAudioModeChange: (value: string) => void;
+  handleInfinitalkResolutionChange: (value: string) => void;
+  handleInfinitalkSeedChange: (value: string) => void;
+  handleInfinitalkAccelerationChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -125,6 +133,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   lipsyncEmotion: LipsyncEmotion;
   lipsyncModelMode: LipsyncModelMode;
   lipsyncAudioMode: LipsyncAudioMode;
+  infinitalkResolution: InfinitalkResolutionSelectionValue;
+  infinitalkSeed: InfinitalkSeedSelectionValue;
+  infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -153,6 +164,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setLipsyncEmotion: Dispatch<SetStateAction<LipsyncEmotion>>;
   setLipsyncModelMode: Dispatch<SetStateAction<LipsyncModelMode>>;
   setLipsyncAudioMode: Dispatch<SetStateAction<LipsyncAudioMode>>;
+  setInfinitalkResolution: Dispatch<SetStateAction<InfinitalkResolutionSelectionValue>>;
+  setInfinitalkSeed: Dispatch<SetStateAction<InfinitalkSeedSelectionValue>>;
+  setInfinitalkAcceleration: Dispatch<SetStateAction<InfinitalkAccelerationSelectionValue>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -185,6 +199,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [lipsyncEmotion, setLipsyncEmotion] = useState<LipsyncEmotion>('neutral');
   const [lipsyncModelMode, setLipsyncModelMode] = useState<LipsyncModelMode>('face');
   const [lipsyncAudioMode, setLipsyncAudioMode] = useState<LipsyncAudioMode>('bounce');
+  const [infinitalkResolution, setInfinitalkResolution] = useState<InfinitalkResolutionSelectionValue>('480p');
+  const [infinitalkSeed, setInfinitalkSeed] = useState<InfinitalkSeedSelectionValue>('42');
+  const [infinitalkAcceleration, setInfinitalkAcceleration] = useState<InfinitalkAccelerationSelectionValue>('regular');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -205,6 +222,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
+  const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -431,6 +449,24 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleInfinitalkResolutionChange = useCallback((value: string) => {
+    if (value === '480p' || value === '720p') {
+      setInfinitalkResolution(value);
+    }
+  }, []);
+
+  const handleInfinitalkSeedChange = useCallback((value: string) => {
+    if (value === '42' || value === 'random') {
+      setInfinitalkSeed(value);
+    }
+  }, []);
+
+  const handleInfinitalkAccelerationChange = useCallback((value: string) => {
+    if (value === 'none' || value === 'regular' || value === 'high') {
+      setInfinitalkAcceleration(value);
+    }
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -508,6 +544,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     lipsyncEmotion,
     lipsyncModelMode,
     lipsyncAudioMode,
+    infinitalkResolution,
+    infinitalkSeed,
+    infinitalkAcceleration,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -523,6 +562,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isWanAnimateVideoModel,
     isOneToAllAnimateVideoModel,
     isLipsyncVideoModel,
+    isInfinitalkVideoModel,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,
@@ -547,6 +587,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleLipsyncEmotionChange,
     handleLipsyncModelModeChange,
     handleLipsyncAudioModeChange,
+    handleInfinitalkResolutionChange,
+    handleInfinitalkSeedChange,
+    handleInfinitalkAccelerationChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -575,6 +618,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setLipsyncEmotion,
     setLipsyncModelMode,
     setLipsyncAudioMode,
+    setInfinitalkResolution,
+    setInfinitalkSeed,
+    setInfinitalkAcceleration,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

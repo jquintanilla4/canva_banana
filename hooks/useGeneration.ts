@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction, SyntheticEvent } from 'react';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  INFINITALK_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
@@ -189,6 +190,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     lipsyncEmotion,
     lipsyncModelMode,
     lipsyncAudioMode,
+    infinitalkResolution,
+    infinitalkSeed,
+    infinitalkAcceleration,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -246,10 +250,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    const wanAnimateQualityForRun = falOptionsOverride.wanAnimateQuality ?? wanAnimateQuality;
 	    const wanAnimateUseTurboForRun = falOptionsOverride.wanAnimateUseTurbo ?? wanAnimateUseTurbo;
       const oneToAllAnimateResolutionForRun = falOptionsOverride.oneToAllAnimateResolution ?? oneToAllAnimateResolution;
+      const infinitalkResolutionForRun = falOptionsOverride.infinitalkResolution ?? infinitalkResolution;
+      const infinitalkSeedForRun = falOptionsOverride.infinitalkSeed ?? infinitalkSeed;
+      const infinitalkAccelerationForRun = falOptionsOverride.infinitalkAcceleration ?? infinitalkAcceleration;
 	    const kling26AudioOverride = falOptionsOverride.kling26Audio;
     const kling26AudioForRun = kling26AudioOverride !== undefined
       ? kling26AudioOverride
       : kling26AudioSelection === 'on';
+    const infinitalkSeedValue = infinitalkSeedForRun === 'random'
+      ? undefined
+      : Number.isFinite(Number(infinitalkSeedForRun)) ? Number(infinitalkSeedForRun) : undefined;
     const primaryImageIdForRun = generationOverride ? generationOverride.primaryImageId ?? null : primaryImageId;
     const primaryImageForRun = primaryImageIdForRun
       ? images.find(img => img.id === primaryImageIdForRun) || null
@@ -283,11 +293,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
 	    const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
 	    const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
-	    const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
+      const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
       const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
       const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
+      const isInfinitalkVideoModel = isVideoMode && falVideoModelIdForRun === INFINITALK_VIDEO_MODEL_ID;
 	    const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
-      const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isLipsyncVideoModel;
+      const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isLipsyncVideoModel || isInfinitalkVideoModel;
 	    const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
 	    const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
 	    const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
@@ -333,13 +344,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
     // Get sourceAudioId for lip sync mode
     const sourceAudioIdForRun = generationOverride?.sourceAudioId ?? sourceAudioId;
 
-    if (usingFal && isVideoMode && isLipsyncVideoModel) {
+    const requiresAudioInput = isLipsyncVideoModel || isInfinitalkVideoModel;
+
+    if (usingFal && isVideoMode && requiresAudioInput) {
       if (!sourceVideoIdForRun) {
-        setError('Select a video on the canvas to lip sync.');
+        setError(isInfinitalkVideoModel
+          ? 'Select a video on the canvas to drive Infinitalk.'
+          : 'Select a video on the canvas to lip sync.');
         return;
       }
       if (!sourceAudioIdForRun) {
-        setError('Select an audio clip on the canvas for lip sync audio.');
+        setError(isInfinitalkVideoModel
+          ? 'Select an audio clip on the canvas for Infinitalk.'
+          : 'Select an audio clip on the canvas for lip sync audio.');
         return;
       }
     }
@@ -445,7 +462,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ? 'Select a video on the canvas to drive the animation.'
                   : isLipsyncVideoModel
                     ? 'Select a video on the canvas to lip sync.'
-                    : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
+                    : isInfinitalkVideoModel
+                      ? 'Select a video on the canvas to drive Infinitalk.'
+                      : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
           }
           if (isLipsyncVideoModel) {
             const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
@@ -478,13 +497,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
         // For lip sync mode, get the audio URL
         let sourceAudioUrlForRequest: string | undefined;
-        if (isLipsyncVideoModel && sourceAudioIdForRun) {
+        if (requiresAudioInput && sourceAudioIdForRun) {
           const sourceAudio = images.find(img => img.id === sourceAudioIdForRun && img.mediaType === 'audio');
           if (!sourceAudio) {
-            throw new Error('Select an audio clip on the canvas for lip sync.');
+            throw new Error(isInfinitalkVideoModel
+              ? 'Select an audio clip on the canvas for Infinitalk.'
+              : 'Select an audio clip on the canvas for lip sync.');
           }
           const audioDurationSeconds = sourceAudio.audioDuration ?? sourceAudio.audioElement?.duration;
-          if (typeof audioDurationSeconds === 'number' && Number.isFinite(audioDurationSeconds) && audioDurationSeconds > 15) {
+          if (isLipsyncVideoModel && typeof audioDurationSeconds === 'number' && Number.isFinite(audioDurationSeconds) && audioDurationSeconds > 15) {
             setError('Lip Sync requires audio 15 seconds or shorter.');
             return;
           }
@@ -493,7 +514,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
           setToastMessage('Preparing audio...');
           const audioFileForUpload = sourceAudio.file.type === 'audio/webm'
-            ? new File([await convertAudioBlobToWav(sourceAudio.file)], `lip-sync-${Date.now()}.wav`, { type: 'audio/wav' })
+            ? new File([await convertAudioBlobToWav(sourceAudio.file)], `fal-audio-${Date.now()}.wav`, { type: 'audio/wav' })
             : sourceAudio.file;
           setToastMessage('Uploading audio...');
           sourceAudioUrlForRequest = await uploadVideoToFal(audioFileForUpload);
@@ -597,6 +618,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
             lipsyncEmotion: lipsyncEmotion,
             lipsyncModelMode: lipsyncModelMode,
             lipsyncAudioMode: lipsyncAudioMode,
+          } : {}),
+          ...(isInfinitalkVideoModel ? {
+            sourceVideoUrl: sourceVideoUrlForRequest,
+            sourceAudioUrl: sourceAudioUrlForRequest,
+            resolution: infinitalkResolutionForRun,
+            ...(infinitalkSeedValue !== undefined ? { seed: infinitalkSeedValue } : {}),
+            acceleration: infinitalkAccelerationForRun,
           } : {}),
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
@@ -735,6 +763,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     lipsyncEmotion: lipsyncEmotion,
                     lipsyncModelMode: lipsyncModelMode,
                     lipsyncAudioMode: lipsyncAudioMode,
+                  } : {}),
+                  ...(isInfinitalkVideoModel ? {
+                    infinitalkResolution: infinitalkResolutionForRun,
+                    infinitalkSeed: infinitalkSeedForRun,
+                    infinitalkAcceleration: infinitalkAccelerationForRun,
                   } : {}),
                   ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                 },
@@ -1288,6 +1321,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    lipsyncEmotion,
 	    lipsyncModelMode,
 	    lipsyncAudioMode,
+    infinitalkResolution,
+    infinitalkSeed,
+    infinitalkAcceleration,
 	    images,
     paths,
     referenceImageIds,

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Tool } from '../types';
-import { getFalModelLabel, ONE_TO_ALL_ANIMATE_MODEL_ID, SYNC_LIPSYNC_MODEL_ID, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID, type FalModelId } from '../services/modelConfig';
+import { getFalModelLabel, INFINITALK_VIDEO_MODEL_ID, ONE_TO_ALL_ANIMATE_MODEL_ID, SYNC_LIPSYNC_MODEL_ID, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID, type FalModelId } from '../services/modelConfig';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -10,6 +10,7 @@ type Args = {
   isKlingO1EditMode: boolean;
   isKlingO1RefV2VMode?: boolean;
   hasSourceVideo: boolean;
+  hasSourceAudio: boolean;
   isVideoMode: boolean;
   isUpscaleModel: boolean;
   isSeedreamModel: boolean;
@@ -43,6 +44,7 @@ export function useGenerationGuards({
   isKlingO1EditMode,
   isKlingO1RefV2VMode = false,
   hasSourceVideo,
+  hasSourceAudio,
   isVideoMode,
   isUpscaleModel,
   isSeedreamModel,
@@ -62,8 +64,10 @@ export function useGenerationGuards({
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
+  const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
-  const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isLipsyncVideoModel;
+  const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
+  const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isAudioInputMode;
   const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
@@ -86,6 +90,7 @@ export function useGenerationGuards({
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasPrimaryImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasPrimaryImage;
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
+    const requiresSourceAudioForVideoInput = usingFal && isVideoMode && isAudioInputMode && !hasSourceAudio;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
       (usingFal && isReveModel) ||
       (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
@@ -99,41 +104,67 @@ export function useGenerationGuards({
       requiresSelectedImageForWanAnimate ||
       requiresSelectedImageForOneToAll ||
       requiresSourceVideoForVideoInput ||
+      requiresSourceAudioForVideoInput ||
       editConstraintsActive;
 
-    const promptPlaceholderText = isVideoMode
-      ? (isLipsyncVideoModel
-        ? `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a video and audio clip to lip sync.`
-        : (isWanAnimateVideoModel
-          ? (hasSourceVideo
-            ? (hasPrimaryImage ? 'Optionally describe changes for this replacement...' : 'Select a still image to replace the character...')
-            : 'Select a video to replace a character, then select a still image...')
-          : isOneToAllAnimateVideoModel
-            ? (!hasSourceVideo
-              ? 'Select a pose video, then select a reference image to animate...'
-              : (hasPrimaryImage
-                ? 'Describe the motion or scene you want to animate...'
-                : 'Select a reference image to animate...'))
-          : (hasPrimaryImage
-            ? 'Describe the motion or scene you want this image to turn into...'
-            : isVideoInputMode
-              ? (hasSourceVideo
-                ? (isWanVideoInputMode
-                  ? 'Describe how you want to enhance this video (optional)...'
-                  : (isKlingO1EditMode
-                    ? 'Describe how you want to edit this video...'
-                    : 'Describe the next shot based on this reference video...'))
-                : (isWanVideoInputMode
-                  ? 'Select a video to enhance, then optionally describe changes...'
-                  : (isKlingO1EditMode
-                    ? 'Select a video to edit, then describe the changes...'
-                    : 'Select a reference video, then describe the next shot...')))
-              : 'Select an image and describe the video you want to create...')))
-      : usingFal && isUpscaleModel
-        ? `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select an image and scale factor.`
-        : isTextToImage
-          ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
-          : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
+    const promptPlaceholderText = (() => {
+      if (isVideoMode) {
+        if (isLipsyncVideoModel) {
+          return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a video and audio clip to lip sync.`;
+        }
+        if (isWanAnimateVideoModel) {
+          if (hasSourceVideo) {
+            return hasPrimaryImage
+              ? 'Optionally describe changes for this replacement...'
+              : 'Select a still image to replace the character...';
+          }
+          return 'Select a video to replace a character, then select a still image...';
+        }
+        if (isOneToAllAnimateVideoModel) {
+          if (!hasSourceVideo) {
+            return 'Select a pose video, then select a reference image to animate...';
+          }
+          return hasPrimaryImage
+            ? 'Describe the motion or scene you want to animate...'
+            : 'Select a reference image to animate...';
+        }
+        if (hasPrimaryImage) {
+          return 'Describe the motion or scene you want this image to turn into...';
+        }
+        if (isVideoInputMode) {
+          const hasAllInputs = hasSourceVideo && (!isInfinitalkVideoModel || hasSourceAudio);
+          if (hasAllInputs) {
+            if (isWanVideoInputMode) {
+              return 'Describe how you want to enhance this video (optional)...';
+            }
+            if (isInfinitalkVideoModel) {
+              return 'Describe the talking avatar and expression you want to generate...';
+            }
+            if (isKlingO1EditMode) {
+              return 'Describe how you want to edit this video...';
+            }
+            return 'Describe the next shot based on this reference video...';
+          }
+          if (isWanVideoInputMode) {
+            return 'Select a video to enhance, then optionally describe changes...';
+          }
+          if (isInfinitalkVideoModel) {
+            return 'Select a video and audio clip, then describe the talking avatar...';
+          }
+          if (isKlingO1EditMode) {
+            return 'Select a video to edit, then describe the changes...';
+          }
+          return 'Select a reference video, then describe the next shot...';
+        }
+        return 'Select an image and describe the video you want to create...';
+      }
+      if (usingFal && isUpscaleModel) {
+        return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select an image and scale factor.`;
+      }
+      return isTextToImage
+        ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
+        : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
+    })();
     const disablePromptInput = usingFal && (isUpscaleModel || isLipsyncVideoModel);
 
     return {
@@ -152,6 +183,7 @@ export function useGenerationGuards({
     falModelId,
     falNumImages,
     hasInpaintMask,
+    hasSourceAudio,
     hasSourceVideo,
     isNanoBananaModel,
     isHailuoVideoModel,
@@ -161,6 +193,7 @@ export function useGenerationGuards({
 	    isKlingO1VideoInputMode,
 	    isKlingVideoModel,
 	    isWanAnimateVideoModel,
+      isInfinitalkVideoModel,
       isLipsyncVideoModel,
       isOneToAllAnimateVideoModel,
     isReveModel,

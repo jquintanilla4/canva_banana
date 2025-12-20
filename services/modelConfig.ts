@@ -41,6 +41,7 @@ export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as const;
 export const ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as const;
 export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const;
+export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 export type HailuoVariant = 'standard' | 'pro';
@@ -87,6 +88,7 @@ export const FAL_VIDEO_MODEL_OPTIONS = [
   { value: WAN_ANIMATE_MODEL_ID, label: 'Wan Animate' },
   { value: ONE_TO_ALL_ANIMATE_MODEL_ID, label: '1-to-All Animate' },
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
+  { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
@@ -174,6 +176,9 @@ export const getWanAnimateVideoEndpoint = (variant: WanAnimateVariant): string =
 export type LipsyncEmotion = 'happy' | 'angry' | 'sad' | 'neutral' | 'disgusted' | 'surprised';
 export type LipsyncModelMode = 'lips' | 'face' | 'head';
 export type LipsyncAudioMode = 'cut_off' | 'loop' | 'bounce' | 'silence' | 'remap';
+export type InfinitalkResolutionSelectionValue = '480p' | '720p';
+export type InfinitalkSeedSelectionValue = '42' | 'random';
+export type InfinitalkAccelerationSelectionValue = 'none' | 'regular' | 'high';
 
 export const LIPSYNC_EMOTION_OPTIONS: ReadonlyArray<{ value: LipsyncEmotion; label: string }> = [
   { value: 'neutral', label: 'Neutral' },
@@ -196,6 +201,22 @@ export const LIPSYNC_AUDIO_MODE_OPTIONS: ReadonlyArray<{ value: LipsyncAudioMode
   { value: 'loop', label: 'Loop' },
   { value: 'silence', label: 'Silence' },
   { value: 'remap', label: 'Remap' },
+] as const;
+
+export const INFINITALK_RESOLUTION_OPTIONS: ReadonlyArray<{ value: InfinitalkResolutionSelectionValue; label: string }> = [
+  { value: '480p', label: '480p' },
+  { value: '720p', label: '720p' },
+] as const;
+
+export const INFINITALK_SEED_OPTIONS: ReadonlyArray<{ value: InfinitalkSeedSelectionValue; label: string }> = [
+  { value: '42', label: '42' },
+  { value: 'random', label: 'Random' },
+] as const;
+
+export const INFINITALK_ACCELERATION_OPTIONS: ReadonlyArray<{ value: InfinitalkAccelerationSelectionValue; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'regular', label: 'Regular' },
+  { value: 'high', label: 'High' },
 ] as const;
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
@@ -237,6 +258,15 @@ export const isFalAspectRatioSelectionValue = (value: unknown): value is FalAspe
 
 export const isFalResolutionSelectionValue = (value: unknown): value is FalResolutionSelectionValue =>
   typeof value === 'string' && FAL_RESOLUTION_OPTIONS.some(option => option.value === value);
+
+export const isInfinitalkResolutionSelectionValue = (value: unknown): value is InfinitalkResolutionSelectionValue =>
+  value === '480p' || value === '720p';
+
+export const isInfinitalkSeedSelectionValue = (value: unknown): value is InfinitalkSeedSelectionValue =>
+  value === '42' || value === 'random';
+
+export const isInfinitalkAccelerationSelectionValue = (value: unknown): value is InfinitalkAccelerationSelectionValue =>
+  value === 'none' || value === 'regular' || value === 'high';
 
 export const isApiProvider = (value: unknown): value is ApiProviderId =>
   value === 'google' || value === 'fal';
@@ -380,6 +410,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [ONE_TO_ALL_ANIMATE_MODEL_ID]: 0,
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,
   [SYNC_LIPSYNC_MODEL_ID]: 0,
+  [INFINITALK_VIDEO_MODEL_ID]: 0,
 };
 
 export const getMaxReferenceImages = (modelId: FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | typeof KLING_O1_VIDEO_REF_V2V_MODEL_ID | undefined): number =>

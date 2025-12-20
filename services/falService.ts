@@ -186,6 +186,8 @@ interface GenerateVideoOptions {
   negativePrompt?: string;
   numInferenceSteps?: number;
   resolution?: '480p' | '580p' | '720p';
+  seed?: number;
+  acceleration?: 'none' | 'regular' | 'high';
   shift?: number;
   videoQuality?: 'high' | 'maximum';
   useTurbo?: boolean;
@@ -270,6 +272,7 @@ export const KLING_O1_VIDEO_FFLF_MODEL_ID = 'fal-ai/kling-video/o1/image-to-vide
 export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace';
 export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer';
+export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -1317,6 +1320,42 @@ export const generateImageToVideo = async (
     const requestId = result?.requestId || latestRequestId;
 
     return { videoUrl, requestId };
+  }
+
+  const isInfinitalkModel = modelId === INFINITALK_VIDEO_MODEL_ID;
+  if (isInfinitalkModel) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Infinitalk requires a source video.');
+    }
+    if (!options.sourceAudioUrl) {
+      throw new Error('Infinitalk requires a source audio.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Infinitalk requires a prompt.');
+    }
+
+    const resolution = options.resolution === '480p' || options.resolution === '720p'
+      ? options.resolution
+      : undefined;
+    const acceleration = options.acceleration === 'none' || options.acceleration === 'regular' || options.acceleration === 'high'
+      ? options.acceleration
+      : undefined;
+    const seed = typeof options.seed === 'number' && Number.isFinite(options.seed)
+      ? Math.floor(options.seed)
+      : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      video_url: options.sourceVideoUrl,
+      audio_url: options.sourceAudioUrl,
+      prompt: trimmedPrompt,
+      ...(resolution ? { resolution } : {}),
+      ...(seed !== undefined ? { seed } : {}),
+      ...(acceleration ? { acceleration } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
   const isOneToAllAnimateModel = modelId === ONE_TO_ALL_ANIMATE_MODEL_ID;

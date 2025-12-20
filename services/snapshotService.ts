@@ -17,6 +17,9 @@ import {
   isFalImageSizeSelectionValue,
   isFalModelMode,
   isFalResolutionSelectionValue,
+  isInfinitalkAccelerationSelectionValue,
+  isInfinitalkResolutionSelectionValue,
+  isInfinitalkSeedSelectionValue,
   isGenerationKind,
 } from './modelConfig';
 import {
@@ -144,6 +147,9 @@ export type SnapshotMetaState = {
   wanAnimateShift?: string;
   wanAnimateQuality?: string;
   wanAnimateUseTurbo?: boolean;
+  infinitalkResolution?: string;
+  infinitalkSeed?: string;
+  infinitalkAcceleration?: string;
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
@@ -666,6 +672,21 @@ export const normalizeSnapshotImageMetadata = (
       const wanAnimateUseTurboValue = (typed as { wanAnimateUseTurbo?: unknown }).wanAnimateUseTurbo;
       if (typeof wanAnimateUseTurboValue === 'boolean') {
         normalizedOptions.wanAnimateUseTurbo = wanAnimateUseTurboValue;
+      }
+
+      const infinitalkResolutionValue = (typed as { infinitalkResolution?: unknown }).infinitalkResolution;
+      if (isInfinitalkResolutionSelectionValue(infinitalkResolutionValue)) {
+        normalizedOptions.infinitalkResolution = infinitalkResolutionValue;
+      }
+
+      const infinitalkSeedValue = (typed as { infinitalkSeed?: unknown }).infinitalkSeed;
+      if (isInfinitalkSeedSelectionValue(infinitalkSeedValue)) {
+        normalizedOptions.infinitalkSeed = infinitalkSeedValue;
+      }
+
+      const infinitalkAccelerationValue = (typed as { infinitalkAcceleration?: unknown }).infinitalkAcceleration;
+      if (isInfinitalkAccelerationSelectionValue(infinitalkAccelerationValue)) {
+        normalizedOptions.infinitalkAcceleration = infinitalkAccelerationValue;
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;

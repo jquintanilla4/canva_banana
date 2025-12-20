@@ -25,6 +25,7 @@ type SelectionFalSettings = Pick<
   | 'isKlingO1EditMode'
   | 'isKlingO1RefV2VMode'
   | 'isLipsyncVideoModel'
+  | 'isInfinitalkVideoModel'
 >;
 
 type SelectionOptions = {
@@ -76,6 +77,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isKlingO1EditMode,
     isKlingO1RefV2VMode,
     isLipsyncVideoModel,
+    isInfinitalkVideoModel,
   } = fal;
 
   const isKlingImageModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
@@ -88,7 +90,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       || falVideoModelId === WAN_ANIMATE_MODEL_ID
       || falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID
     );
-  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode || isLipsyncVideoModel;
+  const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
+  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode || isAudioInputMode;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -136,12 +139,12 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
   }, [isVideoInputMode, sourceVideoId]);
 
-  // Clear sourceAudioId when leaving lip sync mode.
+  // Clear sourceAudioId when leaving audio-input modes.
   useEffect(() => {
-    if (!isLipsyncVideoModel && sourceAudioId) {
+    if (!isAudioInputMode && sourceAudioId) {
       setSourceAudioId(null);
     }
-  }, [isLipsyncVideoModel, sourceAudioId]);
+  }, [isAudioInputMode, sourceAudioId]);
 
   useEffect(() => {
     if (!isKlingO1VideoModel) {
@@ -357,7 +360,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         if (isLipsyncVideoModel && targetImage?.mediaType === 'video') {
           setSourceVideoId(prevId => (prevId === imageId && !nextSelectedIds.includes(imageId)) ? null : imageId);
         }
-        if (isLipsyncVideoModel && targetImage?.mediaType === 'audio') {
+        if (isAudioInputMode && targetImage?.mediaType === 'audio') {
           setSourceAudioId(prevId => (prevId === imageId && !nextSelectedIds.includes(imageId)) ? null : imageId);
         }
         applyKlingReferences(nextSelectedIds);
@@ -377,8 +380,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       if (isVideoInputMode && targetImage?.mediaType === 'video' && sourceVideoId === imageId) {
         setSourceVideoId(null);
       }
-      // Clicking the same audio again in lip sync mode clears sourceAudioId
-      if (isLipsyncVideoModel && targetImage?.mediaType === 'audio' && sourceAudioId === imageId) {
+      // Clicking the same audio again in audio-input mode clears sourceAudioId
+      if (isAudioInputMode && targetImage?.mediaType === 'audio' && sourceAudioId === imageId) {
         setSourceAudioId(null);
       }
       return;
@@ -392,8 +395,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return;
     }
 
-    // In lip sync mode, single-clicking audio sets it as the source audio
-    if (isLipsyncVideoModel && targetImage?.mediaType === 'audio') {
+    // In audio-input modes, single-clicking audio sets it as the source audio
+    if (isAudioInputMode && targetImage?.mediaType === 'audio') {
       setSourceAudioId(imageId);
       setSelectedImageIds([imageId]);
       setSelectedNoteIds([]);
@@ -433,7 +436,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
 	    isKlingO1VideoInputMode,
 	    isVideoInputMode,
 	    sourceVideoId,
-	    isLipsyncVideoModel,
+	    isAudioInputMode,
 	    sourceAudioId,
 	  ]);
 

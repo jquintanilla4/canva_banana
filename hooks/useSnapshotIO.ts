@@ -23,6 +23,9 @@ import {
   isFalImageModelId,
   isFalImageSizeSelectionValue,
   isFalResolutionSelectionValue,
+  isInfinitalkAccelerationSelectionValue,
+  isInfinitalkResolutionSelectionValue,
+  isInfinitalkSeedSelectionValue,
   isFalVideoModelId,
   normalizeFalModelId,
 } from '../services/modelConfig';
@@ -139,6 +142,9 @@ export function useSnapshotIO({
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
+    infinitalkResolution,
+    infinitalkSeed,
+    infinitalkAcceleration,
     setFalModelMode,
     setFalImageModelId,
     setFalVideoModelId,
@@ -158,6 +164,9 @@ export function useSnapshotIO({
     setWanAnimateShift,
     setWanAnimateQuality,
     setWanAnimateUseTurbo,
+    setInfinitalkResolution,
+    setInfinitalkSeed,
+    setInfinitalkAcceleration,
   } = fal;
 
   const {
@@ -205,6 +214,9 @@ export function useSnapshotIO({
       wanAnimateShift,
       wanAnimateQuality,
       wanAnimateUseTurbo,
+      infinitalkResolution,
+      infinitalkSeed,
+      infinitalkAcceleration,
       selectedImageIds: [...selectedImageIds],
       selectedNoteIds: [...selectedNoteIds],
       referenceImageIds: [...referenceImageIds],
@@ -238,6 +250,9 @@ export function useSnapshotIO({
 	    wanAnimateShift,
 	    wanAnimateQuality,
 	    wanAnimateUseTurbo,
+    infinitalkResolution,
+    infinitalkSeed,
+    infinitalkAcceleration,
 	    falImageSizeSelection,
     falModelId,
     falNoiseScale,
@@ -531,9 +546,18 @@ export function useSnapshotIO({
 	        if (meta.wanAnimateQuality === 'high' || meta.wanAnimateQuality === 'maximum') {
 	          setWanAnimateQuality(meta.wanAnimateQuality);
 	        }
-	        if (typeof meta.wanAnimateUseTurbo === 'boolean') {
-	          setWanAnimateUseTurbo(meta.wanAnimateUseTurbo);
-	        }
+        if (typeof meta.wanAnimateUseTurbo === 'boolean') {
+          setWanAnimateUseTurbo(meta.wanAnimateUseTurbo);
+        }
+        if (isInfinitalkResolutionSelectionValue(meta.infinitalkResolution)) {
+          setInfinitalkResolution(meta.infinitalkResolution);
+        }
+        if (isInfinitalkSeedSelectionValue(meta.infinitalkSeed)) {
+          setInfinitalkSeed(meta.infinitalkSeed);
+        }
+        if (isInfinitalkAccelerationSelectionValue(meta.infinitalkAcceleration)) {
+          setInfinitalkAcceleration(meta.infinitalkAcceleration);
+        }
 	        setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
@@ -587,6 +611,9 @@ export function useSnapshotIO({
 	    setWanAnimateShift,
 	    setWanAnimateQuality,
 	    setWanAnimateUseTurbo,
+    setInfinitalkResolution,
+    setInfinitalkSeed,
+    setInfinitalkAcceleration,
 	    setFalImageModelId,
     setFalImageSizeSelection,
     setFalModelMode,
