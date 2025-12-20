@@ -18,6 +18,7 @@ import {
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
+  SEEDREAM_V45_MODEL_ID,
   getFalModelLabel,
   getMaxReferenceImages,
   isKlingO1VideoModelId,
@@ -196,6 +197,11 @@ export default function App() {
     }
     if (fal.falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID && maxReferenceImages === 0) {
       setToastMessage('Tip: Shift-click toggles reference selection. For One-to-All Animation, click the pose video, then click the image to animate (Cmd/Ctrl+click for multi-select).');
+      setTimeout(() => setToastMessage(null), 2000);
+      return;
+    }
+    if (fal.falModelId === SEEDREAM_V45_MODEL_ID && maxReferenceImages >= 10) {
+      setToastMessage('Seedream v4.5 only accepts up to 10 reference images.');
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }

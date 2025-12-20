@@ -1009,7 +1009,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             : [];
 
           const hasEditReferences = referenceImageIdsForRun.length > 0;
-          const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel;
+          const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel;
           let editReferenceImages: HTMLImageElement[] | undefined;
           if (supportsEditReferenceImages && hasEditReferences) {
             const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);

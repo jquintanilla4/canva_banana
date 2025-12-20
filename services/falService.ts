@@ -618,6 +618,18 @@ export const generateImageEdit = async ({
 
   const modelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
   const isSeedreamModel = isSeedreamEditModelId(modelId);
+  const referenceImageCount = referenceImages?.length ?? 0;
+  if (isSeedreamModel && referenceImageCount > 0) {
+    const auxiliaryImageCount = tool === Tool.ANNOTATE || tool === Tool.INPAINT ? 1 : 0;
+    const expectedImageCount = 1 + auxiliaryImageCount + referenceImageCount;
+    if (imageUrls.length < expectedImageCount) {
+      logFalEvent('error', modelId, 'Seedream edit missing reference images', {
+        expectedImageCount,
+        actualImageCount: imageUrls.length,
+      });
+      throw new Error('Seedream edit expected reference images to be included in image_urls.');
+    }
+  }
   const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
   const imageSizeOption: FalImageSizeOption = rawImageSizeOption;
   const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
