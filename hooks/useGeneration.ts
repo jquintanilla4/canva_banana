@@ -61,7 +61,7 @@ import {
   type FalQueueUpdate,
 } from '../services/falService';
 import { addDebugLog } from '../services/debugLog';
-import { buildFalDisplayError, FAL_PROVIDER_DOWN_MESSAGE } from '../services/falConstants';
+import { buildFalDisplayError, FAL_PROVIDER_DOWN_MESSAGE, getFalFileSizeErrorMessage } from '../services/falConstants';
 import type {
   ApiProviderId,
   AppMode,
@@ -102,6 +102,34 @@ type UseGenerationArgs = {
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
   !!img && img.mediaType === 'image';
 
+const extractFalQueueLogMessages = (logs: FalQueueUpdate['logs']): string[] => {
+  if (!logs) {
+    return [];
+  }
+  if (typeof logs === 'string') {
+    return [logs];
+  }
+  if (Array.isArray(logs)) {
+    return logs
+      .map(entry => {
+        if (typeof entry === 'string') {
+          return entry;
+        }
+        if (entry && typeof entry === 'object') {
+          const message = (entry as { message?: unknown }).message;
+          return typeof message === 'string' ? message : '';
+        }
+        return '';
+      })
+      .filter(Boolean);
+  }
+  if (typeof logs === 'object') {
+    return Object.values(logs)
+      .flatMap(value => extractFalQueueLogMessages(value as FalQueueUpdate['logs']));
+  }
+  return [];
+};
+
 export const useGeneration = (args: UseGenerationArgs) => {
   const {
     appMode,
@@ -121,6 +149,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setToastMessage,
     setTool,
   } = args;
+
+  const showTemporaryError = useCallback((message: string) => {
+    setError(message);
+    window.setTimeout(() => {
+      setError(current => (current === message ? null : current));
+    }, 4000);
+  }, [setError]);
 
   const {
     falModelMode,
@@ -884,6 +919,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
           const falResult = await generateFalImage(trimmedPrompt, {
             onQueueUpdate: (update) => {
+              if (isKlingModel && update.status === 'FAILED') {
+                const updateMessage = typeof (update as { message?: unknown }).message === 'string'
+                  ? (update as { message?: string }).message
+                  : undefined;
+                const updateError = typeof (update as { error?: unknown }).error === 'string'
+                  ? (update as { error?: string }).error
+                  : undefined;
+                const fileSizeMessage = getFalFileSizeErrorMessage(
+                  updateMessage ?? updateError,
+                  extractFalQueueLogMessages(update.logs),
+                );
+                if (fileSizeMessage) {
+                  showTemporaryError(fileSizeMessage);
+                }
+              }
               setFalJobs(prev => prev.map(job => {
                 if (job.id !== falJobId) {
                   return job;
@@ -994,6 +1044,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
             numImages: normalizedFalNumImages,
             onQueueUpdate: (update) => {
+              if (isKlingModel && update.status === 'FAILED') {
+                const updateMessage = typeof (update as { message?: unknown }).message === 'string'
+                  ? (update as { message?: string }).message
+                  : undefined;
+                const updateError = typeof (update as { error?: unknown }).error === 'string'
+                  ? (update as { error?: string }).error
+                  : undefined;
+                const fileSizeMessage = getFalFileSizeErrorMessage(
+                  updateMessage ?? updateError,
+                  extractFalQueueLogMessages(update.logs),
+                );
+                if (fileSizeMessage) {
+                  showTemporaryError(fileSizeMessage);
+                }
+              }
               setFalJobs(prev => prev.map(job => {
                 if (job.id !== falJobId) {
                   return job;
@@ -1149,7 +1214,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
       await addGeneratedImages();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An unknown error occurred.';
-      const userFacingMessage = usingFal ? buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE : message;
+      const fileSizeMessage = usingFal && isKlingModel ? getFalFileSizeErrorMessage(message) : undefined;
+      const userFacingMessage = usingFal
+        ? fileSizeMessage ?? buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE
+        : message;
       if (usingFal) {
         setFalJobs(prev => prev.map(job => {
           if (job.id === falJobId) {
@@ -1160,7 +1228,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
       } else {
         setIsLoading(false);
       }
-      setError(userFacingMessage);
+      if (fileSizeMessage) {
+        showTemporaryError(fileSizeMessage);
+      } else {
+        setError(userFacingMessage);
+      }
     } finally {
       if (!usingFal) {
         setIsLoading(false);
@@ -1201,6 +1273,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     activePrimaryImage,
     sourceAudioId,
     setError,
+    showTemporaryError,
     setIsLoading,
     setFalJobs,
     setState,

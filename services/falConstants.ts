@@ -40,6 +40,8 @@ const NETWORK_ERROR_KEYWORDS = [
   'enotfound',
   'offline',
 ];
+const FILE_SIZE_ERROR_REGEX = /file size exceeds the maximum allowed size of\s+(\d+)\s+bytes/i;
+const FILE_SIZE_HINT_REGEX = /file size exceeds/i;
 
 const IMAGE_URL_MARKER = 'image_url=';
 const SCALE_FACTOR_REGEX = /scale_factor\s*=\s*([0-9]+(?:\.[0-9]+)?)/i;
@@ -57,11 +59,50 @@ const hasKeywordMatch = (message: string, keywords: string[]): boolean => {
   return keywords.some(keyword => normalized.includes(keyword));
 };
 
+const formatFileSizeLimit = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '';
+  }
+  const mbValue = bytes / (1024 * 1024);
+  const rounded = Math.round(mbValue * 10) / 10;
+  if (rounded >= 1) {
+    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)} MB`;
+  }
+  return `${Math.round(bytes / 1024)} KB`;
+};
+
+export const getFalFileSizeErrorMessage = (message?: string, logMessages?: string[]): string | undefined => {
+  const candidates = [
+    ...(typeof message === 'string' ? [message] : []),
+    ...(logMessages ?? []),
+  ].map(entry => entry?.trim()).filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    const match = candidate.match(FILE_SIZE_ERROR_REGEX);
+    if (match) {
+      const limitBytes = Number(match[1]);
+      const limitLabel = Number.isFinite(limitBytes) ? formatFileSizeLimit(limitBytes) : '';
+      const limitSuffix = limitLabel ? ` (${limitLabel} max)` : '';
+      return `File size exceeds the maximum allowed size${limitSuffix}. Please upload a smaller image.`;
+    }
+    if (FILE_SIZE_HINT_REGEX.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+};
+
 export const buildFalDisplayError = (message?: string, logMessages?: string[]): string | undefined => {
   const candidates = [
     ...(typeof message === 'string' ? [message] : []),
     ...(logMessages ?? []),
   ].map(entry => entry?.trim()).filter(Boolean) as string[];
+
+  const fileSizeMessage = getFalFileSizeErrorMessage(message, logMessages);
+  if (fileSizeMessage) {
+    return fileSizeMessage;
+  }
 
   if (candidates.some(entry => hasKeywordMatch(entry, SERVER_BUSY_KEYWORDS))) {
     return 'The generation servers are busy on the provider side. Please try again shortly.';
