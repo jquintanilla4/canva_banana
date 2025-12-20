@@ -79,6 +79,7 @@ import { Tool } from '../types';
 import { getImageBounds, isOverlapping } from '../utils/canvasGeometry';
 import { getNaturalSize, loadMediaFromBlob, rasterizeImages } from '../services/mediaService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
+import { convertAudioBlobToWav } from '../services/audioService';
 
 type UseGenerationArgs = {
   appMode: AppMode;
@@ -303,7 +304,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
 	    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary;
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel);
-    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional));
+    const isLipsyncPromptOptional = usingFal && isVideoMode && isLipsyncVideoModel;
+    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
 	    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1VideoInputMode && !isFalVideoInputMode;
 	    const generationKind: GenerationKind = overrideKind
 	      ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
@@ -427,34 +429,41 @@ export const useGeneration = (args: UseGenerationArgs) => {
           return;
         }
 
-	        // For video-input modes (Kling O1 edit/refV2V or Wan enhancer), get source video URL; for other modes, require starting frame image
-	        let sourceVideo: CanvasImage | null = null;
-	        let sourceVideoUrlForRequest: string | undefined;
-	        if (isKlingO1VideoInputMode || isFalVideoInputMode) {
-	          sourceVideo = sourceVideoIdForRun
-	            ? images.find(img => img.id === sourceVideoIdForRun && img.mediaType === 'video')
-	            : null;
-	          if (!sourceVideo) {
-	            throw new Error(isWanVisionEnhancerVideoModel
-	              ? 'Select a video on the canvas to enhance.'
-	              : isWanAnimateVideoModel
-	                ? 'Select a video on the canvas to replace a character.'
-                  : isOneToAllAnimateVideoModel
-                    ? 'Select a video on the canvas to drive the animation.'
+        // For video-input modes (Kling O1 edit/refV2V or Wan enhancer), get source video URL; for other modes, require starting frame image
+        let sourceVideo: CanvasImage | null = null;
+        let sourceVideoUrlForRequest: string | undefined;
+        if (isKlingO1VideoInputMode || isFalVideoInputMode) {
+          sourceVideo = sourceVideoIdForRun
+            ? images.find(img => img.id === sourceVideoIdForRun && img.mediaType === 'video')
+            : null;
+          if (!sourceVideo) {
+            throw new Error(isWanVisionEnhancerVideoModel
+              ? 'Select a video on the canvas to enhance.'
+              : isWanAnimateVideoModel
+                ? 'Select a video on the canvas to replace a character.'
+                : isOneToAllAnimateVideoModel
+                  ? 'Select a video on the canvas to drive the animation.'
                   : isLipsyncVideoModel
                     ? 'Select a video on the canvas to lip sync.'
-	                : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
-	          }
-	          if (isWanVisionEnhancerVideoModel) {
-	            const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
-	            if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 16) {
-	              setToastMessage('Videos longer than 500 frames will have only the first 500 frames processed');
-	              setTimeout(() => setToastMessage(null), 10000);
-	            }
-	          }
-	          // Get video URL from generation metadata, or upload if it's an imported video
-	          sourceVideoUrlForRequest = sourceVideo.metadata?.generation?.url;
-	          if (!sourceVideoUrlForRequest) {
+                    : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
+          }
+          if (isLipsyncVideoModel) {
+            const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
+            if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 15) {
+              setError('Lip Sync requires videos 15 seconds or shorter.');
+              return;
+            }
+          }
+          if (isWanVisionEnhancerVideoModel) {
+            const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
+            if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 16) {
+              setToastMessage('Videos longer than 500 frames will have only the first 500 frames processed');
+              setTimeout(() => setToastMessage(null), 10000);
+            }
+          }
+          // Get video URL from generation metadata, or upload if it's an imported video
+          sourceVideoUrlForRequest = sourceVideo.metadata?.generation?.url;
+          if (!sourceVideoUrlForRequest) {
             // Video was imported, need to upload it to FAL storage
             if (!sourceVideo.file) {
               throw new Error('The selected video does not have a file to upload.');
@@ -474,17 +483,26 @@ export const useGeneration = (args: UseGenerationArgs) => {
           if (!sourceAudio) {
             throw new Error('Select an audio clip on the canvas for lip sync.');
           }
+          const audioDurationSeconds = sourceAudio.audioDuration ?? sourceAudio.audioElement?.duration;
+          if (typeof audioDurationSeconds === 'number' && Number.isFinite(audioDurationSeconds) && audioDurationSeconds > 15) {
+            setError('Lip Sync requires audio 15 seconds or shorter.');
+            return;
+          }
           if (!sourceAudio.file) {
             throw new Error('The selected audio does not have a file to upload.');
           }
+          setToastMessage('Preparing audio...');
+          const audioFileForUpload = sourceAudio.file.type === 'audio/webm'
+            ? new File([await convertAudioBlobToWav(sourceAudio.file)], `lip-sync-${Date.now()}.wav`, { type: 'audio/wav' })
+            : sourceAudio.file;
           setToastMessage('Uploading audio...');
-          sourceAudioUrlForRequest = await uploadVideoToFal(sourceAudio.file);
+          sourceAudioUrlForRequest = await uploadVideoToFal(audioFileForUpload);
           setToastMessage(null);
         }
 
-	        const videoSourceImage = (isWanAnimateVideoModel || isOneToAllAnimateVideoModel)
-	          ? activePrimary?.element as HTMLImageElement
-	          : (isKlingO1VideoInputMode || isFalVideoInputMode) ? null : activePrimary?.element as HTMLImageElement;
+        const videoSourceImage = (isWanAnimateVideoModel || isOneToAllAnimateVideoModel)
+          ? activePrimary?.element as HTMLImageElement
+          : (isKlingO1VideoInputMode || isFalVideoInputMode) ? null : activePrimary?.element as HTMLImageElement;
         const referenceImagesForRun = referenceImageIdsForRun
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia)

@@ -354,6 +354,12 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         } else {
           nextSelectedIds = [...prevIds, imageId];
         }
+        if (isLipsyncVideoModel && targetImage?.mediaType === 'video') {
+          setSourceVideoId(prevId => (prevId === imageId && !nextSelectedIds.includes(imageId)) ? null : imageId);
+        }
+        if (isLipsyncVideoModel && targetImage?.mediaType === 'audio') {
+          setSourceAudioId(prevId => (prevId === imageId && !nextSelectedIds.includes(imageId)) ? null : imageId);
+        }
         applyKlingReferences(nextSelectedIds);
         return nextSelectedIds;
       });

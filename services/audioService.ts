@@ -117,6 +117,62 @@ export const generateWaveformImage = async (
   return { dataUrl: canvas.toDataURL('image/png'), duration };
 };
 
+const writeWavString = (view: DataView, offset: number, value: string): void => {
+  for (let i = 0; i < value.length; i += 1) {
+    view.setUint8(offset + i, value.charCodeAt(i));
+  }
+};
+
+const encodeWav = (buffer: AudioBuffer): ArrayBuffer => {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1;
+  const bitDepth = 16;
+  const blockAlign = numChannels * (bitDepth / 8);
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = buffer.length * blockAlign;
+  const wavBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(wavBuffer);
+
+  writeWavString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeWavString(view, 8, 'WAVE');
+  writeWavString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeWavString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < buffer.length; i += 1) {
+    for (let channel = 0; channel < numChannels; channel += 1) {
+      const sample = buffer.getChannelData(channel)[i] ?? 0;
+      const clamped = Math.max(-1, Math.min(1, sample));
+      view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+      offset += 2;
+    }
+  }
+
+  return wavBuffer;
+};
+
+export const convertAudioBlobToWav = async (audioBlob: Blob): Promise<Blob> => {
+  const audioContext = new AudioContext();
+  try {
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const wavBuffer = encodeWav(audioBuffer);
+    return new Blob([wavBuffer], { type: 'audio/wav' });
+  } finally {
+    await audioContext.close();
+  }
+};
+
 export const formatDuration = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);

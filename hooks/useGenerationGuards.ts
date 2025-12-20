@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Tool } from '../types';
-import { getFalModelLabel, ONE_TO_ALL_ANIMATE_MODEL_ID, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID, type FalModelId } from '../services/modelConfig';
+import { getFalModelLabel, ONE_TO_ALL_ANIMATE_MODEL_ID, SYNC_LIPSYNC_MODEL_ID, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID, type FalModelId } from '../services/modelConfig';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -61,8 +61,9 @@ export function useGenerationGuards({
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
+  const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
-  const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel;
+  const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isLipsyncVideoModel;
   const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
@@ -77,7 +78,8 @@ export function useGenerationGuards({
       falNumImages < 1 ||
       falNumImages > 4;
     const isWanPromptOptional = usingFal && isWanVideoInputMode;
-    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional));
+    const isLipsyncPromptOptional = usingFal && isLipsyncVideoModel;
+    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
     const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage;
@@ -100,37 +102,39 @@ export function useGenerationGuards({
       editConstraintsActive;
 
     const promptPlaceholderText = isVideoMode
-      ? (isWanAnimateVideoModel
-        ? (hasSourceVideo
-          ? (hasPrimaryImage ? 'Optionally describe changes for this replacement...' : 'Select a still image to replace the character...')
-          : 'Select a video to replace a character, then select a still image...')
-        : isOneToAllAnimateVideoModel
-          ? (!hasSourceVideo
-            ? 'Select a pose video, then select a reference image to animate...'
-            : (hasPrimaryImage
-              ? 'Describe the motion or scene you want to animate...'
-              : 'Select a reference image to animate...'))
-        : (hasPrimaryImage
-          ? 'Describe the motion or scene you want this image to turn into...'
-          : isVideoInputMode
-            ? (hasSourceVideo
-              ? (isWanVideoInputMode
-                ? 'Describe how you want to enhance this video (optional)...'
-                : (isKlingO1EditMode
-                  ? 'Describe how you want to edit this video...'
-                  : 'Describe the next shot based on this reference video...'))
-              : (isWanVideoInputMode
-                ? 'Select a video to enhance, then optionally describe changes...'
-                : (isKlingO1EditMode
-                  ? 'Select a video to edit, then describe the changes...'
-                  : 'Select a reference video, then describe the next shot...')))
-            : 'Select an image and describe the video you want to create...'))
+      ? (isLipsyncVideoModel
+        ? `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a video and audio clip to lip sync.`
+        : (isWanAnimateVideoModel
+          ? (hasSourceVideo
+            ? (hasPrimaryImage ? 'Optionally describe changes for this replacement...' : 'Select a still image to replace the character...')
+            : 'Select a video to replace a character, then select a still image...')
+          : isOneToAllAnimateVideoModel
+            ? (!hasSourceVideo
+              ? 'Select a pose video, then select a reference image to animate...'
+              : (hasPrimaryImage
+                ? 'Describe the motion or scene you want to animate...'
+                : 'Select a reference image to animate...'))
+          : (hasPrimaryImage
+            ? 'Describe the motion or scene you want this image to turn into...'
+            : isVideoInputMode
+              ? (hasSourceVideo
+                ? (isWanVideoInputMode
+                  ? 'Describe how you want to enhance this video (optional)...'
+                  : (isKlingO1EditMode
+                    ? 'Describe how you want to edit this video...'
+                    : 'Describe the next shot based on this reference video...'))
+                : (isWanVideoInputMode
+                  ? 'Select a video to enhance, then optionally describe changes...'
+                  : (isKlingO1EditMode
+                    ? 'Select a video to edit, then describe the changes...'
+                    : 'Select a reference video, then describe the next shot...')))
+              : 'Select an image and describe the video you want to create...')))
       : usingFal && isUpscaleModel
         ? `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select an image and scale factor.`
         : isTextToImage
           ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
           : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
-    const disablePromptInput = usingFal && isUpscaleModel;
+    const disablePromptInput = usingFal && (isUpscaleModel || isLipsyncVideoModel);
 
     return {
       submitDisabled,
@@ -157,6 +161,7 @@ export function useGenerationGuards({
 	    isKlingO1VideoInputMode,
 	    isKlingVideoModel,
 	    isWanAnimateVideoModel,
+      isLipsyncVideoModel,
       isOneToAllAnimateVideoModel,
     isReveModel,
     isSeedreamModel,

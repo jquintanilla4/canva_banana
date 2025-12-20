@@ -43,7 +43,7 @@ import { useSnapshotIO } from './hooks/useSnapshotIO';
 import { useCanvasMediaActions } from './hooks/useCanvasMediaActions';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAudioRecording } from './hooks/useAudioRecording';
-import { generateWaveformImage, loadAudioFromBlob } from './services/audioService';
+import { convertAudioBlobToWav, generateWaveformImage, loadAudioFromBlob } from './services/audioService';
 import { useGenerationGuards } from './hooks/useGenerationGuards';
 import { useImageResize } from './hooks/useImageResize';
 import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
@@ -422,12 +422,13 @@ export default function App() {
       const audioBlob = await stopRecording();
       if (audioBlob) {
         try {
+          const wavBlob = await convertAudioBlobToWav(audioBlob);
           // Generate waveform from the recording
           const displayWidth = 400;
           const displayHeight = 80;
-          const audioElement = await loadAudioFromBlob(audioBlob);
+          const audioElement = await loadAudioFromBlob(wavBlob);
           const { dataUrl: waveformImageData, duration } = await generateWaveformImage(
-            audioBlob,
+            wavBlob,
             displayWidth,
             displayHeight
           );
@@ -441,7 +442,7 @@ export default function App() {
           });
 
           // Create the audio file
-          const file = new File([audioBlob], `recording-${Date.now()}.webm`, { type: audioBlob.type });
+          const file = new File([wavBlob], `recording-${Date.now()}.wav`, { type: wavBlob.type });
 
           // Add to canvas at center
           const newCanvasAudio = {
