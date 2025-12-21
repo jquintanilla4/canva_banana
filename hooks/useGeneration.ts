@@ -441,26 +441,31 @@ export const useGeneration = (args: UseGenerationArgs) => {
         return { x: startX, y: startY + height + spacing };
       };
 
-      // Spin up a Fal queue job so the UI can show progress even while the video generates server-side.
-      const newJob: FalQueueJob = {
-        id: falJobId,
-        prompt: trimmedPrompt,
-        modelLabel: jobModelLabel,
-        status: 'IN_QUEUE',
-        logs: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+      let jobQueued = false;
+      const enqueueJob = () => {
+        if (jobQueued) {
+          return;
+        }
+        // Spin up a Fal queue job so the UI can show progress even while the video generates server-side.
+        const newJob: FalQueueJob = {
+          id: falJobId,
+          prompt: trimmedPrompt,
+          modelLabel: jobModelLabel,
+          status: 'IN_QUEUE',
+          logs: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        setFalJobs(prev => [...prev.slice(-9), newJob]);
+        addDebugLog({
+          direction: 'outbound',
+          source: 'fal',
+          title: jobModelLabel,
+          message: 'Submitting request',
+          data: { jobId: falJobId, kind: 'video' },
+        });
+        jobQueued = true;
       };
-      setFalJobs(prev => [...prev.slice(-9), newJob]);
-      addDebugLog({
-        direction: 'outbound',
-        source: 'fal',
-        title: jobModelLabel,
-        message: 'Submitting request',
-        data: { jobId: falJobId, kind: 'video' },
-      });
-
-      setError(null);
 
       try {
         // In Ref-i2v, ensure a still image is selected (videos must be captured to images first)
@@ -597,6 +602,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
           videoTailImageElement = tailFrame.element as HTMLImageElement;
         }
         const videoLastFrameIdForMetadata = videoTailImageElement ? videoLastFrameImageIdForRun : null;
+
+        setError(null);
+        enqueueJob();
+
         const videoModelIdForRequest = actualHailuoModelId ?? actualKlingModelId ?? actualKlingO1ModelId ?? actualWanAnimateModelId ?? falVideoModelIdForRun;
         const shouldSendDuration = isHailuoVideoModel
           ? isHailuoStandardVideoModel
@@ -831,17 +840,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const message = err instanceof Error ? err.message : 'An unknown error occurred.';
         const userFacingMessage = buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE;
 
-        setFalJobs(prev => prev.map(job => {
-          if (job.id !== falJobId) {
-            return job;
-          }
-          return {
-            ...job,
-            status: 'FAILED',
-            error: userFacingMessage,
-            updatedAt: Date.now(),
-          };
-        }));
+        if (jobQueued) {
+          setFalJobs(prev => prev.map(job => {
+            if (job.id !== falJobId) {
+              return job;
+            }
+            return {
+              ...job,
+              status: 'FAILED',
+              error: userFacingMessage,
+              updatedAt: Date.now(),
+            };
+          }));
+        }
 
         setError(userFacingMessage);
       }

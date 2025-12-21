@@ -35,6 +35,19 @@ export const BackupsModal: React.FC<BackupsModalProps> = ({
   onClose,
   onRestore,
 }) => {
+  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleBackdropKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onClose();
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -60,11 +73,16 @@ export const BackupsModal: React.FC<BackupsModalProps> = ({
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
       // Close when clicking outside the modal panel.
-      onClick={onClose}
+      onClick={handleBackdropClick}
+      onKeyDown={handleBackdropKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label="Close backups modal"
     >
       <div
         className="w-full max-w-md rounded-lg border border-gray-700 bg-gray-900 text-white shadow-xl"
-        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
         <div className="flex items-center justify-between border-b border-gray-700 px-4 py-3">
           <h2 className="text-base font-semibold">Autosave Backups</h2>

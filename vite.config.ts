@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => {
         'process.env.FAL_API_URL': JSON.stringify(env.FAL_API_URL),
         'process.env.FAL_MODEL_ID': JSON.stringify(env.FAL_MODEL_ID),
       },
+      test: {
+        environment: 'jsdom',
+      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
