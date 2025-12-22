@@ -29,6 +29,7 @@ import {
   loadMediaFromBlob,
   loadMediaFromDataUrl,
 } from './mediaService';
+import { generateWaveformImage, loadAudioFromBlob } from './audioService';
 
 // Handles snapshot serialization/deserialization so canvases can be saved/restored across sessions.
 export type SnapshotImageManifest = {
@@ -366,6 +367,63 @@ export const restoreSnapshotFromFile = async (
   let snapshotNotes: CanvasNote[] = [];
   let snapshotPaths: Path[] = [];
   let meta: SerializedSnapshotV1['state']['meta'] | undefined;
+  // Audio snapshots need special handling because they render as waveform images.
+  const restoreAudioImage = async (params: {
+    img: {
+      id?: string;
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+      rotation?: number;
+      metadata?: CanvasImage['metadata'];
+    };
+    file: File;
+  }): Promise<CanvasImage> => {
+    const { img, file: audioFile } = params;
+    const width = typeof img.width === 'number' && Number.isFinite(img.width) ? Math.max(1, img.width) : 400;
+    const height = typeof img.height === 'number' && Number.isFinite(img.height) ? Math.max(1, img.height) : 80;
+    const rotation = typeof img.rotation === 'number' && Number.isFinite(img.rotation) ? img.rotation : 0;
+    // Rebuild the audio element from the stored blob.
+    const audioElement = await loadAudioFromBlob(audioFile);
+    // Regenerate the waveform preview so the canvas can draw the audio item.
+    const { dataUrl: waveformImageData, duration: waveformDuration } = await generateWaveformImage(
+      audioFile,
+      width,
+      height,
+    );
+    // Turn the waveform data URL into a drawable element.
+    const waveformImg = new Image();
+    await new Promise<void>((resolve, reject) => {
+      waveformImg.onload = () => resolve();
+      waveformImg.onerror = () => reject(new Error('Failed to load waveform image.'));
+      waveformImg.src = waveformImageData;
+    });
+    const naturalWidth = waveformImg.naturalWidth || width;
+    const naturalHeight = waveformImg.naturalHeight || height;
+    const duration = Number.isFinite(audioElement.duration) ? audioElement.duration : waveformDuration;
+
+    return {
+      id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
+      element: waveformImg,
+      mediaType: 'audio',
+      x: typeof img.x === 'number' ? img.x : 0,
+      y: typeof img.y === 'number' ? img.y : 0,
+      width,
+      height,
+      rotation,
+      naturalWidth,
+      naturalHeight,
+      file: audioFile,
+      isPlaying: false,
+      hasAudio: true,
+      audioElement,
+      waveformImageData,
+      audioDuration: Number.isFinite(duration) ? duration : undefined,
+      currentPlaybackTime: 0,
+      metadata: normalizeSnapshotImageMetadata(img.metadata),
+    };
+  };
 
   if (isBinarySnapshot) {
     const parsed = await parseBinarySnapshotFile(file);
@@ -389,6 +447,14 @@ export const restoreSnapshotFromFile = async (
         const mediaType = img.mediaType ?? getMediaTypeFromFileType(fileType);
 
         const snapshotFile = new File([blob], fileName, { type: fileType });
+        // Audio snapshots are stored as blobs but must be rehydrated as waveform images.
+        if (mediaType === 'audio') {
+          return restoreAudioImage({
+            img,
+            file: snapshotFile,
+          });
+        }
+        // Non-audio media can be rehydrated directly as an image/video element.
         const element = await loadMediaFromBlob(blob, mediaType);
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
         const width = typeof img.width === 'number' ? img.width : naturalWidth;
@@ -452,6 +518,18 @@ export const restoreSnapshotFromFile = async (
           ? (img as SerializedCanvasImageV1).fileType
           : 'image/png';
         const mediaType = (img as SerializedCanvasImageV1).mediaType ?? getMediaTypeFromFileType(fileType);
+        const fileName = typeof (img as SerializedCanvasImageV1).fileName === 'string' && (img as SerializedCanvasImageV1).fileName.length > 0
+          ? (img as SerializedCanvasImageV1).fileName
+          : `snapshot-image-${index + 1}.png`;
+        // V1 snapshots store audio as data URLs; rebuild waveform + audio elements.
+        if (mediaType === 'audio') {
+          const snapshotFile = await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType);
+          return restoreAudioImage({
+            img: img as SerializedCanvasImageV1,
+            file: snapshotFile,
+          });
+        }
+        // Non-audio media can be rehydrated directly from the data URL.
         const element = await loadMediaFromDataUrl((img as SerializedCanvasImageV1).dataUrl, mediaType);
         if (element instanceof HTMLVideoElement) {
           element.pause();
@@ -461,9 +539,6 @@ export const restoreSnapshotFromFile = async (
           element.playsInline = true;
         }
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
-        const fileName = typeof (img as SerializedCanvasImageV1).fileName === 'string' && (img as SerializedCanvasImageV1).fileName.length > 0
-          ? (img as SerializedCanvasImageV1).fileName
-          : `snapshot-image-${index + 1}.png`;
         const snapshotFile = await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType);
         const width = typeof (img as SerializedCanvasImageV1).width === 'number' ? (img as SerializedCanvasImageV1).width : naturalWidth;
         const height = typeof (img as SerializedCanvasImageV1).height === 'number' ? (img as SerializedCanvasImageV1).height : naturalHeight;

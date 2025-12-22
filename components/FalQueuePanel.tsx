@@ -1,10 +1,15 @@
 import React from 'react';
 import type { FalQueueJob } from '../types';
 import { isSuppressedFalLogMessage } from '../services/falConstants';
+import { getBlindTestModelLabel, getOpenSourceAliasLabel, type BlindTestMapping } from '../services/blindTestService';
+import { getFalModelLabel } from '../services/modelConfig';
 
 interface FalQueuePanelProps {
   jobs: FalQueueJob[];
   onDismiss: (jobId: string) => void;
+  blindTestEnabled: boolean;
+  openSourceAliasEnabled: boolean;
+  blindTestMapping: BlindTestMapping;
 }
 
 const statusStyles: Record<FalQueueJob['status'], string> = {
@@ -21,7 +26,13 @@ const statusLabels: Record<FalQueueJob['status'], string> = {
   FAILED: 'Failed',
 };
 
-export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({ jobs, onDismiss }) => {
+export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
+  jobs,
+  onDismiss,
+  blindTestEnabled,
+  openSourceAliasEnabled,
+  blindTestMapping,
+}) => {
   if (jobs.length === 0) {
     return null;
   }
@@ -39,12 +50,27 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({ jobs, onDismiss })
         <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {sortedJobs.map(job => {
             const lastLog = [...job.logs].reverse().find(log => !isSuppressedFalLogMessage(log));
+            const displayModelLabel = (() => {
+              if (!blindTestEnabled && !openSourceAliasEnabled) {
+                return job.modelLabel;
+              }
+              const baseLabel = getFalModelLabel(job.modelId);
+              const suffix = job.modelLabel.startsWith(baseLabel) ? job.modelLabel.slice(baseLabel.length) : '';
+              if (blindTestEnabled) {
+                return `${getBlindTestModelLabel(job.modelId, blindTestMapping)}${suffix}`;
+              }
+              const alias = getOpenSourceAliasLabel(job.modelId);
+              if (alias) {
+                return `${alias}${suffix}`;
+              }
+              return job.modelLabel;
+            })();
             return (
               <li key={job.id} className="bg-gray-800/70 rounded-md border border-gray-700/50 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-100 font-medium leading-snug break-words">
-                      {job.modelLabel}
+                      {displayModelLabel}
                     </p>
                     {job.requestId && (
                       <p className="text-[11px] text-gray-400 mt-1 break-all">

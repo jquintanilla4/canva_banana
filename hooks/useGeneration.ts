@@ -450,6 +450,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const newJob: FalQueueJob = {
           id: falJobId,
           prompt: trimmedPrompt,
+          modelId: falModelIdForRun,
           modelLabel: jobModelLabel,
           status: 'IN_QUEUE',
           logs: [],
@@ -924,6 +925,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const newJob: FalQueueJob = {
         id: falJobId,
         prompt: jobPromptDescription,
+        modelId: falModelIdForRun,
         modelLabel: jobModelLabel,
         status: 'IN_QUEUE',
         logs: [],

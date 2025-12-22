@@ -1124,7 +1124,13 @@ export default function App() {
       )}
 
       {/* FAL job queue panel */}
-      <FalQueuePanel jobs={falJobs} onDismiss={handleDismissFalJob} />
+      <FalQueuePanel
+        jobs={falJobs}
+        onDismiss={handleDismissFalJob}
+        blindTestEnabled={blindTestEnabled}
+        openSourceAliasEnabled={openSourceAliasEnabled}
+        blindTestMapping={blindTestMappingRef.current}
+      />
 
       {/* Debug log panel */}
       {isDebugLogOpen && (

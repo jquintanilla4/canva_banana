@@ -50,6 +50,12 @@ const getOrCreateCodename = (modelId: string, mapping: BlindTestMapping): string
   return mapping.get(modelId)!;
 };
 
+export const getBlindTestModelLabel = (modelId: string, mapping: BlindTestMapping): string =>
+  getOrCreateCodename(modelId, mapping);
+
+export const getOpenSourceAliasLabel = (modelId: string): string | undefined =>
+  OPEN_SOURCE_MODEL_ALIASES[modelId];
+
 export const applyBlindTestMode = <T extends { value: string; label: string }>(
   options: ReadonlyArray<T>,
   mapping: BlindTestMapping,

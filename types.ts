@@ -165,6 +165,7 @@ export type FalJobStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 export interface FalQueueJob {
   id: string;
   prompt: string;
+  modelId: string;
   modelLabel: string;
   status: FalJobStatus;
   requestId?: string;
