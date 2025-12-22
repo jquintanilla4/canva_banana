@@ -28,7 +28,7 @@ import {
   buildPromptBarModelControls,
   getPromptBarModelOptions,
 } from './services/promptBarConfig';
-import { applyBlindTestMode, type BlindTestMapping } from './services/blindTestService';
+import { applyBlindTestMode, applyOpenSourceAliasMode, type BlindTestMapping } from './services/blindTestService';
 import { isOverlapping } from './utils/canvasGeometry';
 import { FileMenu } from './components/FileMenu';
 import { ViewToolbar } from './components/ViewToolbar';
@@ -155,7 +155,27 @@ export default function App() {
 
   // Blind test mode: anonymizes model names in dropdowns with random codenames
   const [blindTestEnabled, setBlindTestEnabled] = useState(false);
+  const [openSourceAliasEnabled, setOpenSourceAliasEnabled] = useState(false);
   const blindTestMappingRef = useRef<BlindTestMapping>(new Map());
+  const handleBlindTestClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    if (event.altKey) {
+      setOpenSourceAliasEnabled(prev => {
+        const next = !prev;
+        if (next) {
+          setBlindTestEnabled(false);
+        }
+        return next;
+      });
+      return;
+    }
+    setBlindTestEnabled(prev => {
+      const next = !prev;
+      if (next) {
+        setOpenSourceAliasEnabled(false);
+      }
+      return next;
+    });
+  }, []);
 
   // State for toggling the file menu and debug log panels
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
@@ -932,7 +952,7 @@ export default function App() {
   });
   const rawModelOptions = getPromptBarModelOptions(fal.falModelMode);
   const promptBarModelOptions = applyBlindTestMode(
-    rawModelOptions,
+    applyOpenSourceAliasMode(rawModelOptions, openSourceAliasEnabled),
     blindTestMappingRef.current,
     blindTestEnabled,
   );
@@ -1070,7 +1090,8 @@ export default function App() {
           metadataVisible={showMetadataOverlay}
           onToggleMetadata={() => setShowMetadataOverlay(prev => !prev)}
           blindTestEnabled={blindTestEnabled}
-          onToggleBlindTest={() => setBlindTestEnabled(prev => !prev)}
+          openSourceAliasEnabled={openSourceAliasEnabled}
+          onToggleBlindTest={handleBlindTestClick}
         />
       </main>
 

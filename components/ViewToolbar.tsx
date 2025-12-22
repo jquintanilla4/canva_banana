@@ -7,7 +7,8 @@ interface ViewToolbarProps {
   metadataVisible: boolean;
   onToggleMetadata: () => void;
   blindTestEnabled: boolean;
-  onToggleBlindTest: () => void;
+  openSourceAliasEnabled: boolean;
+  onToggleBlindTest: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 export const ViewToolbar: React.FC<ViewToolbarProps> = ({
@@ -16,6 +17,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   metadataVisible,
   onToggleMetadata,
   blindTestEnabled,
+  openSourceAliasEnabled,
   onToggleBlindTest,
 }) => {
   // Lightweight view controls separate from the main tool palette.
@@ -23,18 +25,24 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
     ? 'bg-blue-500 hover:bg-blue-400'
     : 'bg-gray-700 hover:bg-gray-600';
 
-  const blindTestButtonClasses = blindTestEnabled
+  const blindTestActive = blindTestEnabled || openSourceAliasEnabled;
+  const blindTestButtonClasses = blindTestActive
     ? 'bg-blue-500 hover:bg-blue-400'
     : 'bg-gray-700 hover:bg-gray-600';
+  const blindTestTitle = blindTestEnabled
+    ? 'Disable Blind Test Mode'
+    : openSourceAliasEnabled
+      ? 'Disable Open Source Alias Mode'
+      : 'Enable Blind Test Mode (Option/Alt + click for aliases)';
 
   return (
     <div className="absolute bottom-4 right-4 z-10 flex items-center space-x-2">
       <button
         type="button"
         onClick={onToggleBlindTest}
-        aria-pressed={blindTestEnabled}
+        aria-pressed={blindTestActive}
         className={`p-2 rounded-md border-none outline-none focus:outline-none focus:ring-0 shadow-none transition-colors duration-200 text-white ${blindTestButtonClasses}`}
-        title={blindTestEnabled ? 'Disable Blind Test Mode' : 'Enable Blind Test Mode'}
+        title={blindTestTitle}
       >
         <BlindTestIcon className="w-5 h-5" />
       </button>
