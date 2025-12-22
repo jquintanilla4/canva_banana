@@ -1098,93 +1098,136 @@ export const useGeneration = (args: UseGenerationArgs) => {
             throw new Error('Unable to create Fal job identifier.');
           }
 
-          const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
-          const shouldSendMask = hasInpaintMask && appMode === 'INPAINT';
-          const inpaintPaths = shouldSendMask
-            ? paths.filter(path => path.tool === Tool.INPAINT)
-            : [];
-
-          const hasEditReferences = referenceImageIdsForRun.length > 0;
-          const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel;
-          let editReferenceImages: HTMLImageElement[] | undefined;
-          if (supportsEditReferenceImages && hasEditReferences) {
-            const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
-            const referenceCanvasImages = referenceImageIdsForRun
-              .filter(id => id !== primaryImageIdForRun)
-              .map(id => images.find(img => img.id === id))
-              .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
-              .slice(0, maxReferenceImages);
-
-            const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
-              if ((img.rotation ?? 0) === 0) {
-                return img.element;
-              }
-              const rasterized = await rasterizeImages([img]);
-              return rasterized.element;
-            };
-
-            if (referenceCanvasImages.length > 0) {
-              editReferenceImages = await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
-              referenceIdsUsed = referenceCanvasImages.map(img => img.id);
-            }
-          }
-
-          const falEditResult = await generateFalImageEdit({
-            prompt: trimmedPrompt,
-            image: sourceImageForAPI.element,
-            tool,
-            paths: shouldSendMask ? inpaintPaths : paths,
-            imageDimensions: editImageDimensions,
-            inpaintMode,
-            referenceImages: editReferenceImages,
-          }, {
-            modelId: falModelIdForRun,
-            ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
-            ...(falImageSizeSelectionForRun ? { imageSize: falImageSizeSelectionForRun } : {}),
-            ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
-            numImages: normalizedFalNumImages,
-            onQueueUpdate: (update) => {
-              if (isKlingModel && update.status === 'FAILED') {
-                const updateMessage = typeof (update as { message?: unknown }).message === 'string'
-                  ? (update as { message?: string }).message
-                  : undefined;
-                const updateError = typeof (update as { error?: unknown }).error === 'string'
-                  ? (update as { error?: string }).error
-                  : undefined;
-                const fileSizeMessage = getFalFileSizeErrorMessage(
-                  updateMessage ?? updateError,
-                  extractFalQueueLogMessages(update.logs),
-                );
-                if (fileSizeMessage) {
-                  showTemporaryError(fileSizeMessage);
-                }
-              }
+          if (isUpscaleModel) {
+            const onQueueUpdate = (update: FalQueueUpdate) => {
               setFalJobs(prev => prev.map(job => {
                 if (job.id !== falJobId) {
                   return job;
                 }
                 return applyFalQueueUpdateToJob(job, update);
               }));
-            },
-          });
-
-          generationResult = falEditResult;
-
-          setFalJobs(prev => prev.map(job => {
-            if (job.id !== falJobId) {
-              return job;
-            }
-            if (job.status === 'FAILED') {
-              return job;
-            }
-            return {
-              ...job,
-              status: 'COMPLETED',
-              requestId: falEditResult.requestId || job.requestId,
-              description: falEditResult.text,
-              updatedAt: Date.now(),
             };
-          }));
+
+            const falUpscaleResult = isSeedvrUpscaleModel
+              ? await upscaleFalSeedvrImage(
+                sourceImageForAPI.element,
+                falScaleFactorForRun,
+                falNoiseScaleForRun,
+                { onQueueUpdate },
+              )
+              : await upscaleFalCrystalImage(
+                sourceImageForAPI.element,
+                falScaleFactorForRun,
+                falCreativityForRun,
+                { onQueueUpdate },
+              );
+
+            generationResult = falUpscaleResult;
+
+            setFalJobs(prev => prev.map(job => {
+              if (job.id !== falJobId) {
+                return job;
+              }
+              if (job.status === 'FAILED') {
+                return job;
+              }
+              return {
+                ...job,
+                status: 'COMPLETED',
+                requestId: falUpscaleResult.requestId || job.requestId,
+                description: falUpscaleResult.text,
+                updatedAt: Date.now(),
+              };
+            }));
+          } else {
+            const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
+            const shouldSendMask = hasInpaintMask && appMode === 'INPAINT';
+            const inpaintPaths = shouldSendMask
+              ? paths.filter(path => path.tool === Tool.INPAINT)
+              : [];
+
+            const hasEditReferences = referenceImageIdsForRun.length > 0;
+            const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel;
+            let editReferenceImages: HTMLImageElement[] | undefined;
+            if (supportsEditReferenceImages && hasEditReferences) {
+              const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
+              const referenceCanvasImages = referenceImageIdsForRun
+                .filter(id => id !== primaryImageIdForRun)
+                .map(id => images.find(img => img.id === id))
+                .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
+                .slice(0, maxReferenceImages);
+
+              const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
+                if ((img.rotation ?? 0) === 0) {
+                  return img.element;
+                }
+                const rasterized = await rasterizeImages([img]);
+                return rasterized.element;
+              };
+
+              if (referenceCanvasImages.length > 0) {
+                editReferenceImages = await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
+                referenceIdsUsed = referenceCanvasImages.map(img => img.id);
+              }
+            }
+
+            const falEditResult = await generateFalImageEdit({
+              prompt: trimmedPrompt,
+              image: sourceImageForAPI.element,
+              tool,
+              paths: shouldSendMask ? inpaintPaths : paths,
+              imageDimensions: editImageDimensions,
+              inpaintMode,
+              referenceImages: editReferenceImages,
+            }, {
+              modelId: falModelIdForRun,
+              ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
+              ...(falImageSizeSelectionForRun ? { imageSize: falImageSizeSelectionForRun } : {}),
+              ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
+              numImages: normalizedFalNumImages,
+              onQueueUpdate: (update) => {
+                if (isKlingModel && update.status === 'FAILED') {
+                  const updateMessage = typeof (update as { message?: unknown }).message === 'string'
+                    ? (update as { message?: string }).message
+                    : undefined;
+                  const updateError = typeof (update as { error?: unknown }).error === 'string'
+                    ? (update as { error?: string }).error
+                    : undefined;
+                  const fileSizeMessage = getFalFileSizeErrorMessage(
+                    updateMessage ?? updateError,
+                    extractFalQueueLogMessages(update.logs),
+                  );
+                  if (fileSizeMessage) {
+                    showTemporaryError(fileSizeMessage);
+                  }
+                }
+                setFalJobs(prev => prev.map(job => {
+                  if (job.id !== falJobId) {
+                    return job;
+                  }
+                  return applyFalQueueUpdateToJob(job, update);
+                }));
+              },
+            });
+
+            generationResult = falEditResult;
+
+            setFalJobs(prev => prev.map(job => {
+              if (job.id !== falJobId) {
+                return job;
+              }
+              if (job.status === 'FAILED') {
+                return job;
+              }
+              return {
+                ...job,
+                status: 'COMPLETED',
+                requestId: falEditResult.requestId || job.requestId,
+                description: falEditResult.text,
+                updatedAt: Date.now(),
+              };
+            }));
+          }
         } else {
           const googleResult = await generateGoogleImageEdit({
             prompt: trimmedPrompt,
