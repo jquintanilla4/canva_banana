@@ -298,7 +298,7 @@ export function useCanvasMediaActions({
       setError('Select an image to remove its background.');
       return;
     }
-    const targetImage = images.find(img => img.id === primaryImageId);
+    const targetImage = displayedImages.find(img => img.id === primaryImageId);
     if (!targetImage || !isImageCanvasMedia(targetImage)) {
       setError('Background removal is only available for images.');
       return;
@@ -331,17 +331,18 @@ export function useCanvasMediaActions({
             }
           : img),
       }));
+      setLiveImages(null);
       setError(null);
       setToastMessage('Background removed');
       setTimeout(() => setToastMessage(null), 2000);
     } catch (err) {
       console.error(err);
       const message = err instanceof Error ? err.message : 'Failed to remove background.';
-    setError(message);
-  } finally {
-    setIsRemovingBackground(false);
-  }
-}, [hasSingleImageSelected, images, primaryImageId, setError, setState, setToastMessage]);
+      setError(message);
+    } finally {
+      setIsRemovingBackground(false);
+    }
+  }, [displayedImages, hasSingleImageSelected, primaryImageId, setError, setLiveImages, setState, setToastMessage]);
 
   const handleStartCrop = useCallback((imageId: string) => {
     handleCommit();
