@@ -23,6 +23,7 @@ type UseCanvasInteractionsArgs = {
   images: CanvasImage[];
   notes: CanvasNote[];
   paths: Path[];
+  isNoteEditing: boolean;
   pan: Point;
   scale: number;
   brushSize: number;
@@ -74,6 +75,7 @@ export function useCanvasInteractions({
   images,
   notes,
   paths,
+  isNoteEditing,
   pan,
   scale,
   brushSize,
@@ -220,6 +222,9 @@ export function useCanvasInteractions({
     const point = getTransformedPoint(e.clientX, e.clientY);
 
     if (activeTool === Tool.NOTE) {
+      if (isNoteEditing) {
+        return;
+      }
       const newNote: CanvasNote = {
         id: crypto.randomUUID(),
         x: point.x - 100,

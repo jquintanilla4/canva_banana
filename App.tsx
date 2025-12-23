@@ -10,6 +10,7 @@ import {
   InpaintMode,
   AppMode,
   ApiProviderId,
+  type CanvasNote,
 } from './types';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
@@ -112,6 +113,7 @@ export default function App() {
   );
   // State for note editing (currently edited note's ID or null if none)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const pendingNoteEditIdRef = useRef<string | null>(null);
 
   // State to track if the app is currently performing a loading operation
   const [isLoading, setIsLoading] = useState(false);
@@ -759,6 +761,37 @@ export default function App() {
     setLiveNotes(newNotes);
   }, [displayedNotes, setLiveNotes]);
 
+  const handleNotesChange = useCallback((nextNotes: CanvasNote[]) => {
+    setLiveNotes(nextNotes);
+    if (tool !== Tool.NOTE || editingNoteId) {
+      return;
+    }
+    const prevIds = new Set(displayedNotes.map(note => note.id));
+    const addedNote = nextNotes.find(note => !prevIds.has(note.id));
+    if (addedNote && addedNote.text === '') {
+      pendingNoteEditIdRef.current = addedNote.id;
+    }
+  }, [displayedNotes, editingNoteId, setLiveNotes, tool]);
+
+  useEffect(() => {
+    const pendingId = pendingNoteEditIdRef.current;
+    if (!pendingId || editingNoteId || tool !== Tool.NOTE) {
+      return;
+    }
+    if (!displayedNotes.some(note => note.id === pendingId)) {
+      return;
+    }
+    setEditingNoteId(pendingId);
+    pendingNoteEditIdRef.current = null;
+  }, [displayedNotes, editingNoteId, tool]);
+
+  useEffect(() => {
+    if (tool !== Tool.NOTE && pendingNoteEditIdRef.current) {
+      pendingNoteEditIdRef.current = null;
+    }
+  }, [tool]);
+
+
   const handleNoteFontSizeChange = useCallback((noteId: string, delta: number) => {
     const noteIndex = notes.findIndex(n => n.id === noteId);
     if (noteIndex === -1) return;
@@ -1057,7 +1090,7 @@ export default function App() {
           images={displayedImages}
           onImagesChange={setLiveImages}
           notes={displayedNotes}
-          onNotesChange={setLiveNotes}
+          onNotesChange={handleNotesChange}
           tool={tool}
           appMode={appMode}
           paths={displayedPaths}

@@ -162,6 +162,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const notePointerDownWhileEditingRef = useRef(false);
+  const noteEditHandledRef = useRef(false);
 
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
@@ -261,6 +263,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     images,
     notes,
     paths,
+    isNoteEditing: Boolean(editingNoteId),
     pan,
     scale,
     brushSize,
@@ -617,18 +620,57 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [currentTool, isPanning, isDragging, isResizing, cropMode, transformMode, isMarqueeSelecting]);
 
   useEffect(() => {
-    if (editingNoteId && textareaRef.current) {
-      textareaRef.current.focus();
+    if (!editingNoteId) return;
+    if (!notes.some(note => note.id === editingNoteId)) return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    if (document.activeElement !== textarea) {
+      textarea.focus();
+    }
+  }, [editingNoteId, notes]);
+
+  useEffect(() => {
+    if (editingNoteId) {
+      noteEditHandledRef.current = false;
     }
   }, [editingNoteId]);
 
-
-
-
   const handleNoteBlur = useCallback(() => {
+    if (noteEditHandledRef.current) {
+      return;
+    }
+    noteEditHandledRef.current = true;
     onCommit();
     onNoteEditEnd();
   }, [onCommit, onNoteEditEnd]);
+
+  const handleMouseDownCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!editingNoteId) {
+      notePointerDownWhileEditingRef.current = false;
+      return;
+    }
+    const target = e.target as HTMLElement;
+    notePointerDownWhileEditingRef.current = target.tagName !== 'TEXTAREA';
+  }, [editingNoteId]);
+
+  const handleMouseDownWithEditGuard = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const suppressNoteCreation = notePointerDownWhileEditingRef.current && tool === Tool.NOTE;
+    notePointerDownWhileEditingRef.current = false;
+
+    if (editingNoteId) {
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'TEXTAREA') {
+        handleNoteBlur();
+        if (tool === Tool.NOTE) {
+          return;
+        }
+      }
+    }
+    if (suppressNoteCreation) {
+      return;
+    }
+    handleMouseDown(e);
+  }, [editingNoteId, handleNoteBlur, handleMouseDown, tool]);
 
   const editingNote = useMemo(() => editingNoteId ? notes.find(n => n.id === editingNoteId) : null, [notes, editingNoteId]);
   const selectedNote = useMemo(() => {
@@ -753,7 +795,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         backgroundImage,
         backgroundSize: `${gridSpacing}px ${gridSpacing}px`,
       }}
-      onMouseDown={handleMouseDown}
+      onMouseDownCapture={handleMouseDownCapture}
+      onMouseDown={handleMouseDownWithEditGuard}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
