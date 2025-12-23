@@ -24,6 +24,7 @@ import {
 import { getImageBounds } from './canvas/geometry';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { drawCanvas } from './canvas/render/drawCanvas';
+import { getNoteTextColor } from './canvas/noteColors';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
 
 interface CanvasProps {
@@ -76,6 +77,7 @@ interface CanvasProps {
   onNoteCopy: (noteId: string) => void;
   onNoteDuplicate: (noteId: string) => void;
   onNoteFontSizeChange: (noteId: string, delta: number) => void;
+  onNoteColorChange: (noteId: string, color: string) => void;
   onImagePromptCopy: (imageId: string) => void;
   onImageDuplicate: (imageId: string) => void;
   onRerunGeneration: (imageId: string) => void;
@@ -151,6 +153,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onNoteCopy,
   onNoteDuplicate,
   onNoteFontSizeChange,
+  onNoteColorChange,
   onImagePromptCopy,
   onImageDuplicate,
   onRerunGeneration,
@@ -162,8 +165,20 @@ export const Canvas: React.FC<CanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const noteColorPickerRef = useRef<HTMLDivElement>(null);
   const notePointerDownWhileEditingRef = useRef(false);
   const noteEditHandledRef = useRef(false);
+  const [isNoteColorPickerOpen, setIsNoteColorPickerOpen] = useState(false);
+
+  const noteColorOptions = useMemo(() => ([
+    { label: 'Dark gray blue', value: '#1f2937' },
+    { label: 'Black', value: '#000000' },
+    { label: 'Orange', value: '#f97316' },
+    { label: 'Mustard yellow', value: '#e1b927' },
+    { label: 'Dark purple', value: '#4c1d95' },
+    { label: 'Dark green', value: '#166534' },
+    { label: 'Dark red', value: '#7f1d1d' },
+  ]), []);
 
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
@@ -680,6 +695,30 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!targetId) return null;
     return notes.find(n => n.id === targetId) || null;
   }, [notes, primarySelectedNoteId, editingNoteId, selectedNoteIds.length]);
+
+  useEffect(() => {
+    setIsNoteColorPickerOpen(false);
+  }, [editingNoteId, selectedNote?.id]);
+
+  useEffect(() => {
+    if (!isNoteColorPickerOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const container = noteColorPickerRef.current;
+      const target = event.target as Node | null;
+      if (!container || !target) {
+        return;
+      }
+      if (!container.contains(target)) {
+        setIsNoteColorPickerOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [isNoteColorPickerOpen]);
   const selectedImage = useMemo(() => {
     if (selectedImageIds.length !== 1) return null;
     const targetId = primarySelectedImageId;
@@ -855,7 +894,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             width: `${editingNote.width * scale}px`,
             height: `${editingNote.height * scale}px`,
             backgroundColor: editingNote.backgroundColor,
-            color: '#e5e7eb', // light gray
+            color: getNoteTextColor(editingNote.backgroundColor),
             border: `2px solid #0ea5e9`,
             borderRadius: '4px',
             padding: `${10 * scale}px`,
@@ -896,6 +935,38 @@ export const Canvas: React.FC<CanvasProps> = ({
               </ActionButton>
             </>
           )}
+          <div className="relative" ref={noteColorPickerRef}>
+            <ActionButton
+              onClick={() => setIsNoteColorPickerOpen(prev => !prev)}
+              disabled={false}
+              title="Note Color"
+            >
+              <span
+                className="block h-4 w-4 rounded-sm border border-white/70"
+                style={{ backgroundColor: selectedNote.backgroundColor }}
+              />
+            </ActionButton>
+            {isNoteColorPickerOpen && (
+              <div className="absolute left-1/2 -translate-x-1/2 mt-2 flex items-center gap-2 rounded-md border border-gray-600 bg-gray-900/95 p-2 shadow-xl">
+                {noteColorOptions.map(option => {
+                  const isActive = option.value === selectedNote.backgroundColor;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      title={option.label}
+                      onClick={() => {
+                        onNoteColorChange(selectedNote.id, option.value);
+                        setIsNoteColorPickerOpen(false);
+                      }}
+                      className={`h-6 w-6 rounded-sm border ${isActive ? 'border-white' : 'border-gray-500'} shadow`}
+                      style={{ backgroundColor: option.value }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <ActionButton
             onClick={() => onNoteCopy(selectedNote.id)}
             disabled={!selectedNote.text}

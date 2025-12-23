@@ -805,6 +805,18 @@ export default function App() {
     });
   }, [notes, setState]);
 
+  const handleNoteColorChange = useCallback((noteId: string, color: string) => {
+    setState(prevState => {
+      const noteIndex = prevState.notes.findIndex(note => note.id === noteId);
+      if (noteIndex === -1) {
+        return prevState;
+      }
+      const newNotes = [...prevState.notes];
+      newNotes[noteIndex] = { ...newNotes[noteIndex], backgroundColor: color };
+      return { ...prevState, notes: newNotes };
+    });
+  }, [setState]);
+
   const selectedImageIndex = primaryImageId ? images.findIndex(img => img.id === primaryImageId) : -1;
   const isImageOverlapping = primaryImageId && selectedImageIndex !== -1 ? images.some(other => other.id !== primaryImageId && isOverlapping(images[selectedImageIndex], other)) : false;
   const canMoveUp = selectedImageIndex > -1 && selectedImageIndex < images.length - 1;
@@ -1135,6 +1147,7 @@ export default function App() {
           onNoteCopy={handleNoteCopy}
           onNoteDuplicate={handleDuplicateNote}
           onNoteFontSizeChange={handleNoteFontSizeChange}
+          onNoteColorChange={handleNoteColorChange}
           onImagePromptCopy={handleImagePromptCopy}
           onImageDuplicate={handleDuplicateImage}
           onRerunGeneration={handleRerunGeneration}

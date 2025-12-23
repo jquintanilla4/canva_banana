@@ -1,5 +1,6 @@
 import { formatDuration } from '../../../services/audioService';
 import { Tool, type CanvasImage, type CanvasNote, type Path, type Point } from '../../../types';
+import { getNoteTextColor } from '../noteColors';
 import { CROP_HANDLE_SIZE, DEFAULT_NOTE_FONT_SIZE, RESIZE_HANDLE_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
 import { getImageCenter, getImageRotation } from '../geometry';
 import { isVideoImage } from '../mediaGuards';
@@ -494,7 +495,7 @@ export function drawCanvas({
     );
     ctx.clip();
 
-    ctx.fillStyle = '#e5e7eb'; // light gray
+    ctx.fillStyle = getNoteTextColor(note.backgroundColor);
     const fontSize = (note.fontSize ?? DEFAULT_NOTE_FONT_SIZE) / scale;
     ctx.font = `${fontSize}px sans-serif`;
     wrapText(ctx, note.text, note.x + textPadding, note.y + textPadding + fontSize, note.width - (2 * textPadding), fontSize * 1.2);
