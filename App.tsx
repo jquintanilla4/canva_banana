@@ -118,8 +118,9 @@ export default function App() {
   // State for error message display (null if no error)
   const [error, setError] = useState<string | null>(null);
 
-  // Triggers to control zoom-to-fit, zoom-in, and zoom-out actions (increment to trigger effect)
+  // Triggers to control zoom-to-fit, zoom-to-selection, zoom-in, and zoom-out actions (increment to trigger effect)
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
+  const [zoomToSelectionTrigger, setZoomToSelectionTrigger] = useState(0);
   const [zoomInTrigger, setZoomInTrigger] = useState(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
 
@@ -264,6 +265,13 @@ export default function App() {
     handleImageSelection,
     handleNoteSelection,
   } = selection;
+
+  const requestZoomToSelection = useCallback(() => {
+    if (selectedImageIds.length === 0 && selectedNoteIds.length === 0) {
+      return;
+    }
+    setZoomToSelectionTrigger(prev => prev + 1);
+  }, [selectedImageIds.length, selectedNoteIds.length]);
 
   const hasSelectedStillImage = useMemo(
     () => selectedImageIds.some(id => images.find(img => img.id === id)?.mediaType === 'image'),
@@ -718,6 +726,8 @@ export default function App() {
     setTool,
     requestZoomIn,
     requestZoomOut,
+    onZoomToFit: handleZoomToFit,
+    onZoomToSelection: requestZoomToSelection,
     onDelete: handleDelete,
     onRecordToggle: handleRecordToggle,
   });
@@ -1059,6 +1069,7 @@ export default function App() {
           onCommit={handleCommit}
           onFilesDrop={handleFilesDrop}
           zoomToFitTrigger={zoomToFitTrigger}
+          zoomToSelectionTrigger={zoomToSelectionTrigger}
           zoomInTrigger={zoomInTrigger}
           zoomOutTrigger={zoomOutTrigger}
           editingNoteId={editingNoteId}

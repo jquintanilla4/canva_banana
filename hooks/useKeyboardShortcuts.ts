@@ -7,6 +7,8 @@ type KeyboardShortcutsArgs = {
   setTool: (tool: Tool) => void;
   requestZoomIn: () => void;
   requestZoomOut: () => void;
+  onZoomToFit?: () => void;
+  onZoomToSelection?: () => void;
   onDelete?: () => void;
   onRecordToggle?: () => void;
 };
@@ -17,6 +19,8 @@ export function useKeyboardShortcuts({
   setTool,
   requestZoomIn,
   requestZoomOut,
+  onZoomToFit,
+  onZoomToSelection,
   onDelete,
   onRecordToggle,
 }: KeyboardShortcutsArgs) {
@@ -94,6 +98,16 @@ export function useKeyboardShortcuts({
       if (!event.metaKey && !event.ctrlKey && (key === '=' || key === '+')) {
         event.preventDefault();
         requestZoomIn();
+        return;
+      }
+      if (!event.metaKey && !event.ctrlKey && key === '.' && onZoomToFit) {
+        event.preventDefault();
+        onZoomToFit();
+        return;
+      }
+      if (!event.metaKey && !event.ctrlKey && key === ',' && onZoomToSelection) {
+        event.preventDefault();
+        onZoomToSelection();
       }
     };
 
@@ -101,5 +115,5 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [appMode, onGenerate, onRecordToggle, requestZoomIn, requestZoomOut, setTool]);
+  }, [appMode, onGenerate, onRecordToggle, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut, setTool]);
 }

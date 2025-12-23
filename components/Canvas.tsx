@@ -53,6 +53,7 @@ interface CanvasProps {
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
   zoomToFitTrigger: number;
+  zoomToSelectionTrigger: number;
   zoomInTrigger: number;
   zoomOutTrigger: number;
   onFilesDrop: (files: FileList, point: Point) => void;
@@ -126,6 +127,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onNoteSelect,
   onCommit,
   zoomToFitTrigger,
+  zoomToSelectionTrigger,
   zoomInTrigger,
   zoomOutTrigger,
   onFilesDrop,
@@ -160,6 +162,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [scale, setScale] = useState(1);
 
   const prevZoomToFitTrigger = useRef(zoomToFitTrigger);
+  const prevZoomToSelectionTrigger = useRef(zoomToSelectionTrigger);
   const prevZoomInTrigger = useRef(zoomInTrigger);
   const prevZoomOutTrigger = useRef(zoomOutTrigger);
   const prevImagesLength = useRef(images.length);
@@ -331,10 +334,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   }, [cropMode, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isKlingO1VideoInputMode, isWanAnimateVideoInputMode, notes, pan, paths, primarySelectedNoteId, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
-  const zoomToFit = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || (images.length === 0 && notes.length === 0)) {
-      return;
+  const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
+    if (targetImages.length === 0 && targetNotes.length === 0) {
+      return null;
     }
 
     let minX = Infinity;
@@ -342,7 +344,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     let maxX = -Infinity;
     let maxY = -Infinity;
 
-    images.forEach(img => {
+    targetImages.forEach(img => {
       const bounds = getImageBounds(img);
       minX = Math.min(minX, bounds.minX);
       minY = Math.min(minY, bounds.minY);
@@ -350,28 +352,47 @@ export const Canvas: React.FC<CanvasProps> = ({
       maxY = Math.max(maxY, bounds.maxY);
     });
 
-    notes.forEach(note => {
+    targetNotes.forEach(note => {
       minX = Math.min(minX, note.x);
       minY = Math.min(minY, note.y);
       maxX = Math.max(maxX, note.x + note.width);
       maxY = Math.max(maxY, note.y + note.height);
     });
 
-    const bboxWidth = maxX - minX;
-    const bboxHeight = maxY - minY;
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      return null;
+    }
 
-    if (bboxWidth === 0 || bboxHeight === 0) return;
+    return { minX, minY, maxX, maxY };
+  }, [getImageBounds]);
+
+  const zoomToBounds = useCallback((bounds: { minX: number; minY: number; maxX: number; maxY: number; }) => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const bboxWidth = bounds.maxX - bounds.minX;
+    const bboxHeight = bounds.maxY - bounds.minY;
+
+    if (bboxWidth === 0 || bboxHeight === 0) {
+      return;
+    }
 
     const canvasWidth = canvas.clientWidth;
     const canvasHeight = canvas.clientHeight;
+
+    if (canvasWidth === 0 || canvasHeight === 0) {
+      return;
+    }
 
     const padding = 0.9; // 10% padding
     const scaleX = canvasWidth / bboxWidth;
     const scaleY = canvasHeight / bboxHeight;
     const newScale = Math.min(scaleX, scaleY) * padding;
 
-    const bboxCenterX = minX + bboxWidth / 2;
-    const bboxCenterY = minY + bboxHeight / 2;
+    const bboxCenterX = bounds.minX + bboxWidth / 2;
+    const bboxCenterY = bounds.minY + bboxHeight / 2;
 
     const newPanX = canvasWidth / 2 - bboxCenterX * newScale;
     const newPanY = canvasHeight / 2 - bboxCenterY * newScale;
@@ -380,7 +401,31 @@ export const Canvas: React.FC<CanvasProps> = ({
     scaleRef.current = clampedScale;
     setScale(clampedScale);
     setPanSmoothly({ x: newPanX, y: newPanY });
-  }, [getImageBounds, images, notes, setPanSmoothly]);
+  }, [setPanSmoothly]);
+
+  const zoomToFit = useCallback(() => {
+    const bounds = getBoundsForItems(images, notes);
+    if (!bounds) {
+      return;
+    }
+    zoomToBounds(bounds);
+  }, [getBoundsForItems, images, notes, zoomToBounds]);
+
+  const zoomToSelection = useCallback(() => {
+    if (selectedImageIds.length === 0 && selectedNoteIds.length === 0) {
+      return;
+    }
+
+    const selectedImageSet = new Set(selectedImageIds);
+    const selectedNoteSet = new Set(selectedNoteIds);
+    const selectedImages = images.filter(img => selectedImageSet.has(img.id));
+    const selectedNotes = notes.filter(note => selectedNoteSet.has(note.id));
+    const bounds = getBoundsForItems(selectedImages, selectedNotes);
+    if (!bounds) {
+      return;
+    }
+    zoomToBounds(bounds);
+  }, [getBoundsForItems, images, notes, selectedImageIds, selectedNoteIds, zoomToBounds]);
 
   useEffect(() => {
     if (zoomToFitTrigger > prevZoomToFitTrigger.current) {
@@ -388,6 +433,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
     prevZoomToFitTrigger.current = zoomToFitTrigger;
   }, [zoomToFitTrigger, zoomToFit]);
+
+  useEffect(() => {
+    if (zoomToSelectionTrigger > prevZoomToSelectionTrigger.current) {
+      zoomToSelection();
+    }
+    prevZoomToSelectionTrigger.current = zoomToSelectionTrigger;
+  }, [zoomToSelectionTrigger, zoomToSelection]);
 
   useEffect(() => {
     if (zoomInTrigger > prevZoomInTrigger.current) {
