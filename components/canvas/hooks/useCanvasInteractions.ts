@@ -227,10 +227,10 @@ export function useCanvasInteractions({
       }
       const newNote: CanvasNote = {
         id: crypto.randomUUID(),
-        x: point.x - 100,
-        y: point.y - 50,
-        width: 200,
-        height: 100,
+        x: point.x - 300,
+        y: point.y - 150,
+        width: 600,
+        height: 300,
         text: '',
         backgroundColor: '#1f2937',
       };
