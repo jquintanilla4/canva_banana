@@ -20,7 +20,7 @@ const getStateSignature = (state: AppState): string => {
     .map(img => `${img.id},${img.mediaType},${img.isPlaying ? 1 : 0},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height},${(img.rotation ?? 0).toFixed(3)},${getFileSignature(img.file)}`)
     .join(';');
   const pathSignature = state.paths.map(p => `${p.points.length},${p.tool}`).join(',');
-  const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length}`).join(';');
+  const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length},${n.fontSize ?? ''}`).join(';');
   return `${imageSignature}|${pathSignature}|${noteSignature}`;
 };
 

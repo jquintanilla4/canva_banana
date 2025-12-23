@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode } from '../types';
 import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, FontSizeDownIcon, FontSizeUpIcon } from './Icons';
 import {
+  DEFAULT_NOTE_FONT_SIZE,
   DOT_BASE_SIZE,
   DOT_MAX_SIZE,
   DOT_MIN_SIZE,
@@ -11,7 +12,9 @@ import {
   GRID_MIN_SIZE,
   KEYBOARD_ZOOM_MULTIPLIER,
   KEYBOARD_ZOOM_OUT_MULTIPLIER,
+  MAX_NOTE_FONT_SIZE,
   MAX_SCALE,
+  MIN_NOTE_FONT_SIZE,
   MIN_NOTE_HEIGHT,
   MIN_NOTE_WIDTH,
   MIN_SCALE,
@@ -72,6 +75,7 @@ interface CanvasProps {
   onCancelCrop: () => void;
   onNoteCopy: (noteId: string) => void;
   onNoteDuplicate: (noteId: string) => void;
+  onNoteFontSizeChange: (noteId: string, delta: number) => void;
   onImagePromptCopy: (imageId: string) => void;
   onImageDuplicate: (imageId: string) => void;
   onRerunGeneration: (imageId: string) => void;
@@ -146,6 +150,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onCancelCrop,
   onNoteCopy,
   onNoteDuplicate,
+  onNoteFontSizeChange,
   onImagePromptCopy,
   onImageDuplicate,
   onRerunGeneration,
@@ -810,8 +815,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             color: '#e5e7eb', // light gray
             border: `2px solid #0ea5e9`,
             borderRadius: '4px',
-            padding: `${10 / scale}px`,
-            fontSize: `${16 * scale}px`,
+            padding: `${10 * scale}px`,
+            fontSize: `${(editingNote.fontSize ?? DEFAULT_NOTE_FONT_SIZE) * scale}px`,
             fontFamily: 'sans-serif',
             resize: 'none',
             outline: 'none',
@@ -830,6 +835,24 @@ export const Canvas: React.FC<CanvasProps> = ({
             zIndex: 100,
           }}
         >
+          {selectedNote.text && (
+            <>
+              <ActionButton
+                onClick={() => onNoteFontSizeChange(selectedNote.id, -2)}
+                disabled={(selectedNote.fontSize ?? DEFAULT_NOTE_FONT_SIZE) <= MIN_NOTE_FONT_SIZE}
+                title="Decrease Font Size"
+              >
+                <FontSizeDownIcon className="w-4 h-4" />
+              </ActionButton>
+              <ActionButton
+                onClick={() => onNoteFontSizeChange(selectedNote.id, 2)}
+                disabled={(selectedNote.fontSize ?? DEFAULT_NOTE_FONT_SIZE) >= MAX_NOTE_FONT_SIZE}
+                title="Increase Font Size"
+              >
+                <FontSizeUpIcon className="w-4 h-4" />
+              </ActionButton>
+            </>
+          )}
           <ActionButton
             onClick={() => onNoteCopy(selectedNote.id)}
             disabled={!selectedNote.text}

@@ -158,6 +158,7 @@ export interface CanvasNote {
   height: number;
   text: string;
   backgroundColor: string;
+  fontSize?: number;
 }
 
 export type FalJobStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';

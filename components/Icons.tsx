@@ -1,7 +1,7 @@
 import React from 'react';
 import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret } from 'react-icons/fa';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
-import { RxCursorArrow } from 'react-icons/rx';
+import { RxCursorArrow, RxFontSize } from 'react-icons/rx';
 import type { IconBaseProps } from 'react-icons';
 
 // Extend IconBaseProps to include className
@@ -44,3 +44,14 @@ export const SnapshotIcon = FaCamera as React.FC<IconProps>;
 export const MicrophoneIcon = FaMicrophone as React.FC<IconProps>;
 export const StopIcon = FaStop as React.FC<IconProps>;
 export const BlindTestIcon = FaUserSecret as React.FC<IconProps>;
+export const FontSizeIcon = RxFontSize as React.FC<IconProps>;
+export const FontSizeDownIcon: React.FC<IconProps> = ({ className }) => (
+  <svg className={className} viewBox="0 0 16 16" fill="currentColor">
+    <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fontSize="11" fontWeight="bold">A</text>
+  </svg>
+);
+export const FontSizeUpIcon: React.FC<IconProps> = ({ className }) => (
+  <svg className={className} viewBox="0 0 16 16" fill="currentColor">
+    <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fontSize="15" fontWeight="bold">A</text>
+  </svg>
+);

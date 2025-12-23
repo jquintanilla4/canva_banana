@@ -229,7 +229,9 @@ export function useCanvasInteractions({
         text: '',
         backgroundColor: '#1f2937',
       };
-      onNotesChange([...notes, newNote]);
+      const updatedNotes = [...notes, newNote];
+      onNotesChange(updatedNotes);
+      onCommit({ notes: updatedNotes });
       onNoteSelect(newNote.id);
       onNoteDoubleClick(newNote.id);
       return;

@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
+import { DEFAULT_NOTE_FONT_SIZE, MIN_NOTE_FONT_SIZE, MAX_NOTE_FONT_SIZE } from './components/canvas/constants';
 import { RecordingOverlay } from './components/RecordingOverlay';
 import { BackupsModal } from './components/BackupsModal';
 import {
@@ -758,6 +759,19 @@ export default function App() {
     setLiveNotes(newNotes);
   }, [displayedNotes, setLiveNotes]);
 
+  const handleNoteFontSizeChange = useCallback((noteId: string, delta: number) => {
+    const noteIndex = notes.findIndex(n => n.id === noteId);
+    if (noteIndex === -1) return;
+    const currentFontSize = notes[noteIndex].fontSize ?? DEFAULT_NOTE_FONT_SIZE;
+    const newFontSize = Math.max(MIN_NOTE_FONT_SIZE, Math.min(MAX_NOTE_FONT_SIZE, currentFontSize + delta));
+    if (newFontSize === currentFontSize) return;
+    setState(prevState => {
+      const newNotes = [...prevState.notes];
+      newNotes[noteIndex] = { ...newNotes[noteIndex], fontSize: newFontSize };
+      return { ...prevState, notes: newNotes };
+    });
+  }, [notes, setState]);
+
   const selectedImageIndex = primaryImageId ? images.findIndex(img => img.id === primaryImageId) : -1;
   const isImageOverlapping = primaryImageId && selectedImageIndex !== -1 ? images.some(other => other.id !== primaryImageId && isOverlapping(images[selectedImageIndex], other)) : false;
   const canMoveUp = selectedImageIndex > -1 && selectedImageIndex < images.length - 1;
@@ -1087,6 +1101,7 @@ export default function App() {
           onCancelCrop={handleCancelCrop}
           onNoteCopy={handleNoteCopy}
           onNoteDuplicate={handleDuplicateNote}
+          onNoteFontSizeChange={handleNoteFontSizeChange}
           onImagePromptCopy={handleImagePromptCopy}
           onImageDuplicate={handleDuplicateImage}
           onRerunGeneration={handleRerunGeneration}
