@@ -105,6 +105,9 @@ export type GenerationFalOptions = Partial<{
   wanAnimateQuality: 'high' | 'maximum';
   wanAnimateUseTurbo: boolean;
   kling26Audio: boolean;
+  kling26ControlVariant: 'standard' | 'pro';
+  kling26ControlKeepSound: boolean;
+  kling26ControlDriver: 'video' | 'image';
   infinitalkResolution: '480p' | '720p';
   infinitalkSeed: '42' | 'random';
   infinitalkAcceleration: 'none' | 'regular' | 'high';

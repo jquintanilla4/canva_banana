@@ -19,6 +19,7 @@ type Args = {
   isKlingModel: boolean;
   isKlingVideoModel: boolean;
   isKling26VideoModel: boolean;
+  isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   falModelId: string;
   falNumImages: number;
@@ -54,6 +55,7 @@ export function useGenerationGuards({
   isKlingModel,
   isKlingVideoModel,
   isKling26VideoModel,
+  isKling26ControlVideoModel,
   isHailuoVideoModel,
   falModelId,
   falNumImages,
@@ -69,7 +71,7 @@ export function useGenerationGuards({
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
-  const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isAudioInputMode;
+  const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isAudioInputMode || isKling26ControlVideoModel;
   const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
@@ -79,6 +81,7 @@ export function useGenerationGuards({
     const hasWanAnimateStillImage = isWanAnimateVideoModel || isOneToAllAnimateVideoModel
       ? hasSelectedStillImage
       : hasPrimaryImage;
+    const hasKling26ControlStillImage = isKling26ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const isTextToImage = !hasPrimaryImage && !(isVideoMode && isVideoInputMode && hasSourceVideo);
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel);
@@ -94,6 +97,7 @@ export function useGenerationGuards({
     const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
+    const requiresSelectedImageForKling26Control = usingFal && isKling26ControlVideoModel && !hasKling26ControlStillImage;
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const requiresSourceAudioForVideoInput = usingFal && isVideoMode && isAudioInputMode && !hasSourceAudio;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
@@ -108,6 +112,7 @@ export function useGenerationGuards({
       requiresSelectedImageForVideo ||
       requiresSelectedImageForWanAnimate ||
       requiresSelectedImageForOneToAll ||
+      requiresSelectedImageForKling26Control ||
       requiresSourceVideoForVideoInput ||
       requiresSourceAudioForVideoInput ||
       editConstraintsActive;
@@ -133,6 +138,14 @@ export function useGenerationGuards({
           return hasWanAnimateStillImage
             ? 'Describe the motion or scene you want to animate...'
             : 'Select a reference image to animate...';
+        }
+        if (isKling26ControlVideoModel) {
+          if (!hasSourceVideo) {
+            return 'Select a motion driver video, then select a character image...';
+          }
+          return hasKling26ControlStillImage
+            ? 'Describe the motion or scene you want to transfer...'
+            : 'Select a character image to control the motion...';
         }
         if (hasPrimaryImage) {
           return 'Describe the motion or scene you want this image to turn into...';
@@ -195,6 +208,7 @@ export function useGenerationGuards({
     isNanoBananaModel,
     isHailuoVideoModel,
     isKling26VideoModel,
+    isKling26ControlVideoModel,
     isKlingModel,
 	    isKlingO1EditMode,
 	    isKlingO1VideoInputMode,

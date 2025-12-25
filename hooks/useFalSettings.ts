@@ -8,6 +8,7 @@ import {
   FAL_KLING_ASPECT_RATIO_OPTIONS,
   FAL_REVE_ASPECT_RATIO_OPTIONS,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  KLING_26_CONTROL_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   KLING_O1_VIDEO_MODEL_ID,
@@ -40,6 +41,8 @@ import type {
   FalVideoModelId,
   HailuoVariant,
   Kling26AudioSelectionValue,
+  Kling26ControlDriver,
+  Kling26ControlVariant,
   KlingO1Variant,
   KlingVariant,
   InfinitalkAccelerationSelectionValue,
@@ -68,6 +71,7 @@ type FalDerivedState = {
   isKlingVideoModel: boolean;
   isKlingO1VideoModel: boolean;
   isKling26VideoModel: boolean;
+  isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
   isOneToAllAnimateVideoModel: boolean;
@@ -88,6 +92,9 @@ type FalHandlers = {
   handleKlingO1VariantChange: (value: string) => void;
   handleKlingO1KeepAudioChange: (value: boolean) => void;
   handleKling26AudioChange: (value: string) => void;
+  handleKling26ControlVariantChange: (value: string) => void;
+  handleKling26ControlKeepSoundChange: (value: boolean) => void;
+  handleKling26ControlDriverChange: (value: string) => void;
   handleWanTargetResolutionChange: (value: string) => void;
   handleWanCreativityChange: (value: string) => void;
   handleWanAnimateVariantChange: (value: string) => void;
@@ -123,6 +130,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   klingO1Variant: KlingO1Variant;
   klingO1KeepAudio: boolean;
   kling26AudioSelection: Kling26AudioSelectionValue;
+  kling26ControlVariant: Kling26ControlVariant;
+  kling26ControlKeepSound: boolean;
+  kling26ControlDriver: Kling26ControlDriver;
   wanTargetResolution: WanTargetResolution;
   wanCreativity: WanCreativity;
   wanAnimateVariant: WanAnimateVariant;
@@ -155,6 +165,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setKlingO1Variant: Dispatch<SetStateAction<KlingO1Variant>>;
   setKlingO1KeepAudio: Dispatch<SetStateAction<boolean>>;
   setKling26AudioSelection: Dispatch<SetStateAction<Kling26AudioSelectionValue>>;
+  setKling26ControlVariant: Dispatch<SetStateAction<Kling26ControlVariant>>;
+  setKling26ControlKeepSound: Dispatch<SetStateAction<boolean>>;
+  setKling26ControlDriver: Dispatch<SetStateAction<Kling26ControlDriver>>;
   setWanTargetResolution: Dispatch<SetStateAction<WanTargetResolution>>;
   setWanCreativity: Dispatch<SetStateAction<WanCreativity>>;
   setWanAnimateVariant: Dispatch<SetStateAction<WanAnimateVariant>>;
@@ -191,6 +204,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [klingO1Variant, setKlingO1Variant] = useState<KlingO1Variant>('refI2V');
   const [klingO1KeepAudio, setKlingO1KeepAudio] = useState<boolean>(false);
   const [kling26AudioSelection, setKling26AudioSelection] = useState<Kling26AudioSelectionValue>('placeholder');
+  const [kling26ControlVariant, setKling26ControlVariant] = useState<Kling26ControlVariant>('standard');
+  const [kling26ControlKeepSound, setKling26ControlKeepSound] = useState<boolean>(true);
+  const [kling26ControlDriver, setKling26ControlDriver] = useState<Kling26ControlDriver>('video');
   const [wanTargetResolution, setWanTargetResolution] = useState<WanTargetResolution>('720p');
   const [wanCreativity, setWanCreativity] = useState<WanCreativity>(1);
   const [wanAnimateVariant, setWanAnimateVariant] = useState<WanAnimateVariant>('replace');
@@ -223,6 +239,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isKlingVideoModel = isVideoMode && falVideoModelId === KLING_VIDEO_MODEL_ID;
   const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelId);
   const isKling26VideoModel = isVideoMode && falVideoModelId === KLING_26_VIDEO_MODEL_ID;
+  const isKling26ControlVideoModel = isVideoMode && falVideoModelId === KLING_26_CONTROL_VIDEO_MODEL_ID;
   const isHailuoVideoModel = isVideoMode && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
@@ -381,6 +398,18 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       return;
     }
     setKling26AudioSelection('placeholder');
+  }, []);
+
+  const handleKling26ControlVariantChange = useCallback((value: string) => {
+    setKling26ControlVariant(value === 'pro' ? 'pro' : 'standard');
+  }, []);
+
+  const handleKling26ControlKeepSoundChange = useCallback((value: boolean) => {
+    setKling26ControlKeepSound(Boolean(value));
+  }, []);
+
+  const handleKling26ControlDriverChange = useCallback((value: string) => {
+    setKling26ControlDriver(value === 'image' ? 'image' : 'video');
   }, []);
 
   const handleWanTargetResolutionChange = useCallback((value: string) => {
@@ -543,6 +572,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     klingO1Variant,
     klingO1KeepAudio,
     kling26AudioSelection,
+    kling26ControlVariant,
+    kling26ControlKeepSound,
+    kling26ControlDriver,
     wanTargetResolution,
     wanCreativity,
     wanAnimateVariant,
@@ -570,6 +602,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isKlingVideoModel,
     isKlingO1VideoModel,
     isKling26VideoModel,
+    isKling26ControlVideoModel,
     isHailuoVideoModel,
     isWanAnimateVideoModel,
     isOneToAllAnimateVideoModel,
@@ -587,6 +620,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleKlingO1VariantChange,
     handleKlingO1KeepAudioChange,
     handleKling26AudioChange,
+    handleKling26ControlVariantChange,
+    handleKling26ControlKeepSoundChange,
+    handleKling26ControlDriverChange,
     handleWanTargetResolutionChange,
     handleWanCreativityChange,
     handleWanAnimateVariantChange,
@@ -619,6 +655,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setKlingO1Variant,
     setKlingO1KeepAudio,
     setKling26AudioSelection,
+    setKling26ControlVariant,
+    setKling26ControlKeepSound,
+    setKling26ControlDriver,
     setWanTargetResolution,
     setWanCreativity,
     setWanAnimateVariant,

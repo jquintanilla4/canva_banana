@@ -22,6 +22,7 @@ type SelectionFalSettings = Pick<
   | 'isVideoMode'
   | 'isKlingProVideoSelection'
   | 'isKlingO1VideoModel'
+  | 'isKling26ControlVideoModel'
   | 'isKlingO1EditMode'
   | 'isKlingO1RefV2VMode'
   | 'isLipsyncVideoModel'
@@ -72,9 +73,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     klingVariant,
     klingO1Variant,
     isVideoMode,
-    isKlingProVideoSelection,
-    isKlingO1VideoModel,
-    isKlingO1EditMode,
+  isKlingProVideoSelection,
+  isKlingO1VideoModel,
+  isKling26ControlVideoModel,
+  isKlingO1EditMode,
     isKlingO1RefV2VMode,
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
@@ -91,7 +93,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       || falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID
     );
   const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
-  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode || isAudioInputMode;
+  const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
+  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode || isAudioInputMode || isKling26ControlVideoInputMode;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);

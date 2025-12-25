@@ -11,6 +11,8 @@ import type {
   InfinitalkResolutionSelectionValue,
   InfinitalkSeedSelectionValue,
   Kling26AudioSelectionValue,
+  Kling26ControlDriver,
+  Kling26ControlVariant,
   KlingO1Variant,
   KlingVariant,
   LipsyncAudioMode,
@@ -40,6 +42,9 @@ import {
   getSeedreamImageSizeOptions,
   HAILUO_VARIANT_OPTIONS,
   KLING26_AUDIO_OPTIONS,
+  KLING26_CONTROL_DRIVER_OPTIONS,
+  KLING26_CONTROL_SOUND_OPTIONS,
+  KLING26_CONTROL_VARIANT_OPTIONS,
   KLING_O1_VARIANT_OPTIONS,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
@@ -93,6 +98,7 @@ export type PromptBarControlsInput = {
   isKlingVideoModel: boolean;
   isKlingO1VideoModel: boolean;
   isKling26VideoModel: boolean;
+  isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
@@ -103,6 +109,9 @@ export type PromptBarControlsInput = {
   klingO1Variant: KlingO1Variant;
   klingO1KeepAudio: boolean;
   kling26AudioSelection: Kling26AudioSelectionValue;
+  kling26ControlVariant: Kling26ControlVariant;
+  kling26ControlKeepSound: boolean;
+  kling26ControlDriver: Kling26ControlDriver;
   wanTargetResolution: WanTargetResolution;
   wanCreativity: WanCreativity;
   wanAnimateVariant: WanAnimateVariant;
@@ -133,6 +142,9 @@ export type PromptBarControlsInput = {
   onKlingO1VariantChange: (value: string) => void;
   onKlingO1KeepAudioChange: (value: boolean) => void;
   onKling26AudioChange: (value: string) => void;
+  onKling26ControlVariantChange: (value: string) => void;
+  onKling26ControlKeepSoundChange: (value: boolean) => void;
+  onKling26ControlDriverChange: (value: string) => void;
   onWanTargetResolutionChange: (value: string) => void;
   onWanCreativityChange: (value: string) => void;
   onWanAnimateVariantChange: (value: string) => void;
@@ -176,6 +188,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isKlingVideoModel,
     isKlingO1VideoModel,
     isKling26VideoModel,
+    isKling26ControlVideoModel,
     isHailuoVideoModel,
     isWanAnimateVideoModel,
     isLipsyncVideoModel,
@@ -186,6 +199,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     klingO1Variant,
     klingO1KeepAudio,
     kling26AudioSelection,
+    kling26ControlVariant,
+    kling26ControlKeepSound,
+    kling26ControlDriver,
     wanTargetResolution,
     wanCreativity,
     wanAnimateVariant,
@@ -216,6 +232,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onKlingO1VariantChange,
     onKlingO1KeepAudioChange,
     onKling26AudioChange,
+    onKling26ControlVariantChange,
+    onKling26ControlKeepSoundChange,
+    onKling26ControlDriverChange,
     onWanTargetResolutionChange,
     onWanCreativityChange,
     onWanAnimateVariantChange,
@@ -368,6 +387,44 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: KLING26_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: kling26AudioSelection,
       onChange: onKling26AudioChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (isKling26ControlVideoModel) {
+    controls.push({
+      id: 'kling26-control-variant-select',
+      ariaLabel: 'Select Kling 2.6 Control variant',
+      options: KLING26_CONTROL_VARIANT_OPTIONS.map(option => ({
+        value: option.value,
+        label: option.label,
+        disabled: option.disabled,
+      })),
+      value: kling26ControlVariant,
+      onChange: onKling26ControlVariantChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'kling26-control-keep-sound',
+      prefixLabel: 'Sound',
+      ariaLabel: 'Keep original sound',
+      options: KLING26_CONTROL_SOUND_OPTIONS.map(option => ({
+        value: option.value,
+        label: option.label,
+      })),
+      value: kling26ControlKeepSound ? 'true' : 'false',
+      onChange: (value: string) => onKling26ControlKeepSoundChange(value === 'true'),
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'kling26-control-driver',
+      prefixLabel: 'Driver',
+      ariaLabel: 'Select control driver',
+      options: KLING26_CONTROL_DRIVER_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: kling26ControlDriver,
+      onChange: onKling26ControlDriverChange,
       disabled: isLoading,
     });
   }

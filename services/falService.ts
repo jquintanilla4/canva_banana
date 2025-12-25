@@ -11,6 +11,8 @@ import {
 } from '../types';
 import { addDebugLog } from './debugLog';
 import {
+  KLING_26_CONTROL_VIDEO_MODEL_ID,
+  KLING_26_CONTROL_VIDEO_PRO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
   SYNC_LIPSYNC_MODEL_ID,
@@ -204,6 +206,8 @@ interface GenerateVideoOptions {
   sourceVideoUrl?: string;
   sourceAudioUrl?: string;
   keepAudio?: boolean;
+  keepOriginalSound?: boolean;
+  characterOrientation?: 'image' | 'video';
   aspectRatio?: FalAspectRatioOption;
   lipsyncEmotion?: LipsyncEmotion;
   lipsyncModelMode?: LipsyncModelMode;
@@ -1548,6 +1552,32 @@ export const generateImageToVideo = async (
 
     const requestId = result?.requestId || latestRequestId;
     return { videoUrl, requestId };
+  }
+
+  const isKling26ControlModel = modelId === KLING_26_CONTROL_VIDEO_MODEL_ID
+    || modelId === KLING_26_CONTROL_VIDEO_PRO_MODEL_ID;
+  if (isKling26ControlModel) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Kling 2.6 Control requires a source video.');
+    }
+    if (!image) {
+      throw new Error('Kling 2.6 Control requires a character image.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    const imageUrl = await uploadImageElementToFal(image);
+    const characterOrientation = options.characterOrientation === 'image' ? 'image' : 'video';
+    const keepOriginalSound = typeof options.keepOriginalSound === 'boolean' ? options.keepOriginalSound : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      image_url: imageUrl,
+      video_url: options.sourceVideoUrl,
+      character_orientation: characterOrientation,
+      ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
+      ...(keepOriginalSound !== undefined ? { keep_original_sound: keepOriginalSound } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
   // Non-edit/refV2V variants require an image

@@ -930,6 +930,7 @@ export default function App() {
 	    isKlingModel,
 		    isKlingVideoModel: fal.isKlingVideoModel,
 		    isKling26VideoModel: fal.isKling26VideoModel,
+        isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
 		    isHailuoVideoModel: fal.isHailuoVideoModel,
     falModelId: fal.falModelId,
     falNumImages: fal.falNumImages,
@@ -953,6 +954,7 @@ export default function App() {
 	    isKlingVideoModel: fal.isKlingVideoModel,
 	    isKlingO1VideoModel: fal.isKlingO1VideoModel,
 		    isKling26VideoModel: fal.isKling26VideoModel,
+        isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
 		    isHailuoVideoModel: fal.isHailuoVideoModel,
 		    isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
 		    isLipsyncVideoModel: fal.isLipsyncVideoModel,
@@ -963,6 +965,9 @@ export default function App() {
 	    klingO1Variant: fal.klingO1Variant,
 	    klingO1KeepAudio: fal.klingO1KeepAudio,
 	    kling26AudioSelection: fal.kling26AudioSelection,
+        kling26ControlVariant: fal.kling26ControlVariant,
+        kling26ControlKeepSound: fal.kling26ControlKeepSound,
+        kling26ControlDriver: fal.kling26ControlDriver,
 	    wanTargetResolution: fal.wanTargetResolution,
 	    wanCreativity: fal.wanCreativity,
 	    wanAnimateVariant: fal.wanAnimateVariant,
@@ -993,6 +998,9 @@ export default function App() {
 	    onKlingO1VariantChange: fal.handleKlingO1VariantChange,
 	    onKlingO1KeepAudioChange: fal.handleKlingO1KeepAudioChange,
 	    onKling26AudioChange: fal.handleKling26AudioChange,
+        onKling26ControlVariantChange: fal.handleKling26ControlVariantChange,
+        onKling26ControlKeepSoundChange: fal.handleKling26ControlKeepSoundChange,
+        onKling26ControlDriverChange: fal.handleKling26ControlDriverChange,
 	    onWanTargetResolutionChange: fal.handleWanTargetResolutionChange,
 	    onWanCreativityChange: fal.handleWanCreativityChange,
 	    onWanAnimateVariantChange: fal.handleWanAnimateVariantChange,
@@ -1121,6 +1129,7 @@ export default function App() {
           tailSelectionEnabled={fal.isKlingProVideoSelection || isKlingO1FflfMode}
           isKlingO1VideoInputMode={isKlingO1VideoInputMode}
           isKlingO1FflfMode={isKlingO1FflfMode}
+          isKling26ControlVideoInputMode={fal.isKling26ControlVideoModel}
           isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel}
           onError={setError}
           onImageSelect={handleImageSelection}
