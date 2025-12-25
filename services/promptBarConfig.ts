@@ -1,6 +1,7 @@
 import type {
   FalAspectRatioSelectionValue,
   FalImageSizeSelectionValue,
+  FalModelOption,
   FalModelMode,
   FalResolutionSelectionValue,
   FalVideoModelId,
@@ -650,7 +651,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   return controls.length > 0 ? controls : undefined;
 };
 
-export const getPromptBarModelOptions = (mode: FalModelMode): typeof FAL_IMAGE_MODEL_OPTIONS | typeof FAL_VIDEO_MODEL_OPTIONS =>
+export const getPromptBarModelOptions = (mode: FalModelMode): ReadonlyArray<FalModelOption> =>
   mode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
 
 export const shouldShowKlingNegativePrompt = (falModelId: FalVideoModelId | string): boolean =>

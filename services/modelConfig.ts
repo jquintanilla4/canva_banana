@@ -236,6 +236,7 @@ export const INFINITALK_DURATION_TO_NUM_FRAMES: Record<InfinitalkDurationSelecti
 } as const;
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
+export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];
 export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
 export type SeedreamModelId = typeof SEEDREAM_MODEL_IDS[number];
 export const SEEDREAM_TEXT_TO_IMAGE_MAP: Record<SeedreamModelId, string> = {
@@ -251,7 +252,7 @@ export type FalAspectRatioSelectionValue = 'placeholder' | FalAspectRatioOption;
 export type FalResolutionSelectionValue = FalResolutionOption;
 export type Kling26AudioSelectionValue = 'placeholder' | 'on' | 'off';
 
-export type FalModelId = typeof FAL_MODEL_OPTIONS[number]['value'];
+export type FalModelId = FalModelOption['value'];
 export type FalImageModelId = typeof FAL_IMAGE_MODEL_OPTIONS[number]['value'];
 export type FalVideoModelId = typeof FAL_VIDEO_MODEL_OPTIONS[number]['value'];
 
