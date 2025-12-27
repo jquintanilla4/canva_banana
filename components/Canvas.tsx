@@ -54,6 +54,7 @@ interface CanvasProps {
   isKlingO1FflfMode: boolean;
   isKling26ControlVideoInputMode: boolean;
   isWanAnimateVideoInputMode: boolean;
+  isWan26I2VMode: boolean;
   onError?: (message: string) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
@@ -130,6 +131,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   isKlingO1FflfMode,
   isKling26ControlVideoInputMode,
   isWanAnimateVideoInputMode,
+  isWan26I2VMode,
   onError,
   onImageSelect,
   onNoteSelect,
@@ -354,11 +356,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       isKlingO1FflfMode,
       isKling26ControlVideoInputMode,
       isWanAnimateVideoInputMode,
+      isWan26I2VMode,
       showMetadataOverlay,
       cropMode,
       transformMode,
     });
-  }, [cropMode, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isWanAnimateVideoInputMode, notes, pan, paths, primarySelectedNoteId, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
+  }, [cropMode, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isWanAnimateVideoInputMode, isWan26I2VMode, notes, pan, paths, primarySelectedNoteId, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {

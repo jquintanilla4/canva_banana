@@ -213,6 +213,10 @@ interface GenerateVideoOptions {
   lipsyncModelMode?: LipsyncModelMode;
   lipsyncAudioMode?: LipsyncAudioMode;
   infinitalkDuration?: InfinitalkDurationSelectionValue;
+  wan26Resolution?: '720p' | '1080p';
+  wan26Duration?: '5' | '10' | '15';
+  wan26PromptExpansion?: boolean;
+  wan26MultiShots?: boolean;
 }
 
 const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit';
@@ -280,6 +284,7 @@ export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace
 export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer';
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video';
+export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -1327,6 +1332,45 @@ export const generateImageToVideo = async (
     const requestId = result?.requestId || latestRequestId;
 
     return { videoUrl, requestId };
+  }
+
+  const isWan26I2VModel = modelId === WAN_26_I2V_MODEL_ID;
+  if (isWan26I2VModel) {
+    if (!image) {
+      throw new Error('Wan 2.6 requires an image.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Wan 2.6 requires a prompt.');
+    }
+
+    const imageUrl = await uploadImageElementToFal(image);
+
+    const resolution = options.wan26Resolution === '720p' || options.wan26Resolution === '1080p'
+      ? options.wan26Resolution
+      : '720p';
+    const videoDuration = options.wan26Duration === '5' || options.wan26Duration === '10' || options.wan26Duration === '15'
+      ? options.wan26Duration
+      : '5';
+    const enablePromptExpansion = typeof options.wan26PromptExpansion === 'boolean'
+      ? options.wan26PromptExpansion
+      : true;
+    const multiShots = typeof options.wan26MultiShots === 'boolean'
+      ? options.wan26MultiShots
+      : false;
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      image_url: imageUrl,
+      resolution,
+      duration: videoDuration,
+      enable_prompt_expansion: enablePromptExpansion,
+      multi_shots: multiShots,
+      ...(options.sourceAudioUrl ? { audio_url: options.sourceAudioUrl } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
   const isInfinitalkModel = modelId === INFINITALK_VIDEO_MODEL_ID;

@@ -112,6 +112,10 @@ export type GenerationFalOptions = Partial<{
   infinitalkSeed: '42' | 'random';
   infinitalkAcceleration: 'none' | 'regular' | 'high';
   infinitalkDuration: '5s' | '6s' | '10s' | '12s';
+  wan26Resolution: '720p' | '1080p';
+  wan26Duration: '5' | '10' | '15';
+  wan26PromptExpansion: boolean;
+  wan26MultiShots: boolean;
 }>;
 
 export interface GenerationInputs {

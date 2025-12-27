@@ -20,6 +20,7 @@ import {
   SYNC_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
+  WAN_26_I2V_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
@@ -52,6 +53,8 @@ import type {
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
+  Wan26DurationSelectionValue,
+  Wan26ResolutionSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -77,6 +80,7 @@ type FalDerivedState = {
   isOneToAllAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
+  isWan26I2VVideoModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -111,6 +115,10 @@ type FalHandlers = {
   handleInfinitalkSeedChange: (value: string) => void;
   handleInfinitalkAccelerationChange: (value: string) => void;
   handleInfinitalkDurationChange: (value: string) => void;
+  handleWan26ResolutionChange: (value: string) => void;
+  handleWan26DurationChange: (value: string) => void;
+  handleWan26PromptExpansionChange: (value: boolean) => void;
+  handleWan26MultiShotsChange: (value: boolean) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -149,6 +157,10 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
   infinitalkDuration: InfinitalkDurationSelectionValue;
+  wan26Resolution: Wan26ResolutionSelectionValue;
+  wan26Duration: Wan26DurationSelectionValue;
+  wan26PromptExpansion: boolean;
+  wan26MultiShots: boolean;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -184,6 +196,10 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setInfinitalkSeed: Dispatch<SetStateAction<InfinitalkSeedSelectionValue>>;
   setInfinitalkAcceleration: Dispatch<SetStateAction<InfinitalkAccelerationSelectionValue>>;
   setInfinitalkDuration: Dispatch<SetStateAction<InfinitalkDurationSelectionValue>>;
+  setWan26Resolution: Dispatch<SetStateAction<Wan26ResolutionSelectionValue>>;
+  setWan26Duration: Dispatch<SetStateAction<Wan26DurationSelectionValue>>;
+  setWan26PromptExpansion: Dispatch<SetStateAction<boolean>>;
+  setWan26MultiShots: Dispatch<SetStateAction<boolean>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -223,6 +239,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [infinitalkSeed, setInfinitalkSeed] = useState<InfinitalkSeedSelectionValue>('42');
   const [infinitalkAcceleration, setInfinitalkAcceleration] = useState<InfinitalkAccelerationSelectionValue>('regular');
   const [infinitalkDuration, setInfinitalkDuration] = useState<InfinitalkDurationSelectionValue>('5s');
+  const [wan26Resolution, setWan26Resolution] = useState<Wan26ResolutionSelectionValue>('720p');
+  const [wan26Duration, setWan26Duration] = useState<Wan26DurationSelectionValue>('5');
+  const [wan26PromptExpansion, setWan26PromptExpansion] = useState<boolean>(true);
+  const [wan26MultiShots, setWan26MultiShots] = useState<boolean>(false);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -245,6 +265,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
+  const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -507,6 +528,29 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleWan26ResolutionChange = useCallback((value: string) => {
+    if (value === '720p' || value === '1080p') {
+      setWan26Resolution(value);
+    }
+  }, []);
+
+  const handleWan26DurationChange = useCallback((value: string) => {
+    if (value === '5' || value === '10' || value === '15') {
+      setWan26Duration(value);
+    }
+  }, []);
+
+  const handleWan26PromptExpansionChange = useCallback((value: boolean) => {
+    setWan26PromptExpansion(value);
+    if (!value) {
+      setWan26MultiShots(false);
+    }
+  }, []);
+
+  const handleWan26MultiShotsChange = useCallback((value: boolean) => {
+    setWan26MultiShots(value);
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -591,6 +635,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    wan26Resolution,
+    wan26Duration,
+    wan26PromptExpansion,
+    wan26MultiShots,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -608,6 +656,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isOneToAllAnimateVideoModel,
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
+    isWan26I2VVideoModel,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,
@@ -639,6 +688,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleInfinitalkSeedChange,
     handleInfinitalkAccelerationChange,
     handleInfinitalkDurationChange,
+    handleWan26ResolutionChange,
+    handleWan26DurationChange,
+    handleWan26PromptExpansionChange,
+    handleWan26MultiShotsChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -674,6 +727,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setInfinitalkSeed,
     setInfinitalkAcceleration,
     setInfinitalkDuration,
+    setWan26Resolution,
+    setWan26Duration,
+    setWan26PromptExpansion,
+    setWan26MultiShots,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

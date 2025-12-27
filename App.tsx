@@ -959,6 +959,7 @@ export default function App() {
 		    isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
 		    isLipsyncVideoModel: fal.isLipsyncVideoModel,
         isInfinitalkVideoModel: fal.isInfinitalkVideoModel,
+        isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
 		    hailuoVariant: fal.hailuoVariant,
 		    falVideoDuration: fal.falVideoDuration,
 		    klingVariant: fal.klingVariant,
@@ -984,6 +985,10 @@ export default function App() {
         infinitalkSeed: fal.infinitalkSeed,
         infinitalkAcceleration: fal.infinitalkAcceleration,
         infinitalkDuration: fal.infinitalkDuration,
+        wan26Resolution: fal.wan26Resolution,
+        wan26Duration: fal.wan26Duration,
+        wan26PromptExpansion: fal.wan26PromptExpansion,
+        wan26MultiShots: fal.wan26MultiShots,
 	    falScaleFactor: fal.falScaleFactor,
 	    falCreativity: fal.falCreativity,
 	    falNoiseScale: fal.falNoiseScale,
@@ -1017,6 +1022,10 @@ export default function App() {
         onInfinitalkSeedChange: fal.handleInfinitalkSeedChange,
         onInfinitalkAccelerationChange: fal.handleInfinitalkAccelerationChange,
         onInfinitalkDurationChange: fal.handleInfinitalkDurationChange,
+        onWan26ResolutionChange: fal.handleWan26ResolutionChange,
+        onWan26DurationChange: fal.handleWan26DurationChange,
+        onWan26PromptExpansionChange: fal.handleWan26PromptExpansionChange,
+        onWan26MultiShotsChange: fal.handleWan26MultiShotsChange,
 	    onFalScaleFactorChange: fal.handleFalScaleFactorChange,
 	    onFalCreativityChange: fal.handleFalCreativityChange,
 	    onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
@@ -1131,6 +1140,7 @@ export default function App() {
           isKlingO1FflfMode={isKlingO1FflfMode}
           isKling26ControlVideoInputMode={fal.isKling26ControlVideoModel}
           isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel}
+          isWan26I2VMode={fal.isWan26I2VVideoModel}
           onError={setError}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}

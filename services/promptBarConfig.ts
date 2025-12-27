@@ -18,6 +18,8 @@ import type {
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
+  Wan26DurationSelectionValue,
+  Wan26ResolutionSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -69,6 +71,11 @@ import {
   WAN_CREATIVITY_OPTIONS,
   WAN_TARGET_RESOLUTION_OPTIONS,
   WAN_VISION_ENHANCER_MODEL_ID,
+  WAN_26_I2V_MODEL_ID,
+  WAN_26_RESOLUTION_OPTIONS,
+  WAN_26_DURATION_OPTIONS,
+  WAN_26_PROMPT_EXPANSION_OPTIONS,
+  WAN_26_MULTI_SHOTS_OPTIONS,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
 } from './modelConfig';
 
@@ -103,6 +110,7 @@ export type PromptBarControlsInput = {
   isWanAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
+  isWan26I2VVideoModel: boolean;
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
@@ -128,6 +136,10 @@ export type PromptBarControlsInput = {
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
   infinitalkDuration: InfinitalkDurationSelectionValue;
+  wan26Resolution: Wan26ResolutionSelectionValue;
+  wan26Duration: Wan26DurationSelectionValue;
+  wan26PromptExpansion: boolean;
+  wan26MultiShots: boolean;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -161,6 +173,10 @@ export type PromptBarControlsInput = {
   onInfinitalkSeedChange: (value: string) => void;
   onInfinitalkAccelerationChange: (value: string) => void;
   onInfinitalkDurationChange: (value: string) => void;
+  onWan26ResolutionChange: (value: string) => void;
+  onWan26DurationChange: (value: string) => void;
+  onWan26PromptExpansionChange: (value: boolean) => void;
+  onWan26MultiShotsChange: (value: boolean) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -193,6 +209,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isWanAnimateVideoModel,
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
+    isWan26I2VVideoModel,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
@@ -218,6 +235,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    wan26Resolution,
+    wan26Duration,
+    wan26PromptExpansion,
+    wan26MultiShots,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -251,6 +272,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onInfinitalkSeedChange,
     onInfinitalkAccelerationChange,
     onInfinitalkDurationChange,
+    onWan26ResolutionChange,
+    onWan26DurationChange,
+    onWan26PromptExpansionChange,
+    onWan26MultiShotsChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -588,6 +613,46 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       value: infinitalkAcceleration,
       onChange: onInfinitalkAccelerationChange,
       disabled: isLoading,
+    });
+  }
+
+  if (isWan26I2VVideoModel) {
+    controls.push({
+      id: 'wan26-resolution-select',
+      ariaLabel: 'Select Wan 2.6 resolution',
+      options: WAN_26_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan26Resolution,
+      onChange: onWan26ResolutionChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan26-duration-select',
+      ariaLabel: 'Select Wan 2.6 duration',
+      options: WAN_26_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan26Duration,
+      onChange: onWan26DurationChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan26-prompt-expansion-select',
+      prefixLabel: 'Prompt+',
+      ariaLabel: 'Toggle Wan 2.6 prompt expansion',
+      options: WAN_26_PROMPT_EXPANSION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan26PromptExpansion ? 'true' : 'false',
+      onChange: (value: string) => onWan26PromptExpansionChange(value === 'true'),
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan26-multi-shots-select',
+      prefixLabel: 'Multi-shots',
+      ariaLabel: 'Toggle Wan 2.6 multi-shots',
+      options: WAN_26_MULTI_SHOTS_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan26MultiShots ? 'true' : 'false',
+      onChange: (value: string) => onWan26MultiShotsChange(value === 'true'),
+      disabled: isLoading || !wan26PromptExpansion,
     });
   }
 

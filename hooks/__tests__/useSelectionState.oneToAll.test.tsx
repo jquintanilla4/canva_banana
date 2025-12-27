@@ -19,6 +19,8 @@ type TestFalSettings = Pick<
   | 'isKlingO1RefV2VMode'
   | 'isLipsyncVideoModel'
   | 'isInfinitalkVideoModel'
+  | 'isKling26ControlVideoModel'
+  | 'isWan26I2VVideoModel'
 >;
 
 const buildCanvasMedia = (id: string, mediaType: 'image' | 'video'): CanvasImage => {
@@ -62,6 +64,8 @@ describe('useSelectionState (one-to-all)', () => {
       isKlingO1RefV2VMode: false,
       isLipsyncVideoModel: false,
       isInfinitalkVideoModel: false,
+      isKling26ControlVideoModel: false,
+      isWan26I2VVideoModel: false,
     } satisfies TestFalSettings;
 
     const onError = vi.fn();

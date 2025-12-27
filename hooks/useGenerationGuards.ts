@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Tool } from '../types';
-import { getFalModelLabel, INFINITALK_VIDEO_MODEL_ID, ONE_TO_ALL_ANIMATE_MODEL_ID, SYNC_LIPSYNC_MODEL_ID, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID, type FalModelId } from '../services/modelConfig';
+import { getFalModelLabel, INFINITALK_VIDEO_MODEL_ID, ONE_TO_ALL_ANIMATE_MODEL_ID, SYNC_LIPSYNC_MODEL_ID, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID, WAN_26_I2V_MODEL_ID, type FalModelId } from '../services/modelConfig';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -69,6 +69,7 @@ export function useGenerationGuards({
   const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
+  const isWan26I2VVideoModel = isVideoMode && falModelId === WAN_26_I2V_MODEL_ID;
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
   const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isAudioInputMode || isKling26ControlVideoModel;
@@ -217,6 +218,7 @@ export function useGenerationGuards({
       isInfinitalkVideoModel,
       isLipsyncVideoModel,
       isOneToAllAnimateVideoModel,
+      isWan26I2VVideoModel,
     isReveModel,
     isSeedreamModel,
     isUpscaleModel,

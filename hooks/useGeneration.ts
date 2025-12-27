@@ -221,6 +221,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    wan26Resolution,
+    wan26Duration,
+    wan26PromptExpansion,
+    wan26MultiShots,
+    isWan26I2VVideoModel,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -711,6 +716,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
             acceleration: infinitalkAccelerationForRun,
             infinitalkDuration: infinitalkDurationForRun,
           } : {}),
+          ...(isWan26I2VVideoModel ? {
+            wan26Resolution: wan26Resolution,
+            wan26Duration: wan26Duration,
+            wan26PromptExpansion: wan26PromptExpansion,
+            wan26MultiShots: wan26MultiShots,
+            ...(sourceAudioUrlForRequest ? { sourceAudioUrl: sourceAudioUrlForRequest } : {}),
+          } : {}),
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
               if (job.id !== falJobId) {
@@ -854,6 +866,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     infinitalkSeed: infinitalkSeedForRun,
                     infinitalkAcceleration: infinitalkAccelerationForRun,
                     infinitalkDuration: infinitalkDurationForRun,
+                  } : {}),
+                  ...(isWan26I2VVideoModel ? {
+                    wan26Resolution: wan26Resolution,
+                    wan26Duration: wan26Duration,
+                    wan26PromptExpansion: wan26PromptExpansion,
+                    wan26MultiShots: wan26MultiShots,
                   } : {}),
                   ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                   ...(isKling26ControlVideoModel ? {
@@ -1465,6 +1483,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    wan26Resolution,
+    wan26Duration,
+    wan26PromptExpansion,
+    wan26MultiShots,
+    isWan26I2VVideoModel,
 	    images,
     paths,
     referenceImageIds,
