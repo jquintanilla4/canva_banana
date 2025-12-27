@@ -960,6 +960,7 @@ export default function App() {
 		    isLipsyncVideoModel: fal.isLipsyncVideoModel,
         isInfinitalkVideoModel: fal.isInfinitalkVideoModel,
         isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
+        isSeedance15VideoModel: fal.isSeedance15VideoModel,
 		    hailuoVariant: fal.hailuoVariant,
 		    falVideoDuration: fal.falVideoDuration,
 		    klingVariant: fal.klingVariant,
@@ -989,6 +990,11 @@ export default function App() {
         wan26Duration: fal.wan26Duration,
         wan26PromptExpansion: fal.wan26PromptExpansion,
         wan26MultiShots: fal.wan26MultiShots,
+        seedance15AspectRatio: fal.seedance15AspectRatio,
+        seedance15Resolution: fal.seedance15Resolution,
+        seedance15Duration: fal.seedance15Duration,
+        seedance15CameraFixed: fal.seedance15CameraFixed,
+        seedance15Audio: fal.seedance15Audio,
 	    falScaleFactor: fal.falScaleFactor,
 	    falCreativity: fal.falCreativity,
 	    falNoiseScale: fal.falNoiseScale,
@@ -1026,6 +1032,11 @@ export default function App() {
         onWan26DurationChange: fal.handleWan26DurationChange,
         onWan26PromptExpansionChange: fal.handleWan26PromptExpansionChange,
         onWan26MultiShotsChange: fal.handleWan26MultiShotsChange,
+        onSeedance15AspectRatioChange: fal.handleSeedance15AspectRatioChange,
+        onSeedance15ResolutionChange: fal.handleSeedance15ResolutionChange,
+        onSeedance15DurationChange: fal.handleSeedance15DurationChange,
+        onSeedance15CameraFixedChange: fal.handleSeedance15CameraFixedChange,
+        onSeedance15AudioChange: fal.handleSeedance15AudioChange,
 	    onFalScaleFactorChange: fal.handleFalScaleFactorChange,
 	    onFalCreativityChange: fal.handleFalCreativityChange,
 	    onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
@@ -1135,9 +1146,10 @@ export default function App() {
           elementImageOrderLabels={klingElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
-          tailSelectionEnabled={fal.isKlingProVideoSelection || isKlingO1FflfMode}
+          tailSelectionEnabled={fal.isKlingProVideoSelection || isKlingO1FflfMode || fal.isSeedance15VideoModel}
           isKlingO1VideoInputMode={isKlingO1VideoInputMode}
           isKlingO1FflfMode={isKlingO1FflfMode}
+          isSeedance15FflfMode={fal.isSeedance15VideoModel}
           isKling26ControlVideoInputMode={fal.isKling26ControlVideoModel}
           isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel}
           isWan26I2VMode={fal.isWan26I2VVideoModel}

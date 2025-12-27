@@ -36,7 +36,7 @@ beforeAll(() => {
     shadowBlur: 0,
     shadowOffsetX: 0,
     shadowOffsetY: 0,
-  })) as typeof HTMLCanvasElement.prototype.getContext;
+  })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 });
 
 afterAll(() => {

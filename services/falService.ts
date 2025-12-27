@@ -217,6 +217,11 @@ interface GenerateVideoOptions {
   wan26Duration?: '5' | '10' | '15';
   wan26PromptExpansion?: boolean;
   wan26MultiShots?: boolean;
+  seedance15AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
+  seedance15Resolution?: '480p' | '720p';
+  seedance15Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
+  seedance15CameraFixed?: boolean;
+  seedance15Audio?: boolean;
 }
 
 const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit';
@@ -285,6 +290,7 @@ export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer';
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video';
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video';
+export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -1368,6 +1374,41 @@ export const generateImageToVideo = async (
       enable_prompt_expansion: enablePromptExpansion,
       multi_shots: multiShots,
       ...(options.sourceAudioUrl ? { audio_url: options.sourceAudioUrl } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  const isSeedance15Model = modelId === SEEDANCE_15_VIDEO_MODEL_ID;
+  if (isSeedance15Model) {
+    if (!image) {
+      throw new Error('Seedance 1.5 requires an image.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Seedance 1.5 requires a prompt.');
+    }
+
+    const imageUrl = await uploadImageElementToFal(image);
+    const tailImage = options.tailImage;
+    const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage) : undefined;
+
+    const aspectRatio = options.seedance15AspectRatio ?? '16:9';
+    const resolution = options.seedance15Resolution ?? '720p';
+    const videoDuration = options.seedance15Duration ?? '5';
+    const cameraFixed = options.seedance15CameraFixed ?? false;
+    const generateAudio = options.seedance15Audio ?? false;
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      image_url: imageUrl,
+      aspect_ratio: aspectRatio,
+      resolution,
+      duration: videoDuration,
+      camera_fixed: cameraFixed,
+      generate_audio: generateAudio,
+      ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);

@@ -21,6 +21,7 @@ import {
   INFINITALK_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_26_I2V_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
@@ -53,6 +54,9 @@ import type {
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
+  Seedance15AspectRatioSelectionValue,
+  Seedance15ResolutionSelectionValue,
+  Seedance15DurationSelectionValue,
   Wan26DurationSelectionValue,
   Wan26ResolutionSelectionValue,
   WanAnimateQualitySelectionValue,
@@ -81,6 +85,7 @@ type FalDerivedState = {
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
+  isSeedance15VideoModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -119,6 +124,11 @@ type FalHandlers = {
   handleWan26DurationChange: (value: string) => void;
   handleWan26PromptExpansionChange: (value: boolean) => void;
   handleWan26MultiShotsChange: (value: boolean) => void;
+  handleSeedance15AspectRatioChange: (value: string) => void;
+  handleSeedance15ResolutionChange: (value: string) => void;
+  handleSeedance15DurationChange: (value: string) => void;
+  handleSeedance15CameraFixedChange: (value: boolean) => void;
+  handleSeedance15AudioChange: (value: boolean) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -161,6 +171,11 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wan26Duration: Wan26DurationSelectionValue;
   wan26PromptExpansion: boolean;
   wan26MultiShots: boolean;
+  seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
+  seedance15Resolution: Seedance15ResolutionSelectionValue;
+  seedance15Duration: Seedance15DurationSelectionValue;
+  seedance15CameraFixed: boolean;
+  seedance15Audio: boolean;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -200,6 +215,11 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWan26Duration: Dispatch<SetStateAction<Wan26DurationSelectionValue>>;
   setWan26PromptExpansion: Dispatch<SetStateAction<boolean>>;
   setWan26MultiShots: Dispatch<SetStateAction<boolean>>;
+  setSeedance15AspectRatio: Dispatch<SetStateAction<Seedance15AspectRatioSelectionValue>>;
+  setSeedance15Resolution: Dispatch<SetStateAction<Seedance15ResolutionSelectionValue>>;
+  setSeedance15Duration: Dispatch<SetStateAction<Seedance15DurationSelectionValue>>;
+  setSeedance15CameraFixed: Dispatch<SetStateAction<boolean>>;
+  setSeedance15Audio: Dispatch<SetStateAction<boolean>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -243,6 +263,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wan26Duration, setWan26Duration] = useState<Wan26DurationSelectionValue>('5');
   const [wan26PromptExpansion, setWan26PromptExpansion] = useState<boolean>(true);
   const [wan26MultiShots, setWan26MultiShots] = useState<boolean>(false);
+  const [seedance15AspectRatio, setSeedance15AspectRatio] = useState<Seedance15AspectRatioSelectionValue>('16:9');
+  const [seedance15Resolution, setSeedance15Resolution] = useState<Seedance15ResolutionSelectionValue>('720p');
+  const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
+  const [seedance15CameraFixed, setSeedance15CameraFixed] = useState<boolean>(false);
+  const [seedance15Audio, setSeedance15Audio] = useState<boolean>(false);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -266,6 +291,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
+  const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -551,6 +577,34 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWan26MultiShots(value);
   }, []);
 
+  const handleSeedance15AspectRatioChange = useCallback((value: string) => {
+    const valid = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] as const;
+    if (valid.includes(value as Seedance15AspectRatioSelectionValue)) {
+      setSeedance15AspectRatio(value as Seedance15AspectRatioSelectionValue);
+    }
+  }, []);
+
+  const handleSeedance15ResolutionChange = useCallback((value: string) => {
+    if (value === '480p' || value === '720p') {
+      setSeedance15Resolution(value);
+    }
+  }, []);
+
+  const handleSeedance15DurationChange = useCallback((value: string) => {
+    const valid = ['4', '5', '6', '7', '8', '9', '10', '11', '12'] as const;
+    if (valid.includes(value as Seedance15DurationSelectionValue)) {
+      setSeedance15Duration(value as Seedance15DurationSelectionValue);
+    }
+  }, []);
+
+  const handleSeedance15CameraFixedChange = useCallback((value: boolean) => {
+    setSeedance15CameraFixed(value);
+  }, []);
+
+  const handleSeedance15AudioChange = useCallback((value: boolean) => {
+    setSeedance15Audio(value);
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -639,6 +693,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wan26Duration,
     wan26PromptExpansion,
     wan26MultiShots,
+    seedance15AspectRatio,
+    seedance15Resolution,
+    seedance15Duration,
+    seedance15CameraFixed,
+    seedance15Audio,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -657,6 +716,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
     isWan26I2VVideoModel,
+    isSeedance15VideoModel,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,
@@ -692,6 +752,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWan26DurationChange,
     handleWan26PromptExpansionChange,
     handleWan26MultiShotsChange,
+    handleSeedance15AspectRatioChange,
+    handleSeedance15ResolutionChange,
+    handleSeedance15DurationChange,
+    handleSeedance15CameraFixedChange,
+    handleSeedance15AudioChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -731,6 +796,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWan26Duration,
     setWan26PromptExpansion,
     setWan26MultiShots,
+    setSeedance15AspectRatio,
+    setSeedance15Resolution,
+    setSeedance15Duration,
+    setSeedance15CameraFixed,
+    setSeedance15Audio,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

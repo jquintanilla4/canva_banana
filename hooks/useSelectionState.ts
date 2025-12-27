@@ -7,6 +7,7 @@ import {
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
   isKlingO1VideoModelId,
 } from '../services/modelConfig';
 import type { ApiProviderId, CanvasImage, CanvasNote } from '../types';
@@ -27,6 +28,7 @@ type SelectionFalSettings = Pick<
   | 'isKlingO1RefV2VMode'
   | 'isLipsyncVideoModel'
   | 'isInfinitalkVideoModel'
+  | 'isSeedance15VideoModel'
 >;
 
 type SelectionOptions = {
@@ -80,6 +82,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isKlingO1RefV2VMode,
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
+    isSeedance15VideoModel,
   } = fal;
 
   const isKlingImageModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
@@ -96,6 +99,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
   const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode || isAudioInputMode || isKling26ControlVideoInputMode;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
+  const isSeedance15FflfMode = isSeedance15VideoModel;
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -229,7 +233,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKlingO1FflfMode) {
+      if (!isKlingProVideoSelection && !isKlingO1FflfMode && !isSeedance15FflfMode) {
         return;
       }
       if (!imageId) {
@@ -426,6 +430,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     images,
     isKlingProVideoSelection,
     isKlingO1FflfMode,
+    isSeedance15FflfMode,
     klingVariant,
     onError,
     onReferenceLimit,

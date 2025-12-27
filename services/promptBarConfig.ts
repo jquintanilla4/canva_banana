@@ -18,6 +18,9 @@ import type {
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
+  Seedance15AspectRatioSelectionValue,
+  Seedance15ResolutionSelectionValue,
+  Seedance15DurationSelectionValue,
   Wan26DurationSelectionValue,
   Wan26ResolutionSelectionValue,
   WanAnimateQualitySelectionValue,
@@ -62,6 +65,12 @@ import {
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
+  SEEDANCE15_ASPECT_RATIO_OPTIONS,
+  SEEDANCE15_RESOLUTION_OPTIONS,
+  SEEDANCE15_DURATION_OPTIONS,
+  SEEDANCE15_CAMERA_FIXED_OPTIONS,
+  SEEDANCE15_AUDIO_OPTIONS,
   WAN_ANIMATE_MODEL_ID,
   WAN_ANIMATE_QUALITY_OPTIONS,
   WAN_ANIMATE_RESOLUTION_OPTIONS,
@@ -111,6 +120,7 @@ export type PromptBarControlsInput = {
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
+  isSeedance15VideoModel: boolean;
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
@@ -140,6 +150,11 @@ export type PromptBarControlsInput = {
   wan26Duration: Wan26DurationSelectionValue;
   wan26PromptExpansion: boolean;
   wan26MultiShots: boolean;
+  seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
+  seedance15Resolution: Seedance15ResolutionSelectionValue;
+  seedance15Duration: Seedance15DurationSelectionValue;
+  seedance15CameraFixed: boolean;
+  seedance15Audio: boolean;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -177,6 +192,11 @@ export type PromptBarControlsInput = {
   onWan26DurationChange: (value: string) => void;
   onWan26PromptExpansionChange: (value: boolean) => void;
   onWan26MultiShotsChange: (value: boolean) => void;
+  onSeedance15AspectRatioChange: (value: string) => void;
+  onSeedance15ResolutionChange: (value: string) => void;
+  onSeedance15DurationChange: (value: string) => void;
+  onSeedance15CameraFixedChange: (value: boolean) => void;
+  onSeedance15AudioChange: (value: boolean) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -210,6 +230,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
     isWan26I2VVideoModel,
+    isSeedance15VideoModel,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
@@ -239,6 +260,11 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     wan26Duration,
     wan26PromptExpansion,
     wan26MultiShots,
+    seedance15AspectRatio,
+    seedance15Resolution,
+    seedance15Duration,
+    seedance15CameraFixed,
+    seedance15Audio,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -276,6 +302,11 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onWan26DurationChange,
     onWan26PromptExpansionChange,
     onWan26MultiShotsChange,
+    onSeedance15AspectRatioChange,
+    onSeedance15ResolutionChange,
+    onSeedance15DurationChange,
+    onSeedance15CameraFixedChange,
+    onSeedance15AudioChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -423,7 +454,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: KLING26_CONTROL_VARIANT_OPTIONS.map(option => ({
         value: option.value,
         label: option.label,
-        disabled: option.disabled,
       })),
       value: kling26ControlVariant,
       onChange: onKling26ControlVariantChange,
@@ -653,6 +683,57 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       value: wan26MultiShots ? 'true' : 'false',
       onChange: (value: string) => onWan26MultiShotsChange(value === 'true'),
       disabled: isLoading || !wan26PromptExpansion,
+    });
+  }
+
+  if (isSeedance15VideoModel) {
+    controls.push({
+      id: 'seedance15-aspect-ratio-select',
+      prefixLabel: 'AR',
+      ariaLabel: 'Select Seedance 1.5 aspect ratio',
+      options: SEEDANCE15_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: seedance15AspectRatio,
+      onChange: onSeedance15AspectRatioChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'seedance15-duration-select',
+      ariaLabel: 'Select Seedance 1.5 duration',
+      options: SEEDANCE15_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: seedance15Duration,
+      onChange: onSeedance15DurationChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'seedance15-resolution-select',
+      prefixLabel: 'Resolution',
+      ariaLabel: 'Select Seedance 1.5 resolution',
+      options: SEEDANCE15_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: seedance15Resolution,
+      onChange: onSeedance15ResolutionChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'seedance15-camera-fixed-select',
+      prefixLabel: 'Camera Fixed',
+      ariaLabel: 'Toggle Seedance 1.5 camera fixed',
+      options: SEEDANCE15_CAMERA_FIXED_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: seedance15CameraFixed ? 'true' : 'false',
+      onChange: (value: string) => onSeedance15CameraFixedChange(value === 'true'),
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'seedance15-audio-select',
+      prefixLabel: 'Audio',
+      ariaLabel: 'Toggle Seedance 1.5 audio generation',
+      options: SEEDANCE15_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: seedance15Audio ? 'true' : 'false',
+      onChange: (value: string) => onSeedance15AudioChange(value === 'true'),
+      disabled: isLoading,
     });
   }
 

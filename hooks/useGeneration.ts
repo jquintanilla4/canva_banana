@@ -181,7 +181,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
   const showTemporaryError = useCallback((message: string) => {
     setError(message);
     window.setTimeout(() => {
-      setError(current => (current === message ? null : current));
+      setError(null);
     }, 4000);
   }, [setError]);
 
@@ -226,6 +226,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wan26PromptExpansion,
     wan26MultiShots,
     isWan26I2VVideoModel,
+    seedance15AspectRatio,
+    seedance15Resolution,
+    seedance15Duration,
+    seedance15CameraFixed,
+    seedance15Audio,
+    isSeedance15VideoModel,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -723,6 +729,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
             wan26MultiShots: wan26MultiShots,
             ...(sourceAudioUrlForRequest ? { sourceAudioUrl: sourceAudioUrlForRequest } : {}),
           } : {}),
+          ...(isSeedance15VideoModel ? {
+            seedance15AspectRatio: seedance15AspectRatio,
+            seedance15Resolution: seedance15Resolution,
+            seedance15Duration: seedance15Duration,
+            seedance15CameraFixed: seedance15CameraFixed,
+            seedance15Audio: seedance15Audio,
+            ...(videoTailImageElement ? { tailImage: videoTailImageElement } : {}),
+          } : {}),
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
               if (job.id !== falJobId) {
@@ -873,6 +887,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     wan26PromptExpansion: wan26PromptExpansion,
                     wan26MultiShots: wan26MultiShots,
                   } : {}),
+                  ...(isSeedance15VideoModel ? {
+                    seedance15AspectRatio: seedance15AspectRatio,
+                    seedance15Resolution: seedance15Resolution,
+                    seedance15Duration: seedance15Duration,
+                    seedance15CameraFixed: seedance15CameraFixed,
+                    seedance15Audio: seedance15Audio,
+                  } : {}),
                   ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                   ...(isKling26ControlVideoModel ? {
                     kling26ControlVariant: kling26ControlVariantForRun,
@@ -892,7 +913,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setSelectedNoteIds([]);
           setReferenceImageIds([]);
           setElementImageIds([]);
-          setTool(Tool.SELECTION);
+          setTool(Tool.FREE_SELECTION);
 
           setToastMessage('Video added to canvas');
           // Let autosave know a generation completed successfully.
@@ -1416,7 +1437,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         }
         setSelectedNoteIds([]);
         setReferenceImageIds([]);
-        setTool(Tool.SELECTION);
+        setTool(Tool.FREE_SELECTION);
         setToastMessage('Generation complete');
         setTimeout(() => setToastMessage(null), 2000);
       };
@@ -1488,6 +1509,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wan26PromptExpansion,
     wan26MultiShots,
     isWan26I2VVideoModel,
+    seedance15AspectRatio,
+    seedance15Resolution,
+    seedance15Duration,
+    seedance15CameraFixed,
+    seedance15Audio,
+    isSeedance15VideoModel,
 	    images,
     paths,
     referenceImageIds,

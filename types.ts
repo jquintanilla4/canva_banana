@@ -116,6 +116,11 @@ export type GenerationFalOptions = Partial<{
   wan26Duration: '5' | '10' | '15';
   wan26PromptExpansion: boolean;
   wan26MultiShots: boolean;
+  seedance15AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
+  seedance15Resolution: '480p' | '720p';
+  seedance15Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
+  seedance15CameraFixed: boolean;
+  seedance15Audio: boolean;
 }>;
 
 export interface GenerationInputs {

@@ -28,6 +28,7 @@ type DrawCanvasArgs = {
   sourceVideoId: string | null;
   isKlingO1VideoInputMode: boolean;
   isKlingO1FflfMode: boolean;
+  isSeedance15FflfMode: boolean;
   isKling26ControlVideoInputMode: boolean;
   isWanAnimateVideoInputMode: boolean;
   isWan26I2VMode: boolean;
@@ -55,6 +56,7 @@ export function drawCanvas({
   sourceVideoId,
   isKlingO1VideoInputMode,
   isKlingO1FflfMode,
+  isSeedance15FflfMode,
   isKling26ControlVideoInputMode,
   isWanAnimateVideoInputMode,
   isWan26I2VMode,
@@ -265,7 +267,7 @@ export function drawCanvas({
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
     } else if (videoLastFrameImageId === image.id) {
-      ctx.strokeStyle = '#f59e0b'; // amber-500 for ending frame
+      ctx.strokeStyle = isSeedance15FflfMode ? '#22c55e' : '#f59e0b'; // green-500 for Seedance 1.5, amber-500 for others
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
