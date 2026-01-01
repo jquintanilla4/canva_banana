@@ -102,7 +102,6 @@ export function useGenerationGuards({
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const requiresSourceAudioForVideoInput = usingFal && isVideoMode && isAudioInputMode && !hasSourceAudio;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
-      (usingFal && isReveModel) ||
       (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
       (appMode === 'INPAINT' && !hasInpaintMask)
     );

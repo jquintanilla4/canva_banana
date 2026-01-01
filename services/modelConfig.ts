@@ -15,6 +15,8 @@ export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as co
 export const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 export const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
 export const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
+export const REVE_EDIT_MODEL_ID = 'fal-ai/reve/edit' as const;
+export const REVE_REMIX_MODEL_ID = 'fal-ai/reve/remix' as const;
 export const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1' as const;
 export const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
 export const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
@@ -533,6 +535,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SEEDREAM_MODEL_ID]: 7,
   [SEEDREAM_V45_MODEL_ID]: 10,
   [KLING_IMAGE_MODEL_ID]: 10,
+  [REVE_TEXT_TO_IMAGE_MODEL_ID]: 5, // Reve remix supports up to 6 total images (1 primary + 5 references)
   [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [KLING_O1_VIDEO_MODEL_ID]: 6,
   [KLING_O1_VIDEO_EDIT_MODEL_ID]: 4,

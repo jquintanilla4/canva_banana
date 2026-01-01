@@ -6,6 +6,7 @@ type UseKlingPromptMentionsArgs = {
   isKlingO1VideoModel: boolean;
   isKlingO1EditMode: boolean;
   isKlingO1RefV2VMode?: boolean;
+  isReveModel?: boolean;
   referenceOrderLabels: Record<string, string> | null;
   elementOrderLabels: Record<string, string> | null;
   referenceImageIds: string[];
@@ -23,6 +24,7 @@ export const useKlingPromptMentions = ({
   isKlingO1VideoModel,
   isKlingO1EditMode,
   isKlingO1RefV2VMode = false,
+  isReveModel = false,
   referenceOrderLabels,
   elementOrderLabels,
   referenceImageIds,
@@ -31,7 +33,7 @@ export const useKlingPromptMentions = ({
 }: UseKlingPromptMentionsArgs): UseKlingPromptMentionsResult => {
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
   return useMemo(() => {
-    if (!isKlingModel && !isKlingO1VideoModel) {
+    if (!isKlingModel && !isKlingO1VideoModel && !isReveModel) {
       return { klingPromptMentions: [], klingReferenceCount: 0 };
     }
 
@@ -75,6 +77,7 @@ export const useKlingPromptMentions = ({
     isKlingModel,
     isKlingO1VideoModel,
     isKlingO1VideoInputMode,
+    isReveModel,
     referenceImageIds.length,
     referenceOrderLabels,
   ]);

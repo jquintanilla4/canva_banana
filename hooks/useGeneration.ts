@@ -969,11 +969,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
         return;
       }
 
-      if (usingFal && !isUpscaleModel && isReveModel) {
-        setError('Reve Image only supports text-to-image generation. Please switch to NanoBanana Pro or Seedream for edits.');
-        return;
-      }
-
       if (!isUpscaleModel) {
         if (appMode === 'CANVAS' && tool !== Tool.SELECTION && tool !== Tool.FREE_SELECTION) {
           setError('In Canvas Mode, please use the Select tool to perform a general image edit.');
@@ -1235,7 +1230,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               : [];
 
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel;
+            const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel || isReveModel;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
               const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);

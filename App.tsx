@@ -845,7 +845,7 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || fal.isKlingO1VideoModel,
+    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isReveModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
     referenceImageIds,
@@ -898,6 +898,7 @@ export default function App() {
     isKlingO1VideoModel: fal.isKlingO1VideoModel,
     isKlingO1EditMode: fal.isKlingO1EditMode,
     isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
+    isReveModel,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds,
@@ -1283,7 +1284,7 @@ export default function App() {
           negativePromptPlaceholder="Describe what the video should avoid... (optional)"
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
-          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel}
+          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isReveModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
         />
