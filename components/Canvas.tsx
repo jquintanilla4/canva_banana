@@ -593,28 +593,49 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   }, [hoveredVideoId, images, isVideoImage]);
 
+  // Auto-fit and center images when first dropped onto an empty canvas.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isFirstImage = images.length === 1 && prevImagesLength.current === 0;
+    // Detect when images are first added to an empty canvas (works for single or multiple images)
+    const isFirstDrop = images.length > 0 && prevImagesLength.current === 0;
 
-    if (isFirstImage) {
-      const image = images[0];
-      const hRatio = canvas.width / image.width;
-      const vRatio = canvas.height / image.height;
-      const newScale = Math.min(hRatio, vRatio) * 0.9;
-      const clampedScale = Math.max(MIN_SCALE, Math.min(newScale, MAX_SCALE));
-      scaleRef.current = clampedScale;
-      setScale(clampedScale);
+    // Cap at 80% so users can see the full image with breathing room.
+    if (isFirstDrop) {
+      const MAX_INITIAL_ZOOM = 0.8;
+      const bounds = getBoundsForItems(images, []);
 
-      const newPanX = (canvas.width - image.width * clampedScale) / 2;
-      const newPanY = (canvas.height - image.height * clampedScale) / 2;
-      setPanSmoothly({ x: newPanX, y: newPanY });
+      if (bounds) {
+        const bboxWidth = bounds.maxX - bounds.minX;
+        const bboxHeight = bounds.maxY - bounds.minY;
+        const canvasWidth = canvas.clientWidth;
+        const canvasHeight = canvas.clientHeight;
+
+        // Calculate scale to fit all images in view, with 10% padding around edges
+        if (bboxWidth > 0 && bboxHeight > 0 && canvasWidth > 0 && canvasHeight > 0) {
+          const padding = 0.9;
+          const scaleX = canvasWidth / bboxWidth;
+          const scaleY = canvasHeight / bboxHeight;
+          const fitScale = Math.min(scaleX, scaleY) * padding; // Apply the 80% max zoom cap
+          const newScale = Math.min(fitScale, MAX_INITIAL_ZOOM);
+          const clampedScale = Math.max(MIN_SCALE, Math.min(newScale, MAX_SCALE));
+
+          // Center the bounding box of all images on the canvas
+          const bboxCenterX = bounds.minX + bboxWidth / 2;
+          const bboxCenterY = bounds.minY + bboxHeight / 2;
+          const newPanX = canvasWidth / 2 - bboxCenterX * clampedScale;
+          const newPanY = canvasHeight / 2 - bboxCenterY * clampedScale;
+
+          scaleRef.current = clampedScale;
+          setScale(clampedScale);
+          setPanSmoothly({ x: newPanX, y: newPanY });
+        }
+      }
     }
 
     prevImagesLength.current = images.length;
-  }, [images, setPanSmoothly]);
+  }, [images, getBoundsForItems, setPanSmoothly]);
 
   useEffect(() => {
     if (containerRef.current) {
@@ -842,6 +863,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       style={{
         backgroundImage,
         backgroundSize: `${gridSpacing}px ${gridSpacing}px`,
+        // Sync the dot grid background position with the canvas pan offset.
+        backgroundPosition: `${pan.x}px ${pan.y}px`,
       }}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseDown={handleMouseDownWithEditGuard}
