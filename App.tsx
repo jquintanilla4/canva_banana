@@ -229,6 +229,11 @@ export default function App() {
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
+    if (fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID) {
+      setToastMessage('Reve remix supports up to 6 images total (1 primary + 5 references). Use @Image1, @Image2, etc. in your prompt to reference them.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
     const totalLimit = maxReferenceImages + 1;
     setToastMessage(`${getFalModelLabel(fal.falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
