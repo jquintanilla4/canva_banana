@@ -5,6 +5,7 @@ import type {
   FalModelMode,
   FalResolutionSelectionValue,
   FalVideoModelId,
+  Flux2MaxImageSizeSelectionValue,
   HailuoVariant,
   InfinitalkAccelerationSelectionValue,
   InfinitalkDurationSelectionValue,
@@ -43,6 +44,8 @@ import {
   FAL_RESOLUTION_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
+  FLUX2_MAX_IMAGE_SIZE_OPTIONS,
+  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
   HAILUO_VARIANT_OPTIONS,
@@ -110,6 +113,7 @@ export type PromptBarControlsInput = {
   isNanoBananaModel: boolean;
   isReveModel: boolean;
   isKlingModel: boolean;
+  isFlux2MaxModel: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
   isKlingO1VideoModel: boolean;
@@ -155,6 +159,7 @@ export type PromptBarControlsInput = {
   seedance15Duration: Seedance15DurationSelectionValue;
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
+  flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -197,6 +202,7 @@ export type PromptBarControlsInput = {
   onSeedance15DurationChange: (value: string) => void;
   onSeedance15CameraFixedChange: (value: boolean) => void;
   onSeedance15AudioChange: (value: boolean) => void;
+  onFlux2MaxImageSizeChange: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -220,6 +226,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isNanoBananaModel,
     isReveModel,
     isKlingModel,
+    isFlux2MaxModel,
     isUpscaleModel,
     isKlingVideoModel,
     isKlingO1VideoModel,
@@ -265,6 +272,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     seedance15Duration,
     seedance15CameraFixed,
     seedance15Audio,
+    flux2MaxImageSize,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -307,6 +315,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onSeedance15DurationChange,
     onSeedance15CameraFixedChange,
     onSeedance15AudioChange,
+    onFlux2MaxImageSizeChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -787,6 +796,19 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: FAL_SEEDVR_NOISE_SCALE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: falNoiseScale.toFixed(1),
       onChange: onFalNoiseScaleChange,
+      disabled: isLoading,
+    });
+  }
+
+  // Flux2 Max image size control
+  if (!isVideoMode && usingFal && isFlux2MaxModel) {
+    controls.push({
+      id: 'flux2-max-image-size-select',
+      prefixLabel: 'Resolution',
+      ariaLabel: 'Select Flux2 Max image size',
+      options: FLUX2_MAX_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: flux2MaxImageSize,
+      onChange: onFlux2MaxImageSizeChange,
       disabled: isLoading,
     });
   }

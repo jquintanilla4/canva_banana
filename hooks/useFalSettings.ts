@@ -7,6 +7,7 @@ import {
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_KLING_ASPECT_RATIO_OPTIONS,
   FAL_REVE_ASPECT_RATIO_OPTIONS,
+  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
@@ -26,6 +27,7 @@ import {
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
+  isFlux2MaxImageSizeSelectionValue,
   isKlingO1VideoModelId,
   isFalImageModelId,
   isFalVideoModelId,
@@ -41,6 +43,7 @@ import type {
   FalModelMode,
   FalResolutionSelectionValue,
   FalVideoModelId,
+  Flux2MaxImageSizeSelectionValue,
   HailuoVariant,
   Kling26AudioSelectionValue,
   Kling26ControlDriver,
@@ -86,6 +89,7 @@ type FalDerivedState = {
   isInfinitalkVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
+  isFlux2MaxModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -129,6 +133,7 @@ type FalHandlers = {
   handleSeedance15DurationChange: (value: string) => void;
   handleSeedance15CameraFixedChange: (value: boolean) => void;
   handleSeedance15AudioChange: (value: boolean) => void;
+  handleFlux2MaxImageSizeChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -176,6 +181,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   seedance15Duration: Seedance15DurationSelectionValue;
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
+  flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -220,6 +226,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setSeedance15Duration: Dispatch<SetStateAction<Seedance15DurationSelectionValue>>;
   setSeedance15CameraFixed: Dispatch<SetStateAction<boolean>>;
   setSeedance15Audio: Dispatch<SetStateAction<boolean>>;
+  setFlux2MaxImageSize: Dispatch<SetStateAction<Flux2MaxImageSizeSelectionValue>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -268,6 +275,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
   const [seedance15CameraFixed, setSeedance15CameraFixed] = useState<boolean>(false);
   const [seedance15Audio, setSeedance15Audio] = useState<boolean>(false);
+  const [flux2MaxImageSize, setFlux2MaxImageSize] = useState<Flux2MaxImageSizeSelectionValue>('landscape_4_3');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -292,6 +300,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
+  const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -605,6 +614,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance15Audio(value);
   }, []);
 
+  const handleFlux2MaxImageSizeChange = useCallback((value: string) => {
+    if (isFlux2MaxImageSizeSelectionValue(value)) {
+      setFlux2MaxImageSize(value);
+    }
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -698,6 +713,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     seedance15Duration,
     seedance15CameraFixed,
     seedance15Audio,
+    flux2MaxImageSize,
+    isFlux2MaxModel,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -757,6 +774,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSeedance15DurationChange,
     handleSeedance15CameraFixedChange,
     handleSeedance15AudioChange,
+    handleFlux2MaxImageSizeChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -801,6 +819,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance15Duration,
     setSeedance15CameraFixed,
     setSeedance15Audio,
+    setFlux2MaxImageSize,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

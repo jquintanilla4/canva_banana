@@ -15,6 +15,7 @@ import {
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
+  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   getFalModelLabel,
   getHailuoActualModelId,
   getKlingActualModelId,
@@ -232,6 +233,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance15CameraFixed,
     seedance15Audio,
     isSeedance15VideoModel,
+    flux2MaxImageSize,
+    isFlux2MaxModel,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -339,6 +342,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isNanoBananaModel = isNanoBananaProModel;
     const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
+    const isFlux2MaxModelForRun = !isVideoMode && falModelIdForRun === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
     const normalizedFalResolutionSelectionForRun =
       isKlingModel && falResolutionSelectionForRun === '4K' ? '2K' : falResolutionSelectionForRun;
     const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
@@ -1074,9 +1078,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ? REVE_TEXT_TO_IMAGE_MODEL_ID
               : isKlingModel
                 ? KLING_IMAGE_MODEL_ID
-                : isNanoBananaProModel
-                  ? NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
-                  : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+                : isFlux2MaxModelForRun
+                  ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
+                  : isNanoBananaProModel
+                    ? NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
+                    : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
 
           let klingReferenceImages: HTMLImageElement[] | undefined;
           if (isKlingModel) {
@@ -1129,6 +1135,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(isKlingModel ? { resolution: normalizedFalResolutionSelectionForRun } : {}),
             ...(isSeedreamModel ? { imageSize: falImageSizeSelectionForRun } : {}),
+            ...(isFlux2MaxModelForRun ? { flux2MaxImageSize } : {}),
             ...(klingReferenceImages ? { referenceImages: klingReferenceImages } : {}),
             numImages: normalizedFalNumImages,
           });
@@ -1230,7 +1237,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               : [];
 
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel || isReveModel;
+            const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel || isReveModel || isFlux2MaxModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
               const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);

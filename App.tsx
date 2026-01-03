@@ -832,8 +832,8 @@ export default function App() {
   const isNanoBananaModel = !fal.isVideoMode && fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
   const isReveModel = !fal.isVideoMode && fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
-  const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isUpscaleModel;
-  const isInpaintModeDisabled = fal.isVideoMode || isReveModel || fal.isUpscaleModel;
+  const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isFlux2MaxModel || fal.isUpscaleModel;
+  const isInpaintModeDisabled = fal.isVideoMode || isReveModel || fal.isFlux2MaxModel || fal.isUpscaleModel;
 
   useEffect(() => {
     if (appMode === 'INPAINT' && isInpaintModeDisabled) {
@@ -850,7 +850,7 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isReveModel,
+    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
     referenceImageIds,
@@ -904,6 +904,7 @@ export default function App() {
     isKlingO1EditMode: fal.isKlingO1EditMode,
     isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
     isReveModel,
+    isFlux2MaxModel: fal.isFlux2MaxModel,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds,
@@ -956,6 +957,7 @@ export default function App() {
     isNanoBananaModel,
     isReveModel,
     isKlingModel,
+    isFlux2MaxModel: fal.isFlux2MaxModel,
     isUpscaleModel: fal.isUpscaleModel,
 	    isKlingVideoModel: fal.isKlingVideoModel,
 	    isKlingO1VideoModel: fal.isKlingO1VideoModel,
@@ -1001,6 +1003,7 @@ export default function App() {
         seedance15Duration: fal.seedance15Duration,
         seedance15CameraFixed: fal.seedance15CameraFixed,
         seedance15Audio: fal.seedance15Audio,
+        flux2MaxImageSize: fal.flux2MaxImageSize,
 	    falScaleFactor: fal.falScaleFactor,
 	    falCreativity: fal.falCreativity,
 	    falNoiseScale: fal.falNoiseScale,
@@ -1043,6 +1046,7 @@ export default function App() {
         onSeedance15DurationChange: fal.handleSeedance15DurationChange,
         onSeedance15CameraFixedChange: fal.handleSeedance15CameraFixedChange,
         onSeedance15AudioChange: fal.handleSeedance15AudioChange,
+        onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
 	    onFalScaleFactorChange: fal.handleFalScaleFactorChange,
 	    onFalCreativityChange: fal.handleFalCreativityChange,
 	    onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
@@ -1279,7 +1283,7 @@ export default function App() {
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
           promptPlaceholder={
-            isKlingModel || fal.isKlingO1VideoModel
+            isKlingModel || fal.isKlingO1VideoModel || fal.isFlux2MaxModel
               ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
               : promptPlaceholderText
           }
@@ -1289,7 +1293,7 @@ export default function App() {
           negativePromptPlaceholder="Describe what the video should avoid... (optional)"
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
-          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isReveModel}
+          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
         />

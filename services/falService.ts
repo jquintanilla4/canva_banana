@@ -176,6 +176,7 @@ interface GenerateImageOptions {
   seed?: number;
   resolution?: FalResolutionOption;
   referenceImages?: HTMLImageElement[];
+  flux2MaxImageSize?: string;
 }
 
 interface UpscaleImageOptions {
@@ -273,6 +274,8 @@ const resolveSeedreamCustomSizeForModel = (
 const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image';
 const REVE_EDIT_MODEL_ID = 'fal-ai/reve/edit';
 const REVE_REMIX_MODEL_ID = 'fal-ai/reve/remix';
+const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max';
+const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit';
 
 // Convert @Image1, @Image2, etc. to Reve's XML format <img>0</img>, <img>1</img>, etc.
 // User-facing mentions are 1-indexed, API expects 0-indexed
@@ -849,6 +852,104 @@ export const generateImageEdit = async ({
     return { imageBase64: primaryBase64, imagesBase64: base64List, text: '', requestId };
   }
 
+  // Flux2 Max edit model - uses @Image1, @Image2 mentions directly (no conversion)
+  const isFlux2MaxModel = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
+  if (isFlux2MaxModel) {
+    const hasReferenceImages = referenceImages && referenceImages.length > 0;
+    let latestRequestId: string | undefined;
+
+    // Build image URLs array: base image first, then reference images
+    const allImageUrls = [baseImageUrl];
+    if (hasReferenceImages) {
+      const referenceUrls = await collectReferenceUploadUrls(referenceImages);
+      allImageUrls.push(...referenceUrls);
+    }
+
+    // Limit to 8 images as per API spec
+    if (allImageUrls.length > 8) {
+      throw new Error('Flux2 Max edit supports up to 8 images. Please reduce the number of selected images.');
+    }
+
+    const flux2Body: {
+      prompt: string;
+      image_urls: string[];
+      image_size?: string;
+      output_format?: 'png' | 'jpeg';
+      safety_tolerance?: '5';
+      sync_mode?: boolean;
+    } = {
+      prompt, // Keep @Image1, @Image2, etc. as-is
+      image_urls: allImageUrls,
+      image_size: 'auto',
+      output_format: 'png',
+      safety_tolerance: '5', // Most permissive
+      sync_mode: false,
+    };
+
+    logFalEvent('outbound', FLUX2_MAX_EDIT_MODEL_ID, 'Outbound request (fal.subscribe)', { input: flux2Body });
+
+    let result: Awaited<ReturnType<typeof fal.subscribe>>;
+    try {
+      result = await fal.subscribe(FLUX2_MAX_EDIT_MODEL_ID, {
+        input: flux2Body,
+        logs: true,
+        onQueueUpdate: update => {
+          const queueUpdate = update as unknown as FalQueueUpdate;
+          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+          if (resolvedRequestId) {
+            latestRequestId = resolvedRequestId;
+          }
+          logFalEvent('inbound', FLUX2_MAX_EDIT_MODEL_ID, 'Queue update', {
+            status: queueUpdate.status,
+            position: queueUpdate.position,
+            eta: queueUpdate.eta,
+            requestId: resolvedRequestId,
+            logs: normalizedLogs.map(log => log?.message ?? ''),
+          });
+          options.onQueueUpdate?.({
+            ...queueUpdate,
+            requestId: resolvedRequestId || '',
+            logs: normalizedLogs,
+          });
+        },
+      });
+    } catch (error) {
+      logFalEvent('error', FLUX2_MAX_EDIT_MODEL_ID, 'Request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logFalEvent('inbound', FLUX2_MAX_EDIT_MODEL_ID, 'Result received', {
+      requestId: result?.requestId || latestRequestId,
+      data: (result?.data as Record<string, unknown>) ?? undefined,
+    });
+
+    const data = result?.data as { images?: Array<{ url: string }> } | undefined;
+    const images = data?.images;
+    if (!images || images.length === 0) {
+      throw new Error('Fal.ai Flux2 Max edit API did not return an image.');
+    }
+
+    const inlineDataList = await Promise.all(images.map(img => extractInlineData(img.url)));
+    const base64List = inlineDataList.map(dataUrl => {
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) {
+        throw new Error('Failed to extract image data from Fal.ai Flux2 Max edit response.');
+      }
+      return base64;
+    });
+
+    const [primaryBase64] = base64List;
+    if (!primaryBase64) {
+      throw new Error('Failed to extract image data from Fal.ai Flux2 Max edit response.');
+    }
+
+    const requestId = result?.requestId || latestRequestId;
+    return { imageBase64: primaryBase64, imagesBase64: base64List, text: '', requestId };
+  }
+
   const isSeedreamModel = isSeedreamEditModelId(modelId);
   const referenceImageCount = referenceImages?.length ?? 0;
   if (isSeedreamModel && referenceImageCount > 0) {
@@ -1210,6 +1311,7 @@ export const generateImage = async (
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
   const isNanoBananaTextToImage = modelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
+  const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const supportsAspectRatio = isNanoBananaTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
   const supportsResolution = isNanoBananaTextToImage || isKlingTextToImage;
   const numImagesOption = options.numImages;
@@ -1235,6 +1337,7 @@ export const generateImage = async (
     seed?: number;
     resolution?: FalResolutionOption;
     image_urls?: string[];
+    safety_tolerance?: '5';
   } = {
     prompt,
     sync_mode: !isSeedreamTextToImage,
@@ -1242,6 +1345,14 @@ export const generateImage = async (
 
   if (!isSeedreamTextToImage) {
     body.output_format = 'png';
+  }
+
+  // Flux2 Max specific settings
+  if (isFlux2MaxTextToImage) {
+    body.safety_tolerance = '5'; // Most permissive
+    body.output_format = 'png';
+    const flux2ImageSize = options.flux2MaxImageSize ?? 'landscape_4_3';
+    body.image_size = flux2ImageSize;
   }
 
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
