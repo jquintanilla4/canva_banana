@@ -4,6 +4,7 @@ import {
   KLING_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
+  SCAIL_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -95,9 +96,16 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       || falVideoModelId === WAN_ANIMATE_MODEL_ID
       || falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID
     );
+  const isScailVideoModel = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && falVideoModelId === SCAIL_VIDEO_MODEL_ID;
   const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
   const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
-  const isVideoInputMode = isKlingO1VideoInputMode || isWanVideoInputMode || isAudioInputMode || isKling26ControlVideoInputMode;
+  const isVideoInputMode = isKlingO1VideoInputMode
+    || isWanVideoInputMode
+    || isAudioInputMode
+    || isKling26ControlVideoInputMode
+    || isScailVideoModel;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
   const isSeedance15FflfMode = isSeedance15VideoModel;
 
@@ -139,7 +147,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setSourceAudioId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
   }, [elementImageIds.length, images, referenceImageIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
 
-  // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All / Lip Sync).
+  // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All / Scail / Lip Sync).
   useEffect(() => {
     if (!isVideoInputMode && sourceVideoId) {
       setSourceVideoId(null);

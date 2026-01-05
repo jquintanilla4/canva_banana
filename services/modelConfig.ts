@@ -50,6 +50,7 @@ export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const;
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as const;
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
+export const SCAIL_VIDEO_MODEL_ID = 'fal-ai/scail' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 export type HailuoVariant = 'standard' | 'pro';
@@ -105,6 +106,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
   { value: KLING_26_CONTROL_VIDEO_MODEL_ID, label: 'Kling 2.6 Control' },
   { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
+  { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
   { value: WAN_26_I2V_MODEL_ID, label: 'Wan 2.6' },
@@ -580,6 +582,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [INFINITALK_VIDEO_MODEL_ID]: 0,
   [WAN_26_I2V_MODEL_ID]: 0,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
+  [SCAIL_VIDEO_MODEL_ID]: 0,
 };
 
 export const getMaxReferenceImages = (modelId: FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | typeof KLING_O1_VIDEO_REF_V2V_MODEL_ID | undefined): number =>

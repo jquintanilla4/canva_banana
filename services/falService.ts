@@ -15,6 +15,7 @@ import {
   KLING_26_CONTROL_VIDEO_PRO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
+  SCAIL_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MOVE_MODEL_ID,
   INFINITALK_DURATION_TO_NUM_FRAMES,
@@ -1806,6 +1807,31 @@ export const generateImageToVideo = async (
       image_url: imageUrl,
       video_url: options.sourceVideoUrl,
       ...(resolution ? { resolution } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  const isScailModel = modelId === SCAIL_VIDEO_MODEL_ID;
+  if (isScailModel) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Scail requires a source video.');
+    }
+    if (!image) {
+      throw new Error('Scail requires a reference image.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Scail requires a prompt.');
+    }
+
+    const imageUrl = await uploadImageElementToFal(image);
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      image_url: imageUrl,
+      video_url: options.sourceVideoUrl,
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);

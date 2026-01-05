@@ -1,6 +1,16 @@
 import { useMemo } from 'react';
 import { Tool } from '../types';
-import { getFalModelLabel, INFINITALK_VIDEO_MODEL_ID, ONE_TO_ALL_ANIMATE_MODEL_ID, SYNC_LIPSYNC_MODEL_ID, WAN_ANIMATE_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID, WAN_26_I2V_MODEL_ID, type FalModelId } from '../services/modelConfig';
+import {
+  getFalModelLabel,
+  INFINITALK_VIDEO_MODEL_ID,
+  ONE_TO_ALL_ANIMATE_MODEL_ID,
+  SCAIL_VIDEO_MODEL_ID,
+  SYNC_LIPSYNC_MODEL_ID,
+  WAN_ANIMATE_MODEL_ID,
+  WAN_VISION_ENHANCER_MODEL_ID,
+  WAN_26_I2V_MODEL_ID,
+  type FalModelId,
+} from '../services/modelConfig';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -67,12 +77,17 @@ export function useGenerationGuards({
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
+  const isScailVideoModel = isVideoMode && falModelId === SCAIL_VIDEO_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falModelId === WAN_26_I2V_MODEL_ID;
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
-  const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isAudioInputMode || isKling26ControlVideoModel;
+  const isFalVideoInputMode = isWanVideoInputMode
+    || isOneToAllAnimateVideoModel
+    || isAudioInputMode
+    || isKling26ControlVideoModel
+    || isScailVideoModel;
   const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
@@ -82,6 +97,7 @@ export function useGenerationGuards({
     const hasWanAnimateStillImage = isWanAnimateVideoModel || isOneToAllAnimateVideoModel
       ? hasSelectedStillImage
       : hasPrimaryImage;
+    const hasScailStillImage = isScailVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const hasKling26ControlStillImage = isKling26ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const isTextToImage = !hasPrimaryImage && !(isVideoMode && isVideoInputMode && hasSourceVideo);
     const promptEmpty = prompt.trim().length === 0;
@@ -99,6 +115,7 @@ export function useGenerationGuards({
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKling26Control = usingFal && isKling26ControlVideoModel && !hasKling26ControlStillImage;
+    const requiresSelectedImageForScail = usingFal && isScailVideoModel && !hasScailStillImage;
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const requiresSourceAudioForVideoInput = usingFal && isVideoMode && isAudioInputMode && !hasSourceAudio;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
@@ -113,6 +130,7 @@ export function useGenerationGuards({
       requiresSelectedImageForWanAnimate ||
       requiresSelectedImageForOneToAll ||
       requiresSelectedImageForKling26Control ||
+      requiresSelectedImageForScail ||
       requiresSourceVideoForVideoInput ||
       requiresSourceAudioForVideoInput ||
       editConstraintsActive;
@@ -137,6 +155,14 @@ export function useGenerationGuards({
           }
           return hasWanAnimateStillImage
             ? 'Describe the motion or scene you want to animate...'
+            : 'Select a reference image to animate...';
+        }
+        if (isScailVideoModel) {
+          if (!hasSourceVideo) {
+            return 'Select a motion video, then select a reference image to animate...';
+          }
+          return hasScailStillImage
+            ? 'Describe the motion you want to apply to the reference image...'
             : 'Select a reference image to animate...';
         }
         if (isKling26ControlVideoModel) {
@@ -214,6 +240,7 @@ export function useGenerationGuards({
 	    isKlingO1VideoInputMode,
 	    isKlingVideoModel,
 	    isWanAnimateVideoModel,
+      isScailVideoModel,
       isInfinitalkVideoModel,
       isLipsyncVideoModel,
       isOneToAllAnimateVideoModel,

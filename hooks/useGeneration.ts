@@ -11,6 +11,7 @@ import {
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
+  SCAIL_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
@@ -321,6 +322,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID
         || falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID
         || falVideoModelIdForRun === KLING_26_CONTROL_VIDEO_MODEL_ID
+        || falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID
       );
     const primaryImageIdForRun = shouldPreferSelectedStillImage
       ? resolveSelectedStillImageId(basePrimaryImageIdForRun, selectedImageIds, images)
@@ -358,13 +360,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
 	    const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
       const isKling26ControlVideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_CONTROL_VIDEO_MODEL_ID;
-	    const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
+      const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
       const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
       const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
+      const isScailVideoModel = isVideoMode && falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID;
       const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
       const isInfinitalkVideoModel = isVideoMode && falVideoModelIdForRun === INFINITALK_VIDEO_MODEL_ID;
 	    const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
-      const isFalVideoInputMode = isWanVideoInputMode || isOneToAllAnimateVideoModel || isLipsyncVideoModel || isInfinitalkVideoModel || isKling26ControlVideoModel;
+      const isFalVideoInputMode = isWanVideoInputMode
+        || isOneToAllAnimateVideoModel
+        || isLipsyncVideoModel
+        || isInfinitalkVideoModel
+        || isKling26ControlVideoModel
+        || isScailVideoModel;
 	    const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
 	    const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
       const actualKling26ControlModelId = isKling26ControlVideoModel
@@ -411,6 +419,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
     if (usingFal && isVideoMode && isKling26ControlVideoModel && !activePrimary) {
       setError('Select a character image to guide the motion.');
+      return;
+    }
+    if (usingFal && isVideoMode && isScailVideoModel && !activePrimary) {
+      setError('Select a still image to animate with Scail.');
       return;
     }
 
@@ -526,6 +538,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('1-to-All Animate requires a still image. Capture a frame or upload an image.');
           return;
         }
+        if (isScailVideoModel && primarySelection?.mediaType === 'video') {
+          setError('Scail requires a still image. Capture a frame or upload an image.');
+          return;
+        }
 
         // For video-input modes (Kling O1 edit/refV2V or Wan enhancer), get source video URL; for other modes, require starting frame image
         let sourceVideo: CanvasImage | null = null;
@@ -541,6 +557,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 ? 'Select a video on the canvas to replace a character.'
                 : isOneToAllAnimateVideoModel
                   ? 'Select a video on the canvas to drive the animation.'
+                  : isScailVideoModel
+                    ? 'Select a video on the canvas to drive Scail.'
                   : isKling26ControlVideoModel
                     ? 'Select a motion driver video on the canvas.'
                   : isLipsyncVideoModel
@@ -604,7 +622,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setToastMessage(null);
         }
 
-        const videoSourceImage = (isWanAnimateVideoModel || isOneToAllAnimateVideoModel || isKling26ControlVideoModel)
+        const videoSourceImage = (isWanAnimateVideoModel || isOneToAllAnimateVideoModel || isKling26ControlVideoModel || isScailVideoModel)
           ? activePrimary?.element as HTMLImageElement
           : (isKlingO1VideoInputMode || isFalVideoInputMode) ? null : activePrimary?.element as HTMLImageElement;
         const referenceImagesForRun = referenceImageIdsForRun
@@ -677,6 +695,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ...(isOneToAllAnimateVideoModel ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
             resolution: oneToAllAnimateResolutionForRun,
+          } : {}),
+          ...(isScailVideoModel ? {
+            sourceVideoUrl: sourceVideoUrlForRequest,
           } : {}),
           ...(videoTailImageElement ? { tailImage: videoTailImageElement } : {}),
           ...(generateAudioForRequest !== undefined ? { generateAudio: generateAudioForRequest } : {}),

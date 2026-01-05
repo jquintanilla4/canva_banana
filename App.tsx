@@ -19,6 +19,7 @@ import {
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
+  SCAIL_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   getFalModelLabel,
@@ -241,6 +242,7 @@ export default function App() {
 
   const isKlingModel = !fal.isVideoMode && fal.falModelId === KLING_IMAGE_MODEL_ID;
   const isKlingO1FflfMode = fal.isKlingO1VideoModel && fal.klingO1Variant === 'fflf';
+  const isScailVideoModel = fal.isVideoMode && fal.falVideoModelId === SCAIL_VIDEO_MODEL_ID;
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const selection = useSelectionState({
@@ -1161,7 +1163,7 @@ export default function App() {
           isKlingO1FflfMode={isKlingO1FflfMode}
           isSeedance15FflfMode={fal.isSeedance15VideoModel}
           isKling26ControlVideoInputMode={fal.isKling26ControlVideoModel}
-          isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel}
+          isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel || isScailVideoModel}
           isWan26I2VMode={fal.isWan26I2VVideoModel}
           onError={setError}
           onImageSelect={handleImageSelection}
