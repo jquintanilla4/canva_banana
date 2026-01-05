@@ -81,31 +81,38 @@ export const WAN_CREATIVITY_OPTIONS: ReadonlyArray<{ value: WanCreativitySelecti
   { value: '4', label: '4 - Maximum enhancement' },
 ] as const;
 
-export const FAL_IMAGE_MODEL_OPTIONS = [
+const sortModelOptionsByLabel = <T extends { label: string }>(options: readonly T[]): ReadonlyArray<T> =>
+  [...options].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+
+const FAL_IMAGE_MODEL_OPTIONS_BASE = [
+  { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
+  { value: FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux2 Max' },
+  { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
+  { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream v4.5' },
-  { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
-  { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
-  { value: FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux2 Max' },
-  { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
-] as const;
+ ] as const;
 
-export const FAL_VIDEO_MODEL_OPTIONS = [
+export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_OPTIONS_BASE);
+
+const FAL_VIDEO_MODEL_OPTIONS_BASE = [
+  { value: ONE_TO_ALL_ANIMATE_MODEL_ID, label: '1-to-All Animate' },
   { value: HAILUO_IMAGE_TO_VIDEO_MODEL_ID, label: 'Hailuo 2.3' },
-  { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
+  { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
   { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
   { value: KLING_26_CONTROL_VIDEO_MODEL_ID, label: 'Kling 2.6 Control' },
-  { value: WAN_ANIMATE_MODEL_ID, label: 'Wan Animate' },
-  { value: WAN_26_I2V_MODEL_ID, label: 'Wan 2.6' },
-  { value: ONE_TO_ALL_ANIMATE_MODEL_ID, label: '1-to-All Animate' },
-  { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
-  { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
+  { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
+  { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
+  { value: WAN_26_I2V_MODEL_ID, label: 'Wan 2.6' },
+  { value: WAN_ANIMATE_MODEL_ID, label: 'Wan Animate' },
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
+
+export const FAL_VIDEO_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_VIDEO_MODEL_OPTIONS_BASE);
 
 export const HAILUO_VARIANT_OPTIONS: ReadonlyArray<{ value: HailuoVariant; label: string }> = [
   { value: 'standard', label: 'Standard' },
@@ -366,7 +373,7 @@ export const isFlux2MaxImageSizeSelectionValue = (value: unknown): value is Flux
 export const isFlux2MaxModel = (modelId: string | undefined): boolean =>
   modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
 
-export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS, ...FAL_VIDEO_MODEL_OPTIONS] as const;
+export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS_BASE, ...FAL_VIDEO_MODEL_OPTIONS_BASE] as const;
 export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];
 export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
 export type SeedreamModelId = typeof SEEDREAM_MODEL_IDS[number];
@@ -384,8 +391,8 @@ export type FalResolutionSelectionValue = FalResolutionOption;
 export type Kling26AudioSelectionValue = 'placeholder' | 'on' | 'off';
 
 export type FalModelId = FalModelOption['value'];
-export type FalImageModelId = typeof FAL_IMAGE_MODEL_OPTIONS[number]['value'];
-export type FalVideoModelId = typeof FAL_VIDEO_MODEL_OPTIONS[number]['value'];
+export type FalImageModelId = typeof FAL_IMAGE_MODEL_OPTIONS_BASE[number]['value'];
+export type FalVideoModelId = typeof FAL_VIDEO_MODEL_OPTIONS_BASE[number]['value'];
 
 export const isFalModelId = (value: string | undefined): value is FalModelId =>
   typeof value === 'string' && FAL_MODEL_OPTIONS.some(option => option.value === value);
