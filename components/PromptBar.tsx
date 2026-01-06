@@ -80,6 +80,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
   const [showKlingSuggestions, setShowKlingSuggestions] = React.useState(false);
   const [suggestionPosition, setSuggestionPosition] = React.useState<{ left: number; top: number } | null>(null);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(0);
 
   const handleSubmitShortcut = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -162,16 +163,26 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     return Array.from({ length: klingReferenceCount }, (_, idx) => `@Image${idx + 1}`);
   }, [klingReferenceCount, klingSuggestionOptions, klingSuggestionsEnabled]);
 
+  useEffect(() => {
+    if (!showKlingSuggestions || klingOptions.length === 0) {
+      setActiveSuggestionIndex(0);
+      return;
+    }
+    setActiveSuggestionIndex(prev => Math.min(Math.max(prev, 0), klingOptions.length - 1));
+  }, [klingOptions.length, showKlingSuggestions]);
+
   const handlePromptChange = (value: string, selectionStart: number | null) => {
     onPromptChange(value);
     if (!klingSuggestionsEnabled || klingOptions.length === 0) {
       setShowKlingSuggestions(false);
+      setActiveSuggestionIndex(0);
       return;
     }
     const caret = selectionStart ?? value.length;
     const charBeforeCaret = value.charAt(Math.max(0, caret - 1));
     if (charBeforeCaret === '@') {
       setShowKlingSuggestions(true);
+      setActiveSuggestionIndex(0);
       const textarea = textareaRef.current;
       if (textarea) {
         const { offsetLeft, offsetTop } = textarea;
@@ -194,7 +205,45 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     } else {
       setShowKlingSuggestions(false);
       setSuggestionPosition(null);
+      setActiveSuggestionIndex(0);
     }
+  };
+
+  const handlePromptKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      handleSubmitShortcut(event);
+      return;
+    }
+    if (!showKlingSuggestions || klingOptions.length === 0) {
+      handleSubmitShortcut(event);
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveSuggestionIndex(prev => (prev + 1) % klingOptions.length);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveSuggestionIndex(prev => (prev - 1 + klingOptions.length) % klingOptions.length);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const suggestion = klingOptions[activeSuggestionIndex] ?? klingOptions[0];
+      if (suggestion) {
+        insertKlingSuggestion(suggestion);
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      setShowKlingSuggestions(false);
+      setSuggestionPosition(null);
+      setActiveSuggestionIndex(0);
+      return;
+    }
+    handleSubmitShortcut(event);
   };
 
   const insertKlingSuggestion = (suggestion: string) => {
@@ -216,6 +265,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       textarea.focus();
     });
     setShowKlingSuggestions(false);
+    setActiveSuggestionIndex(0);
   };
 
   const resolvedPlaceholder = promptPlaceholder ?? (
@@ -272,7 +322,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               ref={textareaRef}
               value={prompt}
               onChange={(e) => handlePromptChange(e.target.value, e.target.selectionStart)}
-              onKeyDown={handleSubmitShortcut}
+              onKeyDown={handlePromptKeyDown}
               placeholder={resolvedPlaceholder}
               disabled={inputDisabled || isLoading}
               rows={3}
@@ -283,17 +333,23 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             {showKlingSuggestions && klingOptions.length > 0 && suggestionPosition && (
               <div className="absolute z-20" style={{ left: suggestionPosition.left, top: suggestionPosition.top }}>
                 <div className="mt-1 w-40 rounded-md border border-gray-700 bg-gray-800 shadow-lg">
-                  {klingOptions.map(option => (
+                  {klingOptions.map((option, index) => {
+                    const isActive = index === activeSuggestionIndex;
+                    return (
                     <button
                       key={option}
+                      id={`kling-suggestion-${index}`}
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
+                      onMouseEnter={() => setActiveSuggestionIndex(index)}
                       onClick={() => insertKlingSuggestion(option)}
-                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700"
+                      className={`w-full text-left px-3 py-2 text-sm text-white ${isActive ? 'bg-gray-700' : 'hover:bg-gray-700'}`}
+                      aria-selected={isActive}
                     >
                       {option}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

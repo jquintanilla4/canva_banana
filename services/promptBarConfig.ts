@@ -24,6 +24,8 @@ import type {
   Seedance15DurationSelectionValue,
   Wan26DurationSelectionValue,
   Wan26ResolutionSelectionValue,
+  Wan26ImageAspectRatioSelectionValue,
+  Wan26ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -88,6 +90,9 @@ import {
   WAN_26_DURATION_OPTIONS,
   WAN_26_PROMPT_EXPANSION_OPTIONS,
   WAN_26_MULTI_SHOTS_OPTIONS,
+  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_26_IMAGE_ASPECT_RATIO_OPTIONS,
+  WAN_26_IMAGE_MAX_IMAGES_OPTIONS,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
 } from './modelConfig';
 
@@ -114,6 +119,7 @@ export type PromptBarControlsInput = {
   isReveModel: boolean;
   isKlingModel: boolean;
   isFlux2MaxModel: boolean;
+  isWan26ImageModel: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
   isKlingO1VideoModel: boolean;
@@ -160,6 +166,8 @@ export type PromptBarControlsInput = {
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
+  wan26ImageAspectRatio: Wan26ImageAspectRatioSelectionValue;
+  wan26ImageMaxImages: Wan26ImageMaxImagesSelectionValue;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -203,6 +211,8 @@ export type PromptBarControlsInput = {
   onSeedance15CameraFixedChange: (value: boolean) => void;
   onSeedance15AudioChange: (value: boolean) => void;
   onFlux2MaxImageSizeChange: (value: string) => void;
+  onWan26ImageAspectRatioChange: (value: string) => void;
+  onWan26ImageMaxImagesChange: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -227,6 +237,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isReveModel,
     isKlingModel,
     isFlux2MaxModel,
+    isWan26ImageModel,
     isUpscaleModel,
     isKlingVideoModel,
     isKlingO1VideoModel,
@@ -273,6 +284,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     seedance15CameraFixed,
     seedance15Audio,
     flux2MaxImageSize,
+    wan26ImageAspectRatio,
+    wan26ImageMaxImages,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -316,6 +329,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onSeedance15CameraFixedChange,
     onSeedance15AudioChange,
     onFlux2MaxImageSizeChange,
+    onWan26ImageAspectRatioChange,
+    onWan26ImageMaxImagesChange,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -813,6 +828,29 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
+  // Wan 2.6 Image controls
+  if (!isVideoMode && usingFal && isWan26ImageModel) {
+    controls.push({
+      id: 'wan26-image-max-images-select',
+      prefixLabel: 'Images',
+      ariaLabel: 'Select number of images to generate',
+      options: WAN_26_IMAGE_MAX_IMAGES_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan26ImageMaxImages,
+      onChange: onWan26ImageMaxImagesChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan26-image-aspect-ratio-select',
+      prefixLabel: 'Aspect Ratio',
+      ariaLabel: 'Select output aspect ratio',
+      options: WAN_26_IMAGE_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan26ImageAspectRatio,
+      onChange: onWan26ImageAspectRatioChange,
+      disabled: isLoading,
+    });
+  }
+
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && (falModelId === SEEDREAM_MODEL_ID || falModelId === SEEDREAM_V45_MODEL_ID);
   if (shouldShowSeedreamImageSizeControl) {
     const seedreamImageSizeOptions = getSeedreamImageSizeOptions(falModelId);
@@ -880,4 +918,4 @@ export const getPromptBarModelOptions = (mode: FalModelMode): ReadonlyArray<FalM
   mode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
 
 export const shouldShowKlingNegativePrompt = (falModelId: FalVideoModelId | string): boolean =>
-  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_26_VIDEO_MODEL_ID || falModelId === KLING_IMAGE_MODEL_ID || falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
+  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_26_VIDEO_MODEL_ID || falModelId === KLING_IMAGE_MODEL_ID || falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID || falModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;

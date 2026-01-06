@@ -22,6 +22,8 @@ import {
   SCAIL_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
+  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
   getMaxReferenceImages,
   isKlingO1VideoModelId,
@@ -155,6 +157,9 @@ export default function App() {
     shouldShowVideoNegativePrompt,
   } = useVideoNegativePrompt({ isVideoMode: fal.isVideoMode, falVideoModelId: fal.falVideoModelId });
 
+  // Negative prompt state for Wan 2.6 Image model
+  const [wan26ImageNegativePrompt, setWan26ImageNegativePrompt] = useState<string>(WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT);
+
   // Toggles display of metadata overlays on canvas images
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
 
@@ -232,6 +237,11 @@ export default function App() {
     }
     if (fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID) {
       setToastMessage('Reve remix supports up to 6 images total (1 primary + 5 references). Use @Image1, @Image2, etc. in your prompt to reference them.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+    if (fal.falModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
+      setToastMessage('Wan 2.6 Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.');
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
@@ -852,7 +862,7 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel,
+    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
     referenceImageIds,
@@ -899,7 +909,7 @@ export default function App() {
     }
   }, [fal.isLipsyncVideoModel, sourceVideoId, sourceAudioId, images]);
 
-  // Build prompt mention suggestions for Kling based on current reference/element selections.
+  // Build prompt mention suggestions for Kling/Wan based on current reference/element selections.
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
     isKlingModel,
     isKlingO1VideoModel: fal.isKlingO1VideoModel,
@@ -907,6 +917,7 @@ export default function App() {
     isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
     isReveModel,
     isFlux2MaxModel: fal.isFlux2MaxModel,
+    isWan26ImageModel: fal.isWan26ImageModel,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds,
@@ -1006,6 +1017,9 @@ export default function App() {
         seedance15CameraFixed: fal.seedance15CameraFixed,
         seedance15Audio: fal.seedance15Audio,
         flux2MaxImageSize: fal.flux2MaxImageSize,
+        isWan26ImageModel: fal.isWan26ImageModel,
+        wan26ImageAspectRatio: fal.wan26ImageAspectRatio,
+        wan26ImageMaxImages: fal.wan26ImageMaxImages,
 	    falScaleFactor: fal.falScaleFactor,
 	    falCreativity: fal.falCreativity,
 	    falNoiseScale: fal.falNoiseScale,
@@ -1049,6 +1063,8 @@ export default function App() {
         onSeedance15CameraFixedChange: fal.handleSeedance15CameraFixedChange,
         onSeedance15AudioChange: fal.handleSeedance15AudioChange,
         onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
+        onWan26ImageAspectRatioChange: fal.handleWan26ImageAspectRatioChange,
+        onWan26ImageMaxImagesChange: fal.handleWan26ImageMaxImagesChange,
 	    onFalScaleFactorChange: fal.handleFalScaleFactorChange,
 	    onFalCreativityChange: fal.handleFalCreativityChange,
 	    onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
@@ -1065,8 +1081,11 @@ export default function App() {
     blindTestMappingRef.current,
     blindTestEnabled,
   );
-  const promptOutlineColor = shouldShowVideoNegativePrompt ? '#34d399' : undefined;
-  const negativePromptOutlineColor = shouldShowVideoNegativePrompt ? '#f87171' : undefined;
+  const shouldShowNegativePrompt = shouldShowVideoNegativePrompt || fal.isWan26ImageModel;
+  const promptOutlineColor = shouldShowNegativePrompt ? '#34d399' : undefined;
+  const negativePromptOutlineColor = shouldShowNegativePrompt ? '#f87171' : undefined;
+  const activeNegativePrompt = fal.isWan26ImageModel ? wan26ImageNegativePrompt : videoNegativePrompt;
+  const activeNegativePromptSetter = fal.isWan26ImageModel ? setWan26ImageNegativePrompt : setVideoNegativePrompt;
 
 
   // TSX (React with Tailwind CSS utility classes)
@@ -1285,17 +1304,19 @@ export default function App() {
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
           promptPlaceholder={
-            isKlingModel || fal.isKlingO1VideoModel || fal.isFlux2MaxModel
-              ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
-              : promptPlaceholderText
+            fal.isWan26ImageModel
+              ? 'Describe your generation, or your edit, or use @ to reference images (4 images in total)... (Cmd/Ctrl + Enter to generate)'
+              : isKlingModel || fal.isKlingO1VideoModel || fal.isFlux2MaxModel
+                ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
+                : promptPlaceholderText
           }
-          showNegativePrompt={shouldShowVideoNegativePrompt}
-          negativePrompt={videoNegativePrompt}
-          onNegativePromptChange={setVideoNegativePrompt}
-          negativePromptPlaceholder="Describe what the video should avoid... (optional)"
+          showNegativePrompt={shouldShowNegativePrompt}
+          negativePrompt={activeNegativePrompt}
+          onNegativePromptChange={activeNegativePromptSetter}
+          negativePromptPlaceholder={fal.isWan26ImageModel ? 'Describe what the image should avoid... (optional)' : 'Describe what the video should avoid... (optional)'}
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
-          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel}
+          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
         />

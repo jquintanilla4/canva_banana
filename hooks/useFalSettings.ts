@@ -22,6 +22,7 @@ import {
   INFINITALK_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_26_I2V_MODEL_ID,
+  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -34,6 +35,8 @@ import {
   normalizeFalModelId,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
+  isWan26ImageAspectRatioSelectionValue,
+  isWan26ImageMaxImagesSelectionValue,
 } from '../services/modelConfig';
 import type {
   FalAspectRatioSelectionValue,
@@ -62,6 +65,8 @@ import type {
   Seedance15DurationSelectionValue,
   Wan26DurationSelectionValue,
   Wan26ResolutionSelectionValue,
+  Wan26ImageAspectRatioSelectionValue,
+  Wan26ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -90,6 +95,7 @@ type FalDerivedState = {
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isFlux2MaxModel: boolean;
+  isWan26ImageModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -134,6 +140,8 @@ type FalHandlers = {
   handleSeedance15CameraFixedChange: (value: boolean) => void;
   handleSeedance15AudioChange: (value: boolean) => void;
   handleFlux2MaxImageSizeChange: (value: string) => void;
+  handleWan26ImageAspectRatioChange: (value: string) => void;
+  handleWan26ImageMaxImagesChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -182,6 +190,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
+  wan26ImageAspectRatio: Wan26ImageAspectRatioSelectionValue;
+  wan26ImageMaxImages: Wan26ImageMaxImagesSelectionValue;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -227,6 +237,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setSeedance15CameraFixed: Dispatch<SetStateAction<boolean>>;
   setSeedance15Audio: Dispatch<SetStateAction<boolean>>;
   setFlux2MaxImageSize: Dispatch<SetStateAction<Flux2MaxImageSizeSelectionValue>>;
+  setWan26ImageAspectRatio: Dispatch<SetStateAction<Wan26ImageAspectRatioSelectionValue>>;
+  setWan26ImageMaxImages: Dispatch<SetStateAction<Wan26ImageMaxImagesSelectionValue>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -276,6 +288,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [seedance15CameraFixed, setSeedance15CameraFixed] = useState<boolean>(false);
   const [seedance15Audio, setSeedance15Audio] = useState<boolean>(false);
   const [flux2MaxImageSize, setFlux2MaxImageSize] = useState<Flux2MaxImageSizeSelectionValue>('landscape_4_3');
+  const [wan26ImageAspectRatio, setWan26ImageAspectRatio] = useState<Wan26ImageAspectRatioSelectionValue>('landscape_16_9');
+  const [wan26ImageMaxImages, setWan26ImageMaxImages] = useState<Wan26ImageMaxImagesSelectionValue>('1');
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -301,6 +315,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
+  const isWan26ImageModel = !isVideoMode && falImageModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -620,6 +635,18 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleWan26ImageAspectRatioChange = useCallback((value: string) => {
+    if (isWan26ImageAspectRatioSelectionValue(value)) {
+      setWan26ImageAspectRatio(value);
+    }
+  }, []);
+
+  const handleWan26ImageMaxImagesChange = useCallback((value: string) => {
+    if (isWan26ImageMaxImagesSelectionValue(value)) {
+      setWan26ImageMaxImages(value);
+    }
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -714,7 +741,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     seedance15CameraFixed,
     seedance15Audio,
     flux2MaxImageSize,
+    wan26ImageAspectRatio,
+    wan26ImageMaxImages,
     isFlux2MaxModel,
+    isWan26ImageModel,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -775,6 +805,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSeedance15CameraFixedChange,
     handleSeedance15AudioChange,
     handleFlux2MaxImageSizeChange,
+    handleWan26ImageAspectRatioChange,
+    handleWan26ImageMaxImagesChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -820,6 +852,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance15CameraFixed,
     setSeedance15Audio,
     setFlux2MaxImageSize,
+    setWan26ImageAspectRatio,
+    setWan26ImageMaxImages,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

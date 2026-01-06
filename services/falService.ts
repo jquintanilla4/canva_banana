@@ -166,6 +166,9 @@ interface GenerateImageEditOptions {
   aspectRatio?: FalAspectRatioOption;
   numImages?: number;
   resolution?: FalResolutionOption;
+  wan26ImageSize?: string;
+  wan26ImageMaxImages?: string;
+  negativePrompt?: string;
 }
 
 interface GenerateImageOptions {
@@ -178,6 +181,9 @@ interface GenerateImageOptions {
   resolution?: FalResolutionOption;
   referenceImages?: HTMLImageElement[];
   flux2MaxImageSize?: string;
+  wan26ImageSize?: string;
+  wan26ImageMaxImages?: string;
+  negativePrompt?: string;
 }
 
 interface UpscaleImageOptions {
@@ -305,7 +311,15 @@ export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer';
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video';
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video';
+export const WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image';
+export const WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image';
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video';
+
+// Convert @Image1, @Image2, etc. to Wan 2.6 Image's format "image 1", "image 2", etc.
+// User-facing mentions are 1-indexed, API expects 1-indexed "image N" format
+const convertWan26ImageMentions = (prompt: string): string => {
+  return prompt.replace(/@Image(\d+)/g, (_, num) => `image ${num}`);
+};
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && Object.getPrototypeOf(value) === Object.prototype;
@@ -951,6 +965,115 @@ export const generateImageEdit = async ({
     return { imageBase64: primaryBase64, imagesBase64: base64List, text: '', requestId };
   }
 
+  // Wan 2.6 Image I2I model - uses image_urls array with @Image → "image N" conversion
+  const isWan26ImageModel = modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  if (isWan26ImageModel) {
+    const hasReferenceImages = referenceImages && referenceImages.length > 0;
+    let latestRequestId: string | undefined;
+
+    // Build image URLs array: base image first, then reference images
+    const allImageUrls = [baseImageUrl];
+    if (hasReferenceImages) {
+      const referenceUrls = await collectReferenceUploadUrls(referenceImages);
+      allImageUrls.push(...referenceUrls);
+    }
+
+    // Limit to 3 images as per API spec (I2I endpoint)
+    if (allImageUrls.length > 3) {
+      throw new Error('Wan 2.6 Image supports up to 3 images total. Please reduce the number of selected images.');
+    }
+
+    // Convert @Image1, @Image2, etc. to "image 1", "image 2", etc.
+    const convertedPrompt = convertWan26ImageMentions(prompt);
+
+    const wan26Body: {
+      prompt: string;
+      image_urls: string[];
+      image_size?: string;
+      num_images?: number;
+      negative_prompt?: string;
+      enable_prompt_expansion?: boolean;
+      enable_safety_checker?: boolean;
+    } = {
+      prompt: convertedPrompt,
+      image_urls: allImageUrls,
+      image_size: options.wan26ImageSize ?? 'landscape_16_9',
+      enable_safety_checker: true,
+    };
+
+    // num_images for I2I is capped at 4
+    const numImages = parseInt(options.wan26ImageMaxImages ?? '1', 10);
+    wan26Body.num_images = Math.min(4, Math.max(1, numImages));
+
+    if (options.negativePrompt) {
+      wan26Body.negative_prompt = options.negativePrompt;
+    }
+
+    const i2iModelId = WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID;
+    logFalEvent('outbound', i2iModelId, 'Outbound request (fal.subscribe)', { input: wan26Body });
+
+    let result: Awaited<ReturnType<typeof fal.subscribe>>;
+    try {
+      result = await fal.subscribe(i2iModelId, {
+        input: wan26Body,
+        logs: true,
+        onQueueUpdate: update => {
+          const queueUpdate = update as unknown as FalQueueUpdate;
+          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+          if (resolvedRequestId) {
+            latestRequestId = resolvedRequestId;
+          }
+          logFalEvent('inbound', i2iModelId, 'Queue update', {
+            status: queueUpdate.status,
+            position: queueUpdate.position,
+            eta: queueUpdate.eta,
+            requestId: resolvedRequestId,
+            logs: normalizedLogs.map(log => log?.message ?? ''),
+          });
+          options.onQueueUpdate?.({
+            ...queueUpdate,
+            requestId: resolvedRequestId || '',
+            logs: normalizedLogs,
+          });
+        },
+      });
+    } catch (error) {
+      logFalEvent('error', i2iModelId, 'Request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logFalEvent('inbound', i2iModelId, 'Result received', {
+      requestId: result?.requestId || latestRequestId,
+      data: (result?.data as Record<string, unknown>) ?? undefined,
+    });
+
+    const data = result?.data as { images?: Array<{ url: string }> } | undefined;
+    const images = data?.images;
+    if (!images || images.length === 0) {
+      throw new Error('Fal.ai Wan 2.6 Image I2I API did not return an image.');
+    }
+
+    const inlineDataList = await Promise.all(images.map(img => extractInlineData(img.url)));
+    const base64List = inlineDataList.map(dataUrl => {
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) {
+        throw new Error('Failed to extract image data from Fal.ai Wan 2.6 Image I2I response.');
+      }
+      return base64;
+    });
+
+    const [primaryBase64] = base64List;
+    if (!primaryBase64) {
+      throw new Error('Failed to extract image data from Fal.ai Wan 2.6 Image I2I response.');
+    }
+
+    const requestId = result?.requestId || latestRequestId;
+    return { imageBase64: primaryBase64, imagesBase64: base64List, text: '', requestId };
+  }
+
   const isSeedreamModel = isSeedreamEditModelId(modelId);
   const referenceImageCount = referenceImages?.length ?? 0;
   if (isSeedreamModel && referenceImageCount > 0) {
@@ -1313,6 +1436,7 @@ export const generateImage = async (
   const isNanoBananaTextToImage = modelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
+  const isWan26ImageTextToImage = modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const supportsAspectRatio = isNanoBananaTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
   const supportsResolution = isNanoBananaTextToImage || isKlingTextToImage;
   const numImagesOption = options.numImages;
@@ -1354,6 +1478,20 @@ export const generateImage = async (
     body.output_format = 'png';
     const flux2ImageSize = options.flux2MaxImageSize ?? 'landscape_4_3';
     body.image_size = flux2ImageSize;
+  }
+
+  // Wan 2.6 Image T2I specific settings
+  if (isWan26ImageTextToImage) {
+    const wan26Body = body as Record<string, unknown>;
+    wan26Body.image_size = options.wan26ImageSize ?? 'landscape_16_9';
+    const maxImages = parseInt(options.wan26ImageMaxImages ?? '1', 10);
+    wan26Body.max_images = Math.min(5, Math.max(1, maxImages));
+    if (options.negativePrompt) {
+      wan26Body.negative_prompt = options.negativePrompt;
+    }
+    wan26Body.enable_safety_checker = true;
+    delete wan26Body.output_format;
+    delete wan26Body.sync_mode;
   }
 
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {

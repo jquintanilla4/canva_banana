@@ -51,6 +51,8 @@ export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as c
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
 export const SCAIL_VIDEO_MODEL_ID = 'fal-ai/scail' as const;
+export const WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
+export const WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 export type HailuoVariant = 'standard' | 'pro';
@@ -64,6 +66,7 @@ export const WAN_DEFAULT_NEGATIVE_PROMPT =
   'oversaturated, overexposed, static, blurry details, subtitles, stylized, artwork, painting, still frame, overall gray, worst quality, low quality, JPEG artifacts, ugly, mutated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, static motion, cluttered background, three legs, crowded background, walking backwards';
 export const ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT =
   'black background, Aerial view, aerial view, overexposed, low quality, deformation, a poor composition, bad hands, bad teeth, bad eyes, bad limbs, distortion';
+export const WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT = 'low resolution, error, worst quality, low quality, deformed, extra fingers';
 
 export type WanTargetResolution = '720p' | '1080p';
 export type WanCreativity = 0 | 1 | 2 | 3 | 4;
@@ -94,6 +97,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream v4.5' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
+  { value: WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Wan 2.6 Image' },
  ] as const;
 
 export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_OPTIONS_BASE);
@@ -375,6 +379,36 @@ export const isFlux2MaxImageSizeSelectionValue = (value: unknown): value is Flux
 export const isFlux2MaxModel = (modelId: string | undefined): boolean =>
   modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
 
+// Wan 2.6 Image options
+export type Wan26ImageAspectRatioSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
+export type Wan26ImageMaxImagesSelectionValue = '1' | '2' | '3' | '4' | '5';
+
+export const WAN_26_IMAGE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan26ImageAspectRatioSelectionValue; label: string }> = [
+  { value: 'landscape_16_9', label: 'Landscape 16:9' },
+  { value: 'landscape_4_3', label: 'Landscape 4:3' },
+  { value: 'portrait_16_9', label: 'Portrait 16:9' },
+  { value: 'portrait_4_3', label: 'Portrait 4:3' },
+  { value: 'square_hd', label: 'Square HD' },
+  { value: 'square', label: 'Square' },
+] as const;
+
+export const WAN_26_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan26ImageMaxImagesSelectionValue; label: string }> = [
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4' },
+  { value: '5', label: '5' },
+] as const;
+
+export const isWan26ImageModel = (modelId: string | undefined): boolean =>
+  modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+
+export const isWan26ImageAspectRatioSelectionValue = (value: unknown): value is Wan26ImageAspectRatioSelectionValue =>
+  value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
+
+export const isWan26ImageMaxImagesSelectionValue = (value: unknown): value is Wan26ImageMaxImagesSelectionValue =>
+  value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
+
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS_BASE, ...FAL_VIDEO_MODEL_OPTIONS_BASE] as const;
 export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];
 export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
@@ -567,6 +601,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [KLING_IMAGE_MODEL_ID]: 10,
   [REVE_TEXT_TO_IMAGE_MODEL_ID]: 5, // Reve remix supports up to 6 total images (1 primary + 5 references)
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
+  [WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID]: 3, // Wan 2.6 Image supports up to 4 total images (1 primary + 3 references)
   [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [KLING_O1_VIDEO_MODEL_ID]: 6,
   [KLING_O1_VIDEO_EDIT_MODEL_ID]: 4,
