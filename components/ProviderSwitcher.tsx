@@ -59,7 +59,7 @@ export const ProviderSwitcher: React.FC<ProviderSwitcherProps> = ({
           onClick={showPopout}
           disabled={disabled}
           aria-expanded={isPopoutOpen}
-          className="rounded-xl border border-slate-500/60 bg-slate-900/90 px-3 py-1.5 text-sm font-semibold uppercase tracking-[0.06em] text-slate-100 shadow-lg transition-colors duration-200 hover:border-slate-300/80 hover:text-white disabled:border-slate-500/40 disabled:text-slate-400 disabled:cursor-not-allowed"
+          className="rounded-md border border-slate-500/60 bg-slate-900/90 px-3 py-1.5 text-sm font-semibold uppercase tracking-[0.06em] text-slate-100 shadow-lg transition-colors duration-200 hover:border-slate-300/80 hover:text-white disabled:border-slate-500/40 disabled:text-slate-400 disabled:cursor-not-allowed"
         >
           Cloud
         </button>
