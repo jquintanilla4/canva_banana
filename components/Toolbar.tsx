@@ -60,16 +60,20 @@ const ModeButton: React.FC<{
   onClick: () => void;
   children: React.ReactNode;
   disabled?: boolean;
-}> = ({ label, isActive, onClick, children, disabled }) => (
+  showHintLine?: boolean;
+}> = ({ label, isActive, onClick, children, disabled, showHintLine = false }) => (
   <button
     onClick={onClick}
-    className={`flex h-8 items-center px-3 text-sm font-semibold rounded-md transition-colors duration-200 ${
+    className={`relative flex h-8 items-center px-3 text-sm font-semibold rounded-md transition-colors duration-200 ${
       isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
     } disabled:opacity-50 disabled:cursor-not-allowed`}
     title={label}
     disabled={disabled}
   >
     {children}
+    {showHintLine && (
+      <span className="pointer-events-none absolute left-1/2 top-full mt-1 h-0.5 w-5 -translate-x-1/2 rounded-full bg-white/80" />
+    )}
   </button>
 );
 
@@ -166,6 +170,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               handleModeMenuOpen();
               scheduleMenuClose();
             }}
+            showHintLine
           >
             {activeModeLabel}
           </ModeButton>
