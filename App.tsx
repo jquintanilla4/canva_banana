@@ -758,6 +758,8 @@ export default function App() {
     onDelete: handleDelete,
     onRecordToggle: handleRecordToggle,
     onAdjustStrokeSize: handleAdjustStrokeSize,
+    onUndo: undo,
+    onRedo: redo,
   });
 
   const handleUploadClick = () => {

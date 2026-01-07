@@ -860,6 +860,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       ref={containerRef}
       className="relative w-full h-full min-h-0 bg-black overflow-hidden outline-none focus:outline-none"
       tabIndex={0}
+      data-canvas-root="true"
       style={{
         backgroundImage,
         backgroundSize: `${gridSpacing}px ${gridSpacing}px`,

@@ -12,6 +12,8 @@ type KeyboardShortcutsArgs = {
   onDelete?: () => void;
   onRecordToggle?: () => void;
   onAdjustStrokeSize?: (delta: number) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
 };
 
 export function useKeyboardShortcuts({
@@ -25,6 +27,8 @@ export function useKeyboardShortcuts({
   onDelete,
   onRecordToggle,
   onAdjustStrokeSize,
+  onUndo,
+  onRedo,
 }: KeyboardShortcutsArgs) {
   useEffect(() => {
     // Guard against hijacking shortcuts while typing in inputs.
@@ -35,6 +39,14 @@ export function useKeyboardShortcuts({
       }
       const tagName = el.tagName;
       return tagName === 'INPUT' || tagName === 'TEXTAREA' || el.isContentEditable || !!el.closest('input, textarea, [contenteditable="true"]');
+    };
+
+    const isCanvasFocused = (): boolean => {
+      const activeElement = document.activeElement;
+      if (!activeElement || !(activeElement instanceof HTMLElement)) {
+        return false;
+      }
+      return Boolean(activeElement.closest('[data-canvas-root="true"]'));
     };
 
     const handleKeyboardShortcuts = (event: KeyboardEvent) => {
@@ -54,6 +66,18 @@ export function useKeyboardShortcuts({
       }
 
       const key = event.key.toLowerCase();
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.shiftKey && isCanvasFocused()) {
+        if (key === 'z' && onUndo) {
+          event.preventDefault();
+          onUndo();
+          return;
+        }
+        if (key === 'y' && onRedo) {
+          event.preventDefault();
+          onRedo();
+          return;
+        }
+      }
       if ((key === 'delete' || key === 'backspace') && onDelete) {
         event.preventDefault();
         onDelete();
@@ -124,5 +148,5 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [appMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut, setTool]);
+  }, [appMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onRedo, onUndo, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut, setTool]);
 }
