@@ -3,7 +3,6 @@ import {
   Tool,
   Path,
   ImageDimensions,
-  InpaintMode,
   FalImageSizeOption,
   FalAspectRatioOption,
   FalResolutionOption,
@@ -32,7 +31,6 @@ interface GenerateImageEditParams {
   tool: Tool;
   paths: Path[];
   imageDimensions: ImageDimensions;
-  inpaintMode: InpaintMode;
   referenceImages?: HTMLImageElement[];
 }
 
@@ -527,49 +525,6 @@ const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimen
   return canvas;
 };
 
-const buildMaskCanvas = (paths: Path[], dimensions: ImageDimensions) => {
-  const canvas = document.createElement('canvas');
-  const width = dimensions.width || 1;
-  const height = dimensions.height || 1;
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('Unable to create mask canvas context');
-  }
-
-  ctx.fillStyle = 'black';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  paths.forEach(path => {
-    if (path.points.length === 0) return;
-
-    if (path.tool === Tool.ERASE) {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.strokeStyle = 'rgba(0,0,0,1)';
-    } else {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = 'white';
-    }
-
-    ctx.lineWidth = path.size;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    path.points.forEach((point, index) => {
-      if (index === 0) {
-        ctx.moveTo(point.x, point.y);
-      } else {
-        ctx.lineTo(point.x, point.y);
-      }
-    });
-    ctx.stroke();
-  });
-
-  ctx.globalCompositeOperation = 'source-over';
-  return canvas;
-};
-
 const collectReferenceUploadUrls = async (referenceImages: HTMLImageElement[] = []) => {
   return Promise.all(referenceImages.map(img => uploadImageElementToFal(img)));
 };
@@ -640,33 +595,30 @@ export const generateImageEdit = async ({
   tool,
   paths,
   imageDimensions,
-  inpaintMode,
   referenceImages,
 }: GenerateImageEditParams, options: GenerateImageEditOptions = {}): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => {
   ensureFalClientConfigured();
 
+  const modelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
+  const isSeedreamAnnotateSingle = tool === Tool.ANNOTATE && isSeedreamEditModelId(modelId);
   const imageUrls: string[] = [];
+  let annotationImageUrl: string | undefined;
 
   const baseImageUrl = await uploadImageElementToFal(image);
-  imageUrls.push(baseImageUrl);
+  if (!isSeedreamAnnotateSingle) {
+    imageUrls.push(baseImageUrl);
+  }
 
   if (tool === Tool.ANNOTATE) {
     const annotationCanvas = buildAnnotationCanvas(image, paths, imageDimensions);
-    imageUrls.push(await uploadCanvasToFal(annotationCanvas));
-  } else if (tool === Tool.INPAINT) {
-    const maskCanvas = buildMaskCanvas(paths, imageDimensions);
-    const maskUrl = await uploadCanvasToFal(maskCanvas);
-    const modePrefix = inpaintMode === 'STRICT' ? '[REPLACE_ONLY_MASKED_REGION] ' : '';
-    prompt = `${modePrefix}${prompt}`;
-    imageUrls.push(maskUrl);
+    annotationImageUrl = await uploadCanvasToFal(annotationCanvas);
+    imageUrls.push(annotationImageUrl);
   }
 
   if (referenceImages && referenceImages.length > 0) {
     const referenceUrls = await collectReferenceUploadUrls(referenceImages);
     imageUrls.push(...referenceUrls);
   }
-
-  const modelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
 
   // Reve model - detect whether to use edit (single image) or remix (multiple images)
   const isReveModel = modelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
@@ -873,8 +825,11 @@ export const generateImageEdit = async ({
     const hasReferenceImages = referenceImages && referenceImages.length > 0;
     let latestRequestId: string | undefined;
 
-    // Build image URLs array: base image first, then reference images
-    const allImageUrls = [baseImageUrl];
+    // Build image URLs array: base or annotation image first, then reference images
+    const primaryImageUrl = tool === Tool.ANNOTATE && annotationImageUrl
+      ? annotationImageUrl
+      : baseImageUrl;
+    const allImageUrls = [primaryImageUrl];
     if (hasReferenceImages) {
       const referenceUrls = await collectReferenceUploadUrls(referenceImages);
       allImageUrls.push(...referenceUrls);
@@ -1077,8 +1032,9 @@ export const generateImageEdit = async ({
   const isSeedreamModel = isSeedreamEditModelId(modelId);
   const referenceImageCount = referenceImages?.length ?? 0;
   if (isSeedreamModel && referenceImageCount > 0) {
-    const auxiliaryImageCount = tool === Tool.ANNOTATE || tool === Tool.INPAINT ? 1 : 0;
-    const expectedImageCount = 1 + auxiliaryImageCount + referenceImageCount;
+    const auxiliaryImageCount = tool === Tool.ANNOTATE ? 1 : 0;
+    const baseImageCount = isSeedreamAnnotateSingle ? 0 : 1;
+    const expectedImageCount = baseImageCount + auxiliaryImageCount + referenceImageCount;
     if (imageUrls.length < expectedImageCount) {
       logFalEvent('error', modelId, 'Seedream edit missing reference images', {
         expectedImageCount,

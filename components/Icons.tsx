@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaMagic, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret } from 'react-icons/fa';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
 import { RxCursorArrow, RxFontSize } from 'react-icons/rx';
 import type { IconBaseProps } from 'react-icons';
@@ -13,7 +13,6 @@ export const SelectionIcon = FaMousePointer as React.FC<IconProps>;
 export const PanIcon = FaHandPaper as React.FC<IconProps>;
 export const FreeSelectionIcon = RxCursorArrow as React.FC<IconProps>;
 export const AnnotateIcon = FaPencilAlt as React.FC<IconProps>;
-export const InpaintIcon = FaMagic as React.FC<IconProps>;
 export const EraseIcon = FaEraser as React.FC<IconProps>;
 export const NoteIcon = FaStickyNote as React.FC<IconProps>;
 export const BrushIcon = FaPaintBrush as React.FC<IconProps>;

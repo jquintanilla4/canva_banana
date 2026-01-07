@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tool, InpaintMode, AppMode } from '../types';
+import { Tool, AppMode } from '../types';
 import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon } from './Icons';
 
 interface ToolbarProps {
@@ -16,8 +16,6 @@ interface ToolbarProps {
   onClear: () => void;
   hasClearablePaths: boolean;
   onUploadClick: () => void;
-  inpaintMode: InpaintMode;
-  onInpaintModeChange: (mode: InpaintMode) => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -32,7 +30,6 @@ interface ToolbarProps {
   onResize: () => void;
   isResizeDisabled: boolean;
   isAnnotateModeDisabled?: boolean;
-  isInpaintModeDisabled?: boolean;
   isRecording: boolean;
   onRecordToggle: () => void;
 }
@@ -75,24 +72,6 @@ const ModeButton: React.FC<{
   </button>
 );
 
-const ToggleButton: React.FC<{
-  label: string;
-  isActive: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}> = ({ label, isActive, onClick, children }) => (
-  <button
-    onClick={onClick}
-    className={`flex h-8 items-center px-3 text-xs rounded-md transition-colors duration-200 ${
-      isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
-    }`}
-    title={label}
-  >
-    {children}
-  </button>
-);
-
-
 export const Toolbar: React.FC<ToolbarProps> = ({
   activeTool,
   onToolChange,
@@ -107,8 +86,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onClear,
   hasClearablePaths,
   onUploadClick,
-  inpaintMode,
-  onInpaintModeChange,
   onUndo,
   onRedo,
   canUndo,
@@ -123,7 +100,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onResize,
   isResizeDisabled,
   isAnnotateModeDisabled = false,
-  isInpaintModeDisabled = false,
   isRecording,
   onRecordToggle,
 }) => {
@@ -150,14 +126,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           disabled={isAnnotateModeDisabled}
         >
           Annotate
-        </ModeButton>
-        <ModeButton
-          label="Inpaint Mode"
-          isActive={appMode === 'INPAINT'}
-          onClick={() => onModeChange('INPAINT')}
-          disabled={isInpaintModeDisabled}
-        >
-          Inpaint
         </ModeButton>
       </div>
 
@@ -187,7 +155,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <BrushIcon className="w-4 h-4" />
         </ToolButton>
         <ToolButton
-          label={appMode === 'CANVAS' ? 'Erase (E) • Only available in Annotate/Inpaint mode' : 'Erase (E)'}
+          label={appMode === 'CANVAS' ? 'Erase (E) • Only available in Annotate mode' : 'Erase (E)'}
           isActive={activeTool === Tool.ERASE}
           onClick={() => onToolChange(Tool.ERASE)}
           disabled={appMode === 'CANVAS'}
@@ -206,16 +174,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <ClearIcon className="w-[1.15rem] h-[1.15rem]" />
         </button>
-        {appMode === 'INPAINT' && (
-            <div className="flex h-full items-center space-x-1 pl-2 border-l border-gray-700">
-                <ToggleButton label="Strict Mode" isActive={inpaintMode === 'STRICT'} onClick={() => onInpaintModeChange('STRICT')}>
-                    S
-                </ToggleButton>
-                <ToggleButton label="Creative Mode" isActive={inpaintMode === 'CREATIVE'} onClick={() => onInpaintModeChange('CREATIVE')}>
-                    C
-                </ToggleButton>
-            </div>
-        )}
       </div>
 
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">

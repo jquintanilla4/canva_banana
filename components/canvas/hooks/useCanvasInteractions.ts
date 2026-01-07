@@ -397,8 +397,6 @@ export function useCanvasInteractions({
       if (activeTool === Tool.BRUSH) {
         if (appMode === 'ANNOTATE') {
           pathTool = Tool.ANNOTATE;
-        } else if (appMode === 'INPAINT') {
-          pathTool = Tool.INPAINT;
         } else {
           return;
         }

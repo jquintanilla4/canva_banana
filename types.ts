@@ -2,15 +2,13 @@ export enum Tool {
   SELECTION = 'SELECTION',
   PAN = 'PAN',
   ANNOTATE = 'ANNOTATE',
-  INPAINT = 'INPAINT',
   BRUSH = 'BRUSH',
   FREE_SELECTION = 'FREE_SELECTION',
   NOTE = 'NOTE',
   ERASE = 'ERASE',
 }
 
-export type InpaintMode = 'STRICT' | 'CREATIVE';
-export type AppMode = 'CANVAS' | 'ANNOTATE' | 'INPAINT';
+export type AppMode = 'CANVAS' | 'ANNOTATE';
 
 export interface Point {
   x: number;

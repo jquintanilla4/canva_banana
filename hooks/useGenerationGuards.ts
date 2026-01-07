@@ -14,7 +14,7 @@ import {
 
 type Args = {
   apiProvider: 'google' | 'fal';
-  appMode: 'CANVAS' | 'ANNOTATE' | 'INPAINT';
+  appMode: 'CANVAS' | 'ANNOTATE';
   tool: Tool;
   prompt: string;
   isKlingO1EditMode: boolean;
@@ -33,7 +33,6 @@ type Args = {
   isHailuoVideoModel: boolean;
   falModelId: string;
   falNumImages: number;
-  hasInpaintMask: boolean;
   activePrimaryImage: unknown;
   hasSelectedStillImage: boolean;
 };
@@ -69,7 +68,6 @@ export function useGenerationGuards({
   isHailuoVideoModel,
   falModelId,
   falNumImages,
-  hasInpaintMask,
   activePrimaryImage,
   hasSelectedStillImage,
 }: Args): GenerationGuardsResult {
@@ -119,8 +117,7 @@ export function useGenerationGuards({
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const requiresSourceAudioForVideoInput = usingFal && isVideoMode && isAudioInputMode && !hasSourceAudio;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
-      (appMode === 'CANVAS' && !isCanvasGenerationTool) ||
-      (appMode === 'INPAINT' && !hasInpaintMask)
+      appMode === 'CANVAS' && !isCanvasGenerationTool
     );
 
     const submitDisabled = isPromptMissing ||
@@ -228,7 +225,6 @@ export function useGenerationGuards({
     falModelId,
     falNumImages,
     hasSelectedStillImage,
-    hasInpaintMask,
     hasSourceAudio,
     hasSourceVideo,
     isNanoBananaModel,

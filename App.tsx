@@ -7,7 +7,6 @@ import { RecordingOverlay } from './components/RecordingOverlay';
 import { BackupsModal } from './components/BackupsModal';
 import {
   Tool,
-  InpaintMode,
   AppMode,
   ApiProviderId,
   type CanvasNote,
@@ -86,12 +85,11 @@ export default function App() {
   const [eraserSize, setEraserSize] = useState(20);
   const [brushColor, setBrushColor] = useState('#ff0000');
   const [prompt, setPrompt] = useState('');
-  const [inpaintMode, setInpaintMode] = useState<InpaintMode>('STRICT');
 
   // Canvas state/history: manages undo/redo, staged edits, and exposes current media slices
   const {
     images,                // Committed canvas images
-    paths,                 // Committed drawing paths (brush/inpaint)
+    paths,                 // Committed drawing paths (brush/annotate)
     notes,                 // Committed notes
     displayedImages,       // Images currently displayed (may include live edits)
     displayedPaths,        // Paths currently displayed (may include live edits)
@@ -108,10 +106,10 @@ export default function App() {
     resetHistory,          // Reset canvas state and undo/redo stack
   } = useCanvasHistory({ images: [], paths: [], notes: [] });
   
-  // Brush/inpaint layers (paths) are the only things we clear with the eraser button.
+  // Brush/annotate layers (paths) are the only things we clear with the eraser button.
   const hasClearablePaths = displayedPaths.some(
     path =>
-      (path.tool === Tool.ANNOTATE || path.tool === Tool.INPAINT) &&
+      path.tool === Tool.ANNOTATE &&
       path.points.length > 0
   );
   // State for note editing (currently edited note's ID or null if none)
@@ -312,7 +310,6 @@ export default function App() {
       eraserSize,
       brushColor,
       prompt,
-      inpaintMode,
       apiProvider,
       setAppMode,
       setTool,
@@ -320,7 +317,6 @@ export default function App() {
       setEraserSize,
       setBrushColor,
       setPrompt,
-      setInpaintMode,
       setApiProvider,
       setError,
       setToastMessage,
@@ -429,11 +425,11 @@ export default function App() {
     if (newMode === appMode) return;
 
     setAppMode(newMode);
-    // Switching modes discards existing brush/inpaint strokes so tools stay scoped to the active mode.
+    // Switching modes discards existing brush/annotate strokes so tools stay scoped to the active mode.
     handleClear();
     if (newMode === 'CANVAS') {
       setTool(Tool.PAN);
-    } else { // ANNOTATE or INPAINT
+    } else { // ANNOTATE
       setTool(Tool.BRUSH);
     }
   }, [appMode, handleClear]);
@@ -705,7 +701,6 @@ export default function App() {
     appMode,
     tool,
     prompt,
-    inpaintMode,
     apiProvider,
     fal,
     selection,
@@ -843,20 +838,13 @@ export default function App() {
   const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
   const isNanoBananaModel = !fal.isVideoMode && fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
   const isReveModel = !fal.isVideoMode && fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-  const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
   const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isFlux2MaxModel || fal.isUpscaleModel;
-  const isInpaintModeDisabled = fal.isVideoMode || isReveModel || fal.isFlux2MaxModel || fal.isUpscaleModel;
 
   useEffect(() => {
-    if (appMode === 'INPAINT' && isInpaintModeDisabled) {
-      const fallbackMode: AppMode = isAnnotateModeDisabled ? 'CANVAS' : 'ANNOTATE';
-      handleModeChange(fallbackMode);
-      return;
-    }
     if (appMode === 'ANNOTATE' && isAnnotateModeDisabled) {
       handleModeChange('CANVAS');
     }
-  }, [appMode, handleModeChange, isAnnotateModeDisabled, isInpaintModeDisabled]);
+  }, [appMode, handleModeChange, isAnnotateModeDisabled]);
 
   const {
     referenceOrderLabels: klingReferenceOrderLabels,
@@ -954,7 +942,6 @@ export default function App() {
 		    isHailuoVideoModel: fal.isHailuoVideoModel,
     falModelId: fal.falModelId,
     falNumImages: fal.falNumImages,
-    hasInpaintMask,
     activePrimaryImage,
     hasSelectedStillImage,
   });
@@ -1130,8 +1117,6 @@ export default function App() {
           onClear={handleClear}
           hasClearablePaths={hasClearablePaths}
           onUploadClick={handleUploadClick}
-          inpaintMode={inpaintMode}
-          onInpaintModeChange={setInpaintMode}
           onUndo={undo}
           onRedo={redo}
           canUndo={canUndo}
@@ -1146,7 +1131,6 @@ export default function App() {
           isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
           isBackgroundRemovalLoading={isRemovingBackground}
           isAnnotateModeDisabled={isAnnotateModeDisabled}
-          isInpaintModeDisabled={isInpaintModeDisabled}
           isRecording={isRecording}
           onRecordToggle={handleRecordToggle}
         />

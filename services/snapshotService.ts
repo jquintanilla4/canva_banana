@@ -6,7 +6,6 @@ import type {
   CanvasMediaType,
   CanvasNote,
   GenerationInputs,
-  InpaintMode,
   Path,
   Point,
 } from '../types';
@@ -62,7 +61,6 @@ export type SnapshotManifestV2 = {
       eraserSize: number;
       brushColor: string;
       prompt: string;
-      inpaintMode: string;
       apiProvider: string;
       falModelId: string;
       falImageSizeSelection: string;
@@ -129,7 +127,6 @@ export type SnapshotMetaState = {
   eraserSize: number;
   brushColor: string;
   prompt: string;
-  inpaintMode: InpaintMode;
   apiProvider: ApiProviderId;
   falModelId: string;
   falImageSizeSelection: string;
@@ -596,9 +593,12 @@ export const restoreSnapshotFromFile = async (
       .map(point => ({ x: point.x, y: point.y }));
 
     const fallbackTool = Tool.BRUSH;
-    const toolValue = Object.values(Tool).includes(path?.tool as Tool)
-      ? (path?.tool as Tool)
-      : fallbackTool;
+    const rawTool = path?.tool;
+    const toolValue = rawTool === 'INPAINT'
+      ? Tool.ANNOTATE
+      : Object.values(Tool).includes(rawTool as Tool)
+        ? (rawTool as Tool)
+        : fallbackTool;
     const fallbackSize = toolValue === Tool.ERASE ? eraserSize : brushSize;
 
     return {

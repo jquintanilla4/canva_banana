@@ -5,7 +5,6 @@ import type {
   AppMode,
   CanvasImage,
   CanvasNote,
-  InpaintMode,
   Path,
 } from '../types';
 import { Tool } from '../types';
@@ -43,7 +42,6 @@ type SnapshotUIBindings = {
   eraserSize: number;
   brushColor: string;
   prompt: string;
-  inpaintMode: InpaintMode;
   apiProvider: ApiProvider;
   setAppMode: Dispatch<SetStateAction<AppMode>>;
   setTool: Dispatch<SetStateAction<Tool>>;
@@ -51,7 +49,6 @@ type SnapshotUIBindings = {
   setEraserSize: Dispatch<SetStateAction<number>>;
   setBrushColor: Dispatch<SetStateAction<string>>;
   setPrompt: Dispatch<SetStateAction<string>>;
-  setInpaintMode: Dispatch<SetStateAction<InpaintMode>>;
   setApiProvider: Dispatch<SetStateAction<ApiProvider>>;
   setError: Dispatch<SetStateAction<string | null>>;
   setToastMessage: Dispatch<SetStateAction<string | null>>;
@@ -103,7 +100,6 @@ export function useSnapshotIO({
     eraserSize,
     brushColor,
     prompt,
-    inpaintMode,
     apiProvider,
     setAppMode,
     setTool,
@@ -111,7 +107,6 @@ export function useSnapshotIO({
     setEraserSize,
     setBrushColor,
     setPrompt,
-    setInpaintMode,
     setApiProvider,
     setError,
     setToastMessage,
@@ -195,7 +190,6 @@ export function useSnapshotIO({
       eraserSize,
       brushColor,
       prompt,
-      inpaintMode,
       apiProvider,
       falModelId,
       falImageSizeSelection,
@@ -260,7 +254,6 @@ export function useSnapshotIO({
     falResolutionSelection,
     elementImageIds,
     falScaleFactor,
-    inpaintMode,
     prompt,
     referenceImageIds,
     selectedImageIds,
@@ -453,9 +446,11 @@ export function useSnapshotIO({
       const meta = restored.meta;
       if (meta) {
         const validAppMode: AppMode =
-          meta.appMode === 'CANVAS' || meta.appMode === 'ANNOTATE' || meta.appMode === 'INPAINT'
-            ? meta.appMode
-            : 'CANVAS';
+          meta.appMode === 'CANVAS'
+            ? 'CANVAS'
+            : (meta.appMode === 'ANNOTATE' || meta.appMode === 'INPAINT')
+              ? 'ANNOTATE'
+              : 'CANVAS';
         setAppMode(validAppMode);
 
         const validTool = Object.values(Tool).includes(meta.tool) ? meta.tool : Tool.PAN;
@@ -472,9 +467,6 @@ export function useSnapshotIO({
         }
         if (typeof meta.prompt === 'string') {
           setPrompt(meta.prompt);
-        }
-        if (meta.inpaintMode === 'STRICT' || meta.inpaintMode === 'CREATIVE') {
-          setInpaintMode(meta.inpaintMode);
         }
         if (meta.apiProvider === 'google' || meta.apiProvider === 'fal') {
           if (providerAvailability[meta.apiProvider]) {
@@ -622,7 +614,6 @@ export function useSnapshotIO({
     setFalResolutionSelection,
     setFalScaleFactor,
     setFalVideoModelId,
-    setInpaintMode,
     setPrompt,
     setReferenceImageIds,
     setElementImageIds,

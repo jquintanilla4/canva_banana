@@ -75,7 +75,6 @@ import type {
   CanvasNote,
   GenerationInputs,
   GenerationKind,
-  InpaintMode,
   Path,
   Point,
   FalVideoDuration,
@@ -91,7 +90,6 @@ type UseGenerationArgs = {
   appMode: AppMode;
   tool: Tool;
   prompt: string;
-  inpaintMode: InpaintMode;
   apiProvider: ApiProviderId;
   fal: UseFalSettingsResult;
   selection: SelectionStateResult;
@@ -165,7 +163,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     appMode,
     tool,
     prompt,
-    inpaintMode,
     apiProvider,
     fal,
     selection,
@@ -1005,12 +1002,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
           return;
         }
 
-        const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
-
-        if (appMode === 'INPAINT' && !hasInpaintMask) {
-          setError('Please use the Brush tool to draw an inpaint mask before generating.');
-          return;
-        }
       }
     }
 
@@ -1263,12 +1254,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
               };
             }));
           } else {
-            const hasInpaintMask = paths.some(path => path.tool === Tool.INPAINT && path.points.length > 0);
-            const shouldSendMask = hasInpaintMask && appMode === 'INPAINT';
-            const inpaintPaths = shouldSendMask
-              ? paths.filter(path => path.tool === Tool.INPAINT)
-              : [];
-
             const hasEditReferences = referenceImageIdsForRun.length > 0;
             const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel || isReveModel || isFlux2MaxModelForRun || isWan26ImageModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
@@ -1298,9 +1283,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
               prompt: trimmedPrompt,
               image: sourceImageForAPI.element,
               tool,
-              paths: shouldSendMask ? inpaintPaths : paths,
+              paths,
               imageDimensions: editImageDimensions,
-              inpaintMode,
               referenceImages: editReferenceImages,
             }, {
               modelId: falModelIdForRun,
@@ -1361,10 +1345,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
             prompt: trimmedPrompt,
             image: sourceImageForAPI.element,
             tool,
-            paths: appMode === 'INPAINT' ? paths.filter(path => path.tool === Tool.INPAINT) : paths,
+            paths,
             imageDimensions: editImageDimensions,
             mimeType: sourceImageForAPI.file.type,
-            inpaintMode,
           });
           generationResult = googleResult;
         }

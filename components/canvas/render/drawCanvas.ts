@@ -537,7 +537,7 @@ export function drawCanvas({
           pathCtx.strokeStyle = 'rgba(0,0,0,1)';
         } else {
           pathCtx.globalCompositeOperation = 'source-over';
-          pathCtx.strokeStyle = path.tool === Tool.INPAINT ? 'rgba(255, 0, 255, 0.5)' : path.color;
+          pathCtx.strokeStyle = path.color;
         }
 
         pathCtx.lineWidth = path.size;

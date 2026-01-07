@@ -1,5 +1,5 @@
 import { GoogleGenAI, Modality, Part } from "@google/genai";
-import { Tool, Path, ImageDimensions, InpaintMode } from '../types';
+import { Tool, Path, ImageDimensions } from '../types';
 
 let cachedClient: GoogleGenAI | null = null;
 
@@ -22,7 +22,6 @@ interface GenerateImageEditParams {
   paths: Path[];
   imageDimensions: ImageDimensions;
   mimeType: string;
-  inpaintMode: InpaintMode;
   referenceImages?: HTMLImageElement[];
 }
 
@@ -41,7 +40,6 @@ export const generateImageEdit = async ({
   paths,
   imageDimensions,
   mimeType,
-  inpaintMode,
   referenceImages,
 }: GenerateImageEditParams): Promise<{ imageBase64: string; imagesBase64: string[]; text: string }> => {
   const model = 'gemini-2.5-flash-image';
@@ -106,47 +104,6 @@ export const generateImageEdit = async ({
     const { data: rasterizedData, mimeType: rasterizedMimeType } = getBase64FromCanvas(offscreenCanvas);
     parts.push({ inlineData: { data: rasterizedData, mimeType: rasterizedMimeType } });
     parts.push({ text: prompt });
-
-  } else if (tool === Tool.INPAINT) {
-    const originalImageCanvas = document.createElement('canvas');
-    originalImageCanvas.width = imageDimensions.width;
-    originalImageCanvas.height = imageDimensions.height;
-    const originalCtx = originalImageCanvas.getContext('2d');
-    if (!originalCtx) throw new Error("Cannot get original image context");
-    originalCtx.drawImage(image, 0, 0);
-    const { data: originalData, mimeType: originalMimeType } = getBase64FromCanvas(originalImageCanvas);
-
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
-
-    paths.forEach(path => {
-      if (path.tool === Tool.ERASE) {
-          ctx.globalCompositeOperation = 'destination-out';
-          ctx.strokeStyle = 'rgba(0,0,0,1)';
-      } else {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = 'white';
-      }
-      
-      ctx.lineWidth = path.size;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      path.points.forEach((point, index) => {
-          if (index === 0) ctx.moveTo(point.x, point.y);
-          else ctx.lineTo(point.x, point.y);
-      });
-      ctx.stroke();
-    });
-    ctx.globalCompositeOperation = 'source-over';
-    
-    const { data: maskData, mimeType: maskMimeType } = getBase64FromCanvas(offscreenCanvas);
-    
-    parts.push({ inlineData: { data: originalData, mimeType: originalMimeType } });
-    parts.push({ inlineData: { data: maskData, mimeType: maskMimeType } });
-
-    const finalPrompt = inpaintMode === 'CREATIVE' ? `[INPAINT] ${prompt}` : `[INPAINT][REPLACE_ONLY_MASKED_REGION] ${prompt}`;
-    parts.push({ text: finalPrompt });
 
   } else {
     throw new Error("Invalid tool for generation");

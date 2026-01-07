@@ -332,7 +332,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             />
             {showKlingSuggestions && klingOptions.length > 0 && suggestionPosition && (
               <div className="absolute z-20" style={{ left: suggestionPosition.left, top: suggestionPosition.top }}>
-                <div className="mt-1 w-40 rounded-md border border-gray-700 bg-gray-800 shadow-lg">
+                <div className="mt-1 w-40 rounded-md border border-gray-700 bg-gray-800 shadow-lg" role="listbox">
                   {klingOptions.map((option, index) => {
                     const isActive = index === activeSuggestionIndex;
                     return (
@@ -344,6 +344,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                       onMouseEnter={() => setActiveSuggestionIndex(index)}
                       onClick={() => insertKlingSuggestion(option)}
                       className={`w-full text-left px-3 py-2 text-sm text-white ${isActive ? 'bg-gray-700' : 'hover:bg-gray-700'}`}
+                      role="option"
                       aria-selected={isActive}
                     >
                       {option}
