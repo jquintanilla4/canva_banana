@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Tool, AppMode } from '../types';
 import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon } from './Icons';
 
@@ -104,8 +104,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onRecordToggle,
 }) => {
   // Main control bar: switches modes/tools and exposes canvas actions (undo, clear, upload, background removal).
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const closeTimeoutRef = useRef<number | null>(null);
   const isBrushToolActive = activeTool === Tool.BRUSH;
   const isEraserToolActive = activeTool === Tool.ERASE;
+  const isCanvasMode = appMode === 'CANVAS';
   const strokeSize = isEraserToolActive ? eraserSize : brushSize;
   const handleStrokeSizeChange = (value: number) => {
     if (isEraserToolActive) {
@@ -114,19 +117,72 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       onBrushSizeChange(value);
     }
   };
+  const inactiveMode = isCanvasMode ? 'ANNOTATE' : 'CANVAS';
+  const inactiveModeLabel = isCanvasMode ? 'Annotate' : 'Canvas';
+  const inactiveModeTitle = isCanvasMode ? 'Annotate Mode' : 'Canvas Mode';
+  const isInactiveModeDisabled = isCanvasMode ? isAnnotateModeDisabled : false;
+  const activeModeLabel = isCanvasMode ? 'Canvas' : 'Annotate';
+  const activeModeTitle = isCanvasMode ? 'Canvas Mode' : 'Annotate Mode';
+  const modeMenuVisibility = isModeMenuOpen
+    ? 'opacity-100 pointer-events-auto'
+    : 'opacity-0 pointer-events-none';
+  const clearCloseTimeout = () => {
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  };
+  const scheduleMenuClose = () => {
+    clearCloseTimeout();
+    closeTimeoutRef.current = window.setTimeout(() => {
+      setIsModeMenuOpen(false);
+      closeTimeoutRef.current = null;
+    }, 3000);
+  };
+  const handleModeMenuOpen = () => {
+    clearCloseTimeout();
+    setIsModeMenuOpen(true);
+  };
+  const handleModeChange = (mode: AppMode) => {
+    onModeChange(mode);
+    setIsModeMenuOpen(false);
+  };
+
+  useEffect(() => () => clearCloseTimeout(), []);
 
   return (
     <header className="absolute top-0 left-1/2 -translate-x-1/2 z-10 mt-4 px-3 py-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex h-12 items-center space-x-4">
-      <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
-        <ModeButton label="Canvas Mode" isActive={appMode === 'CANVAS'} onClick={() => onModeChange('CANVAS')}>Canvas</ModeButton>
-        <ModeButton
-          label="Annotate Mode"
-          isActive={appMode === 'ANNOTATE'}
-          onClick={() => onModeChange('ANNOTATE')}
-          disabled={isAnnotateModeDisabled}
+      <div className="flex h-full items-center border-r border-gray-600 pr-4">
+        <div
+          className="relative flex h-full items-center"
+          onMouseEnter={handleModeMenuOpen}
+          onMouseLeave={scheduleMenuClose}
         >
-          Annotate
-        </ModeButton>
+          <ModeButton
+            label={activeModeTitle}
+            isActive
+            onClick={() => {
+              handleModeMenuOpen();
+              scheduleMenuClose();
+            }}
+          >
+            {activeModeLabel}
+          </ModeButton>
+          <div
+            className={`absolute left-1/2 top-full z-20 mt-3 w-max -translate-x-1/2 flex flex-col items-center space-y-3 transition-opacity duration-150 ${modeMenuVisibility}`}
+            onMouseEnter={handleModeMenuOpen}
+            onMouseLeave={scheduleMenuClose}
+          >
+            <ModeButton
+              label={inactiveModeTitle}
+              isActive={false}
+              onClick={() => handleModeChange(inactiveMode)}
+              disabled={isInactiveModeDisabled}
+            >
+              {inactiveModeLabel}
+            </ModeButton>
+          </div>
+        </div>
       </div>
 
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
