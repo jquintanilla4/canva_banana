@@ -1,27 +1,29 @@
-# Fal/Google API backend
+# Canva Banana
 _Work in progress, expect bugs_
+
+Infinite canvas for AI image/video generation and editing with Fal.ai + Google Gemini.
 
 ## Features
 
-- **Multi-brand AI Image Generation** - Generate images from various AI models including multiple Fal.ai endpoints
-- **Infinite Canvas** - Large, scrollable workspace for image creation and editing
-- **Professional Drawing Tools**:
-  - Brush and eraser with independent size controls
-  - Pen tool for annotations
-  - Hand tool for easy canvas navigation
-- **Image Manipulation**:
-  - Transform mode for rotating and scaling images (hold Shift for free/non-uniform transforms)
-  - Multiple upscale models (e.g., fal-ai/proteus-v2, seed-v2)
-  - Background removal
-  - Image import/export in various formats
-- **Project Management**:
-  - Import/export workspace snapshots
-  - Save/load individual images
+- **Multi-provider AI generation** - Text-to-image, image edit, upscales, and video models across Fal.ai and Google
+- **Infinite canvas** - Images, videos, and audio in a single scrollable workspace (drag/drop or upload)
+- **Canvas + Annotate modes**:
+  - Selection and free-select tools
+  - Notes with adjustable colors and font sizes
+  - Brush/eraser with independent size controls
+  - Hand tool for navigation
+- **Media tools**:
+  - Crop, transform (hold Shift for free/non-uniform), resize, duplicate
+  - Layer reordering, background removal, and video frame capture
+  - Play/pause for audio/video and waveform previews
+- **Project management**:
+  - Snapshot import/export (`.bcsnap`)
+  - Autosave backups with restore
   - Session persistence
-- **Keyboard Shortcuts** - Speed up workflow with hotkeys for common actions
-- **Metadata Overlays** - View generation parameters for AI-created images
-- **Blind Test Mode** - Anonymize model names with random codenames for unbiased A/B testing
-- **Debug Panel** - Advanced logging and error monitoring
+- **Observability + experiments**:
+  - Fal queue panel with job status
+  - Metadata overlays, debug log panel
+  - Blind test mode and open-source alias mode
 
 ## Run Locally
 
@@ -35,10 +37,12 @@ _Work in progress, expect bugs_
    ```
 
 2. **Set up environment variables:**
-   - Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key.
-   - Add `FAL_API_KEY` to target Fal.ai. This app calls the `fal-ai/nano-banana-pro/edit` endpoint by default and accepts `FAL_API_URL` if you need to point at a different gateway.
+   - Set `GEMINI_API_KEY` (or `API_KEY`) in [.env.local](.env.local) for Google Gemini.
+   - Set `FAL_API_KEY` for Fal.ai.
+   - Optional: `FAL_API_URL` to point at a different gateway.
+   - Optional: `FAL_MODEL_ID` to override the default Fal model.
    
-   If an API key is not provided for one of the API endpoints, then it will be hidden in the UI. If both are set, then you'll have an option to choose which provider to use per request.
+   If an API key is not provided for one of the providers, it is hidden in the UI. If both are set, use the Cloud switcher to pick a provider per request.
 
 3. **Run the app:**
    ```bash
@@ -57,6 +61,8 @@ _Work in progress, expect bugs_
 #### Zoom Controls
 - `+` or `=` - Zoom in
 - `-` or `_` - Zoom out
+- `.` - Zoom to fit
+- `,` - Zoom to selection
 
 #### Tool Selection
 - `B` - Brush tool (draw/paint)
@@ -71,21 +77,24 @@ _Work in progress, expect bugs_
 - `]` - Increase brush/eraser size
 
 #### Other Actions
-- `.` (period) - Zoom to fit
 - `Delete` or `Backspace` - Delete selected items
+- `Shift + Z` - Undo (canvas focused)
+- `Shift + Y` - Redo (canvas focused)
+- `M` - Start/stop audio recording
 - `Cmd/Ctrl + Enter` - Submit/generate (when input is focused)
 
 ### Importing and Exporting
 
-**Session Snapshots**: Export your entire workspace (images, annotations, canvas state) as a JSON snapshot file. Import snapshots to restore previous sessions.
+**Session Snapshots**: Export your entire workspace (media, notes, annotations, settings) as a `.bcsnap` binary snapshot. Import snapshots from the file menu to restore previous sessions. Exporting a snapshot also starts autosave backups (restore from File -> Backups).
 
-**Individual Images**: Export selected images as PNG files for use in other applications.
+**Individual Media**: Export selected images, videos, or audio using the download action in the toolbar.
 
-### Image Transform Mode
-- Select a single image to reveal the inline `Transform` button beside the crop control.
-- Click `Transform` to show an orange bounding box with drag handles. Corners scale uniformly; edges scale along one axis; the top circle rotates.
-- Default drag keeps the aspect ratio. Hold Shift while dragging any handle to free-transform (non-uniform scale) for stretching or squashing.
-- Press Enter/Escape or click the orange `Transform` button again to exit and keep the changes.
+### Media Actions (Selected Item)
+- **Transform**: Select a single image to reveal the inline `Transform` button beside the crop control. Drag corners to scale, edges to scale on one axis, and the top circle to rotate. Hold Shift to free-transform.
+- **Crop**: Available for images only (videos/audio are disabled).
+- **Resize**: Select an image and use the Resize control to enter exact pixel sizes.
+- **Duplicate + Layering**: Duplicate media and adjust layer order with the inline actions.
+- **Playback**: Select audio/video and hit play to preview, or capture a still frame from video.
 
 ### Blind Test Mode
 Use Blind Test Mode for unbiased model comparisons:
@@ -94,3 +103,5 @@ Use Blind Test Mode for unbiased model comparisons:
 - Codenames stay consistent within a session but reset on page refresh
 - Click the icon again to reveal the real model names
 - Metadata overlays still show original model names for reference after testing
+
+**Open-source alias mode**: Option/Alt + click the spy icon to swap select model names for neutral aliases instead of codenames.
