@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
-import { DEFAULT_NOTE_FONT_SIZE, MIN_NOTE_FONT_SIZE, MAX_NOTE_FONT_SIZE } from './components/canvas/constants';
+import { DEFAULT_NOTE_FONT_SIZE, MIN_NOTE_FONT_SIZE, MAX_NOTE_FONT_SIZE, MIN_STROKE_SIZE, MAX_STROKE_SIZE, KEYBOARD_STROKE_STEP } from './components/canvas/constants';
 import { RecordingOverlay } from './components/RecordingOverlay';
 import { BackupsModal } from './components/BackupsModal';
 import {
@@ -76,6 +76,7 @@ const providerAvailability: Record<ApiProvider, boolean> = {
 const AVAILABLE_PROVIDERS = PROVIDER_ORDER.filter(provider => providerAvailability[provider]) as ApiProvider[]; // List of enabled providers
 const PROVIDER_LABELS: Record<ApiProvider, string> = { google: 'Google', fal: 'FAL' }; // Mapping of provider IDs to display names
 const DEFAULT_API_PROVIDER: ApiProvider = AVAILABLE_PROVIDERS[0] ?? 'google'; // Default provider (first available or fallback)
+const clampStrokeSize = (value: number) => Math.min(MAX_STROKE_SIZE, Math.max(MIN_STROKE_SIZE, value));
 
 // Root component wires up canvas state, generation controls, and provider-specific settings.
 export default function App() {
@@ -210,6 +211,17 @@ export default function App() {
   const requestZoomOut = useCallback(() => {
     setZoomOutTrigger(prev => prev + 1);
   }, []);
+
+  const handleAdjustStrokeSize = useCallback((delta: number) => {
+    const adjustedDelta = delta * KEYBOARD_STROKE_STEP;
+    if (tool === Tool.BRUSH) {
+      setBrushSize(prev => clampStrokeSize(prev + adjustedDelta));
+      return;
+    }
+    if (tool === Tool.ERASE) {
+      setEraserSize(prev => clampStrokeSize(prev + adjustedDelta));
+    }
+  }, [tool]);
 
   // Shows a toast when the reference image limit is reached for the current model.
   const isKlingO1VideoInputMode = fal.isKlingO1EditMode || fal.isKlingO1RefV2VMode;
@@ -745,6 +757,7 @@ export default function App() {
     onZoomToSelection: requestZoomToSelection,
     onDelete: handleDelete,
     onRecordToggle: handleRecordToggle,
+    onAdjustStrokeSize: handleAdjustStrokeSize,
   });
 
   const handleUploadClick = () => {

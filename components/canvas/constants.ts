@@ -18,4 +18,6 @@ export const DOT_MAX_SIZE = 6;
 export const KEYBOARD_ZOOM_MULTIPLIER = 1.05; // 5% zoom steps for keyboard shortcuts
 export const KEYBOARD_ZOOM_OUT_MULTIPLIER = 1 / KEYBOARD_ZOOM_MULTIPLIER;
 export const WHEEL_ZOOM_MULTIPLIER = 1.1;
-
+export const MIN_STROKE_SIZE = 1;
+export const MAX_STROKE_SIZE = 100;
+export const KEYBOARD_STROKE_STEP = 1;

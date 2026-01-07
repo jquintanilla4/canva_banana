@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Tool, AppMode } from '../types';
 import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon } from './Icons';
+import { MAX_STROKE_SIZE, MIN_STROKE_SIZE } from './canvas/constants';
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -248,8 +249,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <input
               id="brushSize"
               type="range"
-              min="1"
-              max="100"
+              min={MIN_STROKE_SIZE}
+              max={MAX_STROKE_SIZE}
               value={strokeSize}
               onChange={(e) => handleStrokeSizeChange(Number(e.target.value))}
               className="w-24 h-2 accent-blue-500"

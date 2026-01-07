@@ -25,4 +25,30 @@ describe('useKeyboardShortcuts', () => {
 
     expect(onZoomToFit).toHaveBeenCalledTimes(1);
   });
+
+  it('adjusts stroke size on bracket shortcuts', () => {
+    const onAdjustStrokeSize = vi.fn();
+    const onGenerate = vi.fn();
+    const setTool = vi.fn();
+    const requestZoomIn = vi.fn();
+    const requestZoomOut = vi.fn();
+
+    renderHook(() => useKeyboardShortcuts({
+      onGenerate,
+      appMode: 'ANNOTATE',
+      setTool,
+      requestZoomIn,
+      requestZoomOut,
+      onAdjustStrokeSize,
+    }));
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '[' }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ']' }));
+    });
+
+    expect(onAdjustStrokeSize).toHaveBeenCalledTimes(2);
+    expect(onAdjustStrokeSize).toHaveBeenNthCalledWith(1, -1);
+    expect(onAdjustStrokeSize).toHaveBeenNthCalledWith(2, 1);
+  });
 });

@@ -11,6 +11,7 @@ type KeyboardShortcutsArgs = {
   onZoomToSelection?: () => void;
   onDelete?: () => void;
   onRecordToggle?: () => void;
+  onAdjustStrokeSize?: (delta: number) => void;
 };
 
 export function useKeyboardShortcuts({
@@ -23,6 +24,7 @@ export function useKeyboardShortcuts({
   onZoomToSelection,
   onDelete,
   onRecordToggle,
+  onAdjustStrokeSize,
 }: KeyboardShortcutsArgs) {
   useEffect(() => {
     // Guard against hijacking shortcuts while typing in inputs.
@@ -90,6 +92,13 @@ export function useKeyboardShortcuts({
         onRecordToggle();
         return;
       }
+      const isDecreaseStrokeKey = key === '[' || event.code === 'BracketLeft';
+      const isIncreaseStrokeKey = key === ']' || event.code === 'BracketRight';
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && onAdjustStrokeSize && (isDecreaseStrokeKey || isIncreaseStrokeKey)) {
+        event.preventDefault();
+        onAdjustStrokeSize(isDecreaseStrokeKey ? -1 : 1);
+        return;
+      }
       if (!event.metaKey && !event.ctrlKey && (key === '-' || key === '_')) {
         event.preventDefault();
         requestZoomOut();
@@ -115,5 +124,5 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [appMode, onGenerate, onRecordToggle, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut, setTool]);
+  }, [appMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut, setTool]);
 }
