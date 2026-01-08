@@ -395,7 +395,7 @@ const logFalEvent = (
     source: 'fal',
     title: endpointId,
     message,
-    data: summarizeForLog(payload),
+    data: payload,
   });
 };
 

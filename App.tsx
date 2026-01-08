@@ -200,6 +200,7 @@ export default function App() {
     debugLogEntries,
     openDebugLogPanel,
     closeDebugLogPanel,
+    copyLastEntry,
   } = useDebugLogState({
     onOpen: () => setIsFileMenuOpen(false),
   });
@@ -1271,6 +1272,7 @@ export default function App() {
           entries={debugLogEntries}
           onClose={closeDebugLogPanel}
           onClear={clearDebugLogs}
+          onCopy={copyLastEntry}
         />
       )}
 
