@@ -67,7 +67,9 @@ export const CameraSettingsPopover: React.FC<CameraSettingsPopoverProps> = ({
   };
 
   const handleClear = () => {
-    setDraft(cloneCameraSelection(EMPTY_CAMERA_SELECTION));
+    const clearedSelection = cloneCameraSelection(EMPTY_CAMERA_SELECTION);
+    setDraft(clearedSelection);
+    onApply(clearedSelection);
   };
 
   return (

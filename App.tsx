@@ -66,6 +66,7 @@ import {
   EMPTY_CAMERA_SELECTION,
   buildCameraPromptPrefix,
   cloneCameraSelection,
+  hasCameraSettings,
   type CameraSettingsSelection,
 } from './utils/cameraSettings';
 
@@ -722,7 +723,18 @@ export default function App() {
     }
   }, [editingNoteId, handleCommit, cropMode, handleCancelCrop]);
 
-  const cameraPromptPrefix = useMemo(() => buildCameraPromptPrefix(cameraSettings), [cameraSettings]);
+  const isCameraSettingsEnabled = !fal.isVideoMode && (
+    fal.falModelId === SEEDREAM_MODEL_ID
+    || fal.falModelId === SEEDREAM_V45_MODEL_ID
+    || fal.falModelId === SEEDREAM_TEXT_TO_IMAGE_MODEL_ID
+    || fal.falModelId === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID
+    || fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID
+    || fal.falModelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
+  );
+
+  const cameraPromptPrefix = useMemo(() => (
+    isCameraSettingsEnabled ? buildCameraPromptPrefix(cameraSettings) : ''
+  ), [cameraSettings, isCameraSettingsEnabled]);
 
   // Centralized generation handler that calls provider APIs and writes results back to canvas state.
   const handleGenerate = useGeneration({
@@ -869,14 +881,6 @@ export default function App() {
   const usingFal = apiProvider === 'fal';
   const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
   const isNanoBananaModel = !fal.isVideoMode && fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
-  const isCameraSettingsEnabled = !fal.isVideoMode && (
-    fal.falModelId === SEEDREAM_MODEL_ID
-    || fal.falModelId === SEEDREAM_V45_MODEL_ID
-    || fal.falModelId === SEEDREAM_TEXT_TO_IMAGE_MODEL_ID
-    || fal.falModelId === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID
-    || fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID
-    || fal.falModelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
-  );
   const isReveModel = !fal.isVideoMode && fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isFlux2MaxModel || fal.isUpscaleModel;
 
@@ -1109,7 +1113,10 @@ export default function App() {
     blindTestEnabled,
   );
   const shouldShowNegativePrompt = shouldShowVideoNegativePrompt || fal.isWan26ImageModel;
-  const promptOutlineColor = shouldShowNegativePrompt ? '#34d399' : undefined;
+  const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);
+  const promptOutlineColor = isCameraPromptAccentActive
+    ? '#f59e0b'
+    : shouldShowNegativePrompt ? '#34d399' : undefined;
   const negativePromptOutlineColor = shouldShowNegativePrompt ? '#f87171' : undefined;
   const activeNegativePrompt = fal.isWan26ImageModel ? wan26ImageNegativePrompt : videoNegativePrompt;
   const activeNegativePromptSetter = fal.isWan26ImageModel ? setWan26ImageNegativePrompt : setVideoNegativePrompt;
@@ -1344,6 +1351,7 @@ export default function App() {
           negativePromptPlaceholder={fal.isWan26ImageModel ? 'Describe what the image should avoid... (optional)' : 'Describe what the video should avoid... (optional)'}
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
+          cameraThemeActive={isCameraPromptAccentActive}
           klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}

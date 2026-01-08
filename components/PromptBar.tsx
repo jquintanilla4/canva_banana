@@ -44,6 +44,7 @@ interface PromptBarProps {
   klingSuggestionsEnabled?: boolean;
   klingReferenceCount?: number;
   klingSuggestionOptions?: ReadonlyArray<string>;
+  cameraThemeActive?: boolean;
 }
 
 export const PromptBar: React.FC<PromptBarProps> = ({
@@ -71,6 +72,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   klingSuggestionsEnabled,
   klingReferenceCount = 0,
   klingSuggestionOptions = [],
+  cameraThemeActive = false,
 }) => {
   // Prompt input surface with dynamic model selectors and optional negative prompt for video flows.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -274,6 +276,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       : "Describe your edit or image idea... (Cmd/Ctrl + Enter to generate)"
   );
   const resolvedNegativePromptPlaceholder = negativePromptPlaceholder ?? 'What should the video avoid? (negative prompt)';
+  const activeModeClassName = cameraThemeActive ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white';
+  const submitButtonAccentClassName = cameraThemeActive ? 'bg-amber-500 hover:bg-amber-400' : 'bg-green-600 hover:bg-green-500';
+  const promptTextareaClassName = `flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed ${
+    cameraThemeActive ? 'caret-amber-400' : ''
+  }`;
 
   const selectedModelOption = modelOptions.find(option => option.value === selectedModel);
   const selectHighlightStyle = selectedModelOption?.highlightColor
@@ -326,7 +333,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               placeholder={resolvedPlaceholder}
               disabled={inputDisabled || isLoading}
               rows={3}
-              className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+              className={promptTextareaClassName}
               style={{ minHeight: '92px', maxHeight: '269px' }}
               aria-label="Prompt input"
             />
@@ -365,7 +372,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                         type="button"
                         onClick={() => onModelModeChange(option.value)}
                         disabled={resolvedModeDisabled}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-150 ${isActive ? 'bg-blue-500 text-white' : 'text-gray-300 hover:text-white'} disabled:opacity-60 disabled:cursor-not-allowed`}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-150 ${isActive ? activeModeClassName : 'text-gray-300 hover:text-white'} disabled:opacity-60 disabled:cursor-not-allowed`}
                         aria-pressed={isActive}
                         aria-label={`Switch to ${option.label} models`}
                       >
@@ -487,7 +494,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             aria-label="Generate"
             onClick={onSubmit}
             disabled={isLoading || submitDisabled}
-            className="h-[2.64rem] w-[2.64rem] bg-green-600 text-white font-semibold rounded-full transition-all duration-200 ease-in-out disabled:bg-gray-500 disabled:cursor-not-allowed hover:bg-green-500 flex items-center justify-center"
+            className={`h-[2.64rem] w-[2.64rem] text-white font-semibold rounded-full transition-all duration-200 ease-in-out disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center ${submitButtonAccentClassName}`}
           >
             {isLoading ? (
               <svg className="animate-spin h-[1.1rem] w-[1.1rem] text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

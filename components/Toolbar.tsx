@@ -262,15 +262,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <ToolButton
             label="Camera Settings"
             onClick={() => setIsCameraPanelOpen(prev => !prev)}
-            isActive={isCameraPanelOpen && cameraSettingsEnabled}
+            isActive={cameraSettingsEnabled && (isCameraPanelOpen || isCameraSettingsActive)}
             disabled={!cameraSettingsEnabled}
-            activeClassName="bg-amber-500 text-black"
+            activeClassName={isCameraPanelOpen ? 'bg-amber-500 text-black' : 'bg-amber-500 text-white'}
           >
             <span className="relative flex items-center justify-center">
               <CameraSettingsIcon className="h-5 w-5" />
-              {isCameraSettingsActive && !isCameraPanelOpen && cameraSettingsEnabled && (
-                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400" />
-              )}
             </span>
           </ToolButton>
           <CameraSettingsPopover
