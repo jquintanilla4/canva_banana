@@ -90,6 +90,7 @@ type UseGenerationArgs = {
   appMode: AppMode;
   tool: Tool;
   prompt: string;
+  promptPrefix?: string;
   apiProvider: ApiProviderId;
   fal: UseFalSettingsResult;
   selection: SelectionStateResult;
@@ -163,6 +164,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     appMode,
     tool,
     prompt,
+    promptPrefix,
     apiProvider,
     fal,
     selection,
@@ -263,7 +265,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ? generationOverrideOrEvent
       : undefined;
     const overrideKind = generationOverride?.kind;
-    const promptForRun = generationOverride?.prompt ?? prompt;
+    const overridePrompt = typeof generationOverride?.prompt === 'string' ? generationOverride.prompt : undefined;
+    const basePrompt = overridePrompt ?? prompt;
+    const trimmedUserPrompt = overridePrompt !== undefined ? basePrompt.trim() : prompt.trim();
+    const normalizedPrefix = promptPrefix && promptPrefix.trim().length > 0 ? promptPrefix : '';
+    const shouldApplyPromptPrefix = overridePrompt === undefined && normalizedPrefix.length > 0 && trimmedUserPrompt.length > 0;
+    const promptForRun = shouldApplyPromptPrefix ? `${normalizedPrefix}${basePrompt}` : basePrompt;
     const trimmedPrompt = promptForRun.trim();
     const apiProviderForRun = isApiProvider(generationOverride?.provider) ? generationOverride.provider : apiProvider;
     const overrideModelId = generationOverride?.modelId;
@@ -400,7 +407,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 	    const generationKind: GenerationKind = overrideKind
 	      ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
 
-    if (requiresPrompt && !trimmedPrompt) {
+    if (requiresPrompt && !trimmedUserPrompt) {
       setError(isTextToImage ? 'Please describe the image you want to create.' : 'Please write a prompt to describe your edit.');
       return;
     }
@@ -1498,6 +1505,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     appMode,
     tool,
     prompt,
+    promptPrefix,
     apiProvider,
     falModelMode,
     falImageModelId,

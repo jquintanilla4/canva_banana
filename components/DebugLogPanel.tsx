@@ -57,12 +57,6 @@ export const DebugLogPanel: React.FC<DebugLogPanelProps> = ({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
-  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
-  };
-
   const handleCopy = () => {
     onCopy();
     setCopyFeedback(true);
@@ -72,12 +66,19 @@ export const DebugLogPanel: React.FC<DebugLogPanelProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
-      onClick={handleBackdropClick}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="debug-log-title"
     >
-      <div className="w-full max-w-3xl max-h-[70vh] rounded-lg border border-gray-700 bg-gray-950 shadow-2xl flex flex-col">
+      <button
+        type="button"
+        aria-label="Close debug log"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="debug-log-title"
+        className="relative z-10 w-full max-w-3xl max-h-[70vh] rounded-lg border border-gray-700 bg-gray-950 shadow-2xl flex flex-col"
+      >
         {/* Header */}
         <header className="px-4 py-3 border-b border-gray-700 flex items-center justify-between flex-shrink-0">
           <h2

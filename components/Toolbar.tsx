@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Tool, AppMode } from '../types';
-import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon } from './Icons';
+import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon, CameraSettingsIcon } from './Icons';
 import { MAX_STROKE_SIZE, MIN_STROKE_SIZE } from './canvas/constants';
+import { CameraSettingsPopover } from './CameraSettingsPopover';
+import { hasCameraSettings, type CameraSettingsSelection } from '../utils/cameraSettings';
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -33,6 +35,9 @@ interface ToolbarProps {
   isAnnotateModeDisabled?: boolean;
   isRecording: boolean;
   onRecordToggle: () => void;
+  cameraSettings: CameraSettingsSelection;
+  onCameraSettingsChange: (selection: CameraSettingsSelection) => void;
+  cameraSettingsEnabled: boolean;
 }
 
 const ToolButton: React.FC<{
@@ -41,13 +46,15 @@ const ToolButton: React.FC<{
   onClick: () => void;
   children: React.ReactNode;
   disabled?: boolean;
-}> = ({ label, isActive, onClick, children, disabled }) => (
+  activeClassName?: string;
+}> = ({ label, isActive, onClick, children, disabled, activeClassName }) => (
   <button
     onClick={onClick}
     className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
-      isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
+      isActive ? (activeClassName ?? 'bg-blue-600 text-white') : 'bg-gray-700 hover:bg-gray-600'
     } disabled:opacity-50 disabled:cursor-not-allowed`}
     title={label}
+    aria-label={label}
     disabled={disabled}
   >
     {children}
@@ -107,6 +114,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isAnnotateModeDisabled = false,
   isRecording,
   onRecordToggle,
+  cameraSettings,
+  onCameraSettingsChange,
+  cameraSettingsEnabled,
 }) => {
   // Main control bar: switches modes/tools and exposes canvas actions (undo, clear, upload, background removal).
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
@@ -148,6 +158,41 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     clearCloseTimeout();
     setIsModeMenuOpen(true);
   };
+  const [isCameraPanelOpen, setIsCameraPanelOpen] = useState(false);
+  const cameraPanelRef = useRef<HTMLDivElement>(null);
+  const isCameraSettingsActive = hasCameraSettings(cameraSettings);
+
+  useEffect(() => {
+    if (!isCameraPanelOpen) {
+      return;
+    }
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (cameraPanelRef.current && !cameraPanelRef.current.contains(event.target as Node)) {
+        setIsCameraPanelOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsCameraPanelOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isCameraPanelOpen]);
+
+  useEffect(() => {
+    if (!cameraSettingsEnabled && isCameraPanelOpen) {
+      setIsCameraPanelOpen(false);
+    }
+  }, [cameraSettingsEnabled, isCameraPanelOpen]);
   const handleModeChange = (mode: AppMode) => {
     onModeChange(mode);
     setIsModeMenuOpen(false);
@@ -213,6 +258,28 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           {isRecording ? <StopIcon className="w-4 h-4" /> : <MicrophoneIcon className="w-4 h-4" />}
         </button>
+        <div ref={cameraPanelRef} className="flex h-full items-center">
+          <ToolButton
+            label="Camera Settings"
+            onClick={() => setIsCameraPanelOpen(prev => !prev)}
+            isActive={isCameraPanelOpen && cameraSettingsEnabled}
+            disabled={!cameraSettingsEnabled}
+            activeClassName="bg-amber-500 text-black"
+          >
+            <span className="relative flex items-center justify-center">
+              <CameraSettingsIcon className="h-5 w-5" />
+              {isCameraSettingsActive && !isCameraPanelOpen && cameraSettingsEnabled && (
+                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400" />
+              )}
+            </span>
+          </ToolButton>
+          <CameraSettingsPopover
+            isOpen={isCameraPanelOpen}
+            selection={cameraSettings}
+            onApply={onCameraSettingsChange}
+            onClose={() => setIsCameraPanelOpen(false)}
+          />
+        </div>
         <ToolButton label="Brush (B)" isActive={activeTool === Tool.BRUSH} onClick={() => onToolChange(Tool.BRUSH)} disabled={appMode === 'CANVAS'}>
           <BrushIcon className="w-4 h-4" />
         </ToolButton>
@@ -234,7 +301,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           } disabled:cursor-not-allowed`}
           title="Nuke markings"
         >
-          <ClearIcon className="w-[1.15rem] h-[1.15rem]" />
+          <ClearIcon className="w-[1.20rem] h-[1.20rem]" />
         </button>
       </div>
 

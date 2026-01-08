@@ -1,5 +1,6 @@
 import React from 'react';
 import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret } from 'react-icons/fa';
+import { RiCameraLensLine } from 'react-icons/ri';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
 import { RxCursorArrow, RxFontSize } from 'react-icons/rx';
 import type { IconBaseProps } from 'react-icons';
@@ -40,6 +41,7 @@ export const DuplicateIcon = FaRegClone as React.FC<IconProps>;
 export const PlayIcon = FaPlay as React.FC<IconProps>;
 export const PauseIcon = FaPause as React.FC<IconProps>;
 export const SnapshotIcon = FaCamera as React.FC<IconProps>;
+export const CameraSettingsIcon = RiCameraLensLine as React.FC<IconProps>;
 export const MicrophoneIcon = FaMicrophone as React.FC<IconProps>;
 export const StopIcon = FaStop as React.FC<IconProps>;
 export const BlindTestIcon = FaUserSecret as React.FC<IconProps>;

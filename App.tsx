@@ -17,10 +17,14 @@ import { clearDebugLogs } from './services/debugLog';
 import {
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
+  NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
+  SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
+  SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
+  SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
@@ -58,6 +62,12 @@ import { useFalQueueJobs } from './hooks/useFalQueueJobs';
 import { useDebugLogState } from './hooks/useDebugLogState';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
 import type { FalModelMode } from './services/modelConfig';
+import {
+  EMPTY_CAMERA_SELECTION,
+  buildCameraPromptPrefix,
+  cloneCameraSelection,
+  type CameraSettingsSelection,
+} from './utils/cameraSettings';
 
 // Type alias for API providers
 type ApiProvider = ApiProviderId;
@@ -86,6 +96,9 @@ export default function App() {
   const [eraserSize, setEraserSize] = useState(20);
   const [brushColor, setBrushColor] = useState('#ff0000');
   const [prompt, setPrompt] = useState('');
+  const [cameraSettings, setCameraSettings] = useState<CameraSettingsSelection>(
+    () => cloneCameraSelection(EMPTY_CAMERA_SELECTION),
+  );
 
   // Canvas state/history: manages undo/redo, staged edits, and exposes current media slices
   const {
@@ -709,11 +722,14 @@ export default function App() {
     }
   }, [editingNoteId, handleCommit, cropMode, handleCancelCrop]);
 
+  const cameraPromptPrefix = useMemo(() => buildCameraPromptPrefix(cameraSettings), [cameraSettings]);
+
   // Centralized generation handler that calls provider APIs and writes results back to canvas state.
   const handleGenerate = useGeneration({
     appMode,
     tool,
     prompt,
+    promptPrefix: cameraPromptPrefix,
     apiProvider,
     fal,
     selection,
@@ -853,6 +869,14 @@ export default function App() {
   const usingFal = apiProvider === 'fal';
   const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
   const isNanoBananaModel = !fal.isVideoMode && fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
+  const isCameraSettingsEnabled = !fal.isVideoMode && (
+    fal.falModelId === SEEDREAM_MODEL_ID
+    || fal.falModelId === SEEDREAM_V45_MODEL_ID
+    || fal.falModelId === SEEDREAM_TEXT_TO_IMAGE_MODEL_ID
+    || fal.falModelId === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID
+    || fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID
+    || fal.falModelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
+  );
   const isReveModel = !fal.isVideoMode && fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isFlux2MaxModel || fal.isUpscaleModel;
 
@@ -1119,11 +1143,11 @@ export default function App() {
 
       {/* Main toolbar, hidden during crop/transform */}
       {!cropMode && !transformMode && (
-        <Toolbar
-          activeTool={tool}
-          onToolChange={handleToolChange}
-          appMode={appMode}
-          onModeChange={handleModeChange}
+      <Toolbar
+        activeTool={tool}
+        onToolChange={handleToolChange}
+        appMode={appMode}
+        onModeChange={handleModeChange}
           brushSize={brushSize}
           eraserSize={eraserSize}
           onBrushSizeChange={setBrushSize}
@@ -1147,9 +1171,12 @@ export default function App() {
           isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
           isBackgroundRemovalLoading={isRemovingBackground}
           isAnnotateModeDisabled={isAnnotateModeDisabled}
-          isRecording={isRecording}
-          onRecordToggle={handleRecordToggle}
-        />
+        isRecording={isRecording}
+        onRecordToggle={handleRecordToggle}
+        cameraSettings={cameraSettings}
+        onCameraSettingsChange={setCameraSettings}
+        cameraSettingsEnabled={isCameraSettingsEnabled}
+      />
       )}
 
       {/* Recording overlay */}
