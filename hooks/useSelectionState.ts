@@ -24,6 +24,7 @@ type SelectionFalSettings = Pick<
   | 'isVideoMode'
   | 'isKlingProVideoSelection'
   | 'isKlingO1VideoModel'
+  | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
   | 'isKlingO1EditMode'
   | 'isKlingO1RefV2VMode'
@@ -78,6 +79,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isVideoMode,
   isKlingProVideoSelection,
   isKlingO1VideoModel,
+  isKling26VideoModel,
   isKling26ControlVideoModel,
   isKlingO1EditMode,
     isKlingO1RefV2VMode,
@@ -241,7 +243,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKlingO1FflfMode && !isSeedance15FflfMode) {
+      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isSeedance15FflfMode) {
         return;
       }
       if (!imageId) {
@@ -437,6 +439,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     falVideoModelId,
     images,
     isKlingProVideoSelection,
+    isKling26VideoModel,
     isKlingO1FflfMode,
     isSeedance15FflfMode,
     klingVariant,

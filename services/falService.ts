@@ -2335,6 +2335,25 @@ export const generateImageToVideo = async (
     return { videoUrl, requestId };
   }
 
+  const isKling26ImageToVideo = modelId === KLING_26_IMAGE_TO_VIDEO_MODEL_ID; // Kling 2.6 I2V uses start/end image fields.
+  if (isKling26ImageToVideo) {
+    const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
+    const tailImage = options.tailImage;
+    const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage) : undefined;
+    const generateAudio = typeof options.generateAudio === 'boolean' ? options.generateAudio : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      prompt,
+      start_image_url: imageUrl,
+      ...(duration ? { duration } : {}),
+      ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+      ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
+      ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
   const isHailuoVideoModel = modelId.includes('hailuo-2.3');
   const promptOptimizer = options.promptOptimizer ?? (isHailuoVideoModel ? true : undefined);
   const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;

@@ -274,6 +274,7 @@ export default function App() {
   const isKlingModel = !fal.isVideoMode && fal.falModelId === KLING_IMAGE_MODEL_ID;
   const isKlingO1FflfMode = fal.isKlingO1VideoModel && fal.klingO1Variant === 'fflf';
   const isScailVideoModel = fal.isVideoMode && fal.falVideoModelId === SCAIL_VIDEO_MODEL_ID;
+  const supportsTailFrameSelection = fal.isKlingProVideoSelection || fal.isKling26VideoModel || isKlingO1FflfMode || fal.isSeedance15VideoModel; // End-frame capable modes.
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const selection = useSelectionState({
@@ -426,10 +427,10 @@ export default function App() {
 
   // Clear video last frame selection if not in a first/last-frame capable mode
   useEffect(() => {
-    if (!fal.isKlingProVideoSelection && !isKlingO1FflfMode && !fal.isSeedance15VideoModel && videoLastFrameImageId) { // Keep end-frame selection for Seedance FFLF too.
+    if (!supportsTailFrameSelection && videoLastFrameImageId) { // Drop last-frame selection when not supported.
       setVideoLastFrameImageId(null);
     }
-  }, [isKlingO1FflfMode, fal.isKlingProVideoSelection, fal.isSeedance15VideoModel, videoLastFrameImageId]); // Sync FFLF-capable modes.
+  }, [supportsTailFrameSelection, videoLastFrameImageId]); // Sync end-frame selection with capabilities.
 
   const handleModelModeChange = useCallback((mode: FalModelMode) => {
     fal.handleModelModeChange(mode);
@@ -1210,7 +1211,7 @@ export default function App() {
           elementImageOrderLabels={klingElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
-          tailSelectionEnabled={fal.isKlingProVideoSelection || isKlingO1FflfMode || fal.isSeedance15VideoModel}
+          tailSelectionEnabled={supportsTailFrameSelection}
           isKlingO1VideoInputMode={isKlingO1VideoInputMode}
           isKlingO1FflfMode={isKlingO1FflfMode}
           isSeedance15FflfMode={fal.isSeedance15VideoModel}
