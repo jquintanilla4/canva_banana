@@ -222,6 +222,10 @@ interface GenerateVideoOptions {
   sora2ProResolution?: 'auto' | '720p' | '1080p';
   sora2ProAspectRatio?: 'auto' | '9:16' | '16:9';
   sora2ProDuration?: '4' | '8' | '12';
+  veo31Duration?: '4s' | '6s' | '8s' | '7s';
+  veo31Resolution?: '720p' | '1080p' | '4k';
+  veo31AspectRatio?: 'auto' | '16:9' | '9:16';
+  veo31GenerateAudio?: boolean;
   wan26Resolution?: '720p' | '1080p';
   wan26Duration?: '5' | '10' | '15';
   wan26PromptExpansion?: boolean;
@@ -313,6 +317,9 @@ export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer';
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video';
 export const SORA_2_PRO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro';
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video';
+export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video';
+export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video';
+export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video';
 export const WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image';
 export const WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image';
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video';
@@ -1594,6 +1601,9 @@ export const generateImageToVideo = async (
 
   const modelId = options.modelId || HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
   const duration = options.duration;
+  const isVeo31ImageToVideoModel = modelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
+  const isVeo31FflfModel = modelId === VEO_31_FFLF_VIDEO_MODEL_ID;
+  const isVeo31ExtendModel = modelId === VEO_31_EXTEND_VIDEO_MODEL_ID;
   const isKlingO1VideoModel = modelId === KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID
     || modelId === KLING_O1_VIDEO_EDIT_MODEL_ID
     || modelId === KLING_O1_VIDEO_REF_V2V_MODEL_ID
@@ -1784,6 +1794,94 @@ export const generateImageToVideo = async (
     const requestId = result?.requestId || latestRequestId;
 
     return { videoUrl, requestId };
+  }
+
+  if (isVeo31ExtendModel) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Veo 3.1 Extend requires a source video.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Veo 3.1 Extend requires a prompt.');
+    }
+
+    const aspectRatio = options.veo31AspectRatio === 'auto' || options.veo31AspectRatio === '16:9' || options.veo31AspectRatio === '9:16'
+      ? options.veo31AspectRatio
+      : undefined;
+    const durationValue = options.veo31Duration === '7s' ? options.veo31Duration : undefined;
+    const resolutionValue = options.veo31Resolution === '720p' ? options.veo31Resolution : undefined;
+    const generateAudio = typeof options.veo31GenerateAudio === 'boolean' ? options.veo31GenerateAudio : undefined;
+    const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      video_url: options.sourceVideoUrl,
+      ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+      ...(durationValue ? { duration: durationValue } : {}),
+      ...(resolutionValue ? { resolution: resolutionValue } : {}),
+      ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
+      ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  if (isVeo31ImageToVideoModel || isVeo31FflfModel) {
+    if (!image) {
+      throw new Error('Veo 3.1 requires an image.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Veo 3.1 requires a prompt.');
+    }
+
+    const imageUrl = await uploadImageElementToFal(image);
+    const aspectRatio = options.veo31AspectRatio === 'auto' || options.veo31AspectRatio === '16:9' || options.veo31AspectRatio === '9:16'
+      ? options.veo31AspectRatio
+      : undefined;
+    const durationValue = options.veo31Duration === '4s' || options.veo31Duration === '6s' || options.veo31Duration === '8s'
+      ? options.veo31Duration
+      : undefined;
+    const resolutionValue = options.veo31Resolution === '720p' || options.veo31Resolution === '1080p' || options.veo31Resolution === '4k'
+      ? options.veo31Resolution
+      : undefined;
+    const generateAudio = typeof options.veo31GenerateAudio === 'boolean' ? options.veo31GenerateAudio : undefined;
+    const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
+
+    if (isVeo31FflfModel) {
+      const tailImage = options.tailImage;
+      if (!tailImage) {
+        throw new Error('Veo 3.1 FFLF requires a first and last frame.');
+      }
+      const lastFrameUrl = await uploadImageElementToFal(tailImage);
+
+      const inputPayload: Record<string, unknown> = {
+        prompt: trimmedPrompt,
+        first_frame_url: imageUrl,
+        last_frame_url: lastFrameUrl,
+        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+        ...(durationValue ? { duration: durationValue } : {}),
+        ...(resolutionValue ? { resolution: resolutionValue } : {}),
+        ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
+        ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+      };
+
+      return subscribeForVideoUrl(modelId, inputPayload, options);
+    }
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      image_url: imageUrl,
+      ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+      ...(durationValue ? { duration: durationValue } : {}),
+      ...(resolutionValue ? { resolution: resolutionValue } : {}),
+      ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
+      ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
   const isWan26I2VModel = modelId === WAN_26_I2V_MODEL_ID;

@@ -25,6 +25,7 @@ import {
   WAN_26_I2V_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
+  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
@@ -34,6 +35,10 @@ import {
   isFalImageModelId,
   isFalVideoModelId,
   normalizeFalModelId,
+  isVeo31AspectRatioSelectionValue,
+  isVeo31DurationSelectionValue,
+  isVeo31ResolutionSelectionValue,
+  isVeo31Variant,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
   isWan26ImageAspectRatioSelectionValue,
@@ -61,6 +66,10 @@ import type {
   Sora2ProAspectRatioSelectionValue,
   Sora2ProDurationSelectionValue,
   Sora2ProResolutionSelectionValue,
+  Veo31AspectRatioSelectionValue,
+  Veo31DurationSelectionValue,
+  Veo31ResolutionSelectionValue,
+  Veo31Variant,
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
@@ -99,6 +108,7 @@ type FalDerivedState = {
   isSora2ProVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
+  isVeo31VideoModel: boolean;
   isFlux2MaxModel: boolean;
   isWan26ImageModel: boolean;
   isUpscaleModel: boolean;
@@ -138,6 +148,11 @@ type FalHandlers = {
   handleSora2ProResolutionChange: (value: string) => void;
   handleSora2ProAspectRatioChange: (value: string) => void;
   handleSora2ProDurationChange: (value: string) => void;
+  handleVeo31VariantChange: (value: string) => void;
+  handleVeo31DurationChange: (value: string) => void;
+  handleVeo31ResolutionChange: (value: string) => void;
+  handleVeo31AspectRatioChange: (value: string) => void;
+  handleVeo31GenerateAudioChange: (value: boolean) => void;
   handleWan26ResolutionChange: (value: string) => void;
   handleWan26DurationChange: (value: string) => void;
   handleWan26PromptExpansionChange: (value: boolean) => void;
@@ -191,6 +206,11 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   sora2ProResolution: Sora2ProResolutionSelectionValue;
   sora2ProAspectRatio: Sora2ProAspectRatioSelectionValue;
   sora2ProDuration: Sora2ProDurationSelectionValue;
+  veo31Variant: Veo31Variant;
+  veo31Duration: Veo31DurationSelectionValue;
+  veo31Resolution: Veo31ResolutionSelectionValue;
+  veo31AspectRatio: Veo31AspectRatioSelectionValue;
+  veo31GenerateAudio: boolean;
   wan26Resolution: Wan26ResolutionSelectionValue;
   wan26Duration: Wan26DurationSelectionValue;
   wan26PromptExpansion: boolean;
@@ -241,6 +261,11 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setSora2ProResolution: Dispatch<SetStateAction<Sora2ProResolutionSelectionValue>>;
   setSora2ProAspectRatio: Dispatch<SetStateAction<Sora2ProAspectRatioSelectionValue>>;
   setSora2ProDuration: Dispatch<SetStateAction<Sora2ProDurationSelectionValue>>;
+  setVeo31Variant: Dispatch<SetStateAction<Veo31Variant>>;
+  setVeo31Duration: Dispatch<SetStateAction<Veo31DurationSelectionValue>>;
+  setVeo31Resolution: Dispatch<SetStateAction<Veo31ResolutionSelectionValue>>;
+  setVeo31AspectRatio: Dispatch<SetStateAction<Veo31AspectRatioSelectionValue>>;
+  setVeo31GenerateAudio: Dispatch<SetStateAction<boolean>>;
   setWan26Resolution: Dispatch<SetStateAction<Wan26ResolutionSelectionValue>>;
   setWan26Duration: Dispatch<SetStateAction<Wan26DurationSelectionValue>>;
   setWan26PromptExpansion: Dispatch<SetStateAction<boolean>>;
@@ -295,6 +320,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [sora2ProResolution, setSora2ProResolution] = useState<Sora2ProResolutionSelectionValue>('auto');
   const [sora2ProAspectRatio, setSora2ProAspectRatio] = useState<Sora2ProAspectRatioSelectionValue>('auto');
   const [sora2ProDuration, setSora2ProDuration] = useState<Sora2ProDurationSelectionValue>('4');
+  const [veo31Variant, setVeo31Variant] = useState<Veo31Variant>('i2v');
+  const [veo31Duration, setVeo31Duration] = useState<Veo31DurationSelectionValue>('8s');
+  const [veo31Resolution, setVeo31Resolution] = useState<Veo31ResolutionSelectionValue>('720p');
+  const [veo31AspectRatio, setVeo31AspectRatio] = useState<Veo31AspectRatioSelectionValue>('auto');
+  const [veo31GenerateAudio, setVeo31GenerateAudio] = useState<boolean>(true);
   const [wan26Resolution, setWan26Resolution] = useState<Wan26ResolutionSelectionValue>('720p');
   const [wan26Duration, setWan26Duration] = useState<Wan26DurationSelectionValue>('5');
   const [wan26PromptExpansion, setWan26PromptExpansion] = useState<boolean>(true);
@@ -332,6 +362,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isSora2ProVideoModel = isVideoMode && falVideoModelId === SORA_2_PRO_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
+  const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan26ImageModel = !isVideoMode && falImageModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
@@ -372,10 +403,44 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, [falVideoModelId]);
 
   useEffect(() => {
+    if (!isVeo31VideoModel) {
+      return;
+    }
+    if (!isVeo31Variant(veo31Variant)) {
+      setVeo31Variant('i2v');
+      return;
+    }
+    if (veo31Variant === 'extend') {
+      if (veo31Duration !== '7s') {
+        setVeo31Duration('7s');
+      }
+      if (veo31Resolution !== '720p') {
+        setVeo31Resolution('720p');
+      }
+      return;
+    }
+    if (!isVeo31DurationSelectionValue(veo31Duration) || veo31Duration === '7s') {
+      setVeo31Duration('8s');
+    }
+    if (!isVeo31ResolutionSelectionValue(veo31Resolution)) {
+      setVeo31Resolution('720p');
+    }
+  }, [isVeo31VideoModel, veo31Duration, veo31Resolution, veo31Variant]);
+
+  useEffect(() => {
     if (falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID && hailuoVariant === 'pro' && falVideoDuration !== '6') {
       setFalVideoDuration('6');
     }
   }, [falVideoModelId, hailuoVariant, falVideoDuration]);
+
+  useEffect(() => {
+    if (!isVeo31VideoModel) {
+      return;
+    }
+    if (!isVeo31AspectRatioSelectionValue(veo31AspectRatio)) {
+      setVeo31AspectRatio('auto');
+    }
+  }, [isVeo31VideoModel, veo31AspectRatio]);
 
   useEffect(() => {
     setFalScaleFactor(prev => {
@@ -614,6 +679,36 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleVeo31VariantChange = useCallback((value: string) => {
+    if (isVeo31Variant(value)) {
+      setVeo31Variant(value);
+      return;
+    }
+    setVeo31Variant('i2v');
+  }, []);
+
+  const handleVeo31DurationChange = useCallback((value: string) => {
+    if (isVeo31DurationSelectionValue(value)) {
+      setVeo31Duration(value);
+    }
+  }, []);
+
+  const handleVeo31ResolutionChange = useCallback((value: string) => {
+    if (isVeo31ResolutionSelectionValue(value)) {
+      setVeo31Resolution(value);
+    }
+  }, []);
+
+  const handleVeo31AspectRatioChange = useCallback((value: string) => {
+    if (isVeo31AspectRatioSelectionValue(value)) {
+      setVeo31AspectRatio(value);
+    }
+  }, []);
+
+  const handleVeo31GenerateAudioChange = useCallback((value: boolean) => {
+    setVeo31GenerateAudio(Boolean(value));
+  }, []);
+
   const handleWan26ResolutionChange = useCallback((value: string) => {
     if (value === '720p' || value === '1080p') {
       setWan26Resolution(value);
@@ -770,6 +865,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
+    veo31Variant,
+    veo31Duration,
+    veo31Resolution,
+    veo31AspectRatio,
+    veo31GenerateAudio,
     wan26Resolution,
     wan26Duration,
     wan26PromptExpansion,
@@ -802,6 +902,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
     isSora2ProVideoModel,
+    isVeo31VideoModel,
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
     isUpscaleModel,
@@ -838,6 +939,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSora2ProResolutionChange,
     handleSora2ProAspectRatioChange,
     handleSora2ProDurationChange,
+    handleVeo31VariantChange,
+    handleVeo31DurationChange,
+    handleVeo31ResolutionChange,
+    handleVeo31AspectRatioChange,
+    handleVeo31GenerateAudioChange,
     handleWan26ResolutionChange,
     handleWan26DurationChange,
     handleWan26PromptExpansionChange,
@@ -888,6 +994,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSora2ProResolution,
     setSora2ProAspectRatio,
     setSora2ProDuration,
+    setVeo31Variant,
+    setVeo31Duration,
+    setVeo31Resolution,
+    setVeo31AspectRatio,
+    setVeo31GenerateAudio,
     setWan26Resolution,
     setWan26Duration,
     setWan26PromptExpansion,

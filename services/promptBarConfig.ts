@@ -14,6 +14,10 @@ import type {
   Sora2ProAspectRatioSelectionValue,
   Sora2ProDurationSelectionValue,
   Sora2ProResolutionSelectionValue,
+  Veo31AspectRatioSelectionValue,
+  Veo31DurationSelectionValue,
+  Veo31ResolutionSelectionValue,
+  Veo31Variant,
   Kling26AudioSelectionValue,
   Kling26ControlDriver,
   Kling26ControlVariant,
@@ -73,6 +77,13 @@ import {
   SORA_2_PRO_ASPECT_RATIO_OPTIONS,
   SORA_2_PRO_DURATION_OPTIONS,
   SORA_2_PRO_RESOLUTION_OPTIONS,
+  VEO31_ASPECT_RATIO_OPTIONS,
+  VEO31_AUDIO_OPTIONS,
+  VEO31_DURATION_OPTIONS,
+  VEO31_EXTEND_DURATION_OPTIONS,
+  VEO31_RESOLUTION_OPTIONS,
+  VEO31_EXTEND_RESOLUTION_OPTIONS,
+  VEO31_VARIANT_OPTIONS,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
@@ -136,6 +147,7 @@ export type PromptBarControlsInput = {
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
   isSora2ProVideoModel: boolean;
+  isVeo31VideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
   hailuoVariant: HailuoVariant;
@@ -166,6 +178,11 @@ export type PromptBarControlsInput = {
   sora2ProResolution: Sora2ProResolutionSelectionValue;
   sora2ProAspectRatio: Sora2ProAspectRatioSelectionValue;
   sora2ProDuration: Sora2ProDurationSelectionValue;
+  veo31Variant: Veo31Variant;
+  veo31Duration: Veo31DurationSelectionValue;
+  veo31Resolution: Veo31ResolutionSelectionValue;
+  veo31AspectRatio: Veo31AspectRatioSelectionValue;
+  veo31GenerateAudio: boolean;
   wan26Resolution: Wan26ResolutionSelectionValue;
   wan26Duration: Wan26DurationSelectionValue;
   wan26PromptExpansion: boolean;
@@ -214,6 +231,11 @@ export type PromptBarControlsInput = {
   onSora2ProResolutionChange: (value: string) => void;
   onSora2ProAspectRatioChange: (value: string) => void;
   onSora2ProDurationChange: (value: string) => void;
+  onVeo31VariantChange: (value: string) => void;
+  onVeo31DurationChange: (value: string) => void;
+  onVeo31ResolutionChange: (value: string) => void;
+  onVeo31AspectRatioChange: (value: string) => void;
+  onVeo31GenerateAudioChange: (value: boolean) => void;
   onWan26ResolutionChange: (value: string) => void;
   onWan26DurationChange: (value: string) => void;
   onWan26PromptExpansionChange: (value: boolean) => void;
@@ -261,6 +283,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
     isSora2ProVideoModel,
+    isVeo31VideoModel,
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
     hailuoVariant,
@@ -291,6 +314,11 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
+    veo31Variant,
+    veo31Duration,
+    veo31Resolution,
+    veo31AspectRatio,
+    veo31GenerateAudio,
     wan26Resolution,
     wan26Duration,
     wan26PromptExpansion,
@@ -339,6 +367,11 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onSora2ProResolutionChange,
     onSora2ProAspectRatioChange,
     onSora2ProDurationChange,
+    onVeo31VariantChange,
+    onVeo31DurationChange,
+    onVeo31ResolutionChange,
+    onVeo31AspectRatioChange,
+    onVeo31GenerateAudioChange,
     onWan26ResolutionChange,
     onWan26DurationChange,
     onWan26PromptExpansionChange,
@@ -718,6 +751,59 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: SORA_2_PRO_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: sora2ProDuration,
       onChange: onSora2ProDurationChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (isVeo31VideoModel) {
+    const durationOptions = veo31Variant === 'extend' ? VEO31_EXTEND_DURATION_OPTIONS : VEO31_DURATION_OPTIONS;
+    const resolutionOptions = veo31Variant === 'extend' ? VEO31_EXTEND_RESOLUTION_OPTIONS : VEO31_RESOLUTION_OPTIONS;
+
+    controls.push({
+      id: 'veo31-variant-select',
+      ariaLabel: 'Select Veo 3.1 variant',
+      options: VEO31_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: veo31Variant,
+      onChange: onVeo31VariantChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'veo31-duration-select',
+      ariaLabel: 'Select Veo 3.1 duration',
+      options: durationOptions.map(option => ({ value: option.value, label: option.label })),
+      value: veo31Duration,
+      onChange: onVeo31DurationChange,
+      disabled: isLoading || (veo31Variant === 'extend' && durationOptions.length === 1),
+    });
+
+    controls.push({
+      id: 'veo31-resolution-select',
+      prefixLabel: 'Resolution',
+      ariaLabel: 'Select Veo 3.1 resolution',
+      options: resolutionOptions.map(option => ({ value: option.value, label: option.label })),
+      value: veo31Resolution,
+      onChange: onVeo31ResolutionChange,
+      disabled: isLoading || (veo31Variant === 'extend' && resolutionOptions.length === 1),
+    });
+
+    controls.push({
+      id: 'veo31-audio-select',
+      prefixLabel: 'Audio',
+      ariaLabel: 'Toggle Veo 3.1 audio generation',
+      options: VEO31_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: veo31GenerateAudio ? 'on' : 'off',
+      onChange: (value: string) => onVeo31GenerateAudioChange(value === 'on'),
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'veo31-aspect-ratio-select',
+      prefixLabel: 'AR',
+      ariaLabel: 'Select Veo 3.1 aspect ratio',
+      options: VEO31_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: veo31AspectRatio,
+      onChange: onVeo31AspectRatioChange,
       disabled: isLoading,
     });
   }

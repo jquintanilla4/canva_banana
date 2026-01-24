@@ -22,6 +22,10 @@ import {
   isSora2ProAspectRatioSelectionValue,
   isSora2ProDurationSelectionValue,
   isSora2ProResolutionSelectionValue,
+  isVeo31AspectRatioSelectionValue,
+  isVeo31DurationSelectionValue,
+  isVeo31ResolutionSelectionValue,
+  isVeo31Variant,
   isGenerationKind,
 } from './modelConfig';
 import {
@@ -88,6 +92,11 @@ export type SnapshotManifestV2 = {
         sora2ProResolution?: string;
         sora2ProAspectRatio?: string;
         sora2ProDuration?: string;
+        veo31Variant?: string;
+        veo31Duration?: string;
+        veo31Resolution?: string;
+        veo31AspectRatio?: string;
+        veo31GenerateAudio?: boolean;
 	      selectedImageIds: string[];
 	      selectedNoteIds: string[];
 	      referenceImageIds: string[];
@@ -160,6 +169,11 @@ export type SnapshotMetaState = {
   sora2ProResolution?: string;
   sora2ProAspectRatio?: string;
   sora2ProDuration?: string;
+  veo31Variant?: string;
+  veo31Duration?: string;
+  veo31Resolution?: string;
+  veo31AspectRatio?: string;
+  veo31GenerateAudio?: boolean;
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
@@ -789,6 +803,27 @@ export const normalizeSnapshotImageMetadata = (
       const sora2ProDurationValue = (typed as { sora2ProDuration?: unknown }).sora2ProDuration;
       if (isSora2ProDurationSelectionValue(sora2ProDurationValue)) {
         normalizedOptions.sora2ProDuration = sora2ProDurationValue;
+      }
+
+      const veo31VariantValue = (typed as { veo31Variant?: unknown }).veo31Variant;
+      if (isVeo31Variant(veo31VariantValue)) {
+        normalizedOptions.veo31Variant = veo31VariantValue;
+      }
+      const veo31DurationValue = (typed as { veo31Duration?: unknown }).veo31Duration;
+      if (isVeo31DurationSelectionValue(veo31DurationValue)) {
+        normalizedOptions.veo31Duration = veo31DurationValue;
+      }
+      const veo31ResolutionValue = (typed as { veo31Resolution?: unknown }).veo31Resolution;
+      if (isVeo31ResolutionSelectionValue(veo31ResolutionValue)) {
+        normalizedOptions.veo31Resolution = veo31ResolutionValue;
+      }
+      const veo31AspectRatioValue = (typed as { veo31AspectRatio?: unknown }).veo31AspectRatio;
+      if (isVeo31AspectRatioSelectionValue(veo31AspectRatioValue)) {
+        normalizedOptions.veo31AspectRatio = veo31AspectRatioValue;
+      }
+      const veo31GenerateAudioValue = (typed as { veo31GenerateAudio?: unknown }).veo31GenerateAudio;
+      if (typeof veo31GenerateAudioValue === 'boolean') {
+        normalizedOptions.veo31GenerateAudio = veo31GenerateAudioValue;
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;

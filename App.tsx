@@ -273,8 +273,14 @@ export default function App() {
 
   const isKlingModel = !fal.isVideoMode && fal.falModelId === KLING_IMAGE_MODEL_ID;
   const isKlingO1FflfMode = fal.isKlingO1VideoModel && fal.klingO1Variant === 'fflf';
+  const isVeo31FflfMode = fal.isVeo31VideoModel && fal.veo31Variant === 'fflf';
+  const isVeo31ExtendMode = fal.isVeo31VideoModel && fal.veo31Variant === 'extend';
   const isScailVideoModel = fal.isVideoMode && fal.falVideoModelId === SCAIL_VIDEO_MODEL_ID;
-  const supportsTailFrameSelection = fal.isKlingProVideoSelection || fal.isKling26VideoModel || isKlingO1FflfMode || fal.isSeedance15VideoModel; // End-frame capable modes.
+  const supportsTailFrameSelection = fal.isKlingProVideoSelection
+    || fal.isKling26VideoModel
+    || isKlingO1FflfMode
+    || isVeo31FflfMode
+    || fal.isSeedance15VideoModel; // End-frame capable modes.
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const selection = useSelectionState({
@@ -977,6 +983,8 @@ export default function App() {
     isKling26VideoModel: fal.isKling26VideoModel,
     isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
+    isVeo31VideoModel: fal.isVeo31VideoModel,
+    veo31Variant: fal.veo31Variant,
     falModelId: fal.falModelId,
     falNumImages: fal.falNumImages,
     activePrimaryImage,
@@ -1005,6 +1013,7 @@ export default function App() {
     isLipsyncVideoModel: fal.isLipsyncVideoModel,
     isInfinitalkVideoModel: fal.isInfinitalkVideoModel,
     isSora2ProVideoModel: fal.isSora2ProVideoModel,
+    isVeo31VideoModel: fal.isVeo31VideoModel,
     isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
     isSeedance15VideoModel: fal.isSeedance15VideoModel,
     hailuoVariant: fal.hailuoVariant,
@@ -1032,6 +1041,11 @@ export default function App() {
     infinitalkSeed: fal.infinitalkSeed,
     infinitalkAcceleration: fal.infinitalkAcceleration,
     infinitalkDuration: fal.infinitalkDuration,
+    veo31Variant: fal.veo31Variant,
+    veo31Duration: fal.veo31Duration,
+    veo31Resolution: fal.veo31Resolution,
+    veo31AspectRatio: fal.veo31AspectRatio,
+    veo31GenerateAudio: fal.veo31GenerateAudio,
     sora2ProResolution: fal.sora2ProResolution,
     sora2ProAspectRatio: fal.sora2ProAspectRatio,
     sora2ProDuration: fal.sora2ProDuration,
@@ -1081,6 +1095,11 @@ export default function App() {
     onInfinitalkSeedChange: fal.handleInfinitalkSeedChange,
     onInfinitalkAccelerationChange: fal.handleInfinitalkAccelerationChange,
     onInfinitalkDurationChange: fal.handleInfinitalkDurationChange,
+    onVeo31VariantChange: fal.handleVeo31VariantChange,
+    onVeo31DurationChange: fal.handleVeo31DurationChange,
+    onVeo31ResolutionChange: fal.handleVeo31ResolutionChange,
+    onVeo31AspectRatioChange: fal.handleVeo31AspectRatioChange,
+    onVeo31GenerateAudioChange: fal.handleVeo31GenerateAudioChange,
     onSora2ProResolutionChange: fal.handleSora2ProResolutionChange,
     onSora2ProAspectRatioChange: fal.handleSora2ProAspectRatioChange,
     onSora2ProDurationChange: fal.handleSora2ProDurationChange,
@@ -1216,6 +1235,7 @@ export default function App() {
           isKlingO1FflfMode={isKlingO1FflfMode}
           isSeedance15FflfMode={fal.isSeedance15VideoModel}
           isKling26ControlVideoInputMode={fal.isKling26ControlVideoModel}
+          isVeo31ExtendMode={isVeo31ExtendMode}
           isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel || isScailVideoModel}
           isWan26I2VMode={fal.isWan26I2VVideoModel}
           onError={setError}

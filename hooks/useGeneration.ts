@@ -15,6 +15,7 @@ import {
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SORA_2_PRO_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
+  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
@@ -24,6 +25,7 @@ import {
   getKlingActualModelId,
   getKling26ControlModelId,
   getKlingO1VideoEndpoint,
+  getVeo31VideoEndpoint,
   getWanAnimateVideoEndpoint,
   getMaxReferenceImages,
   isKlingO1VideoModelId,
@@ -227,6 +229,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
+    veo31Variant,
+    veo31Duration,
+    veo31Resolution,
+    veo31AspectRatio,
+    veo31GenerateAudio,
     wan26Resolution,
     wan26Duration,
     wan26PromptExpansion,
@@ -293,18 +300,18 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const falNoiseScaleForRun = falOptionsOverride.noiseScale ?? falNoiseScale;
     const falCreativityForRun = falOptionsOverride.creativity ?? falCreativity;
     const falVideoDurationForRun = falOptionsOverride.videoDuration ?? falVideoDuration;
-	    const hailuoVariantForRun = falOptionsOverride.hailuoVariant ?? hailuoVariant;
-	    const klingVariantForRun = falOptionsOverride.klingVariant ?? klingVariant;
-	    const klingO1VariantForRun = falOptionsOverride.klingO1Variant ?? klingO1Variant;
-	    const videoNegativePromptForRun = falOptionsOverride.negativePrompt ?? videoNegativePrompt;
-	    const wanTargetResolutionForRun = falOptionsOverride.wanTargetResolution ?? wanTargetResolution;
-	    const wanCreativityForRun = falOptionsOverride.wanCreativity ?? wanCreativity;
-	    const wanAnimateVariantForRun = falOptionsOverride.wanAnimateVariant ?? wanAnimateVariant;
-	    const wanAnimateStepsForRun = falOptionsOverride.wanAnimateSteps ?? wanAnimateSteps;
-	    const wanAnimateResolutionForRun = falOptionsOverride.wanAnimateResolution ?? wanAnimateResolution;
-	    const wanAnimateShiftForRun = falOptionsOverride.wanAnimateShift ?? wanAnimateShift;
-	    const wanAnimateQualityForRun = falOptionsOverride.wanAnimateQuality ?? wanAnimateQuality;
-	    const wanAnimateUseTurboForRun = falOptionsOverride.wanAnimateUseTurbo ?? wanAnimateUseTurbo;
+    const hailuoVariantForRun = falOptionsOverride.hailuoVariant ?? hailuoVariant;
+    const klingVariantForRun = falOptionsOverride.klingVariant ?? klingVariant;
+    const klingO1VariantForRun = falOptionsOverride.klingO1Variant ?? klingO1Variant;
+    const videoNegativePromptForRun = falOptionsOverride.negativePrompt ?? videoNegativePrompt;
+    const wanTargetResolutionForRun = falOptionsOverride.wanTargetResolution ?? wanTargetResolution;
+    const wanCreativityForRun = falOptionsOverride.wanCreativity ?? wanCreativity;
+    const wanAnimateVariantForRun = falOptionsOverride.wanAnimateVariant ?? wanAnimateVariant;
+    const wanAnimateStepsForRun = falOptionsOverride.wanAnimateSteps ?? wanAnimateSteps;
+    const wanAnimateResolutionForRun = falOptionsOverride.wanAnimateResolution ?? wanAnimateResolution;
+    const wanAnimateShiftForRun = falOptionsOverride.wanAnimateShift ?? wanAnimateShift;
+    const wanAnimateQualityForRun = falOptionsOverride.wanAnimateQuality ?? wanAnimateQuality;
+    const wanAnimateUseTurboForRun = falOptionsOverride.wanAnimateUseTurbo ?? wanAnimateUseTurbo;
       const oneToAllAnimateResolutionForRun = falOptionsOverride.oneToAllAnimateResolution ?? oneToAllAnimateResolution;
       const infinitalkResolutionForRun = falOptionsOverride.infinitalkResolution ?? infinitalkResolution;
       const infinitalkSeedForRun = falOptionsOverride.infinitalkSeed ?? infinitalkSeed;
@@ -313,7 +320,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const sora2ProResolutionForRun = falOptionsOverride.sora2ProResolution ?? sora2ProResolution;
       const sora2ProAspectRatioForRun = falOptionsOverride.sora2ProAspectRatio ?? sora2ProAspectRatio;
       const sora2ProDurationForRun = falOptionsOverride.sora2ProDuration ?? sora2ProDuration;
-	    const kling26AudioOverride = falOptionsOverride.kling26Audio;
+      const veo31VariantForRun = falOptionsOverride.veo31Variant ?? veo31Variant;
+      const veo31DurationForRun = falOptionsOverride.veo31Duration ?? veo31Duration;
+    const veo31ResolutionForRun = falOptionsOverride.veo31Resolution ?? veo31Resolution;
+    const veo31AspectRatioForRun = falOptionsOverride.veo31AspectRatio ?? veo31AspectRatio;
+    const veo31GenerateAudioForRun = falOptionsOverride.veo31GenerateAudio ?? veo31GenerateAudio;
+    const kling26AudioOverride = falOptionsOverride.kling26Audio;
     const kling26AudioForRun = kling26AudioOverride !== undefined
       ? kling26AudioOverride
       : kling26AudioSelection === 'on';
@@ -373,47 +385,52 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelIdForRun);
     const isKlingO1EditMode = isKlingO1VideoModel && klingO1VariantForRun === 'edit';
     const isKlingO1RefV2VMode = isKlingO1VideoModel && klingO1VariantForRun === 'refV2V';
-	    const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
-	    const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
+    const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+    const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
       const isKling26ControlVideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_CONTROL_VIDEO_MODEL_ID;
       const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
       const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
       const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
       const isScailVideoModel = isVideoMode && falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID;
       const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
-      const isInfinitalkVideoModel = isVideoMode && falVideoModelIdForRun === INFINITALK_VIDEO_MODEL_ID;
-      const isSora2ProVideoModel = isVideoMode && falVideoModelIdForRun === SORA_2_PRO_VIDEO_MODEL_ID;
-	    const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
+    const isInfinitalkVideoModel = isVideoMode && falVideoModelIdForRun === INFINITALK_VIDEO_MODEL_ID;
+    const isSora2ProVideoModel = isVideoMode && falVideoModelIdForRun === SORA_2_PRO_VIDEO_MODEL_ID;
+    const isVeo31VideoModelForRun = isVideoMode && falVideoModelIdForRun === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
+    const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
+      const isVeo31ExtendMode = isVeo31VideoModelForRun && veo31VariantForRun === 'extend';
       const isFalVideoInputMode = isWanVideoInputMode
         || isOneToAllAnimateVideoModel
         || isLipsyncVideoModel
         || isInfinitalkVideoModel
         || isKling26ControlVideoModel
+        || isVeo31ExtendMode
         || isScailVideoModel;
-	    const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
-	    const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
+    const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
+    const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
       const actualKling26ControlModelId = isKling26ControlVideoModel
         ? getKling26ControlModelId(kling26ControlVariantForRun)
         : null;
-	    const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
-	    const isKlingO1FflfMode = isKlingO1VideoModel && klingO1VariantForRun === 'fflf';
+    const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
+    const actualVeo31ModelId = isVeo31VideoModelForRun ? getVeo31VideoEndpoint(veo31VariantForRun) : null;
+    const isKlingO1FflfMode = isKlingO1VideoModel && klingO1VariantForRun === 'fflf';
+      const isVeo31FflfMode = isVeo31VideoModelForRun && veo31VariantForRun === 'fflf';
     const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
       ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
       : (isKlingVideoModel || isKling26VideoModel || isKlingO1VideoModel)
         ? (falVideoDurationForRun === '10' ? '10' : '5')
         : undefined;
-	    const normalizedVideoNegativePrompt =
-	      (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel)
-	        ? videoNegativePromptForRun.trim()
-	        : '';
-	    const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
-	    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary;
+    const normalizedVideoNegativePrompt =
+      (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel || isVeo31VideoModelForRun)
+        ? videoNegativePromptForRun.trim()
+        : '';
+    const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
+    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary;
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel);
     const isLipsyncPromptOptional = usingFal && isVideoMode && isLipsyncVideoModel;
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
-	    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1VideoInputMode && !isFalVideoInputMode;
-	    const generationKind: GenerationKind = overrideKind
-	      ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
+    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1VideoInputMode && !isFalVideoInputMode;
+    const generationKind: GenerationKind = overrideKind
+      ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
 
     if (requiresPrompt && !trimmedUserPrompt) {
       setError(isTextToImage ? 'Please describe the image you want to create.' : 'Please write a prompt to describe your edit.');
@@ -469,19 +486,26 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const klingO1VariantLabel = klingO1VariantForRun === 'refI2V'
         ? 'RefI2V'
         : klingO1VariantForRun.toUpperCase();
-	      const jobModelLabel = isHailuoVideoModel
-	        ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
-	        : isKlingVideoModel
-	          ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
-	          : isKlingO1VideoModel
+      const veo31VariantLabel = veo31VariantForRun === 'fflf'
+        ? 'FFLF'
+        : veo31VariantForRun === 'extend'
+          ? 'Extend'
+          : 'I2V';
+      const jobModelLabel = isHailuoVideoModel
+        ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
+        : isKlingVideoModel
+          ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
+          : isKlingO1VideoModel
             ? `${baseModelLabel} ${klingO1VariantLabel}`
             : isKling26ControlVideoModel
               ? `${baseModelLabel} ${kling26ControlVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
             : isKling26VideoModel
               ? `${baseModelLabel} Pro`
-	              : isWanAnimateVideoModel
-	                ? `${baseModelLabel} ${wanAnimateVariantForRun === 'replace' ? 'Keep BG' : 'Replace BG'}`
-	                : baseModelLabel;
+              : isVeo31VideoModelForRun
+                ? `${baseModelLabel} ${veo31VariantLabel}`
+                : isWanAnimateVideoModel
+                  ? `${baseModelLabel} ${wanAnimateVariantForRun === 'replace' ? 'Keep BG' : 'Replace BG'}`
+                  : baseModelLabel;
       const findNonOverlappingPlacement = (
         width: number,
         height: number,
@@ -673,7 +697,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKling26VideoModel || isKlingO1FflfMode || isSeedance15VideoModel; // Allow end-frame input for Kling 2.6/FFLF.
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKling26VideoModel || isKlingO1FflfMode || isVeo31FflfMode || isSeedance15VideoModel; // Allow end-frame input for Kling 2.6/FFLF.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -692,6 +716,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ?? actualKlingO1ModelId
           ?? actualKling26ControlModelId
           ?? actualWanAnimateModelId
+          ?? actualVeo31ModelId
           ?? falVideoModelIdForRun;
         const shouldSendDuration = isHailuoVideoModel
           ? isHailuoStandardVideoModel
@@ -699,7 +724,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
         const oneToAllNegativePromptForRequest = isOneToAllAnimateVideoModel ? videoNegativePromptForRun.trim() : undefined;
         const negativePromptForRequest =
-          (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel) && hasVideoNegativePrompt
+          (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel || isVeo31VideoModelForRun) && hasVideoNegativePrompt
             ? normalizedVideoNegativePrompt
             : undefined;
         const generateAudioForRequest = isKling26VideoModel ? kling26AudioForRun : undefined;
@@ -714,6 +739,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
             resolution: oneToAllAnimateResolutionForRun,
           } : {}),
           ...(isScailVideoModel ? {
+            sourceVideoUrl: sourceVideoUrlForRequest,
+          } : {}),
+          ...(isVeo31ExtendMode ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
           } : {}),
           ...(videoTailImageElement ? { tailImage: videoTailImageElement } : {}),
@@ -768,6 +796,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
             sora2ProResolution: sora2ProResolutionForRun,
             sora2ProAspectRatio: sora2ProAspectRatioForRun,
             sora2ProDuration: sora2ProDurationForRun,
+          } : {}),
+          ...(isVeo31VideoModelForRun ? {
+            veo31Duration: veo31DurationForRun,
+            veo31Resolution: veo31ResolutionForRun,
+            veo31AspectRatio: veo31AspectRatioForRun,
+            veo31GenerateAudio: veo31GenerateAudioForRun,
           } : {}),
           ...(isWan26I2VVideoModel ? {
             wan26Resolution: wan26Resolution,
@@ -858,7 +892,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
             audioTrackCount > 0 ||
             (typeof webkitAudioDecodedByteCount === 'number' && webkitAudioDecodedByteCount > 0)
           );
-          const hasAudio = hasDetectedAudio || generateAudioForRequest === true;
+          const hasAudio = hasDetectedAudio
+            || generateAudioForRequest === true
+            || (isVeo31VideoModelForRun && veo31GenerateAudioForRun);
 
           const newVideo: CanvasImage = {
             id: crypto.randomUUID(),
@@ -893,7 +929,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
                   : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameIdForMetadata ? { videoLastFrameImageId: videoLastFrameIdForMetadata } : {}),
-	                ...((isKlingO1VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
+                ...((isKlingO1VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
                 falOptions: {
                   ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
                   ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
@@ -932,6 +968,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     sora2ProResolution: sora2ProResolutionForRun,
                     sora2ProAspectRatio: sora2ProAspectRatioForRun,
                     sora2ProDuration: sora2ProDurationForRun,
+                  } : {}),
+                  ...(isVeo31VideoModelForRun ? {
+                    veo31Variant: veo31VariantForRun,
+                    veo31Duration: veo31DurationForRun,
+                    veo31Resolution: veo31ResolutionForRun,
+                    veo31AspectRatio: veo31AspectRatioForRun,
+                    veo31GenerateAudio: veo31GenerateAudioForRun,
                   } : {}),
                   ...(isWan26I2VVideoModel ? {
                     wan26Resolution: wan26Resolution,
@@ -1447,27 +1490,27 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
                   ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
                   ...(generationKind === 'video' ? { videoDuration: videoDurationForRun } : {}),
-	                  ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
-	                  ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
-	                  ...(hasVideoNegativePrompt ? { negativePrompt: normalizedVideoNegativePrompt } : {}),
-	                  ...(isWanVisionEnhancerVideoModel ? {
-	                    wanTargetResolution: wanTargetResolutionForRun,
-	                    wanCreativity: wanCreativityForRun,
-	                  } : {}),
-	                  ...(isWanAnimateVideoModel ? {
-	                    wanAnimateVariant: wanAnimateVariantForRun,
-	                    wanAnimateSteps: wanAnimateStepsForRun,
-	                    wanAnimateResolution: wanAnimateResolutionForRun,
-	                    wanAnimateShift: wanAnimateShiftForRun,
-	                    wanAnimateQuality: wanAnimateQualityForRun,
-	                    wanAnimateUseTurbo: wanAnimateUseTurboForRun,
-	                  } : {}),
-                    ...(isOneToAllAnimateVideoModel ? {
-                      oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
-                    } : {}),
-	                  ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
-	                  ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
-	                },
+                  ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
+                  ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
+                  ...(hasVideoNegativePrompt ? { negativePrompt: normalizedVideoNegativePrompt } : {}),
+                  ...(isWanVisionEnhancerVideoModel ? {
+                    wanTargetResolution: wanTargetResolutionForRun,
+                    wanCreativity: wanCreativityForRun,
+                  } : {}),
+                  ...(isWanAnimateVideoModel ? {
+                    wanAnimateVariant: wanAnimateVariantForRun,
+                    wanAnimateSteps: wanAnimateStepsForRun,
+                    wanAnimateResolution: wanAnimateResolutionForRun,
+                    wanAnimateShift: wanAnimateShiftForRun,
+                    wanAnimateQuality: wanAnimateQualityForRun,
+                    wanAnimateUseTurbo: wanAnimateUseTurboForRun,
+                  } : {}),
+                  ...(isOneToAllAnimateVideoModel ? {
+                    oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
+                  } : {}),
+                  ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
+                  ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
+                },
               },
             },
           };
@@ -1536,19 +1579,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
     falNoiseScale,
     falCreativity,
     falVideoDuration,
-	    hailuoVariant,
-	    klingVariant,
-	    klingO1Variant,
-	    kling26AudioSelection,
-      kling26ControlVariant,
-      kling26ControlKeepSound,
-      kling26ControlDriver,
-	    videoNegativePrompt,
-	    wanTargetResolution,
-	    wanCreativity,
-	    lipsyncEmotion,
-	    lipsyncModelMode,
-	    lipsyncAudioMode,
+    hailuoVariant,
+    klingVariant,
+    klingO1Variant,
+    kling26AudioSelection,
+    kling26ControlVariant,
+    kling26ControlKeepSound,
+    kling26ControlDriver,
+    videoNegativePrompt,
+    wanTargetResolution,
+    wanCreativity,
+    lipsyncEmotion,
+    lipsyncModelMode,
+    lipsyncAudioMode,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -1556,6 +1599,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
+    veo31Variant,
+    veo31Duration,
+    veo31Resolution,
+    veo31AspectRatio,
+    veo31GenerateAudio,
     wan26Resolution,
     wan26Duration,
     wan26PromptExpansion,
@@ -1570,7 +1618,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wan26ImageAspectRatio,
     wan26ImageMaxImages,
     isWan26ImageModel,
-	    images,
+    images,
     paths,
     referenceImageIds,
     elementImageIds,

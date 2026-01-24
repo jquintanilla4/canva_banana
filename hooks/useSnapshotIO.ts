@@ -28,6 +28,10 @@ import {
   isSora2ProAspectRatioSelectionValue,
   isSora2ProDurationSelectionValue,
   isSora2ProResolutionSelectionValue,
+  isVeo31AspectRatioSelectionValue,
+  isVeo31DurationSelectionValue,
+  isVeo31ResolutionSelectionValue,
+  isVeo31Variant,
   isFalVideoModelId,
   normalizeFalModelId,
 } from '../services/modelConfig';
@@ -146,6 +150,11 @@ export function useSnapshotIO({
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
+    veo31Variant,
+    veo31Duration,
+    veo31Resolution,
+    veo31AspectRatio,
+    veo31GenerateAudio,
     setFalModelMode,
     setFalImageModelId,
     setFalVideoModelId,
@@ -171,6 +180,11 @@ export function useSnapshotIO({
     setSora2ProResolution,
     setSora2ProAspectRatio,
     setSora2ProDuration,
+    setVeo31Variant,
+    setVeo31Duration,
+    setVeo31Resolution,
+    setVeo31AspectRatio,
+    setVeo31GenerateAudio,
   } = fal;
 
   const {
@@ -223,6 +237,11 @@ export function useSnapshotIO({
       sora2ProResolution,
       sora2ProAspectRatio,
       sora2ProDuration,
+      veo31Variant,
+      veo31Duration,
+      veo31Resolution,
+      veo31AspectRatio,
+      veo31GenerateAudio,
       selectedImageIds: [...selectedImageIds],
       selectedNoteIds: [...selectedNoteIds],
       referenceImageIds: [...referenceImageIds],
@@ -245,24 +264,29 @@ export function useSnapshotIO({
     displayedNotes,
     displayedPaths,
     eraserSize,
-	    falAspectRatioSelection,
-	    falCreativity,
-	    wanTargetResolution,
-	    wanCreativity,
-	    wanAnimateVariant,
-	    wanAnimateSteps,
-	    wanAnimateResolution,
-      oneToAllAnimateResolution,
-	    wanAnimateShift,
-	    wanAnimateQuality,
-	    wanAnimateUseTurbo,
+    falAspectRatioSelection,
+    falCreativity,
+    wanTargetResolution,
+    wanCreativity,
+    wanAnimateVariant,
+    wanAnimateSteps,
+    wanAnimateResolution,
+    oneToAllAnimateResolution,
+    wanAnimateShift,
+    wanAnimateQuality,
+    wanAnimateUseTurbo,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
-	    falImageSizeSelection,
+    veo31Variant,
+    veo31Duration,
+    veo31Resolution,
+    veo31AspectRatio,
+    veo31GenerateAudio,
+    falImageSizeSelection,
     falModelId,
     falNoiseScale,
     falNumImages,
@@ -520,39 +544,39 @@ export function useSnapshotIO({
           const roundedNoise = Math.round(normalizedNoise * 10) / 10;
           setFalNoiseScale(Math.min(1, Math.max(0.1, roundedNoise)));
         }
-	        if (typeof meta.falCreativity === 'number') {
-	          const normalizedCreativity = Number.isFinite(meta.falCreativity)
-	            ? Math.round(meta.falCreativity * 2) / 2
-	            : 0;
-	          setFalCreativity(Math.min(10, Math.max(0, normalizedCreativity)));
-	        }
-	        if (meta.wanTargetResolution === '720p' || meta.wanTargetResolution === '1080p') {
-	          setWanTargetResolution(meta.wanTargetResolution);
-	        }
-	        if (typeof meta.wanCreativity === 'number') {
-	          const normalizedWanCreativity = Number.isFinite(meta.wanCreativity)
-	            ? Math.round(meta.wanCreativity)
-	            : 1;
-	          setWanCreativity(Math.min(4, Math.max(0, normalizedWanCreativity)) as WanCreativity);
-	        }
-	        if (meta.wanAnimateVariant === 'replace' || meta.wanAnimateVariant === 'move') {
-	          setWanAnimateVariant(meta.wanAnimateVariant);
-	        }
-	        if (meta.wanAnimateSteps === '10' || meta.wanAnimateSteps === '20' || meta.wanAnimateSteps === '30' || meta.wanAnimateSteps === '40') {
-	          setWanAnimateSteps(meta.wanAnimateSteps);
-	        }
-	        if (meta.wanAnimateResolution === '480p' || meta.wanAnimateResolution === '580p' || meta.wanAnimateResolution === '720p') {
-	          setWanAnimateResolution(meta.wanAnimateResolution);
-	        }
-          if (meta.oneToAllAnimateResolution === '480p' || meta.oneToAllAnimateResolution === '580p' || meta.oneToAllAnimateResolution === '720p') {
-            setOneToAllAnimateResolution(meta.oneToAllAnimateResolution);
-          }
-	        if (meta.wanAnimateShift === '5.0' || meta.wanAnimateShift === '6.0' || meta.wanAnimateShift === '7.0' || meta.wanAnimateShift === '8.0' || meta.wanAnimateShift === '9.0' || meta.wanAnimateShift === '10.0') {
-	          setWanAnimateShift(meta.wanAnimateShift);
-	        }
-	        if (meta.wanAnimateQuality === 'high' || meta.wanAnimateQuality === 'maximum') {
-	          setWanAnimateQuality(meta.wanAnimateQuality);
-	        }
+        if (typeof meta.falCreativity === 'number') {
+          const normalizedCreativity = Number.isFinite(meta.falCreativity)
+            ? Math.round(meta.falCreativity * 2) / 2
+            : 0;
+          setFalCreativity(Math.min(10, Math.max(0, normalizedCreativity)));
+        }
+        if (meta.wanTargetResolution === '720p' || meta.wanTargetResolution === '1080p') {
+          setWanTargetResolution(meta.wanTargetResolution);
+        }
+        if (typeof meta.wanCreativity === 'number') {
+          const normalizedWanCreativity = Number.isFinite(meta.wanCreativity)
+            ? Math.round(meta.wanCreativity)
+            : 1;
+          setWanCreativity(Math.min(4, Math.max(0, normalizedWanCreativity)) as WanCreativity);
+        }
+        if (meta.wanAnimateVariant === 'replace' || meta.wanAnimateVariant === 'move') {
+          setWanAnimateVariant(meta.wanAnimateVariant);
+        }
+        if (meta.wanAnimateSteps === '10' || meta.wanAnimateSteps === '20' || meta.wanAnimateSteps === '30' || meta.wanAnimateSteps === '40') {
+          setWanAnimateSteps(meta.wanAnimateSteps);
+        }
+        if (meta.wanAnimateResolution === '480p' || meta.wanAnimateResolution === '580p' || meta.wanAnimateResolution === '720p') {
+          setWanAnimateResolution(meta.wanAnimateResolution);
+        }
+        if (meta.oneToAllAnimateResolution === '480p' || meta.oneToAllAnimateResolution === '580p' || meta.oneToAllAnimateResolution === '720p') {
+          setOneToAllAnimateResolution(meta.oneToAllAnimateResolution);
+        }
+        if (meta.wanAnimateShift === '5.0' || meta.wanAnimateShift === '6.0' || meta.wanAnimateShift === '7.0' || meta.wanAnimateShift === '8.0' || meta.wanAnimateShift === '9.0' || meta.wanAnimateShift === '10.0') {
+          setWanAnimateShift(meta.wanAnimateShift);
+        }
+        if (meta.wanAnimateQuality === 'high' || meta.wanAnimateQuality === 'maximum') {
+          setWanAnimateQuality(meta.wanAnimateQuality);
+        }
         if (typeof meta.wanAnimateUseTurbo === 'boolean') {
           setWanAnimateUseTurbo(meta.wanAnimateUseTurbo);
         }
@@ -574,7 +598,22 @@ export function useSnapshotIO({
         if (isSora2ProDurationSelectionValue(meta.sora2ProDuration)) {
           setSora2ProDuration(meta.sora2ProDuration);
         }
-	        setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
+        if (isVeo31Variant(meta.veo31Variant)) {
+          setVeo31Variant(meta.veo31Variant);
+        }
+        if (isVeo31DurationSelectionValue(meta.veo31Duration)) {
+          setVeo31Duration(meta.veo31Duration);
+        }
+        if (isVeo31ResolutionSelectionValue(meta.veo31Resolution)) {
+          setVeo31Resolution(meta.veo31Resolution);
+        }
+        if (isVeo31AspectRatioSelectionValue(meta.veo31AspectRatio)) {
+          setVeo31AspectRatio(meta.veo31AspectRatio);
+        }
+        if (typeof meta.veo31GenerateAudio === 'boolean') {
+          setVeo31GenerateAudio(meta.veo31GenerateAudio);
+        }
+        setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
         setElementImageIds(Array.isArray(meta.elementImageIds) ? [...meta.elementImageIds] : []);
@@ -616,24 +655,29 @@ export function useSnapshotIO({
     setBrushColor,
     setBrushSize,
     setEraserSize,
-	    setFalAspectRatioSelection,
-	    setFalCreativity,
-	    setWanTargetResolution,
-	    setWanCreativity,
-	    setWanAnimateVariant,
-	    setWanAnimateSteps,
-	    setWanAnimateResolution,
-      setOneToAllAnimateResolution,
-	    setWanAnimateShift,
-	    setWanAnimateQuality,
-	    setWanAnimateUseTurbo,
+    setFalAspectRatioSelection,
+    setFalCreativity,
+    setWanTargetResolution,
+    setWanCreativity,
+    setWanAnimateVariant,
+    setWanAnimateSteps,
+    setWanAnimateResolution,
+    setOneToAllAnimateResolution,
+    setWanAnimateShift,
+    setWanAnimateQuality,
+    setWanAnimateUseTurbo,
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,
     setSora2ProResolution,
     setSora2ProAspectRatio,
     setSora2ProDuration,
-	    setFalImageModelId,
+    setVeo31Variant,
+    setVeo31Duration,
+    setVeo31Resolution,
+    setVeo31AspectRatio,
+    setVeo31GenerateAudio,
+    setFalImageModelId,
     setFalImageSizeSelection,
     setFalModelMode,
     setFalNoiseScale,

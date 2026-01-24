@@ -51,6 +51,9 @@ export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as c
 export const SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const; // Sora 2 Pro image-to-video
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
+export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as const;
+export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
+export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video' as const;
 export const SCAIL_VIDEO_MODEL_ID = 'fal-ai/scail' as const;
 export const WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
 export const WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
@@ -61,6 +64,7 @@ export type KlingVariant = 'standard' | 'pro';
 export type KlingO1Variant = 'refI2V' | 'edit' | 'fflf' | 'refV2V';
 export type Kling26ControlVariant = 'standard' | 'pro';
 export type Kling26ControlDriver = 'image' | 'video';
+export type Veo31Variant = 'i2v' | 'fflf' | 'extend';
 export type Kling26ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
@@ -115,6 +119,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
+  { value: VEO_31_IMAGE_TO_VIDEO_MODEL_ID, label: 'Veo 3.1' },
   { value: WAN_26_I2V_MODEL_ID, label: 'Wan 2.6' },
   { value: WAN_ANIMATE_MODEL_ID, label: 'Wan Animate' },
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
@@ -168,6 +173,12 @@ export const getKlingO1VideoEndpoint = (variant: KlingO1Variant): string => {
   if (variant === 'refV2V') return KLING_O1_VIDEO_REF_V2V_MODEL_ID;
   if (variant === 'fflf') return KLING_O1_VIDEO_FFLF_MODEL_ID;
   return KLING_O1_VIDEO_MODEL_ID;
+};
+
+export const getVeo31VideoEndpoint = (variant: Veo31Variant): string => {
+  if (variant === 'fflf') return VEO_31_FFLF_VIDEO_MODEL_ID;
+  if (variant === 'extend') return VEO_31_EXTEND_VIDEO_MODEL_ID;
+  return VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
 };
 
 export const isKlingO1VideoModelId = (value: string | undefined): value is typeof KLING_O1_VIDEO_MODEL_IDS[number] =>
@@ -295,6 +306,48 @@ export const SORA_2_PRO_DURATION_OPTIONS: ReadonlyArray<{ value: Sora2ProDuratio
   { value: '8', label: '8s' },
   { value: '12', label: '12s' },
 ] as const; // Sora 2 Pro duration picker
+
+export type Veo31DurationSelectionValue = '4s' | '6s' | '8s' | '7s';
+export type Veo31ResolutionSelectionValue = '720p' | '1080p' | '4k';
+export type Veo31AspectRatioSelectionValue = 'auto' | '16:9' | '9:16';
+export type Veo31AudioSelectionValue = 'on' | 'off';
+
+export const VEO31_VARIANT_OPTIONS: ReadonlyArray<{ value: Veo31Variant; label: string }> = [
+  { value: 'i2v', label: 'i2v' },
+  { value: 'fflf', label: 'FFLF' },
+  { value: 'extend', label: 'Extend' },
+] as const;
+
+export const VEO31_DURATION_OPTIONS: ReadonlyArray<{ value: Veo31DurationSelectionValue; label: string }> = [
+  { value: '4s', label: '4s' },
+  { value: '6s', label: '6s' },
+  { value: '8s', label: '8s' },
+] as const;
+
+export const VEO31_EXTEND_DURATION_OPTIONS: ReadonlyArray<{ value: Veo31DurationSelectionValue; label: string }> = [
+  { value: '7s', label: '7s' },
+] as const;
+
+export const VEO31_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Veo31ResolutionSelectionValue; label: string }> = [
+  { value: '720p', label: '720p' },
+  { value: '1080p', label: '1080p' },
+  { value: '4k', label: '4k' },
+] as const;
+
+export const VEO31_EXTEND_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Veo31ResolutionSelectionValue; label: string }> = [
+  { value: '720p', label: '720p' },
+] as const;
+
+export const VEO31_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Veo31AspectRatioSelectionValue; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+] as const;
+
+export const VEO31_AUDIO_OPTIONS: ReadonlyArray<{ value: Veo31AudioSelectionValue; label: string }> = [
+  { value: 'off', label: 'OFF' },
+  { value: 'on', label: 'ON' },
+] as const;
 
 // Map display duration to num_frames for Infinitalk API
 export const INFINITALK_DURATION_TO_NUM_FRAMES: Record<InfinitalkDurationSelectionValue, number> = {
@@ -495,6 +548,18 @@ export const isSora2ProAspectRatioSelectionValue = (value: unknown): value is So
 export const isSora2ProDurationSelectionValue = (value: unknown): value is Sora2ProDurationSelectionValue =>
   value === '4' || value === '8' || value === '12';
 
+export const isVeo31DurationSelectionValue = (value: unknown): value is Veo31DurationSelectionValue =>
+  value === '4s' || value === '6s' || value === '8s' || value === '7s';
+
+export const isVeo31ResolutionSelectionValue = (value: unknown): value is Veo31ResolutionSelectionValue =>
+  value === '720p' || value === '1080p' || value === '4k';
+
+export const isVeo31AspectRatioSelectionValue = (value: unknown): value is Veo31AspectRatioSelectionValue =>
+  value === 'auto' || value === '16:9' || value === '9:16';
+
+export const isVeo31Variant = (value: unknown): value is Veo31Variant =>
+  value === 'i2v' || value === 'fflf' || value === 'extend';
+
 export const isWan26ResolutionSelectionValue = (value: unknown): value is Wan26ResolutionSelectionValue =>
   value === '720p' || value === '1080p';
 
@@ -649,6 +714,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SYNC_LIPSYNC_MODEL_ID]: 0,
   [INFINITALK_VIDEO_MODEL_ID]: 0,
   [SORA_2_PRO_VIDEO_MODEL_ID]: 0,
+  [VEO_31_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [WAN_26_I2V_MODEL_ID]: 0,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SCAIL_VIDEO_MODEL_ID]: 0,

@@ -31,6 +31,8 @@ type SelectionFalSettings = Pick<
   | 'isLipsyncVideoModel'
   | 'isInfinitalkVideoModel'
   | 'isSeedance15VideoModel'
+  | 'isVeo31VideoModel'
+  | 'veo31Variant'
 >;
 
 type SelectionOptions = {
@@ -86,6 +88,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
     isSeedance15VideoModel,
+    isVeo31VideoModel,
+    veo31Variant,
   } = fal;
 
   const isKlingImageModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
@@ -98,6 +102,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       || falVideoModelId === WAN_ANIMATE_MODEL_ID
       || falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID
     );
+  const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isScailVideoModel = apiProvider === 'fal'
     && falModelMode === 'video'
     && falVideoModelId === SCAIL_VIDEO_MODEL_ID;
@@ -107,9 +112,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     || isWanVideoInputMode
     || isAudioInputMode
     || isKling26ControlVideoInputMode
+    || isVeo31ExtendMode
     || isScailVideoModel;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
   const isSeedance15FflfMode = isSeedance15VideoModel;
+  const isVeo31FflfMode = isVeo31VideoModel && veo31Variant === 'fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -243,7 +250,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isSeedance15FflfMode) {
+      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isSeedance15FflfMode && !isVeo31FflfMode) {
         return;
       }
       if (!imageId) {
@@ -442,6 +449,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isKling26VideoModel,
     isKlingO1FflfMode,
     isSeedance15FflfMode,
+    isVeo31FflfMode,
     klingVariant,
     onError,
     onReferenceLimit,

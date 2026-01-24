@@ -31,6 +31,8 @@ type Args = {
   isKling26VideoModel: boolean;
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
+  isVeo31VideoModel: boolean;
+  veo31Variant: 'i2v' | 'fflf' | 'extend';
   falModelId: string;
   falNumImages: number;
   activePrimaryImage: unknown;
@@ -66,6 +68,8 @@ export function useGenerationGuards({
   isKling26VideoModel,
   isKling26ControlVideoModel,
   isHailuoVideoModel,
+  isVeo31VideoModel,
+  veo31Variant,
   falModelId,
   falNumImages,
   activePrimaryImage,
@@ -79,12 +83,14 @@ export function useGenerationGuards({
   const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falModelId === WAN_26_I2V_MODEL_ID;
+  const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
   const isFalVideoInputMode = isWanVideoInputMode
     || isOneToAllAnimateVideoModel
     || isAudioInputMode
     || isKling26ControlVideoModel
+    || isVeo31ExtendMode
     || isScailVideoModel;
   const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
@@ -241,6 +247,7 @@ export function useGenerationGuards({
       isLipsyncVideoModel,
       isOneToAllAnimateVideoModel,
       isWan26I2VVideoModel,
+      isVeo31ExtendMode,
     isReveModel,
     isSeedreamModel,
     isUpscaleModel,
