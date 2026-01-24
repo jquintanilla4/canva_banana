@@ -399,9 +399,9 @@ export const SEEDANCE15_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Seedance15A
 ] as const;
 
 export const SEEDANCE15_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Seedance15ResolutionSelectionValue; label: string }> = [
+  { value: '480p', label: '480p' },
   { value: '720p', label: '720p' },
   { value: '1080p', label: '1080p' }, // Higher quality output.
-  { value: '480p', label: '480p' },
 ] as const;
 
 export const SEEDANCE15_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance15DurationSelectionValue; label: string }> = [

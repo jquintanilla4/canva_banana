@@ -269,7 +269,7 @@ export function drawCanvas({
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
     } else if (videoLastFrameImageId === image.id) {
-      ctx.strokeStyle = isSeedance15FflfMode ? '#22c55e' : '#f59e0b'; // green-500 for Seedance 1.5, amber-500 for others
+      ctx.strokeStyle = isSeedance15FflfMode ? '#f97316' : '#f59e0b'; // orange-500 for Seedance 1.5, amber-500 for others
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
