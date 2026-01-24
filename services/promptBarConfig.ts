@@ -11,6 +11,9 @@ import type {
   InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
   InfinitalkSeedSelectionValue,
+  Sora2ProAspectRatioSelectionValue,
+  Sora2ProDurationSelectionValue,
+  Sora2ProResolutionSelectionValue,
   Kling26AudioSelectionValue,
   Kling26ControlDriver,
   Kling26ControlVariant,
@@ -67,6 +70,9 @@ import {
   INFINITALK_RESOLUTION_OPTIONS,
   INFINITALK_SEED_OPTIONS,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
+  SORA_2_PRO_ASPECT_RATIO_OPTIONS,
+  SORA_2_PRO_DURATION_OPTIONS,
+  SORA_2_PRO_RESOLUTION_OPTIONS,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
@@ -129,6 +135,7 @@ export type PromptBarControlsInput = {
   isWanAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
+  isSora2ProVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
   hailuoVariant: HailuoVariant;
@@ -156,6 +163,9 @@ export type PromptBarControlsInput = {
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
   infinitalkDuration: InfinitalkDurationSelectionValue;
+  sora2ProResolution: Sora2ProResolutionSelectionValue;
+  sora2ProAspectRatio: Sora2ProAspectRatioSelectionValue;
+  sora2ProDuration: Sora2ProDurationSelectionValue;
   wan26Resolution: Wan26ResolutionSelectionValue;
   wan26Duration: Wan26DurationSelectionValue;
   wan26PromptExpansion: boolean;
@@ -201,6 +211,9 @@ export type PromptBarControlsInput = {
   onInfinitalkSeedChange: (value: string) => void;
   onInfinitalkAccelerationChange: (value: string) => void;
   onInfinitalkDurationChange: (value: string) => void;
+  onSora2ProResolutionChange: (value: string) => void;
+  onSora2ProAspectRatioChange: (value: string) => void;
+  onSora2ProDurationChange: (value: string) => void;
   onWan26ResolutionChange: (value: string) => void;
   onWan26DurationChange: (value: string) => void;
   onWan26PromptExpansionChange: (value: boolean) => void;
@@ -247,6 +260,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isWanAnimateVideoModel,
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
+    isSora2ProVideoModel,
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
     hailuoVariant,
@@ -274,6 +288,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    sora2ProResolution,
+    sora2ProAspectRatio,
+    sora2ProDuration,
     wan26Resolution,
     wan26Duration,
     wan26PromptExpansion,
@@ -319,6 +336,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onInfinitalkSeedChange,
     onInfinitalkAccelerationChange,
     onInfinitalkDurationChange,
+    onSora2ProResolutionChange,
+    onSora2ProAspectRatioChange,
+    onSora2ProDurationChange,
     onWan26ResolutionChange,
     onWan26DurationChange,
     onWan26PromptExpansionChange,
@@ -666,6 +686,38 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: INFINITALK_ACCELERATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: infinitalkAcceleration,
       onChange: onInfinitalkAccelerationChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (isSora2ProVideoModel) {
+    controls.push({
+      id: 'sora2-pro-resolution-select',
+      prefixLabel: 'Resolution',
+      ariaLabel: 'Select Sora 2 Pro resolution',
+      options: SORA_2_PRO_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: sora2ProResolution,
+      onChange: onSora2ProResolutionChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'sora2-pro-aspect-ratio-select',
+      prefixLabel: 'AR',
+      ariaLabel: 'Select Sora 2 Pro aspect ratio',
+      options: SORA_2_PRO_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: sora2ProAspectRatio,
+      onChange: onSora2ProAspectRatioChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'sora2-pro-duration-select',
+      prefixLabel: 'Duration',
+      ariaLabel: 'Select Sora 2 Pro duration',
+      options: SORA_2_PRO_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: sora2ProDuration,
+      onChange: onSora2ProDurationChange,
       disabled: isLoading,
     });
   }

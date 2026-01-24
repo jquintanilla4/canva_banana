@@ -20,6 +20,7 @@ import {
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
+  SORA_2_PRO_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_26_I2V_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
@@ -57,6 +58,9 @@ import type {
   InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
   InfinitalkSeedSelectionValue,
+  Sora2ProAspectRatioSelectionValue,
+  Sora2ProDurationSelectionValue,
+  Sora2ProResolutionSelectionValue,
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
@@ -92,6 +96,7 @@ type FalDerivedState = {
   isOneToAllAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
+  isSora2ProVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isFlux2MaxModel: boolean;
@@ -130,6 +135,9 @@ type FalHandlers = {
   handleInfinitalkSeedChange: (value: string) => void;
   handleInfinitalkAccelerationChange: (value: string) => void;
   handleInfinitalkDurationChange: (value: string) => void;
+  handleSora2ProResolutionChange: (value: string) => void;
+  handleSora2ProAspectRatioChange: (value: string) => void;
+  handleSora2ProDurationChange: (value: string) => void;
   handleWan26ResolutionChange: (value: string) => void;
   handleWan26DurationChange: (value: string) => void;
   handleWan26PromptExpansionChange: (value: boolean) => void;
@@ -180,6 +188,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
   infinitalkDuration: InfinitalkDurationSelectionValue;
+  sora2ProResolution: Sora2ProResolutionSelectionValue;
+  sora2ProAspectRatio: Sora2ProAspectRatioSelectionValue;
+  sora2ProDuration: Sora2ProDurationSelectionValue;
   wan26Resolution: Wan26ResolutionSelectionValue;
   wan26Duration: Wan26DurationSelectionValue;
   wan26PromptExpansion: boolean;
@@ -227,6 +238,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setInfinitalkSeed: Dispatch<SetStateAction<InfinitalkSeedSelectionValue>>;
   setInfinitalkAcceleration: Dispatch<SetStateAction<InfinitalkAccelerationSelectionValue>>;
   setInfinitalkDuration: Dispatch<SetStateAction<InfinitalkDurationSelectionValue>>;
+  setSora2ProResolution: Dispatch<SetStateAction<Sora2ProResolutionSelectionValue>>;
+  setSora2ProAspectRatio: Dispatch<SetStateAction<Sora2ProAspectRatioSelectionValue>>;
+  setSora2ProDuration: Dispatch<SetStateAction<Sora2ProDurationSelectionValue>>;
   setWan26Resolution: Dispatch<SetStateAction<Wan26ResolutionSelectionValue>>;
   setWan26Duration: Dispatch<SetStateAction<Wan26DurationSelectionValue>>;
   setWan26PromptExpansion: Dispatch<SetStateAction<boolean>>;
@@ -278,6 +292,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [infinitalkSeed, setInfinitalkSeed] = useState<InfinitalkSeedSelectionValue>('42');
   const [infinitalkAcceleration, setInfinitalkAcceleration] = useState<InfinitalkAccelerationSelectionValue>('regular');
   const [infinitalkDuration, setInfinitalkDuration] = useState<InfinitalkDurationSelectionValue>('5s');
+  const [sora2ProResolution, setSora2ProResolution] = useState<Sora2ProResolutionSelectionValue>('auto');
+  const [sora2ProAspectRatio, setSora2ProAspectRatio] = useState<Sora2ProAspectRatioSelectionValue>('auto');
+  const [sora2ProDuration, setSora2ProDuration] = useState<Sora2ProDurationSelectionValue>('4');
   const [wan26Resolution, setWan26Resolution] = useState<Wan26ResolutionSelectionValue>('720p');
   const [wan26Duration, setWan26Duration] = useState<Wan26DurationSelectionValue>('5');
   const [wan26PromptExpansion, setWan26PromptExpansion] = useState<boolean>(true);
@@ -312,6 +329,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
+  const isSora2ProVideoModel = isVideoMode && falVideoModelId === SORA_2_PRO_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
@@ -578,6 +596,24 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleSora2ProResolutionChange = useCallback((value: string) => {
+    if (value === 'auto' || value === '720p' || value === '1080p') {
+      setSora2ProResolution(value);
+    }
+  }, []);
+
+  const handleSora2ProAspectRatioChange = useCallback((value: string) => {
+    if (value === 'auto' || value === '9:16' || value === '16:9') {
+      setSora2ProAspectRatio(value);
+    }
+  }, []);
+
+  const handleSora2ProDurationChange = useCallback((value: string) => {
+    if (value === '4' || value === '8' || value === '12') {
+      setSora2ProDuration(value);
+    }
+  }, []);
+
   const handleWan26ResolutionChange = useCallback((value: string) => {
     if (value === '720p' || value === '1080p') {
       setWan26Resolution(value);
@@ -609,7 +645,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, []);
 
   const handleSeedance15ResolutionChange = useCallback((value: string) => {
-    if (value === '480p' || value === '720p') {
+    if (value === '480p' || value === '720p' || value === '1080p') {
       setSeedance15Resolution(value);
     }
   }, []);
@@ -731,6 +767,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    sora2ProResolution,
+    sora2ProAspectRatio,
+    sora2ProDuration,
     wan26Resolution,
     wan26Duration,
     wan26PromptExpansion,
@@ -762,6 +801,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isOneToAllAnimateVideoModel,
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
+    isSora2ProVideoModel,
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
     isUpscaleModel,
@@ -795,6 +835,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleInfinitalkSeedChange,
     handleInfinitalkAccelerationChange,
     handleInfinitalkDurationChange,
+    handleSora2ProResolutionChange,
+    handleSora2ProAspectRatioChange,
+    handleSora2ProDurationChange,
     handleWan26ResolutionChange,
     handleWan26DurationChange,
     handleWan26PromptExpansionChange,
@@ -842,6 +885,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setInfinitalkSeed,
     setInfinitalkAcceleration,
     setInfinitalkDuration,
+    setSora2ProResolution,
+    setSora2ProAspectRatio,
+    setSora2ProDuration,
     setWan26Resolution,
     setWan26Duration,
     setWan26PromptExpansion,

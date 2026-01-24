@@ -19,6 +19,9 @@ import {
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isSora2ProAspectRatioSelectionValue,
+  isSora2ProDurationSelectionValue,
+  isSora2ProResolutionSelectionValue,
   isGenerationKind,
 } from './modelConfig';
 import {
@@ -79,6 +82,12 @@ export type SnapshotManifestV2 = {
 	      wanAnimateShift?: string;
 	      wanAnimateQuality?: string;
 	      wanAnimateUseTurbo?: boolean;
+        infinitalkResolution?: string;
+        infinitalkSeed?: string;
+        infinitalkAcceleration?: string;
+        sora2ProResolution?: string;
+        sora2ProAspectRatio?: string;
+        sora2ProDuration?: string;
 	      selectedImageIds: string[];
 	      selectedNoteIds: string[];
 	      referenceImageIds: string[];
@@ -148,6 +157,9 @@ export type SnapshotMetaState = {
   infinitalkResolution?: string;
   infinitalkSeed?: string;
   infinitalkAcceleration?: string;
+  sora2ProResolution?: string;
+  sora2ProAspectRatio?: string;
+  sora2ProDuration?: string;
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
@@ -593,7 +605,7 @@ export const restoreSnapshotFromFile = async (
       .map(point => ({ x: point.x, y: point.y }));
 
     const fallbackTool = Tool.BRUSH;
-    const rawTool = path?.tool;
+    const rawTool = (path as { tool?: unknown })?.tool;
     const toolValue = rawTool === 'INPAINT'
       ? Tool.ANNOTATE
       : Object.values(Tool).includes(rawTool as Tool)
@@ -762,6 +774,21 @@ export const normalizeSnapshotImageMetadata = (
       const infinitalkAccelerationValue = (typed as { infinitalkAcceleration?: unknown }).infinitalkAcceleration;
       if (isInfinitalkAccelerationSelectionValue(infinitalkAccelerationValue)) {
         normalizedOptions.infinitalkAcceleration = infinitalkAccelerationValue;
+      }
+
+      const sora2ProResolutionValue = (typed as { sora2ProResolution?: unknown }).sora2ProResolution;
+      if (isSora2ProResolutionSelectionValue(sora2ProResolutionValue)) {
+        normalizedOptions.sora2ProResolution = sora2ProResolutionValue;
+      }
+
+      const sora2ProAspectRatioValue = (typed as { sora2ProAspectRatio?: unknown }).sora2ProAspectRatio;
+      if (isSora2ProAspectRatioSelectionValue(sora2ProAspectRatioValue)) {
+        normalizedOptions.sora2ProAspectRatio = sora2ProAspectRatioValue;
+      }
+
+      const sora2ProDurationValue = (typed as { sora2ProDuration?: unknown }).sora2ProDuration;
+      if (isSora2ProDurationSelectionValue(sora2ProDurationValue)) {
+        normalizedOptions.sora2ProDuration = sora2ProDurationValue;
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;

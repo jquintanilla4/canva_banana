@@ -48,6 +48,7 @@ export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as cons
 export const ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as const;
 export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const;
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as const;
+export const SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const; // Sora 2 Pro image-to-video
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
 export const SCAIL_VIDEO_MODEL_ID = 'fal-ai/scail' as const;
@@ -110,6 +111,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
   { value: KLING_26_CONTROL_VIDEO_MODEL_ID, label: 'Kling 2.6 Control' },
   { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
+  { value: SORA_2_PRO_VIDEO_MODEL_ID, label: 'Sora 2 Pro' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
@@ -226,6 +228,9 @@ export type InfinitalkResolutionSelectionValue = '480p' | '720p';
 export type InfinitalkSeedSelectionValue = '42' | 'random';
 export type InfinitalkAccelerationSelectionValue = 'none' | 'regular' | 'high';
 export type InfinitalkDurationSelectionValue = '5s' | '6s' | '10s' | '12s';
+export type Sora2ProResolutionSelectionValue = 'auto' | '720p' | '1080p'; // Sora 2 Pro resolution choices
+export type Sora2ProAspectRatioSelectionValue = 'auto' | '9:16' | '16:9'; // Sora 2 Pro aspect ratios
+export type Sora2ProDurationSelectionValue = '4' | '8' | '12'; // Sora 2 Pro duration seconds
 
 export const LIPSYNC_EMOTION_OPTIONS: ReadonlyArray<{ value: LipsyncEmotion; label: string }> = [
   { value: 'neutral', label: 'Neutral' },
@@ -273,6 +278,24 @@ export const INFINITALK_DURATION_OPTIONS: ReadonlyArray<{ value: InfinitalkDurat
   { value: '12s', label: '12s' },
 ] as const;
 
+export const SORA_2_PRO_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Sora2ProResolutionSelectionValue; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: '720p', label: '720p' },
+  { value: '1080p', label: '1080p' },
+] as const; // Sora 2 Pro resolution picker
+
+export const SORA_2_PRO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Sora2ProAspectRatioSelectionValue; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: '9:16', label: '9:16' },
+  { value: '16:9', label: '16:9' },
+] as const; // Sora 2 Pro aspect ratio picker
+
+export const SORA_2_PRO_DURATION_OPTIONS: ReadonlyArray<{ value: Sora2ProDurationSelectionValue; label: string }> = [
+  { value: '4', label: '4s' },
+  { value: '8', label: '8s' },
+  { value: '12', label: '12s' },
+] as const; // Sora 2 Pro duration picker
+
 // Map display duration to num_frames for Infinitalk API
 export const INFINITALK_DURATION_TO_NUM_FRAMES: Record<InfinitalkDurationSelectionValue, number> = {
   '5s': 120,
@@ -308,7 +331,7 @@ export const WAN_26_MULTI_SHOTS_OPTIONS: ReadonlyArray<{ value: Wan26MultiShotsS
 ] as const;
 
 export type Seedance15AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
-export type Seedance15ResolutionSelectionValue = '480p' | '720p';
+export type Seedance15ResolutionSelectionValue = '480p' | '720p' | '1080p';
 export type Seedance15DurationSelectionValue = '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
 export type Seedance15CameraFixedSelectionValue = 'true' | 'false';
 export type Seedance15AudioSelectionValue = 'true' | 'false';
@@ -324,6 +347,7 @@ export const SEEDANCE15_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Seedance15A
 
 export const SEEDANCE15_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Seedance15ResolutionSelectionValue; label: string }> = [
   { value: '720p', label: '720p' },
+  { value: '1080p', label: '1080p' }, // Higher quality output.
   { value: '480p', label: '480p' },
 ] as const;
 
@@ -356,7 +380,7 @@ export const isSeedance15AspectRatioSelectionValue = (value: unknown): value is 
   value === '21:9' || value === '16:9' || value === '4:3' || value === '1:1' || value === '3:4' || value === '9:16';
 
 export const isSeedance15ResolutionSelectionValue = (value: unknown): value is Seedance15ResolutionSelectionValue =>
-  value === '480p' || value === '720p';
+  value === '480p' || value === '720p' || value === '1080p';
 
 export const isSeedance15DurationSelectionValue = (value: unknown): value is Seedance15DurationSelectionValue =>
   value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12';
@@ -461,6 +485,15 @@ export const isInfinitalkAccelerationSelectionValue = (value: unknown): value is
 
 export const isInfinitalkDurationSelectionValue = (value: unknown): value is InfinitalkDurationSelectionValue =>
   value === '5s' || value === '6s' || value === '10s' || value === '12s';
+
+export const isSora2ProResolutionSelectionValue = (value: unknown): value is Sora2ProResolutionSelectionValue =>
+  value === 'auto' || value === '720p' || value === '1080p';
+
+export const isSora2ProAspectRatioSelectionValue = (value: unknown): value is Sora2ProAspectRatioSelectionValue =>
+  value === 'auto' || value === '9:16' || value === '16:9';
+
+export const isSora2ProDurationSelectionValue = (value: unknown): value is Sora2ProDurationSelectionValue =>
+  value === '4' || value === '8' || value === '12';
 
 export const isWan26ResolutionSelectionValue = (value: unknown): value is Wan26ResolutionSelectionValue =>
   value === '720p' || value === '1080p';
@@ -615,6 +648,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,
   [SYNC_LIPSYNC_MODEL_ID]: 0,
   [INFINITALK_VIDEO_MODEL_ID]: 0,
+  [SORA_2_PRO_VIDEO_MODEL_ID]: 0,
   [WAN_26_I2V_MODEL_ID]: 0,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SCAIL_VIDEO_MODEL_ID]: 0,

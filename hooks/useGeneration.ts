@@ -13,6 +13,7 @@ import {
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
+  SORA_2_PRO_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -223,6 +224,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    sora2ProResolution,
+    sora2ProAspectRatio,
+    sora2ProDuration,
     wan26Resolution,
     wan26Duration,
     wan26PromptExpansion,
@@ -306,6 +310,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const infinitalkSeedForRun = falOptionsOverride.infinitalkSeed ?? infinitalkSeed;
       const infinitalkAccelerationForRun = falOptionsOverride.infinitalkAcceleration ?? infinitalkAcceleration;
       const infinitalkDurationForRun = falOptionsOverride.infinitalkDuration ?? infinitalkDuration;
+      const sora2ProResolutionForRun = falOptionsOverride.sora2ProResolution ?? sora2ProResolution;
+      const sora2ProAspectRatioForRun = falOptionsOverride.sora2ProAspectRatio ?? sora2ProAspectRatio;
+      const sora2ProDurationForRun = falOptionsOverride.sora2ProDuration ?? sora2ProDuration;
 	    const kling26AudioOverride = falOptionsOverride.kling26Audio;
     const kling26AudioForRun = kling26AudioOverride !== undefined
       ? kling26AudioOverride
@@ -375,6 +382,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const isScailVideoModel = isVideoMode && falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID;
       const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
       const isInfinitalkVideoModel = isVideoMode && falVideoModelIdForRun === INFINITALK_VIDEO_MODEL_ID;
+      const isSora2ProVideoModel = isVideoMode && falVideoModelIdForRun === SORA_2_PRO_VIDEO_MODEL_ID;
 	    const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
       const isFalVideoInputMode = isWanVideoInputMode
         || isOneToAllAnimateVideoModel
@@ -665,7 +673,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingO1FflfMode;
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingO1FflfMode || isSeedance15VideoModel; // Allow end-frame input for Seedance FFLF.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -755,6 +763,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(infinitalkSeedValue !== undefined ? { seed: infinitalkSeedValue } : {}),
             acceleration: infinitalkAccelerationForRun,
             infinitalkDuration: infinitalkDurationForRun,
+          } : {}),
+          ...(isSora2ProVideoModel ? {
+            sora2ProResolution: sora2ProResolutionForRun,
+            sora2ProAspectRatio: sora2ProAspectRatioForRun,
+            sora2ProDuration: sora2ProDurationForRun,
           } : {}),
           ...(isWan26I2VVideoModel ? {
             wan26Resolution: wan26Resolution,
@@ -914,6 +927,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     infinitalkSeed: infinitalkSeedForRun,
                     infinitalkAcceleration: infinitalkAccelerationForRun,
                     infinitalkDuration: infinitalkDurationForRun,
+                  } : {}),
+                  ...(isSora2ProVideoModel ? {
+                    sora2ProResolution: sora2ProResolutionForRun,
+                    sora2ProAspectRatio: sora2ProAspectRatioForRun,
+                    sora2ProDuration: sora2ProDurationForRun,
                   } : {}),
                   ...(isWan26I2VVideoModel ? {
                     wan26Resolution: wan26Resolution,
@@ -1535,6 +1553,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    sora2ProResolution,
+    sora2ProAspectRatio,
+    sora2ProDuration,
     wan26Resolution,
     wan26Duration,
     wan26PromptExpansion,

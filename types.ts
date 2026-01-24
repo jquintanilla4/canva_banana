@@ -110,12 +110,15 @@ export type GenerationFalOptions = Partial<{
   infinitalkSeed: '42' | 'random';
   infinitalkAcceleration: 'none' | 'regular' | 'high';
   infinitalkDuration: '5s' | '6s' | '10s' | '12s';
+  sora2ProResolution: 'auto' | '720p' | '1080p';
+  sora2ProAspectRatio: 'auto' | '9:16' | '16:9';
+  sora2ProDuration: '4' | '8' | '12';
   wan26Resolution: '720p' | '1080p';
   wan26Duration: '5' | '10' | '15';
   wan26PromptExpansion: boolean;
   wan26MultiShots: boolean;
   seedance15AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
-  seedance15Resolution: '480p' | '720p';
+  seedance15Resolution: '480p' | '720p' | '1080p';
   seedance15Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;

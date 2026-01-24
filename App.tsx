@@ -17,14 +17,10 @@ import { clearDebugLogs } from './services/debugLog';
 import {
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
-  NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
-  SEEDREAM_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
-  SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
-  SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
@@ -120,7 +116,7 @@ export default function App() {
     canRedo,               // Whether redo is currently possible
     resetHistory,          // Reset canvas state and undo/redo stack
   } = useCanvasHistory({ images: [], paths: [], notes: [] });
-  
+
   // Brush/annotate layers (paths) are the only things we clear with the eraser button.
   const hasClearablePaths = displayedPaths.some(
     path =>
@@ -430,10 +426,10 @@ export default function App() {
 
   // Clear video last frame selection if not in a first/last-frame capable mode
   useEffect(() => {
-    if (!fal.isKlingProVideoSelection && !isKlingO1FflfMode && videoLastFrameImageId) {
+    if (!fal.isKlingProVideoSelection && !isKlingO1FflfMode && !fal.isSeedance15VideoModel && videoLastFrameImageId) { // Keep end-frame selection for Seedance FFLF too.
       setVideoLastFrameImageId(null);
     }
-  }, [isKlingO1FflfMode, fal.isKlingProVideoSelection, videoLastFrameImageId]);
+  }, [isKlingO1FflfMode, fal.isKlingProVideoSelection, fal.isSeedance15VideoModel, videoLastFrameImageId]); // Sync FFLF-capable modes.
 
   const handleModelModeChange = useCallback((mode: FalModelMode) => {
     fal.handleModelModeChange(mode);
@@ -724,12 +720,8 @@ export default function App() {
   }, [editingNoteId, handleCommit, cropMode, handleCancelCrop]);
 
   const isCameraSettingsEnabled = !fal.isVideoMode && (
-    fal.falModelId === SEEDREAM_MODEL_ID
-    || fal.falModelId === SEEDREAM_V45_MODEL_ID
-    || fal.falModelId === SEEDREAM_TEXT_TO_IMAGE_MODEL_ID
-    || fal.falModelId === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID
+    isSeedreamModelId(fal.falModelId)
     || fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID
-    || fal.falModelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
   );
 
   const cameraPromptPrefix = useMemo(() => (
@@ -979,11 +971,11 @@ export default function App() {
     isSeedreamModel,
     isNanoBananaModel,
     isReveModel,
-	    isKlingModel,
-		    isKlingVideoModel: fal.isKlingVideoModel,
-		    isKling26VideoModel: fal.isKling26VideoModel,
-        isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
-		    isHailuoVideoModel: fal.isHailuoVideoModel,
+    isKlingModel,
+    isKlingVideoModel: fal.isKlingVideoModel,
+    isKling26VideoModel: fal.isKling26VideoModel,
+    isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
+    isHailuoVideoModel: fal.isHailuoVideoModel,
     falModelId: fal.falModelId,
     falNumImages: fal.falNumImages,
     activePrimaryImage,
@@ -1003,57 +995,61 @@ export default function App() {
     isKlingModel,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isUpscaleModel: fal.isUpscaleModel,
-	    isKlingVideoModel: fal.isKlingVideoModel,
-	    isKlingO1VideoModel: fal.isKlingO1VideoModel,
-		    isKling26VideoModel: fal.isKling26VideoModel,
-        isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
-		    isHailuoVideoModel: fal.isHailuoVideoModel,
-		    isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
-		    isLipsyncVideoModel: fal.isLipsyncVideoModel,
-        isInfinitalkVideoModel: fal.isInfinitalkVideoModel,
-        isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
-        isSeedance15VideoModel: fal.isSeedance15VideoModel,
-		    hailuoVariant: fal.hailuoVariant,
-		    falVideoDuration: fal.falVideoDuration,
-		    klingVariant: fal.klingVariant,
-	    klingO1Variant: fal.klingO1Variant,
-	    klingO1KeepAudio: fal.klingO1KeepAudio,
-	    kling26AudioSelection: fal.kling26AudioSelection,
-        kling26ControlVariant: fal.kling26ControlVariant,
-        kling26ControlKeepSound: fal.kling26ControlKeepSound,
-        kling26ControlDriver: fal.kling26ControlDriver,
-	    wanTargetResolution: fal.wanTargetResolution,
-	    wanCreativity: fal.wanCreativity,
-	    wanAnimateVariant: fal.wanAnimateVariant,
-	    wanAnimateSteps: fal.wanAnimateSteps,
-	    wanAnimateResolution: fal.wanAnimateResolution,
-        oneToAllAnimateResolution: fal.oneToAllAnimateResolution,
-	    wanAnimateShift: fal.wanAnimateShift,
-	    wanAnimateQuality: fal.wanAnimateQuality,
-	    wanAnimateUseTurbo: fal.wanAnimateUseTurbo,
-	    lipsyncEmotion: fal.lipsyncEmotion,
-	    lipsyncModelMode: fal.lipsyncModelMode,
-	    lipsyncAudioMode: fal.lipsyncAudioMode,
-        infinitalkResolution: fal.infinitalkResolution,
-        infinitalkSeed: fal.infinitalkSeed,
-        infinitalkAcceleration: fal.infinitalkAcceleration,
-        infinitalkDuration: fal.infinitalkDuration,
-        wan26Resolution: fal.wan26Resolution,
-        wan26Duration: fal.wan26Duration,
-        wan26PromptExpansion: fal.wan26PromptExpansion,
-        wan26MultiShots: fal.wan26MultiShots,
-        seedance15AspectRatio: fal.seedance15AspectRatio,
-        seedance15Resolution: fal.seedance15Resolution,
-        seedance15Duration: fal.seedance15Duration,
-        seedance15CameraFixed: fal.seedance15CameraFixed,
-        seedance15Audio: fal.seedance15Audio,
-        flux2MaxImageSize: fal.flux2MaxImageSize,
-        isWan26ImageModel: fal.isWan26ImageModel,
-        wan26ImageAspectRatio: fal.wan26ImageAspectRatio,
-        wan26ImageMaxImages: fal.wan26ImageMaxImages,
-	    falScaleFactor: fal.falScaleFactor,
-	    falCreativity: fal.falCreativity,
-	    falNoiseScale: fal.falNoiseScale,
+    isKlingVideoModel: fal.isKlingVideoModel,
+    isKlingO1VideoModel: fal.isKlingO1VideoModel,
+    isKling26VideoModel: fal.isKling26VideoModel,
+    isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
+    isHailuoVideoModel: fal.isHailuoVideoModel,
+    isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
+    isLipsyncVideoModel: fal.isLipsyncVideoModel,
+    isInfinitalkVideoModel: fal.isInfinitalkVideoModel,
+    isSora2ProVideoModel: fal.isSora2ProVideoModel,
+    isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
+    isSeedance15VideoModel: fal.isSeedance15VideoModel,
+    hailuoVariant: fal.hailuoVariant,
+    falVideoDuration: fal.falVideoDuration,
+    klingVariant: fal.klingVariant,
+    klingO1Variant: fal.klingO1Variant,
+    klingO1KeepAudio: fal.klingO1KeepAudio,
+    kling26AudioSelection: fal.kling26AudioSelection,
+    kling26ControlVariant: fal.kling26ControlVariant,
+    kling26ControlKeepSound: fal.kling26ControlKeepSound,
+    kling26ControlDriver: fal.kling26ControlDriver,
+    wanTargetResolution: fal.wanTargetResolution,
+    wanCreativity: fal.wanCreativity,
+    wanAnimateVariant: fal.wanAnimateVariant,
+    wanAnimateSteps: fal.wanAnimateSteps,
+    wanAnimateResolution: fal.wanAnimateResolution,
+    oneToAllAnimateResolution: fal.oneToAllAnimateResolution,
+    wanAnimateShift: fal.wanAnimateShift,
+    wanAnimateQuality: fal.wanAnimateQuality,
+    wanAnimateUseTurbo: fal.wanAnimateUseTurbo,
+    lipsyncEmotion: fal.lipsyncEmotion,
+    lipsyncModelMode: fal.lipsyncModelMode,
+    lipsyncAudioMode: fal.lipsyncAudioMode,
+    infinitalkResolution: fal.infinitalkResolution,
+    infinitalkSeed: fal.infinitalkSeed,
+    infinitalkAcceleration: fal.infinitalkAcceleration,
+    infinitalkDuration: fal.infinitalkDuration,
+    sora2ProResolution: fal.sora2ProResolution,
+    sora2ProAspectRatio: fal.sora2ProAspectRatio,
+    sora2ProDuration: fal.sora2ProDuration,
+    wan26Resolution: fal.wan26Resolution,
+    wan26Duration: fal.wan26Duration,
+    wan26PromptExpansion: fal.wan26PromptExpansion,
+    wan26MultiShots: fal.wan26MultiShots,
+    seedance15AspectRatio: fal.seedance15AspectRatio,
+    seedance15Resolution: fal.seedance15Resolution,
+    seedance15Duration: fal.seedance15Duration,
+    seedance15CameraFixed: fal.seedance15CameraFixed,
+    seedance15Audio: fal.seedance15Audio,
+    flux2MaxImageSize: fal.flux2MaxImageSize,
+    isWan26ImageModel: fal.isWan26ImageModel,
+    wan26ImageAspectRatio: fal.wan26ImageAspectRatio,
+    wan26ImageMaxImages: fal.wan26ImageMaxImages,
+    falScaleFactor: fal.falScaleFactor,
+    falCreativity: fal.falCreativity,
+    falNoiseScale: fal.falNoiseScale,
     falImageSizeSelection: fal.falImageSizeSelection,
     falAspectRatioSelection: fal.falAspectRatioSelection,
     falResolutionSelection: fal.falResolutionSelection,
@@ -1062,43 +1058,46 @@ export default function App() {
     onHailuoVariantChange: fal.handleHailuoVariantChange,
     onFalVideoDurationChange: fal.handleFalVideoDurationChange,
     onKlingVariantChange: fal.handleKlingVariantChange,
-	    onKlingO1VariantChange: fal.handleKlingO1VariantChange,
-	    onKlingO1KeepAudioChange: fal.handleKlingO1KeepAudioChange,
-	    onKling26AudioChange: fal.handleKling26AudioChange,
-        onKling26ControlVariantChange: fal.handleKling26ControlVariantChange,
-        onKling26ControlKeepSoundChange: fal.handleKling26ControlKeepSoundChange,
-        onKling26ControlDriverChange: fal.handleKling26ControlDriverChange,
-	    onWanTargetResolutionChange: fal.handleWanTargetResolutionChange,
-	    onWanCreativityChange: fal.handleWanCreativityChange,
-	    onWanAnimateVariantChange: fal.handleWanAnimateVariantChange,
-	    onWanAnimateStepsChange: fal.handleWanAnimateStepsChange,
-	    onWanAnimateResolutionChange: fal.handleWanAnimateResolutionChange,
-        onOneToAllAnimateResolutionChange: fal.handleOneToAllAnimateResolutionChange,
-	    onWanAnimateShiftChange: fal.handleWanAnimateShiftChange,
-	    onWanAnimateQualityChange: fal.handleWanAnimateQualityChange,
-	    onWanAnimateTurboChange: fal.handleWanAnimateTurboChange,
-	    onLipsyncEmotionChange: fal.handleLipsyncEmotionChange,
-	    onLipsyncModelModeChange: fal.handleLipsyncModelModeChange,
-	    onLipsyncAudioModeChange: fal.handleLipsyncAudioModeChange,
-        onInfinitalkResolutionChange: fal.handleInfinitalkResolutionChange,
-        onInfinitalkSeedChange: fal.handleInfinitalkSeedChange,
-        onInfinitalkAccelerationChange: fal.handleInfinitalkAccelerationChange,
-        onInfinitalkDurationChange: fal.handleInfinitalkDurationChange,
-        onWan26ResolutionChange: fal.handleWan26ResolutionChange,
-        onWan26DurationChange: fal.handleWan26DurationChange,
-        onWan26PromptExpansionChange: fal.handleWan26PromptExpansionChange,
-        onWan26MultiShotsChange: fal.handleWan26MultiShotsChange,
-        onSeedance15AspectRatioChange: fal.handleSeedance15AspectRatioChange,
-        onSeedance15ResolutionChange: fal.handleSeedance15ResolutionChange,
-        onSeedance15DurationChange: fal.handleSeedance15DurationChange,
-        onSeedance15CameraFixedChange: fal.handleSeedance15CameraFixedChange,
-        onSeedance15AudioChange: fal.handleSeedance15AudioChange,
-        onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
-        onWan26ImageAspectRatioChange: fal.handleWan26ImageAspectRatioChange,
-        onWan26ImageMaxImagesChange: fal.handleWan26ImageMaxImagesChange,
-	    onFalScaleFactorChange: fal.handleFalScaleFactorChange,
-	    onFalCreativityChange: fal.handleFalCreativityChange,
-	    onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
+    onKlingO1VariantChange: fal.handleKlingO1VariantChange,
+    onKlingO1KeepAudioChange: fal.handleKlingO1KeepAudioChange,
+    onKling26AudioChange: fal.handleKling26AudioChange,
+    onKling26ControlVariantChange: fal.handleKling26ControlVariantChange,
+    onKling26ControlKeepSoundChange: fal.handleKling26ControlKeepSoundChange,
+    onKling26ControlDriverChange: fal.handleKling26ControlDriverChange,
+    onWanTargetResolutionChange: fal.handleWanTargetResolutionChange,
+    onWanCreativityChange: fal.handleWanCreativityChange,
+    onWanAnimateVariantChange: fal.handleWanAnimateVariantChange,
+    onWanAnimateStepsChange: fal.handleWanAnimateStepsChange,
+    onWanAnimateResolutionChange: fal.handleWanAnimateResolutionChange,
+    onOneToAllAnimateResolutionChange: fal.handleOneToAllAnimateResolutionChange,
+    onWanAnimateShiftChange: fal.handleWanAnimateShiftChange,
+    onWanAnimateQualityChange: fal.handleWanAnimateQualityChange,
+    onWanAnimateTurboChange: fal.handleWanAnimateTurboChange,
+    onLipsyncEmotionChange: fal.handleLipsyncEmotionChange,
+    onLipsyncModelModeChange: fal.handleLipsyncModelModeChange,
+    onLipsyncAudioModeChange: fal.handleLipsyncAudioModeChange,
+    onInfinitalkResolutionChange: fal.handleInfinitalkResolutionChange,
+    onInfinitalkSeedChange: fal.handleInfinitalkSeedChange,
+    onInfinitalkAccelerationChange: fal.handleInfinitalkAccelerationChange,
+    onInfinitalkDurationChange: fal.handleInfinitalkDurationChange,
+    onSora2ProResolutionChange: fal.handleSora2ProResolutionChange,
+    onSora2ProAspectRatioChange: fal.handleSora2ProAspectRatioChange,
+    onSora2ProDurationChange: fal.handleSora2ProDurationChange,
+    onWan26ResolutionChange: fal.handleWan26ResolutionChange,
+    onWan26DurationChange: fal.handleWan26DurationChange,
+    onWan26PromptExpansionChange: fal.handleWan26PromptExpansionChange,
+    onWan26MultiShotsChange: fal.handleWan26MultiShotsChange,
+    onSeedance15AspectRatioChange: fal.handleSeedance15AspectRatioChange,
+    onSeedance15ResolutionChange: fal.handleSeedance15ResolutionChange,
+    onSeedance15DurationChange: fal.handleSeedance15DurationChange,
+    onSeedance15CameraFixedChange: fal.handleSeedance15CameraFixedChange,
+    onSeedance15AudioChange: fal.handleSeedance15AudioChange,
+    onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
+    onWan26ImageAspectRatioChange: fal.handleWan26ImageAspectRatioChange,
+    onWan26ImageMaxImagesChange: fal.handleWan26ImageMaxImagesChange,
+    onFalScaleFactorChange: fal.handleFalScaleFactorChange,
+    onFalCreativityChange: fal.handleFalCreativityChange,
+    onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
     onFalImageSizeChange: fal.handleFalImageSizeChange,
     onFalAspectRatioChange: fal.handleFalAspectRatioChange,
     onFalResolutionChange: fal.handleFalResolutionChange,
@@ -1150,11 +1149,11 @@ export default function App() {
 
       {/* Main toolbar, hidden during crop/transform */}
       {!cropMode && !transformMode && (
-      <Toolbar
-        activeTool={tool}
-        onToolChange={handleToolChange}
-        appMode={appMode}
-        onModeChange={handleModeChange}
+        <Toolbar
+          activeTool={tool}
+          onToolChange={handleToolChange}
+          appMode={appMode}
+          onModeChange={handleModeChange}
           brushSize={brushSize}
           eraserSize={eraserSize}
           onBrushSizeChange={setBrushSize}
@@ -1178,12 +1177,12 @@ export default function App() {
           isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
           isBackgroundRemovalLoading={isRemovingBackground}
           isAnnotateModeDisabled={isAnnotateModeDisabled}
-        isRecording={isRecording}
-        onRecordToggle={handleRecordToggle}
-        cameraSettings={cameraSettings}
-        onCameraSettingsChange={setCameraSettings}
-        cameraSettingsEnabled={isCameraSettingsEnabled}
-      />
+          isRecording={isRecording}
+          onRecordToggle={handleRecordToggle}
+          cameraSettings={cameraSettings}
+          onCameraSettingsChange={setCameraSettings}
+          cameraSettingsEnabled={isCameraSettingsEnabled}
+        />
       )}
 
       {/* Recording overlay */}

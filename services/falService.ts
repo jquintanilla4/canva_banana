@@ -219,12 +219,15 @@ interface GenerateVideoOptions {
   lipsyncModelMode?: LipsyncModelMode;
   lipsyncAudioMode?: LipsyncAudioMode;
   infinitalkDuration?: InfinitalkDurationSelectionValue;
+  sora2ProResolution?: 'auto' | '720p' | '1080p';
+  sora2ProAspectRatio?: 'auto' | '9:16' | '16:9';
+  sora2ProDuration?: '4' | '8' | '12';
   wan26Resolution?: '720p' | '1080p';
   wan26Duration?: '5' | '10' | '15';
   wan26PromptExpansion?: boolean;
   wan26MultiShots?: boolean;
   seedance15AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
-  seedance15Resolution?: '480p' | '720p';
+  seedance15Resolution?: '480p' | '720p' | '1080p';
   seedance15Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
   seedance15CameraFixed?: boolean;
   seedance15Audio?: boolean;
@@ -308,6 +311,7 @@ export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace
 export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer';
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video';
+export const SORA_2_PRO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro';
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video';
 export const WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image';
 export const WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image';
@@ -1851,6 +1855,40 @@ export const generateImageToVideo = async (
       camera_fixed: cameraFixed,
       generate_audio: generateAudio,
       ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  const isSora2ProModel = modelId === SORA_2_PRO_IMAGE_TO_VIDEO_MODEL_ID;
+  if (isSora2ProModel) {
+    if (!image) {
+      throw new Error('Sora 2 Pro requires an image.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Sora 2 Pro requires a prompt.');
+    }
+
+    const imageUrl = await uploadImageElementToFal(image);
+    const resolution = options.sora2ProResolution === '720p' || options.sora2ProResolution === '1080p'
+      ? options.sora2ProResolution
+      : 'auto';
+    const aspectRatio = options.sora2ProAspectRatio === '9:16' || options.sora2ProAspectRatio === '16:9'
+      ? options.sora2ProAspectRatio
+      : 'auto';
+    const durationValue = options.sora2ProDuration === '8' || options.sora2ProDuration === '12'
+      ? options.sora2ProDuration
+      : '4';
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      image_url: imageUrl,
+      resolution,
+      aspect_ratio: aspectRatio,
+      duration: Number(durationValue),
+      delete_video: true,
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);

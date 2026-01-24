@@ -25,6 +25,9 @@ import {
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isSora2ProAspectRatioSelectionValue,
+  isSora2ProDurationSelectionValue,
+  isSora2ProResolutionSelectionValue,
   isFalVideoModelId,
   normalizeFalModelId,
 } from '../services/modelConfig';
@@ -140,6 +143,9 @@ export function useSnapshotIO({
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
+    sora2ProResolution,
+    sora2ProAspectRatio,
+    sora2ProDuration,
     setFalModelMode,
     setFalImageModelId,
     setFalVideoModelId,
@@ -162,6 +168,9 @@ export function useSnapshotIO({
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,
+    setSora2ProResolution,
+    setSora2ProAspectRatio,
+    setSora2ProDuration,
   } = fal;
 
   const {
@@ -211,6 +220,9 @@ export function useSnapshotIO({
       infinitalkResolution,
       infinitalkSeed,
       infinitalkAcceleration,
+      sora2ProResolution,
+      sora2ProAspectRatio,
+      sora2ProDuration,
       selectedImageIds: [...selectedImageIds],
       selectedNoteIds: [...selectedNoteIds],
       referenceImageIds: [...referenceImageIds],
@@ -247,6 +259,9 @@ export function useSnapshotIO({
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
+    sora2ProResolution,
+    sora2ProAspectRatio,
+    sora2ProDuration,
 	    falImageSizeSelection,
     falModelId,
     falNoiseScale,
@@ -550,6 +565,15 @@ export function useSnapshotIO({
         if (isInfinitalkAccelerationSelectionValue(meta.infinitalkAcceleration)) {
           setInfinitalkAcceleration(meta.infinitalkAcceleration);
         }
+        if (isSora2ProResolutionSelectionValue(meta.sora2ProResolution)) {
+          setSora2ProResolution(meta.sora2ProResolution);
+        }
+        if (isSora2ProAspectRatioSelectionValue(meta.sora2ProAspectRatio)) {
+          setSora2ProAspectRatio(meta.sora2ProAspectRatio);
+        }
+        if (isSora2ProDurationSelectionValue(meta.sora2ProDuration)) {
+          setSora2ProDuration(meta.sora2ProDuration);
+        }
 	        setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
@@ -606,6 +630,9 @@ export function useSnapshotIO({
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,
+    setSora2ProResolution,
+    setSora2ProAspectRatio,
+    setSora2ProDuration,
 	    setFalImageModelId,
     setFalImageSizeSelection,
     setFalModelMode,
