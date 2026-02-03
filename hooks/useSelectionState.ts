@@ -63,8 +63,8 @@ export type SelectionStateResult = {
   setVideoLastFrameImageId: Dispatch<SetStateAction<string | null>>;
   setSourceVideoId: Dispatch<SetStateAction<string | null>>;
   setSourceAudioId: Dispatch<SetStateAction<string | null>>;
-  handleImageSelection: (imageId: string | null, multi?: boolean) => void;
-  handleNoteSelection: (noteId: string | null, multi?: boolean) => void;
+  handleImageSelection: (imageId: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
+  handleNoteSelection: (noteId: string | null, options?: { multi?: boolean }) => void;
 };
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>

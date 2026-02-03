@@ -289,6 +289,7 @@ const REVE_REMIX_MODEL_ID = 'fal-ai/reve/remix';
 const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max';
 const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit';
 const GROK_IMAGINE_IMAGE_MODEL_ID = 'xai/grok-imagine-image'; // Grok Imagine image model id.
+const GROK_IMAGINE_IMAGE_EDIT_MODEL_ID = 'xai/grok-imagine-image/edit'; // Grok Imagine edit endpoint id.
 
 // Convert @Image1, @Image2, etc. to Reve's XML format <img>0</img>, <img>1</img>, etc.
 // User-facing mentions are 1-indexed, API expects 0-indexed
@@ -642,6 +643,96 @@ export const generateImageEdit = async ({
   let annotationImageUrl: string | undefined;
 
   const baseImageUrl = await uploadImageElementToFal(image);
+
+  if (modelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
+    const numImagesOption = options.numImages; // Grok supports 1-4 outputs per request.
+    const grokBody: {
+      prompt: string;
+      image_url: string;
+      num_images?: number;
+      output_format?: 'png' | 'jpeg' | 'webp';
+      sync_mode?: boolean;
+    } = {
+      prompt,
+      image_url: baseImageUrl,
+      output_format: 'png',
+      sync_mode: false,
+    };
+
+    if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+      const normalized = Math.min(4, Math.max(1, Math.floor(numImagesOption)));
+      if (normalized >= 1) {
+        grokBody.num_images = normalized;
+      }
+    }
+
+    let latestRequestId: string | undefined;
+
+    logFalEvent('outbound', GROK_IMAGINE_IMAGE_EDIT_MODEL_ID, 'Outbound request (fal.subscribe)', { input: grokBody });
+
+    let result: Awaited<ReturnType<typeof fal.subscribe>>;
+    try {
+      result = await fal.subscribe(GROK_IMAGINE_IMAGE_EDIT_MODEL_ID, {
+        input: grokBody,
+        logs: true,
+        onQueueUpdate: update => {
+          const queueUpdate = update as unknown as FalQueueUpdate;
+          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
+          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
+          if (resolvedRequestId) {
+            latestRequestId = resolvedRequestId;
+          }
+          logFalEvent('inbound', GROK_IMAGINE_IMAGE_EDIT_MODEL_ID, 'Queue update', {
+            status: queueUpdate.status,
+            position: queueUpdate.position,
+            eta: queueUpdate.eta,
+            requestId: resolvedRequestId,
+            logs: normalizedLogs.map(log => log?.message ?? ''),
+          });
+          options.onQueueUpdate?.({
+            ...queueUpdate,
+            requestId: resolvedRequestId || '',
+            logs: normalizedLogs,
+          });
+        },
+      });
+    } catch (error) {
+      logFalEvent('error', GROK_IMAGINE_IMAGE_EDIT_MODEL_ID, 'Request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logFalEvent('inbound', GROK_IMAGINE_IMAGE_EDIT_MODEL_ID, 'Result received', {
+      requestId: result?.requestId || latestRequestId,
+      data: (result?.data as Record<string, unknown>) ?? undefined,
+    });
+
+    const data = result?.data as { images?: Array<{ url: string }>; revised_prompt?: string } | undefined;
+    const images = data?.images;
+    if (!images || images.length === 0) {
+      throw new Error('Fal.ai Grok Imagine edit API did not return an image.');
+    }
+
+    const inlineDataList = await Promise.all(images.map(img => extractInlineData(img.url)));
+    const base64List = inlineDataList.map(dataUrl => {
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) {
+        throw new Error('Failed to extract image data from Fal.ai Grok Imagine edit response.');
+      }
+      return base64;
+    });
+
+    const [primaryBase64] = base64List;
+    if (!primaryBase64) {
+      throw new Error('Failed to extract image data from Fal.ai Grok Imagine edit response.');
+    }
+
+    const revisedPrompt = typeof data?.revised_prompt === 'string' ? data.revised_prompt : ''; // Optional prompt rewrite.
+    const requestId = result?.requestId || latestRequestId;
+    return { imageBase64: primaryBase64, imagesBase64: base64List, text: revisedPrompt, requestId };
+  }
+
   if (!isSeedreamAnnotateSingle) {
     imageUrls.push(baseImageUrl);
   }

@@ -247,6 +247,11 @@ export default function App() {
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
+    if (fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
+      setToastMessage('Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
     if (fal.falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID && maxReferenceImages === 0) {
       setToastMessage('Tip: Shift-click toggles reference selection. For One-to-All Animation, click the pose video, then click the image to animate (Cmd/Ctrl+click for multi-select).');
       setTimeout(() => setToastMessage(null), 2000);
