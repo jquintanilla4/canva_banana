@@ -16,6 +16,9 @@ import {
   isFalImageSizeSelectionValue,
   isFalModelMode,
   isFalResolutionSelectionValue,
+  isGrokImagineVideoAspectRatioSelectionValue,
+  isGrokImagineVideoDurationSelectionValue,
+  isGrokImagineVideoResolutionSelectionValue,
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
@@ -90,6 +93,9 @@ export type SnapshotManifestV2 = {
         infinitalkResolution?: string;
         infinitalkSeed?: string;
         infinitalkAcceleration?: string;
+        grokImagineVideoDuration?: string;
+        grokImagineVideoResolution?: string;
+        grokImagineVideoAspectRatio?: string;
         sora2ProResolution?: string;
         sora2ProAspectRatio?: string;
         sora2ProDuration?: string;
@@ -167,6 +173,9 @@ export type SnapshotMetaState = {
   infinitalkResolution?: string;
   infinitalkSeed?: string;
   infinitalkAcceleration?: string;
+  grokImagineVideoDuration?: string;
+  grokImagineVideoResolution?: string;
+  grokImagineVideoAspectRatio?: string;
   sora2ProResolution?: string;
   sora2ProAspectRatio?: string;
   sora2ProDuration?: string;
@@ -789,6 +798,21 @@ export const normalizeSnapshotImageMetadata = (
       const infinitalkAccelerationValue = (typed as { infinitalkAcceleration?: unknown }).infinitalkAcceleration;
       if (isInfinitalkAccelerationSelectionValue(infinitalkAccelerationValue)) {
         normalizedOptions.infinitalkAcceleration = infinitalkAccelerationValue;
+      }
+
+      const grokImagineVideoDurationValue = (typed as { grokImagineVideoDuration?: unknown }).grokImagineVideoDuration;
+      if (isGrokImagineVideoDurationSelectionValue(grokImagineVideoDurationValue)) {
+        normalizedOptions.grokImagineVideoDuration = grokImagineVideoDurationValue;
+      }
+
+      const grokImagineVideoResolutionValue = (typed as { grokImagineVideoResolution?: unknown }).grokImagineVideoResolution;
+      if (isGrokImagineVideoResolutionSelectionValue(grokImagineVideoResolutionValue)) {
+        normalizedOptions.grokImagineVideoResolution = grokImagineVideoResolutionValue;
+      }
+
+      const grokImagineVideoAspectRatioValue = (typed as { grokImagineVideoAspectRatio?: unknown }).grokImagineVideoAspectRatio;
+      if (isGrokImagineVideoAspectRatioSelectionValue(grokImagineVideoAspectRatioValue)) {
+        normalizedOptions.grokImagineVideoAspectRatio = grokImagineVideoAspectRatioValue;
       }
 
       const sora2ProResolutionValue = (typed as { sora2ProResolution?: unknown }).sora2ProResolution;

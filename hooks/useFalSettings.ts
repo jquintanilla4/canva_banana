@@ -10,6 +10,7 @@ import {
   FAL_REVE_ASPECT_RATIO_OPTIONS,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
+  GROK_IMAGINE_VIDEO_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
@@ -33,6 +34,9 @@ import {
   SEEDREAM_V45_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
   isFlux2MaxImageSizeSelectionValue,
+  isGrokImagineVideoAspectRatioSelectionValue,
+  isGrokImagineVideoDurationSelectionValue,
+  isGrokImagineVideoResolutionSelectionValue,
   isKlingO1VideoModelId,
   isFalImageModelId,
   isFalVideoModelId,
@@ -66,6 +70,9 @@ import type {
   InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
   InfinitalkSeedSelectionValue,
+  GrokImagineVideoAspectRatioSelectionValue,
+  GrokImagineVideoDurationSelectionValue,
+  GrokImagineVideoResolutionSelectionValue,
   Sora2ProAspectRatioSelectionValue,
   Sora2ProDurationSelectionValue,
   Sora2ProResolutionSelectionValue,
@@ -108,6 +115,7 @@ type FalDerivedState = {
   isOneToAllAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
+  isGrokImagineVideoModel: boolean;
   isSora2ProVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
@@ -148,6 +156,9 @@ type FalHandlers = {
   handleInfinitalkSeedChange: (value: string) => void;
   handleInfinitalkAccelerationChange: (value: string) => void;
   handleInfinitalkDurationChange: (value: string) => void;
+  handleGrokImagineVideoDurationChange: (value: string) => void;
+  handleGrokImagineVideoResolutionChange: (value: string) => void;
+  handleGrokImagineVideoAspectRatioChange: (value: string) => void;
   handleSora2ProResolutionChange: (value: string) => void;
   handleSora2ProAspectRatioChange: (value: string) => void;
   handleSora2ProDurationChange: (value: string) => void;
@@ -206,6 +217,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
   infinitalkDuration: InfinitalkDurationSelectionValue;
+  grokImagineVideoDuration: GrokImagineVideoDurationSelectionValue;
+  grokImagineVideoResolution: GrokImagineVideoResolutionSelectionValue;
+  grokImagineVideoAspectRatio: GrokImagineVideoAspectRatioSelectionValue;
   sora2ProResolution: Sora2ProResolutionSelectionValue;
   sora2ProAspectRatio: Sora2ProAspectRatioSelectionValue;
   sora2ProDuration: Sora2ProDurationSelectionValue;
@@ -261,6 +275,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setInfinitalkSeed: Dispatch<SetStateAction<InfinitalkSeedSelectionValue>>;
   setInfinitalkAcceleration: Dispatch<SetStateAction<InfinitalkAccelerationSelectionValue>>;
   setInfinitalkDuration: Dispatch<SetStateAction<InfinitalkDurationSelectionValue>>;
+  setGrokImagineVideoDuration: Dispatch<SetStateAction<GrokImagineVideoDurationSelectionValue>>;
+  setGrokImagineVideoResolution: Dispatch<SetStateAction<GrokImagineVideoResolutionSelectionValue>>;
+  setGrokImagineVideoAspectRatio: Dispatch<SetStateAction<GrokImagineVideoAspectRatioSelectionValue>>;
   setSora2ProResolution: Dispatch<SetStateAction<Sora2ProResolutionSelectionValue>>;
   setSora2ProAspectRatio: Dispatch<SetStateAction<Sora2ProAspectRatioSelectionValue>>;
   setSora2ProDuration: Dispatch<SetStateAction<Sora2ProDurationSelectionValue>>;
@@ -320,6 +337,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [infinitalkSeed, setInfinitalkSeed] = useState<InfinitalkSeedSelectionValue>('42');
   const [infinitalkAcceleration, setInfinitalkAcceleration] = useState<InfinitalkAccelerationSelectionValue>('regular');
   const [infinitalkDuration, setInfinitalkDuration] = useState<InfinitalkDurationSelectionValue>('5s');
+  const [grokImagineVideoDuration, setGrokImagineVideoDuration] = useState<GrokImagineVideoDurationSelectionValue>('6');
+  const [grokImagineVideoResolution, setGrokImagineVideoResolution] = useState<GrokImagineVideoResolutionSelectionValue>('720p');
+  const [grokImagineVideoAspectRatio, setGrokImagineVideoAspectRatio] = useState<GrokImagineVideoAspectRatioSelectionValue>('auto');
   const [sora2ProResolution, setSora2ProResolution] = useState<Sora2ProResolutionSelectionValue>('auto');
   const [sora2ProAspectRatio, setSora2ProAspectRatio] = useState<Sora2ProAspectRatioSelectionValue>('auto');
   const [sora2ProDuration, setSora2ProDuration] = useState<Sora2ProDurationSelectionValue>('4');
@@ -362,6 +382,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
+  const isGrokImagineVideoModel = isVideoMode && falVideoModelId === GROK_IMAGINE_VIDEO_MODEL_ID;
   const isSora2ProVideoModel = isVideoMode && falVideoModelId === SORA_2_PRO_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
@@ -672,6 +693,24 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleGrokImagineVideoDurationChange = useCallback((value: string) => {
+    if (isGrokImagineVideoDurationSelectionValue(value)) {
+      setGrokImagineVideoDuration(value);
+    }
+  }, []);
+
+  const handleGrokImagineVideoResolutionChange = useCallback((value: string) => {
+    if (isGrokImagineVideoResolutionSelectionValue(value)) {
+      setGrokImagineVideoResolution(value);
+    }
+  }, []);
+
+  const handleGrokImagineVideoAspectRatioChange = useCallback((value: string) => {
+    if (isGrokImagineVideoAspectRatioSelectionValue(value)) {
+      setGrokImagineVideoAspectRatio(value);
+    }
+  }, []);
+
   const handleSora2ProResolutionChange = useCallback((value: string) => {
     if (value === 'auto' || value === '720p' || value === '1080p') {
       setSora2ProResolution(value);
@@ -870,6 +909,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    grokImagineVideoDuration,
+    grokImagineVideoResolution,
+    grokImagineVideoAspectRatio,
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
@@ -909,6 +951,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isOneToAllAnimateVideoModel,
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
+    isGrokImagineVideoModel,
     isSora2ProVideoModel,
     isVeo31VideoModel,
     isWan26I2VVideoModel,
@@ -944,6 +987,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleInfinitalkSeedChange,
     handleInfinitalkAccelerationChange,
     handleInfinitalkDurationChange,
+    handleGrokImagineVideoDurationChange,
+    handleGrokImagineVideoResolutionChange,
+    handleGrokImagineVideoAspectRatioChange,
     handleSora2ProResolutionChange,
     handleSora2ProAspectRatioChange,
     handleSora2ProDurationChange,
@@ -999,6 +1045,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setInfinitalkSeed,
     setInfinitalkAcceleration,
     setInfinitalkDuration,
+    setGrokImagineVideoDuration,
+    setGrokImagineVideoResolution,
+    setGrokImagineVideoAspectRatio,
     setSora2ProResolution,
     setSora2ProAspectRatio,
     setSora2ProDuration,

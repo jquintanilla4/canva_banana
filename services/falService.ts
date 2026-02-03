@@ -18,6 +18,9 @@ import {
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MOVE_MODEL_ID,
   INFINITALK_DURATION_TO_NUM_FRAMES,
+  type GrokImagineVideoAspectRatioSelectionValue,
+  type GrokImagineVideoDurationSelectionValue,
+  type GrokImagineVideoResolutionSelectionValue,
   type InfinitalkDurationSelectionValue,
   type LipsyncAudioMode,
   type LipsyncEmotion,
@@ -219,6 +222,9 @@ interface GenerateVideoOptions {
   lipsyncModelMode?: LipsyncModelMode;
   lipsyncAudioMode?: LipsyncAudioMode;
   infinitalkDuration?: InfinitalkDurationSelectionValue;
+  grokImagineVideoDuration?: GrokImagineVideoDurationSelectionValue;
+  grokImagineVideoResolution?: GrokImagineVideoResolutionSelectionValue;
+  grokImagineVideoAspectRatio?: GrokImagineVideoAspectRatioSelectionValue;
   sora2ProResolution?: 'auto' | '720p' | '1080p';
   sora2ProAspectRatio?: 'auto' | '9:16' | '16:9';
   sora2ProDuration?: '4' | '8' | '12';
@@ -290,6 +296,8 @@ const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max';
 const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit';
 const GROK_IMAGINE_IMAGE_MODEL_ID = 'xai/grok-imagine-image'; // Grok Imagine image model id.
 const GROK_IMAGINE_IMAGE_EDIT_MODEL_ID = 'xai/grok-imagine-image/edit'; // Grok Imagine edit endpoint id.
+const GROK_IMAGINE_VIDEO_IMAGE_TO_VIDEO_MODEL_ID = 'xai/grok-imagine-video/image-to-video';
+const GROK_IMAGINE_VIDEO_EDIT_MODEL_ID = 'xai/grok-imagine-video/edit-video';
 
 // Convert @Image1, @Image2, etc. to Reve's XML format <img>0</img>, <img>1</img>, etc.
 // User-facing mentions are 1-indexed, API expects 0-indexed
@@ -1890,6 +1898,70 @@ export const generateImageToVideo = async (
     const requestId = result?.requestId || latestRequestId;
 
     return { videoUrl, requestId };
+  }
+
+  if (modelId === GROK_IMAGINE_VIDEO_EDIT_MODEL_ID) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('Grok Imagine Video Edit requires a source video.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Grok Imagine Video Edit requires a prompt.');
+    }
+
+    const resolution = options.grokImagineVideoResolution === '480p' || options.grokImagineVideoResolution === '720p'
+      ? options.grokImagineVideoResolution
+      : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      video_url: options.sourceVideoUrl,
+      ...(resolution ? { resolution } : {}),
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  if (modelId === GROK_IMAGINE_VIDEO_IMAGE_TO_VIDEO_MODEL_ID) {
+    if (!image) {
+      throw new Error('Grok Imagine Video requires an image.');
+    }
+
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Grok Imagine Video requires a prompt.');
+    }
+
+    const imageUrl = await uploadImageElementToFal(image);
+
+    const duration = options.grokImagineVideoDuration
+      ? Number(options.grokImagineVideoDuration)
+      : 6;
+    const clampedDuration = Number.isFinite(duration) ? Math.min(15, Math.max(1, Math.round(duration))) : 6;
+
+    const aspectRatio = options.grokImagineVideoAspectRatio === '16:9'
+      || options.grokImagineVideoAspectRatio === '4:3'
+      || options.grokImagineVideoAspectRatio === '3:2'
+      || options.grokImagineVideoAspectRatio === '1:1'
+      || options.grokImagineVideoAspectRatio === '2:3'
+      || options.grokImagineVideoAspectRatio === '3:4'
+      || options.grokImagineVideoAspectRatio === '9:16'
+      ? options.grokImagineVideoAspectRatio
+      : 'auto';
+    const resolution = options.grokImagineVideoResolution === '480p' || options.grokImagineVideoResolution === '720p'
+      ? options.grokImagineVideoResolution
+      : '720p';
+
+    const inputPayload: Record<string, unknown> = {
+      prompt: trimmedPrompt,
+      duration: clampedDuration,
+      aspect_ratio: aspectRatio,
+      resolution,
+      image_url: imageUrl,
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
   if (isVeo31ExtendModel) {

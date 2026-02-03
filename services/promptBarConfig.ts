@@ -11,6 +11,9 @@ import type {
   InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
   InfinitalkSeedSelectionValue,
+  GrokImagineVideoAspectRatioSelectionValue,
+  GrokImagineVideoDurationSelectionValue,
+  GrokImagineVideoResolutionSelectionValue,
   Sora2ProAspectRatioSelectionValue,
   Sora2ProDurationSelectionValue,
   Sora2ProResolutionSelectionValue,
@@ -57,6 +60,9 @@ import {
   FLUX2_MAX_IMAGE_SIZE_OPTIONS,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
+  GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS,
+  GROK_IMAGINE_VIDEO_DURATION_OPTIONS,
+  GROK_IMAGINE_VIDEO_RESOLUTION_OPTIONS,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
   HAILUO_VARIANT_OPTIONS,
@@ -148,6 +154,7 @@ export type PromptBarControlsInput = {
   isWanAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
+  isGrokImagineVideoModel: boolean;
   isSora2ProVideoModel: boolean;
   isVeo31VideoModel: boolean;
   isWan26I2VVideoModel: boolean;
@@ -177,6 +184,9 @@ export type PromptBarControlsInput = {
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
   infinitalkDuration: InfinitalkDurationSelectionValue;
+  grokImagineVideoDuration: GrokImagineVideoDurationSelectionValue;
+  grokImagineVideoResolution: GrokImagineVideoResolutionSelectionValue;
+  grokImagineVideoAspectRatio: GrokImagineVideoAspectRatioSelectionValue;
   sora2ProResolution: Sora2ProResolutionSelectionValue;
   sora2ProAspectRatio: Sora2ProAspectRatioSelectionValue;
   sora2ProDuration: Sora2ProDurationSelectionValue;
@@ -230,6 +240,9 @@ export type PromptBarControlsInput = {
   onInfinitalkSeedChange: (value: string) => void;
   onInfinitalkAccelerationChange: (value: string) => void;
   onInfinitalkDurationChange: (value: string) => void;
+  onGrokImagineVideoDurationChange: (value: string) => void;
+  onGrokImagineVideoResolutionChange: (value: string) => void;
+  onGrokImagineVideoAspectRatioChange: (value: string) => void;
   onSora2ProResolutionChange: (value: string) => void;
   onSora2ProAspectRatioChange: (value: string) => void;
   onSora2ProDurationChange: (value: string) => void;
@@ -284,6 +297,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isWanAnimateVideoModel,
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
+    isGrokImagineVideoModel,
     isSora2ProVideoModel,
     isVeo31VideoModel,
     isWan26I2VVideoModel,
@@ -313,6 +327,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    grokImagineVideoDuration,
+    grokImagineVideoResolution,
+    grokImagineVideoAspectRatio,
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
@@ -366,6 +383,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onInfinitalkSeedChange,
     onInfinitalkAccelerationChange,
     onInfinitalkDurationChange,
+    onGrokImagineVideoDurationChange,
+    onGrokImagineVideoResolutionChange,
+    onGrokImagineVideoAspectRatioChange,
     onSora2ProResolutionChange,
     onSora2ProAspectRatioChange,
     onSora2ProDurationChange,
@@ -721,6 +741,38 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: INFINITALK_ACCELERATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: infinitalkAcceleration,
       onChange: onInfinitalkAccelerationChange,
+      disabled: isLoading,
+    });
+  }
+
+  if (isGrokImagineVideoModel) {
+    controls.push({
+      id: 'grok-imagine-video-duration-select',
+      prefixLabel: 'Duration',
+      ariaLabel: 'Select Grok Imagine Video duration',
+      options: GROK_IMAGINE_VIDEO_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: grokImagineVideoDuration,
+      onChange: onGrokImagineVideoDurationChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'grok-imagine-video-resolution-select',
+      prefixLabel: 'Resolution',
+      ariaLabel: 'Select Grok Imagine Video resolution',
+      options: GROK_IMAGINE_VIDEO_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: grokImagineVideoResolution,
+      onChange: onGrokImagineVideoResolutionChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'grok-imagine-video-aspect-ratio-select',
+      prefixLabel: 'AR',
+      ariaLabel: 'Select Grok Imagine Video aspect ratio',
+      options: GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: grokImagineVideoAspectRatio,
+      onChange: onGrokImagineVideoAspectRatioChange,
       disabled: isLoading,
     });
   }

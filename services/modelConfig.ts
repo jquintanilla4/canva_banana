@@ -22,6 +22,8 @@ export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
 export const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit' as const;
 export const GROK_IMAGINE_IMAGE_MODEL_ID = 'xai/grok-imagine-image' as const; // Grok Imagine image model id.
 export const GROK_IMAGINE_IMAGE_EDIT_MODEL_ID = 'xai/grok-imagine-image/edit' as const; // Grok Imagine edit endpoint id.
+export const GROK_IMAGINE_VIDEO_MODEL_ID = 'xai/grok-imagine-video/image-to-video' as const; // Grok Imagine image-to-video endpoint id.
+export const GROK_IMAGINE_VIDEO_EDIT_MODEL_ID = 'xai/grok-imagine-video/edit-video' as const; // Grok Imagine video edit endpoint id.
 export const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
 export const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
 export const HAILUO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/image-to-video' as const;
@@ -112,6 +114,7 @@ export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_O
 
 const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: ONE_TO_ALL_ANIMATE_MODEL_ID, label: '1-to-All Animate' },
+  { value: GROK_IMAGINE_VIDEO_MODEL_ID, label: 'Grok Imagine' },
   { value: HAILUO_IMAGE_TO_VIDEO_MODEL_ID, label: 'Hailuo 2.3' },
   { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
@@ -247,6 +250,9 @@ export type InfinitalkResolutionSelectionValue = '480p' | '720p';
 export type InfinitalkSeedSelectionValue = '42' | 'random';
 export type InfinitalkAccelerationSelectionValue = 'none' | 'regular' | 'high';
 export type InfinitalkDurationSelectionValue = '5s' | '6s' | '10s' | '12s';
+export type GrokImagineVideoDurationSelectionValue = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+export type GrokImagineVideoResolutionSelectionValue = '480p' | '720p';
+export type GrokImagineVideoAspectRatioSelectionValue = 'auto' | '16:9' | '4:3' | '3:2' | '1:1' | '2:3' | '3:4' | '9:16';
 export type Sora2ProResolutionSelectionValue = 'auto' | '720p' | '1080p'; // Sora 2 Pro resolution choices
 export type Sora2ProAspectRatioSelectionValue = 'auto' | '9:16' | '16:9'; // Sora 2 Pro aspect ratios
 export type Sora2ProDurationSelectionValue = '4' | '8' | '12'; // Sora 2 Pro duration seconds
@@ -295,6 +301,40 @@ export const INFINITALK_DURATION_OPTIONS: ReadonlyArray<{ value: InfinitalkDurat
   { value: '6s', label: '6s' },
   { value: '10s', label: '10s' },
   { value: '12s', label: '12s' },
+] as const;
+
+export const GROK_IMAGINE_VIDEO_DURATION_OPTIONS: ReadonlyArray<{ value: GrokImagineVideoDurationSelectionValue; label: string }> = [
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4' },
+  { value: '5', label: '5' },
+  { value: '6', label: '6' },
+  { value: '7', label: '7' },
+  { value: '8', label: '8' },
+  { value: '9', label: '9' },
+  { value: '10', label: '10' },
+  { value: '11', label: '11' },
+  { value: '12', label: '12' },
+  { value: '13', label: '13' },
+  { value: '14', label: '14' },
+  { value: '15', label: '15' },
+] as const;
+
+export const GROK_IMAGINE_VIDEO_RESOLUTION_OPTIONS: ReadonlyArray<{ value: GrokImagineVideoResolutionSelectionValue; label: string }> = [
+  { value: '480p', label: '480p' },
+  { value: '720p', label: '720p' },
+] as const;
+
+export const GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: GrokImagineVideoAspectRatioSelectionValue; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: '16:9', label: '16:9' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:2', label: '3:2' },
+  { value: '1:1', label: '1:1' },
+  { value: '2:3', label: '2:3' },
+  { value: '3:4', label: '3:4' },
+  { value: '9:16', label: '9:16' },
 ] as const;
 
 export const SORA_2_PRO_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Sora2ProResolutionSelectionValue; label: string }> = [
@@ -546,6 +586,15 @@ export const isInfinitalkAccelerationSelectionValue = (value: unknown): value is
 export const isInfinitalkDurationSelectionValue = (value: unknown): value is InfinitalkDurationSelectionValue =>
   value === '5s' || value === '6s' || value === '10s' || value === '12s';
 
+export const isGrokImagineVideoDurationSelectionValue = (value: unknown): value is GrokImagineVideoDurationSelectionValue =>
+  value === '1' || value === '2' || value === '3' || value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
+
+export const isGrokImagineVideoResolutionSelectionValue = (value: unknown): value is GrokImagineVideoResolutionSelectionValue =>
+  value === '480p' || value === '720p';
+
+export const isGrokImagineVideoAspectRatioSelectionValue = (value: unknown): value is GrokImagineVideoAspectRatioSelectionValue =>
+  value === 'auto' || value === '16:9' || value === '4:3' || value === '3:2' || value === '1:1' || value === '2:3' || value === '3:4' || value === '9:16';
+
 export const isSora2ProResolutionSelectionValue = (value: unknown): value is Sora2ProResolutionSelectionValue =>
   value === 'auto' || value === '720p' || value === '1080p';
 
@@ -724,6 +773,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [REVE_TEXT_TO_IMAGE_MODEL_ID]: 5, // Reve remix supports up to 6 total images (1 primary + 5 references)
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
   [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
+  [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,
   [WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID]: 3, // Wan 2.6 Image supports up to 4 total images (1 primary + 3 references)
   [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [KLING_O1_VIDEO_MODEL_ID]: 6,

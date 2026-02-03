@@ -3,6 +3,8 @@ import type { Dispatch, SetStateAction, SyntheticEvent } from 'react';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
+  GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
+  GROK_IMAGINE_VIDEO_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
@@ -30,6 +32,9 @@ import {
   getKlingO1VideoEndpoint,
   getWanAnimateVideoEndpoint,
   getMaxReferenceImages,
+  isGrokImagineVideoAspectRatioSelectionValue,
+  isGrokImagineVideoDurationSelectionValue,
+  isGrokImagineVideoResolutionSelectionValue,
   isKlingO1VideoModelId,
   getSeedreamTextToImageModelId,
   isApiProvider,
@@ -228,6 +233,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
+    grokImagineVideoDuration,
+    grokImagineVideoResolution,
+    grokImagineVideoAspectRatio,
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
@@ -314,16 +322,25 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const wanAnimateShiftForRun = falOptionsOverride.wanAnimateShift ?? wanAnimateShift;
     const wanAnimateQualityForRun = falOptionsOverride.wanAnimateQuality ?? wanAnimateQuality;
     const wanAnimateUseTurboForRun = falOptionsOverride.wanAnimateUseTurbo ?? wanAnimateUseTurbo;
-      const oneToAllAnimateResolutionForRun = falOptionsOverride.oneToAllAnimateResolution ?? oneToAllAnimateResolution;
-      const infinitalkResolutionForRun = falOptionsOverride.infinitalkResolution ?? infinitalkResolution;
-      const infinitalkSeedForRun = falOptionsOverride.infinitalkSeed ?? infinitalkSeed;
-      const infinitalkAccelerationForRun = falOptionsOverride.infinitalkAcceleration ?? infinitalkAcceleration;
-      const infinitalkDurationForRun = falOptionsOverride.infinitalkDuration ?? infinitalkDuration;
-      const sora2ProResolutionForRun = falOptionsOverride.sora2ProResolution ?? sora2ProResolution;
-      const sora2ProAspectRatioForRun = falOptionsOverride.sora2ProAspectRatio ?? sora2ProAspectRatio;
-      const sora2ProDurationForRun = falOptionsOverride.sora2ProDuration ?? sora2ProDuration;
-      const veo31VariantForRun = falOptionsOverride.veo31Variant ?? veo31Variant;
-      const veo31DurationForRun = falOptionsOverride.veo31Duration ?? veo31Duration;
+    const oneToAllAnimateResolutionForRun = falOptionsOverride.oneToAllAnimateResolution ?? oneToAllAnimateResolution;
+    const infinitalkResolutionForRun = falOptionsOverride.infinitalkResolution ?? infinitalkResolution;
+    const infinitalkSeedForRun = falOptionsOverride.infinitalkSeed ?? infinitalkSeed;
+    const infinitalkAccelerationForRun = falOptionsOverride.infinitalkAcceleration ?? infinitalkAcceleration;
+    const infinitalkDurationForRun = falOptionsOverride.infinitalkDuration ?? infinitalkDuration;
+    const grokImagineVideoDurationForRun = isGrokImagineVideoDurationSelectionValue(falOptionsOverride.grokImagineVideoDuration)
+      ? falOptionsOverride.grokImagineVideoDuration
+      : grokImagineVideoDuration;
+    const grokImagineVideoResolutionForRun = isGrokImagineVideoResolutionSelectionValue(falOptionsOverride.grokImagineVideoResolution)
+      ? falOptionsOverride.grokImagineVideoResolution
+      : grokImagineVideoResolution;
+    const grokImagineVideoAspectRatioForRun = isGrokImagineVideoAspectRatioSelectionValue(falOptionsOverride.grokImagineVideoAspectRatio)
+      ? falOptionsOverride.grokImagineVideoAspectRatio
+      : grokImagineVideoAspectRatio;
+    const sora2ProResolutionForRun = falOptionsOverride.sora2ProResolution ?? sora2ProResolution;
+    const sora2ProAspectRatioForRun = falOptionsOverride.sora2ProAspectRatio ?? sora2ProAspectRatio;
+    const sora2ProDurationForRun = falOptionsOverride.sora2ProDuration ?? sora2ProDuration;
+    const veo31VariantForRun = falOptionsOverride.veo31Variant ?? veo31Variant;
+    const veo31DurationForRun = falOptionsOverride.veo31Duration ?? veo31Duration;
     const veo31ResolutionForRun = falOptionsOverride.veo31Resolution ?? veo31Resolution;
     const veo31AspectRatioForRun = falOptionsOverride.veo31AspectRatio ?? veo31AspectRatio;
     const veo31GenerateAudioForRun = falOptionsOverride.veo31GenerateAudio ?? veo31GenerateAudio;
@@ -393,29 +410,31 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isKlingO1RefV2VMode = isKlingO1VideoModel && klingO1VariantForRun === 'refV2V';
     const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
     const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
-      const isKling26ControlVideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_CONTROL_VIDEO_MODEL_ID;
-      const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
-      const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
-      const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
-      const isScailVideoModel = isVideoMode && falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID;
-      const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
+    const isKling26ControlVideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_CONTROL_VIDEO_MODEL_ID;
+    const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
+    const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
+    const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
+    const isScailVideoModel = isVideoMode && falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID;
+    const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
     const isInfinitalkVideoModel = isVideoMode && falVideoModelIdForRun === INFINITALK_VIDEO_MODEL_ID;
+    const isGrokImagineVideoModel = isVideoMode && falVideoModelIdForRun === GROK_IMAGINE_VIDEO_MODEL_ID;
+    const isGrokImagineVideoEditMode = isGrokImagineVideoModel && primaryImageForRun?.mediaType === 'video';
     const isSora2ProVideoModel = isVideoMode && falVideoModelIdForRun === SORA_2_PRO_VIDEO_MODEL_ID;
     const isVeo31VideoModelForRun = isVideoMode && falVideoModelIdForRun === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
     const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
-      const isVeo31ExtendMode = isVeo31VideoModelForRun && veo31VariantForRun === 'extend';
-      const isFalVideoInputMode = isWanVideoInputMode
-        || isOneToAllAnimateVideoModel
-        || isLipsyncVideoModel
-        || isInfinitalkVideoModel
-        || isKling26ControlVideoModel
-        || isVeo31ExtendMode
-        || isScailVideoModel;
+    const isVeo31ExtendMode = isVeo31VideoModelForRun && veo31VariantForRun === 'extend';
+    const isFalVideoInputMode = isWanVideoInputMode
+      || isOneToAllAnimateVideoModel
+      || isLipsyncVideoModel
+      || isInfinitalkVideoModel
+      || isKling26ControlVideoModel
+      || isVeo31ExtendMode
+      || isScailVideoModel;
     const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
     const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
-      const actualKling26ControlModelId = isKling26ControlVideoModel
-        ? getKling26ControlModelId(kling26ControlVariantForRun)
-        : null;
+    const actualKling26ControlModelId = isKling26ControlVideoModel
+      ? getKling26ControlModelId(kling26ControlVariantForRun)
+      : null;
     const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
     const isKlingO1FflfMode = isKlingO1VideoModel && klingO1VariantForRun === 'fflf';
     const isVeo31TailCapable = isVeo31VideoModelForRun && veo31VariantForRun === 'i2v-fflf';
@@ -433,7 +452,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel);
     const isLipsyncPromptOptional = usingFal && isVideoMode && isLipsyncVideoModel;
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
-    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1VideoInputMode && !isFalVideoInputMode;
+    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingO1VideoInputMode && !isFalVideoInputMode
+      && !(isGrokImagineVideoModel && isGrokImagineVideoEditMode);
     const generationKind: GenerationKind = overrideKind
       ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
 
@@ -585,13 +605,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
           return;
         }
 
-        // For video-input modes (Kling O1 edit/refV2V or Wan enhancer), get source video URL; for other modes, require starting frame image
+        // For video-input modes (Kling O1 edit/refV2V, Grok edit-video, Wan enhancer), get source video URL; for other modes, require starting frame image
         let sourceVideo: CanvasImage | null = null;
         let sourceVideoUrlForRequest: string | undefined;
-        if (isKlingO1VideoInputMode || isFalVideoInputMode) {
-          sourceVideo = sourceVideoIdForRun
-            ? images.find(img => img.id === sourceVideoIdForRun && img.mediaType === 'video')
-            : null;
+        if (isKlingO1VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) {
+          sourceVideo = isGrokImagineVideoEditMode
+            ? (primarySelection?.mediaType === 'video' ? primarySelection : null)
+            : sourceVideoIdForRun
+              ? images.find(img => img.id === sourceVideoIdForRun && img.mediaType === 'video')
+              : null;
           if (!sourceVideo) {
             throw new Error(isWanVisionEnhancerVideoModel
               ? 'Select a video on the canvas to enhance.'
@@ -607,7 +629,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     ? 'Select a video on the canvas to lip sync.'
                     : isInfinitalkVideoModel
                       ? 'Select a video on the canvas to drive Infinitalk.'
-                      : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
+                      : isGrokImagineVideoEditMode
+                        ? 'Select a video on the canvas to edit.'
+                        : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
           }
           if (isLipsyncVideoModel) {
             const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
@@ -666,7 +690,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
         const videoSourceImage = (isWanAnimateVideoModel || isOneToAllAnimateVideoModel || isKling26ControlVideoModel || isScailVideoModel)
           ? activePrimary?.element as HTMLImageElement
-          : (isKlingO1VideoInputMode || isFalVideoInputMode) ? null : activePrimary?.element as HTMLImageElement;
+          : (isKlingO1VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) ? null : activePrimary?.element as HTMLImageElement;
         const referenceImagesForRun = referenceImageIdsForRun
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia)
@@ -719,12 +743,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ? VEO_31_FFLF_VIDEO_MODEL_ID
               : VEO_31_IMAGE_TO_VIDEO_MODEL_ID
           : null;
+        const actualGrokImagineVideoModelId = isGrokImagineVideoModel
+          ? (isGrokImagineVideoEditMode ? GROK_IMAGINE_VIDEO_EDIT_MODEL_ID : GROK_IMAGINE_VIDEO_MODEL_ID)
+          : null;
         const videoModelIdForRequest = actualHailuoModelId
           ?? actualKlingModelId
           ?? actualKlingO1ModelId
           ?? actualKling26ControlModelId
           ?? actualWanAnimateModelId
           ?? actualVeo31ModelId
+          ?? actualGrokImagineVideoModelId
           ?? falVideoModelIdForRun;
         const shouldSendDuration = isHailuoVideoModel
           ? isHailuoStandardVideoModel
@@ -799,6 +827,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(infinitalkSeedValue !== undefined ? { seed: infinitalkSeedValue } : {}),
             acceleration: infinitalkAccelerationForRun,
             infinitalkDuration: infinitalkDurationForRun,
+          } : {}),
+          ...(isGrokImagineVideoModel ? {
+            grokImagineVideoDuration: grokImagineVideoDurationForRun,
+            grokImagineVideoResolution: grokImagineVideoResolutionForRun,
+            grokImagineVideoAspectRatio: grokImagineVideoAspectRatioForRun,
+            ...(isGrokImagineVideoEditMode ? { sourceVideoUrl: sourceVideoUrlForRequest } : {}),
           } : {}),
           ...(isSora2ProVideoModel ? {
             sora2ProResolution: sora2ProResolutionForRun,
@@ -971,6 +1005,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     infinitalkSeed: infinitalkSeedForRun,
                     infinitalkAcceleration: infinitalkAccelerationForRun,
                     infinitalkDuration: infinitalkDurationForRun,
+                  } : {}),
+                  ...(isGrokImagineVideoModel ? {
+                    grokImagineVideoDuration: grokImagineVideoDurationForRun,
+                    grokImagineVideoResolution: grokImagineVideoResolutionForRun,
+                    grokImagineVideoAspectRatio: grokImagineVideoAspectRatioForRun,
                   } : {}),
                   ...(isSora2ProVideoModel ? {
                     sora2ProResolution: sora2ProResolutionForRun,

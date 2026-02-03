@@ -987,6 +987,7 @@ export default function App() {
     isReveModel,
     isKlingModel,
     isGrokModel, // Grok validation flag.
+    isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isKlingVideoModel: fal.isKlingVideoModel,
     isKling26VideoModel: fal.isKling26VideoModel,
     isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
@@ -996,6 +997,7 @@ export default function App() {
     falModelId: fal.falModelId,
     falNumImages: fal.falNumImages,
     activePrimaryImage,
+    primarySelectionMediaType,
     hasSelectedStillImage,
   });
 
@@ -1020,6 +1022,7 @@ export default function App() {
     isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
     isLipsyncVideoModel: fal.isLipsyncVideoModel,
     isInfinitalkVideoModel: fal.isInfinitalkVideoModel,
+    isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isSora2ProVideoModel: fal.isSora2ProVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
     isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
@@ -1049,6 +1052,9 @@ export default function App() {
     infinitalkSeed: fal.infinitalkSeed,
     infinitalkAcceleration: fal.infinitalkAcceleration,
     infinitalkDuration: fal.infinitalkDuration,
+    grokImagineVideoDuration: fal.grokImagineVideoDuration,
+    grokImagineVideoResolution: fal.grokImagineVideoResolution,
+    grokImagineVideoAspectRatio: fal.grokImagineVideoAspectRatio,
     veo31Variant: fal.veo31Variant,
     veo31Duration: fal.veo31Duration,
     veo31Resolution: fal.veo31Resolution,
@@ -1103,6 +1109,9 @@ export default function App() {
     onInfinitalkSeedChange: fal.handleInfinitalkSeedChange,
     onInfinitalkAccelerationChange: fal.handleInfinitalkAccelerationChange,
     onInfinitalkDurationChange: fal.handleInfinitalkDurationChange,
+    onGrokImagineVideoDurationChange: fal.handleGrokImagineVideoDurationChange,
+    onGrokImagineVideoResolutionChange: fal.handleGrokImagineVideoResolutionChange,
+    onGrokImagineVideoAspectRatioChange: fal.handleGrokImagineVideoAspectRatioChange,
     onVeo31VariantChange: fal.handleVeo31VariantChange,
     onVeo31DurationChange: fal.handleVeo31DurationChange,
     onVeo31ResolutionChange: fal.handleVeo31ResolutionChange,

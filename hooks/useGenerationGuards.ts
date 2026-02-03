@@ -28,6 +28,7 @@ type Args = {
   isReveModel: boolean;
   isKlingModel: boolean;
   isGrokModel: boolean; // Grok text-to-image flag.
+  isGrokImagineVideoModel: boolean;
   isKlingVideoModel: boolean;
   isKling26VideoModel: boolean;
   isKling26ControlVideoModel: boolean;
@@ -37,6 +38,7 @@ type Args = {
   falModelId: string;
   falNumImages: number;
   activePrimaryImage: unknown;
+  primarySelectionMediaType: 'image' | 'video' | 'audio' | null;
   hasSelectedStillImage: boolean;
 };
 
@@ -66,6 +68,7 @@ export function useGenerationGuards({
   isReveModel,
   isKlingModel,
   isGrokModel, // Grok text-to-image flag.
+  isGrokImagineVideoModel,
   isKlingVideoModel,
   isKling26VideoModel,
   isKling26ControlVideoModel,
@@ -75,6 +78,7 @@ export function useGenerationGuards({
   falModelId,
   falNumImages,
   activePrimaryImage,
+  primarySelectionMediaType,
   hasSelectedStillImage,
 }: Args): GenerationGuardsResult {
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
@@ -100,12 +104,16 @@ export function useGenerationGuards({
     const usingFal = apiProvider === 'fal';
     const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
     const hasPrimaryImage = Boolean(activePrimaryImage);
+    const hasPrimaryVideoSelected = primarySelectionMediaType === 'video';
+    const isGrokImagineVideoEditMode = isGrokImagineVideoModel && hasPrimaryVideoSelected;
     const hasWanAnimateStillImage = isWanAnimateVideoModel || isOneToAllAnimateVideoModel
       ? hasSelectedStillImage
       : hasPrimaryImage;
     const hasScailStillImage = isScailVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const hasKling26ControlStillImage = isKling26ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
-    const isTextToImage = !hasPrimaryImage && !(isVideoMode && isVideoInputMode && hasSourceVideo);
+    const isTextToImage = !hasPrimaryImage && !(isVideoMode && (
+      (isVideoInputMode && hasSourceVideo) || isGrokImagineVideoEditMode
+    ));
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
@@ -119,7 +127,7 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKling26Control = usingFal && isKling26ControlVideoModel && !hasKling26ControlStillImage;
@@ -180,6 +188,9 @@ export function useGenerationGuards({
             ? 'Describe the motion or scene you want to transfer...'
             : 'Select a character image to control the motion...';
         }
+        if (isGrokImagineVideoEditMode) {
+          return 'Describe how you want to edit this video...';
+        }
         if (hasPrimaryImage) {
           return 'Describe the motion or scene you want this image to turn into...';
         }
@@ -207,6 +218,9 @@ export function useGenerationGuards({
             return 'Select a video to edit, then describe the changes...';
           }
           return 'Select a reference video, then describe the next shot...';
+        }
+        if (isGrokImagineVideoModel) {
+          return 'Select an image or video and describe what you want to generate...';
         }
         return 'Select an image and describe the video you want to create...';
       }
@@ -237,21 +251,23 @@ export function useGenerationGuards({
     hasSelectedStillImage,
     hasSourceAudio,
     hasSourceVideo,
+    primarySelectionMediaType,
+    isGrokImagineVideoModel,
     isNanoBananaModel,
     isHailuoVideoModel,
     isKling26VideoModel,
     isKling26ControlVideoModel,
     isKlingModel,
-	    isKlingO1EditMode,
-	    isKlingO1VideoInputMode,
-	    isKlingVideoModel,
-	    isWanAnimateVideoModel,
-      isScailVideoModel,
-      isInfinitalkVideoModel,
-      isLipsyncVideoModel,
-      isOneToAllAnimateVideoModel,
-      isWan26I2VVideoModel,
-      isVeo31ExtendMode,
+    isKlingO1EditMode,
+    isKlingO1VideoInputMode,
+    isKlingVideoModel,
+    isWanAnimateVideoModel,
+    isScailVideoModel,
+    isInfinitalkVideoModel,
+    isLipsyncVideoModel,
+    isOneToAllAnimateVideoModel,
+    isWan26I2VVideoModel,
+    isVeo31ExtendMode,
     isReveModel,
     isSeedreamModel,
     isUpscaleModel,

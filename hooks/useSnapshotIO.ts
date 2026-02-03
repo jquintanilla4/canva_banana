@@ -25,6 +25,9 @@ import {
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isGrokImagineVideoAspectRatioSelectionValue,
+  isGrokImagineVideoDurationSelectionValue,
+  isGrokImagineVideoResolutionSelectionValue,
   isSora2ProAspectRatioSelectionValue,
   isSora2ProDurationSelectionValue,
   isSora2ProResolutionSelectionValue,
@@ -148,6 +151,9 @@ export function useSnapshotIO({
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
+    grokImagineVideoDuration,
+    grokImagineVideoResolution,
+    grokImagineVideoAspectRatio,
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
@@ -178,6 +184,9 @@ export function useSnapshotIO({
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,
+    setGrokImagineVideoDuration,
+    setGrokImagineVideoResolution,
+    setGrokImagineVideoAspectRatio,
     setSora2ProResolution,
     setSora2ProAspectRatio,
     setSora2ProDuration,
@@ -235,6 +244,9 @@ export function useSnapshotIO({
       infinitalkResolution,
       infinitalkSeed,
       infinitalkAcceleration,
+      grokImagineVideoDuration,
+      grokImagineVideoResolution,
+      grokImagineVideoAspectRatio,
       sora2ProResolution,
       sora2ProAspectRatio,
       sora2ProDuration,
@@ -279,6 +291,9 @@ export function useSnapshotIO({
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
+    grokImagineVideoDuration,
+    grokImagineVideoResolution,
+    grokImagineVideoAspectRatio,
     sora2ProResolution,
     sora2ProAspectRatio,
     sora2ProDuration,
@@ -590,6 +605,15 @@ export function useSnapshotIO({
         if (isInfinitalkAccelerationSelectionValue(meta.infinitalkAcceleration)) {
           setInfinitalkAcceleration(meta.infinitalkAcceleration);
         }
+        if (isGrokImagineVideoDurationSelectionValue(meta.grokImagineVideoDuration)) {
+          setGrokImagineVideoDuration(meta.grokImagineVideoDuration);
+        }
+        if (isGrokImagineVideoResolutionSelectionValue(meta.grokImagineVideoResolution)) {
+          setGrokImagineVideoResolution(meta.grokImagineVideoResolution);
+        }
+        if (isGrokImagineVideoAspectRatioSelectionValue(meta.grokImagineVideoAspectRatio)) {
+          setGrokImagineVideoAspectRatio(meta.grokImagineVideoAspectRatio);
+        }
         if (isSora2ProResolutionSelectionValue(meta.sora2ProResolution)) {
           setSora2ProResolution(meta.sora2ProResolution);
         }
@@ -671,6 +695,9 @@ export function useSnapshotIO({
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,
+    setGrokImagineVideoDuration,
+    setGrokImagineVideoResolution,
+    setGrokImagineVideoAspectRatio,
     setSora2ProResolution,
     setSora2ProAspectRatio,
     setSora2ProDuration,
