@@ -61,7 +61,7 @@ export const generateImage = async (
     safety_tolerance?: '5';
   } = {
     prompt,
-    sync_mode: !isSeedreamTextToImage,
+    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage, // Keep Nano Banana history visible.
   };
 
   if (!isSeedreamTextToImage) {

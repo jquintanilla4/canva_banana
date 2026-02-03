@@ -589,7 +589,7 @@ export const generateImageEdit = async (
   } = {
     prompt,
     image_urls: imageUrls,
-    sync_mode: !isSeedreamModel,
+    sync_mode: !isSeedreamModel && !isNanoBananaProModel, // Keep Nano Banana history visible.
   };
 
   if (!isSeedreamModel) {
