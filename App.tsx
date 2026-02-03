@@ -16,6 +16,7 @@ import { DebugLogPanel } from './components/DebugLogPanel';
 import { clearDebugLogs } from './services/debugLog';
 import {
   KLING_IMAGE_MODEL_ID,
+  GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
@@ -880,6 +881,7 @@ export default function App() {
   const usingFal = apiProvider === 'fal';
   const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
   const isNanoBananaModel = !fal.isVideoMode && fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
+  const isGrokModel = !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
   const isReveModel = !fal.isVideoMode && fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
   const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isFlux2MaxModel || fal.isUpscaleModel;
 
@@ -979,6 +981,7 @@ export default function App() {
     isNanoBananaModel,
     isReveModel,
     isKlingModel,
+    isGrokModel, // Grok validation flag.
     isKlingVideoModel: fal.isKlingVideoModel,
     isKling26VideoModel: fal.isKling26VideoModel,
     isKling26ControlVideoModel: fal.isKling26ControlVideoModel,

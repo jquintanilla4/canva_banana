@@ -27,6 +27,7 @@ type Args = {
   isNanoBananaModel: boolean;
   isReveModel: boolean;
   isKlingModel: boolean;
+  isGrokModel: boolean; // Grok text-to-image flag.
   isKlingVideoModel: boolean;
   isKling26VideoModel: boolean;
   isKling26ControlVideoModel: boolean;
@@ -64,6 +65,7 @@ export function useGenerationGuards({
   isNanoBananaModel,
   isReveModel,
   isKlingModel,
+  isGrokModel, // Grok text-to-image flag.
   isKlingVideoModel,
   isKling26VideoModel,
   isKling26ControlVideoModel,
@@ -105,7 +107,9 @@ export function useGenerationGuards({
     const hasKling26ControlStillImage = isKling26ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const isTextToImage = !hasPrimaryImage && !(isVideoMode && isVideoInputMode && hasSourceVideo);
     const promptEmpty = prompt.trim().length === 0;
-    const shouldValidateFalOptions = usingFal && !isVideoMode && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel);
+    const shouldValidateFalOptions = usingFal
+      && !isVideoMode
+      && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel || isGrokModel); // Include Grok validation.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
       falNumImages < 1 ||

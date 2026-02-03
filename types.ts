@@ -63,11 +63,17 @@ export type FalAspectRatioPreset =
   | '4:3'
   | '3:2'
   | '2:3'
+  | '2:1' // Grok aspect ratio.
+  | '20:9' // Grok aspect ratio.
+  | '19.5:9' // Grok aspect ratio.
   | '5:4'
   | '4:5'
   | '3:4'
   | '16:9'
   | '9:16'
+  | '9:19.5' // Grok aspect ratio.
+  | '9:20' // Grok aspect ratio.
+  | '1:2' // Grok aspect ratio.
   | '2560x1440'
   | '1440x2560';
 

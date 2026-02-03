@@ -5,9 +5,11 @@ import {
   DEFAULT_FAL_IMAGE_MODEL_ID,
   DEFAULT_FAL_VIDEO_MODEL_ID,
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
+  FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   FAL_KLING_ASPECT_RATIO_OPTIONS,
   FAL_REVE_ASPECT_RATIO_OPTIONS,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
@@ -472,6 +474,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
     const aspectRatioOptions = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID
       ? FAL_REVE_ASPECT_RATIO_OPTIONS
+      : falModelId === GROK_IMAGINE_IMAGE_MODEL_ID // Grok model branch.
+        ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratios.
       : falModelId === KLING_IMAGE_MODEL_ID
         ? FAL_KLING_ASPECT_RATIO_OPTIONS
         : isSeedreamModel
@@ -479,7 +483,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
           : FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS;
     const validOptions = aspectRatioOptions.map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
-      setFalAspectRatioSelection('default');
+      const fallbackAspectRatio = falModelId === GROK_IMAGINE_IMAGE_MODEL_ID ? '1:1' : 'default'; // Grok uses 1:1 fallback.
+      setFalAspectRatioSelection(fallbackAspectRatio);
     }
   }, [falModelId, falModelMode, falAspectRatioSelection, isSeedreamModel]);
 

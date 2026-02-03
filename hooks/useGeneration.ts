@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { Dispatch, SetStateAction, SyntheticEvent } from 'react';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
+  GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
@@ -372,6 +373,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isNanoBananaModel = isNanoBananaProModel;
     const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
+    const isGrokImagineModel = !isVideoMode && falModelIdForRun === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
+    const grokAspectRatioForRun = (isGrokImagineModel && falAspectRatioSelectionForRun === 'default')
+      ? '1:1'
+      : falAspectRatioSelectionForRun; // Grok falls back to 1:1.
     const isFlux2MaxModelForRun = !isVideoMode && falModelIdForRun === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
     const isWan26ImageModelForRun = !isVideoMode && falModelIdForRun === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
     const normalizedFalResolutionSelectionForRun =
@@ -1051,7 +1056,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
-    const shouldValidateFalOptions = usingFal && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel);
+    const shouldValidateFalOptions = usingFal
+      && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel || isGrokImagineModel); // Include Grok validation.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImagesForRun) ||
       falNumImagesForRun < 1 ||
@@ -1126,7 +1132,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       setFalImageSizeSelection('default');
     }
     if (rawFalAspectRatioSelection === 'placeholder' && !falOptionsOverride.aspectRatioSelection) {
-      setFalAspectRatioSelection('default');
+      setFalAspectRatioSelection(isGrokImagineModel ? '1:1' : 'default'); // Grok uses 1:1 default.
     }
 
     let referenceIdsUsed: string[] = [];
@@ -1164,6 +1170,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ? getSeedreamTextToImageModelId(falModelIdForRun)
             : isReveModel
               ? REVE_TEXT_TO_IMAGE_MODEL_ID
+              : isGrokImagineModel
+                ? GROK_IMAGINE_IMAGE_MODEL_ID // Grok text-to-image endpoint.
               : isKlingModel
                 ? KLING_IMAGE_MODEL_ID
                 : isFlux2MaxModelForRun
@@ -1221,7 +1229,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isNanoBananaModel || isReveModel || isKlingModel || isSeedreamModel) ? falAspectRatioSelectionForRun : 'default',
+            aspectRatio: (isNanoBananaModel || isReveModel || isKlingModel || isSeedreamModel || isGrokImagineModel)
+              ? (isGrokImagineModel ? grokAspectRatioForRun : falAspectRatioSelectionForRun)
+              : 'default', // Include Grok aspect ratios.
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(isKlingModel ? { resolution: normalizedFalResolutionSelectionForRun } : {}),
             ...(isSeedreamModel ? { imageSize: falImageSizeSelectionForRun } : {}),

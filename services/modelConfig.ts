@@ -20,6 +20,7 @@ export const REVE_REMIX_MODEL_ID = 'fal-ai/reve/remix' as const;
 export const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1' as const;
 export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
 export const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit' as const;
+export const GROK_IMAGINE_IMAGE_MODEL_ID = 'xai/grok-imagine-image' as const; // Grok Imagine image model id.
 export const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
 export const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
 export const HAILUO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/image-to-video' as const;
@@ -96,6 +97,7 @@ const sortModelOptionsByLabel = <T extends { label: string }>(options: readonly 
 const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux2 Max' },
+  { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine' }, // Grok model option.
   { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
@@ -673,6 +675,22 @@ export const FAL_KLING_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRat
   { value: '2:3', label: '2:3' },
 ] as const;
 
+export const FAL_GROK_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
+  { value: '1:1', label: '1:1' }, // Grok ratio.
+  { value: '2:1', label: '2:1' }, // Grok ratio.
+  { value: '20:9', label: '20:9' }, // Grok ratio.
+  { value: '19.5:9', label: '19.5:9' }, // Grok ratio.
+  { value: '16:9', label: '16:9' }, // Grok ratio.
+  { value: '4:3', label: '4:3' }, // Grok ratio.
+  { value: '3:2', label: '3:2' }, // Grok ratio.
+  { value: '2:3', label: '2:3' }, // Grok ratio.
+  { value: '3:4', label: '3:4' }, // Grok ratio.
+  { value: '9:16', label: '9:16' }, // Grok ratio.
+  { value: '9:19.5', label: '9:19.5' }, // Grok ratio.
+  { value: '9:20', label: '9:20' }, // Grok ratio.
+  { value: '1:2', label: '1:2' }, // Grok ratio.
+] as const; // Grok aspect ratio options.
+
 export const FAL_SEEDREAM_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
   { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Default' },
@@ -685,6 +703,7 @@ export const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_KLING_ASPECT_RATIO_OPTIONS.map(option => option.value),
+  ...FAL_GROK_ASPECT_RATIO_OPTIONS.map(option => option.value), // Grok ratio values.
   ...FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
 
@@ -703,6 +722,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [KLING_IMAGE_MODEL_ID]: 10,
   [REVE_TEXT_TO_IMAGE_MODEL_ID]: 5, // Reve remix supports up to 6 total images (1 primary + 5 references)
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
+  [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok is text-only.
   [WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID]: 3, // Wan 2.6 Image supports up to 4 total images (1 primary + 3 references)
   [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [KLING_O1_VIDEO_MODEL_ID]: 6,

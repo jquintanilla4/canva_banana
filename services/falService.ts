@@ -288,6 +288,7 @@ const REVE_EDIT_MODEL_ID = 'fal-ai/reve/edit';
 const REVE_REMIX_MODEL_ID = 'fal-ai/reve/remix';
 const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max';
 const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit';
+const GROK_IMAGINE_IMAGE_MODEL_ID = 'xai/grok-imagine-image'; // Grok Imagine image model id.
 
 // Convert @Image1, @Image2, etc. to Reve's XML format <img>0</img>, <img>1</img>, etc.
 // User-facing mentions are 1-indexed, API expects 0-indexed
@@ -1429,7 +1430,11 @@ export const generateImage = async (
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan26ImageTextToImage = modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
-  const supportsAspectRatio = isNanoBananaTextToImage || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID || isKlingTextToImage;
+  const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
+  const supportsAspectRatio = isNanoBananaTextToImage
+    || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID
+    || isKlingTextToImage
+    || isGrokImagineModel; // Enable Grok aspect ratios.
   const supportsResolution = isNanoBananaTextToImage || isKlingTextToImage;
   const numImagesOption = options.numImages;
   const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
