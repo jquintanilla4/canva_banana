@@ -15,6 +15,8 @@ import {
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SORA_2_PRO_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
+  VEO_31_EXTEND_VIDEO_MODEL_ID,
+  VEO_31_FFLF_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -25,7 +27,6 @@ import {
   getKlingActualModelId,
   getKling26ControlModelId,
   getKlingO1VideoEndpoint,
-  getVeo31VideoEndpoint,
   getWanAnimateVideoEndpoint,
   getMaxReferenceImages,
   isKlingO1VideoModelId,
@@ -411,9 +412,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? getKling26ControlModelId(kling26ControlVariantForRun)
         : null;
     const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
-    const actualVeo31ModelId = isVeo31VideoModelForRun ? getVeo31VideoEndpoint(veo31VariantForRun) : null;
     const isKlingO1FflfMode = isKlingO1VideoModel && klingO1VariantForRun === 'fflf';
-      const isVeo31FflfMode = isVeo31VideoModelForRun && veo31VariantForRun === 'fflf';
+    const isVeo31TailCapable = isVeo31VideoModelForRun && veo31VariantForRun === 'i2v-fflf';
     const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
       ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
       : (isKlingVideoModel || isKling26VideoModel || isKlingO1VideoModel)
@@ -486,11 +486,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const klingO1VariantLabel = klingO1VariantForRun === 'refI2V'
         ? 'RefI2V'
         : klingO1VariantForRun.toUpperCase();
-      const veo31VariantLabel = veo31VariantForRun === 'fflf'
-        ? 'FFLF'
-        : veo31VariantForRun === 'extend'
-          ? 'Extend'
-          : 'I2V';
+      const veo31VariantLabel = veo31VariantForRun === 'extend' ? 'Extend' : 'i2v/FFLF';
       const jobModelLabel = isHailuoVideoModel
         ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
         : isKlingVideoModel
@@ -697,7 +693,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKling26VideoModel || isKlingO1FflfMode || isVeo31FflfMode || isSeedance15VideoModel; // Allow end-frame input for Kling 2.6/FFLF.
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKling26VideoModel || isKlingO1FflfMode || isVeo31TailCapable || isSeedance15VideoModel; // Allow end-frame input for Kling 2.6/tail-capable variants.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -711,6 +707,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
         setError(null);
         enqueueJob();
 
+        const actualVeo31ModelId = isVeo31VideoModelForRun
+          ? veo31VariantForRun === 'extend'
+            ? VEO_31_EXTEND_VIDEO_MODEL_ID
+            : videoTailImageElement
+              ? VEO_31_FFLF_VIDEO_MODEL_ID
+              : VEO_31_IMAGE_TO_VIDEO_MODEL_ID
+          : null;
         const videoModelIdForRequest = actualHailuoModelId
           ?? actualKlingModelId
           ?? actualKlingO1ModelId

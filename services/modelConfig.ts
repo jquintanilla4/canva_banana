@@ -64,7 +64,7 @@ export type KlingVariant = 'standard' | 'pro';
 export type KlingO1Variant = 'refI2V' | 'edit' | 'fflf' | 'refV2V';
 export type Kling26ControlVariant = 'standard' | 'pro';
 export type Kling26ControlDriver = 'image' | 'video';
-export type Veo31Variant = 'i2v' | 'fflf' | 'extend';
+export type Veo31Variant = 'i2v-fflf' | 'extend';
 export type Kling26ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
@@ -176,9 +176,14 @@ export const getKlingO1VideoEndpoint = (variant: KlingO1Variant): string => {
 };
 
 export const getVeo31VideoEndpoint = (variant: Veo31Variant): string => {
-  if (variant === 'fflf') return VEO_31_FFLF_VIDEO_MODEL_ID;
   if (variant === 'extend') return VEO_31_EXTEND_VIDEO_MODEL_ID;
-  return VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
+  return VEO_31_IMAGE_TO_VIDEO_MODEL_ID; // Tail-frame routing handled by caller.
+};
+
+export const normalizeVeo31Variant = (value: unknown): Veo31Variant | null => {
+  if (value === 'extend') return 'extend';
+  if (value === 'i2v-fflf' || value === 'i2v' || value === 'fflf') return 'i2v-fflf';
+  return null;
 };
 
 export const isKlingO1VideoModelId = (value: string | undefined): value is typeof KLING_O1_VIDEO_MODEL_IDS[number] =>
@@ -313,8 +318,7 @@ export type Veo31AspectRatioSelectionValue = 'auto' | '16:9' | '9:16';
 export type Veo31AudioSelectionValue = 'on' | 'off';
 
 export const VEO31_VARIANT_OPTIONS: ReadonlyArray<{ value: Veo31Variant; label: string }> = [
-  { value: 'i2v', label: 'i2v' },
-  { value: 'fflf', label: 'FFLF' },
+  { value: 'i2v-fflf', label: 'i2v / FFLF' },
   { value: 'extend', label: 'Extend' },
 ] as const;
 
@@ -558,7 +562,7 @@ export const isVeo31AspectRatioSelectionValue = (value: unknown): value is Veo31
   value === 'auto' || value === '16:9' || value === '9:16';
 
 export const isVeo31Variant = (value: unknown): value is Veo31Variant =>
-  value === 'i2v' || value === 'fflf' || value === 'extend';
+  value === 'i2v-fflf' || value === 'extend';
 
 export const isWan26ResolutionSelectionValue = (value: unknown): value is Wan26ResolutionSelectionValue =>
   value === '720p' || value === '1080p';

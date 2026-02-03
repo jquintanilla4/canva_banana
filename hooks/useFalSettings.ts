@@ -39,6 +39,7 @@ import {
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
   isVeo31Variant,
+  normalizeVeo31Variant,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
   isWan26ImageAspectRatioSelectionValue,
@@ -320,7 +321,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [sora2ProResolution, setSora2ProResolution] = useState<Sora2ProResolutionSelectionValue>('auto');
   const [sora2ProAspectRatio, setSora2ProAspectRatio] = useState<Sora2ProAspectRatioSelectionValue>('auto');
   const [sora2ProDuration, setSora2ProDuration] = useState<Sora2ProDurationSelectionValue>('4');
-  const [veo31Variant, setVeo31Variant] = useState<Veo31Variant>('i2v');
+  const [veo31Variant, setVeo31Variant] = useState<Veo31Variant>('i2v-fflf');
   const [veo31Duration, setVeo31Duration] = useState<Veo31DurationSelectionValue>('8s');
   const [veo31Resolution, setVeo31Resolution] = useState<Veo31ResolutionSelectionValue>('720p');
   const [veo31AspectRatio, setVeo31AspectRatio] = useState<Veo31AspectRatioSelectionValue>('auto');
@@ -406,11 +407,16 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (!isVeo31VideoModel) {
       return;
     }
-    if (!isVeo31Variant(veo31Variant)) {
-      setVeo31Variant('i2v');
+    const normalizedVariant = normalizeVeo31Variant(veo31Variant);
+    if (!normalizedVariant) {
+      setVeo31Variant('i2v-fflf');
       return;
     }
-    if (veo31Variant === 'extend') {
+    if (normalizedVariant !== veo31Variant) {
+      setVeo31Variant(normalizedVariant);
+      return;
+    }
+    if (normalizedVariant === 'extend') {
       if (veo31Duration !== '7s') {
         setVeo31Duration('7s');
       }
@@ -680,11 +686,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, []);
 
   const handleVeo31VariantChange = useCallback((value: string) => {
-    if (isVeo31Variant(value)) {
-      setVeo31Variant(value);
-      return;
-    }
-    setVeo31Variant('i2v');
+    const normalized = normalizeVeo31Variant(value);
+    setVeo31Variant(normalized ?? 'i2v-fflf');
   }, []);
 
   const handleVeo31DurationChange = useCallback((value: string) => {

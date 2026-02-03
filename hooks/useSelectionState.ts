@@ -116,7 +116,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     || isScailVideoModel;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
   const isSeedance15FflfMode = isSeedance15VideoModel;
-  const isVeo31FflfMode = isVeo31VideoModel && veo31Variant === 'fflf';
+  const isVeo31TailCapable = isVeo31VideoModel && veo31Variant === 'i2v-fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -250,7 +250,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isSeedance15FflfMode && !isVeo31FflfMode) {
+      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isSeedance15FflfMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -449,7 +449,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isKling26VideoModel,
     isKlingO1FflfMode,
     isSeedance15FflfMode,
-    isVeo31FflfMode,
+    isVeo31TailCapable,
     klingVariant,
     onError,
     onReferenceLimit,

@@ -32,7 +32,7 @@ type Args = {
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isVeo31VideoModel: boolean;
-  veo31Variant: 'i2v' | 'fflf' | 'extend';
+  veo31Variant: 'i2v-fflf' | 'extend';
   falModelId: string;
   falNumImages: number;
   activePrimaryImage: unknown;

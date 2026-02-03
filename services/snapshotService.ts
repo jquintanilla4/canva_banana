@@ -26,6 +26,7 @@ import {
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
   isVeo31Variant,
+  normalizeVeo31Variant,
   isGenerationKind,
 } from './modelConfig';
 import {
@@ -806,8 +807,9 @@ export const normalizeSnapshotImageMetadata = (
       }
 
       const veo31VariantValue = (typed as { veo31Variant?: unknown }).veo31Variant;
-      if (isVeo31Variant(veo31VariantValue)) {
-        normalizedOptions.veo31Variant = veo31VariantValue;
+      const normalizedVeo31Variant = normalizeVeo31Variant(veo31VariantValue);
+      if (normalizedVeo31Variant) {
+        normalizedOptions.veo31Variant = normalizedVeo31Variant;
       }
       const veo31DurationValue = (typed as { veo31Duration?: unknown }).veo31Duration;
       if (isVeo31DurationSelectionValue(veo31DurationValue)) {

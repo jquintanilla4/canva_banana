@@ -273,13 +273,13 @@ export default function App() {
 
   const isKlingModel = !fal.isVideoMode && fal.falModelId === KLING_IMAGE_MODEL_ID;
   const isKlingO1FflfMode = fal.isKlingO1VideoModel && fal.klingO1Variant === 'fflf';
-  const isVeo31FflfMode = fal.isVeo31VideoModel && fal.veo31Variant === 'fflf';
+  const isVeo31TailCapable = fal.isVeo31VideoModel && fal.veo31Variant === 'i2v-fflf';
   const isVeo31ExtendMode = fal.isVeo31VideoModel && fal.veo31Variant === 'extend';
   const isScailVideoModel = fal.isVideoMode && fal.falVideoModelId === SCAIL_VIDEO_MODEL_ID;
   const supportsTailFrameSelection = fal.isKlingProVideoSelection
     || fal.isKling26VideoModel
     || isKlingO1FflfMode
-    || isVeo31FflfMode
+    || isVeo31TailCapable
     || fal.isSeedance15VideoModel; // End-frame capable modes.
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).

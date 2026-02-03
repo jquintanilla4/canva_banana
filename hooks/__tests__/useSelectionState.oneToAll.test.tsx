@@ -73,7 +73,7 @@ describe('useSelectionState (one-to-all)', () => {
       isWan26I2VVideoModel: false,
       isSeedance15VideoModel: false,
       isVeo31VideoModel: false,
-      veo31Variant: 'i2v',
+      veo31Variant: 'i2v-fflf',
     } satisfies TestFalSettings;
 
     const onError = vi.fn();

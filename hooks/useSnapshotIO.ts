@@ -32,6 +32,7 @@ import {
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
   isVeo31Variant,
+  normalizeVeo31Variant,
   isFalVideoModelId,
   normalizeFalModelId,
 } from '../services/modelConfig';
@@ -598,8 +599,9 @@ export function useSnapshotIO({
         if (isSora2ProDurationSelectionValue(meta.sora2ProDuration)) {
           setSora2ProDuration(meta.sora2ProDuration);
         }
-        if (isVeo31Variant(meta.veo31Variant)) {
-          setVeo31Variant(meta.veo31Variant);
+        const normalizedVeoVariant = normalizeVeo31Variant(meta.veo31Variant);
+        if (normalizedVeoVariant) {
+          setVeo31Variant(normalizedVeoVariant);
         }
         if (isVeo31DurationSelectionValue(meta.veo31Duration)) {
           setVeo31Duration(meta.veo31Duration);
