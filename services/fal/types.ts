@@ -1,0 +1,126 @@
+import type {
+  Tool,
+  Path,
+  ImageDimensions,
+  FalImageSizeOption,
+  FalAspectRatioOption,
+  FalResolutionOption,
+  FalVideoDuration,
+} from '../../types'; // Shared app types.
+import type {
+  GrokImagineVideoAspectRatioSelectionValue,
+  GrokImagineVideoDurationSelectionValue,
+  GrokImagineVideoResolutionSelectionValue,
+  InfinitalkDurationSelectionValue,
+  LipsyncAudioMode,
+  LipsyncEmotion,
+  LipsyncModelMode,
+} from '../modelConfig'; // Model-specific option types.
+
+export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED'; // Fal queue status enum.
+export type FalQueueLogs = Array<{ message?: string }> | Record<string, unknown> | string | undefined; // Fal log payload shapes.
+
+export interface FalQueueUpdate {
+  requestId?: string; // Server-generated request id.
+  status: FalQueueStatus; // Queue status string.
+  position?: number; // Queue position when available.
+  eta?: number; // Estimated seconds until completion.
+  logs?: FalQueueLogs; // Raw log payloads from Fal.
+  [key: string]: unknown; // Allow extra provider fields.
+} // Normalized Fal queue update event.
+
+export interface GenerateImageEditParams {
+  prompt: string;
+  image: HTMLImageElement;
+  tool: Tool;
+  paths: Path[];
+  imageDimensions: ImageDimensions;
+  referenceImages?: HTMLImageElement[];
+} // Inputs for image edit workflows.
+
+export interface GenerateImageEditOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void; // Hook for queue updates.
+  modelId?: string;
+  imageSize?: FalImageSizeOption;
+  aspectRatio?: FalAspectRatioOption;
+  numImages?: number;
+  resolution?: FalResolutionOption;
+  wan26ImageSize?: string;
+  wan26ImageMaxImages?: string;
+  negativePrompt?: string;
+} // Optional controls for image edits.
+
+export interface GenerateImageOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+  modelId?: string;
+  aspectRatio?: FalAspectRatioOption;
+  numImages?: number;
+  imageSize?: FalImageSizeOption;
+  seed?: number;
+  resolution?: FalResolutionOption;
+  referenceImages?: HTMLImageElement[];
+  flux2MaxImageSize?: string;
+  wan26ImageSize?: string;
+  wan26ImageMaxImages?: string;
+  negativePrompt?: string;
+} // Optional controls for text-to-image.
+
+export interface UpscaleImageOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+} // Optional controls for upscaling.
+
+export interface GenerateVideoOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+  promptOptimizer?: boolean;
+  modelId?: string;
+  duration?: FalVideoDuration;
+  negativePrompt?: string;
+  numInferenceSteps?: number;
+  resolution?: '480p' | '580p' | '720p';
+  seed?: number;
+  acceleration?: 'none' | 'regular' | 'high';
+  shift?: number;
+  videoQuality?: 'high' | 'maximum';
+  useTurbo?: boolean;
+  targetResolution?: '720p' | '1080p';
+  creativity?: number;
+  cfgScale?: number;
+  tailImage?: HTMLImageElement;
+  generateAudio?: boolean;
+  referenceImages?: HTMLImageElement[];
+  elementImages?: HTMLImageElement[];
+  klingO1Variant?: string;
+  sourceVideoUrl?: string;
+  sourceAudioUrl?: string;
+  keepAudio?: boolean;
+  keepOriginalSound?: boolean;
+  characterOrientation?: 'image' | 'video';
+  aspectRatio?: FalAspectRatioOption;
+  lipsyncEmotion?: LipsyncEmotion;
+  lipsyncModelMode?: LipsyncModelMode;
+  lipsyncAudioMode?: LipsyncAudioMode;
+  infinitalkDuration?: InfinitalkDurationSelectionValue;
+  grokImagineVideoDuration?: GrokImagineVideoDurationSelectionValue;
+  grokImagineVideoResolution?: GrokImagineVideoResolutionSelectionValue;
+  grokImagineVideoAspectRatio?: GrokImagineVideoAspectRatioSelectionValue;
+  sora2ProResolution?: 'auto' | '720p' | '1080p';
+  sora2ProAspectRatio?: 'auto' | '9:16' | '16:9';
+  sora2ProDuration?: '4' | '8' | '12';
+  veo31Duration?: '4s' | '6s' | '8s' | '7s';
+  veo31Resolution?: '720p' | '1080p' | '4k';
+  veo31AspectRatio?: 'auto' | '16:9' | '9:16';
+  veo31GenerateAudio?: boolean;
+  wan26Resolution?: '720p' | '1080p';
+  wan26Duration?: '5' | '10' | '15';
+  wan26PromptExpansion?: boolean;
+  wan26MultiShots?: boolean;
+  seedance15AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
+  seedance15Resolution?: '480p' | '720p' | '1080p';
+  seedance15Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
+  seedance15CameraFixed?: boolean;
+  seedance15Audio?: boolean;
+} // Optional controls for image-to-video.
+
+export interface RemoveBackgroundOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+} // Optional controls for background removal.
