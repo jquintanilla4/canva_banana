@@ -18,6 +18,7 @@ import {
 } from '../services/snapshotService';
 import { pruneBackupSessions, saveBackupSession } from '../services/backupService';
 import {
+  getFalNumImageMaxForModel,
   isFalAspectRatioSelectionValue,
   isFalImageModelId,
   isFalImageSizeSelectionValue,
@@ -550,7 +551,8 @@ export function useSnapshotIO({
           setFalResolutionSelection(meta.falResolutionSelection);
         }
         if (typeof meta.falNumImages === 'number') {
-          setFalNumImages(Math.min(4, Math.max(1, Math.floor(meta.falNumImages))));
+          const maxFalNumImages = getFalNumImageMaxForModel(normalizedFalModelId); // Respect model-specific output cap on restore.
+          setFalNumImages(Math.min(maxFalNumImages, Math.max(1, Math.floor(meta.falNumImages))));
         }
         if (typeof meta.falScaleFactor === 'number') {
           setFalScaleFactor(Math.min(10, Math.max(1, Math.round(meta.falScaleFactor))));

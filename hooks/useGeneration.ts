@@ -26,6 +26,7 @@ import {
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   getFalModelLabel,
+  getFalNumImageMaxForModel,
   getHailuoActualModelId,
   getKlingActualModelId,
   getKling26ControlModelId,
@@ -42,6 +43,7 @@ import {
   isFalModelMode,
   isFalVideoModelId,
   isSeedreamModelId,
+  isSeedreamV5LiteModelId,
   type FalAspectRatioSelectionValue,
   type FalImageModelId,
   type FalImageSizeSelectionValue,
@@ -386,6 +388,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const usingFal = apiProviderForRun === 'fal';
     const isVideoMode = usingFal && falModelModeForRun === 'video';
     const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelIdForRun);
+    const normalizedFalImageSizeSelectionForRun = isSeedreamV5LiteModelId(falModelIdForRun) && falImageSizeSelectionForRun === 'default'
+      ? 'auto_2K'
+      : falImageSizeSelectionForRun; // Seedream 5 Lite defaults to auto_2K instead of source-matching.
     const isNanoBananaProModel = !isVideoMode && falModelIdForRun === NANO_BANANA_PRO_EDIT_MODEL_ID;
     const isNanoBananaModel = isNanoBananaProModel;
     const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
@@ -1097,11 +1102,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
     const shouldValidateFalOptions = usingFal
       && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel || isGrokImagineModel); // Include Grok validation.
+    const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImagesForRun) ||
       falNumImagesForRun < 1 ||
-      falNumImagesForRun > 4;
-    const normalizedFalNumImages = Math.min(4, Math.max(1, Math.floor(Number.isFinite(falNumImagesForRun) ? falNumImagesForRun : 1)));
+      falNumImagesForRun > falNumImageMaxForRun;
+    const normalizedFalNumImages = Math.min(falNumImageMaxForRun, Math.max(1, Math.floor(Number.isFinite(falNumImagesForRun) ? falNumImagesForRun : 1)));
     const googleAspectRatio = isNanoBananaModel && falAspectRatioSelectionForRun !== 'default'
       ? falAspectRatioSelectionForRun
       : undefined;
@@ -1122,7 +1128,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
 
     if (shouldValidateFalOptions && isNumImagesInvalid) {
-      setError('Number of images must be between 1 and 4.');
+      setError(`Number of images must be between 1 and ${falNumImageMaxForRun}.`);
       return;
     }
 
@@ -1168,7 +1174,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setError(null);
 
     if (rawFalImageSizeSelection === 'placeholder' && !falOptionsOverride.imageSizeSelection) {
-      setFalImageSizeSelection('default');
+      setFalImageSizeSelection(isSeedreamV5LiteModelId(falModelIdForRun) ? 'auto_2K' : 'default');
     }
     if (rawFalAspectRatioSelection === 'placeholder' && !falOptionsOverride.aspectRatioSelection) {
       setFalAspectRatioSelection(isGrokImagineModel ? '1:1' : 'default'); // Grok uses 1:1 default.
@@ -1273,7 +1279,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               : 'default', // Include Grok aspect ratios.
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(isKlingModel ? { resolution: normalizedFalResolutionSelectionForRun } : {}),
-            ...(isSeedreamModel ? { imageSize: falImageSizeSelectionForRun } : {}),
+            ...(isSeedreamModel ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
             ...(isFlux2MaxModelForRun ? { flux2MaxImageSize } : {}),
             ...(isWan26ImageModelForRun ? {
               wan26ImageSize: wan26ImageAspectRatio,
@@ -1409,7 +1415,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }, {
               modelId: falModelIdForRun,
               ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
-              ...(falImageSizeSelectionForRun ? { imageSize: falImageSizeSelectionForRun } : {}),
+              ...(normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
               ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
               ...(isWan26ImageModelForRun ? {
                 wan26ImageSize: wan26ImageAspectRatio,
@@ -1536,7 +1542,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 ...(primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 falOptions: {
                   ...(falAspectRatioSelectionForRun ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
-                  ...(falImageSizeSelectionForRun ? { imageSizeSelection: falImageSizeSelectionForRun } : {}),
+                  ...(normalizedFalImageSizeSelectionForRun ? { imageSizeSelection: normalizedFalImageSizeSelectionForRun } : {}),
                   ...(falResolutionSelectionForRun ? { resolutionSelection: falResolutionSelectionForRun } : {}),
                   ...(generationKind === 'upscale' ? { scaleFactor: falScaleFactorForRun } : {}),
                   ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),

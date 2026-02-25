@@ -4,6 +4,8 @@ import {
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
+  SEEDREAM_V5_LITE_MODEL_ID,
+  SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
@@ -23,12 +25,12 @@ export const normalizeModelId = (modelId: string | undefined): string | undefine
 
 export const FAL_MODEL_ID = normalizeModelId(process.env.FAL_MODEL_ID) || NANO_BANANA_PRO_EDIT_MODEL_ID; // Default edit model.
 
-const SEEDREAM_EDIT_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const; // Seedream edit ids.
+const SEEDREAM_EDIT_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID] as const; // Seedream edit ids.
 export type SeedreamEditModelId = typeof SEEDREAM_EDIT_MODEL_IDS[number]; // Seedream edit id union.
 export const isSeedreamEditModelId = (modelId: string | undefined): modelId is SeedreamEditModelId =>
   !!modelId && (SEEDREAM_EDIT_MODEL_IDS as readonly string[]).includes(modelId); // Seedream edit guard.
 
-const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID] as const; // Seedream t2i ids.
+const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID] as const; // Seedream t2i ids.
 export const isSeedreamTextToImageModelId = (modelId: string | undefined): boolean =>
   !!modelId && (SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(modelId); // Seedream t2i guard.
 

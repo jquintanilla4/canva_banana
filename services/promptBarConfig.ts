@@ -52,7 +52,6 @@ import {
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_KLING_ASPECT_RATIO_OPTIONS,
   FAL_KLING_RESOLUTION_OPTIONS,
-  FAL_NUM_IMAGE_OPTIONS,
   FAL_REVE_ASPECT_RATIO_OPTIONS,
   FAL_RESOLUTION_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
@@ -63,6 +62,8 @@ import {
   GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS,
   GROK_IMAGINE_VIDEO_DURATION_OPTIONS,
   GROK_IMAGINE_VIDEO_RESOLUTION_OPTIONS,
+  getFalNumImageMaxForModel,
+  getFalNumImageOptionsForModel,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
   HAILUO_VARIANT_OPTIONS,
@@ -92,8 +93,7 @@ import {
   VEO31_RESOLUTION_OPTIONS,
   VEO31_EXTEND_RESOLUTION_OPTIONS,
   VEO31_VARIANT_OPTIONS,
-  SEEDREAM_MODEL_ID,
-  SEEDREAM_V45_MODEL_ID,
+  isSeedreamV5LiteModelId,
   SYNC_LIPSYNC_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE15_ASPECT_RATIO_OPTIONS,
@@ -1044,11 +1044,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }
 
   const isGrokImagineModel = !isVideoMode && falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
-  const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && (falModelId === SEEDREAM_MODEL_ID || falModelId === SEEDREAM_V45_MODEL_ID);
+  const isSeedreamV5Lite = isSeedreamV5LiteModelId(falModelId); // Seedream 5 Lite uses stricter controls.
+  const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel; // Show size picker for all Seedream models.
   if (shouldShowSeedreamImageSizeControl) {
     const seedreamImageSizeOptions = getSeedreamImageSizeOptions(falModelId);
     controls.push({
       id: 'fal-image-size-select',
+      prefixLabel: isSeedreamV5Lite ? 'Image Size' : undefined,
       ariaLabel: 'Select Seedream image size',
       options: seedreamImageSizeOptions.map(option => ({ value: option.value, label: option.label })),
       value: falImageSizeSelection,
@@ -1102,15 +1104,17 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     && !isVideoMode
     && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel || isGrokImagineModel); // Include Grok for Num control.
   if (shouldShowNumImagesControl) {
+    const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
+    const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
     controls.push({
       id: 'fal-num-images-select',
-      prefixLabel: isGrokImagineModel ? 'Num' : undefined, // Grok uses short label.
+      prefixLabel: isSeedreamV5Lite ? 'Images' : (isGrokImagineModel ? 'Num' : undefined), // Seedream 5 Lite matches Infinitalk-style prefixed controls.
       ariaLabel: 'Select number of images to generate',
-      options: FAL_NUM_IMAGE_OPTIONS.map(option => ({ value: `${option}`, label: `${option}` })),
+      options: falNumImageOptions.map(option => ({ value: `${option}`, label: `${option}` })),
       value: falNumImages.toString(),
       onChange: (value: string) => onFalNumImagesChange(Number(value)),
       disabled: isLoading,
-      errorMessage: shouldValidateFalOptions && isNumImagesInvalid ? 'Num images must be between 1 and 4.' : undefined,
+      errorMessage: shouldValidateFalOptions && isNumImagesInvalid ? `Num images must be between 1 and ${falNumImageMax}.` : undefined,
     });
   }
 

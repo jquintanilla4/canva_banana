@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Tool } from '../types';
 import {
   getFalModelLabel,
+  getFalNumImageMaxForModel,
   INFINITALK_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
@@ -118,10 +119,11 @@ export function useGenerationGuards({
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
       && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel || isGrokModel); // Include Grok validation.
+    const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
       falNumImages < 1 ||
-      falNumImages > 4;
+      falNumImages > falNumImageMax;
     const isWanPromptOptional = usingFal && isWanVideoInputMode;
     const isLipsyncPromptOptional = usingFal && isLipsyncVideoModel;
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));

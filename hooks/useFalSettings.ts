@@ -30,9 +30,8 @@ import {
   SEEDANCE_15_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
-  SEEDREAM_MODEL_ID,
-  SEEDREAM_V45_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
+  getFalNumImageMaxForModel,
   isFlux2MaxImageSizeSelectionValue,
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
@@ -40,6 +39,8 @@ import {
   isKlingO1VideoModelId,
   isFalImageModelId,
   isFalVideoModelId,
+  isSeedreamModelId,
+  isSeedreamV5LiteModelId,
   normalizeFalModelId,
   isVeo31AspectRatioSelectionValue,
   isVeo31DurationSelectionValue,
@@ -393,7 +394,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
   const isKlingO1RefV2VMode = isKlingO1VideoModel && klingO1Variant === 'refV2V';
-  const isSeedreamModel = falModelId === SEEDREAM_MODEL_ID || falModelId === SEEDREAM_V45_MODEL_ID;
+  const isSeedreamModel = isSeedreamModelId(falModelId);
 
   // Non-FAL providers cannot use video mode; reset when switching providers.
   useEffect(() => {
@@ -479,6 +480,15 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     });
   }, [falModelId]);
 
+  useEffect(() => {
+    const maxFalNumImages = getFalNumImageMaxForModel(falModelId); // Clamp to each model's output cap.
+    setFalNumImages(prev => {
+      const normalizedPrev = Number.isFinite(prev) ? Math.floor(prev) : 1;
+      const clamped = Math.min(maxFalNumImages, Math.max(1, normalizedPrev));
+      return clamped === prev ? prev : clamped;
+    });
+  }, [falModelId]);
+
   // Noise/creativity sliders are model-specific; normalize values whenever the model changes.
   useEffect(() => {
     setFalNoiseScale(prev => {
@@ -518,7 +528,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
     const validImageSizeOptions = getSeedreamImageSizeOptions(falModelId).map(option => option.value);
     if (!validImageSizeOptions.includes(falImageSizeSelection)) {
-      setFalImageSizeSelection('default');
+      const fallback = isSeedreamV5LiteModelId(falModelId) ? 'auto_2K' : 'default'; // Seedream 5 Lite defaults to auto_2K.
+      setFalImageSizeSelection(fallback);
     }
   }, [falModelId, falModelMode, falImageSizeSelection, isSeedreamModel]);
 
@@ -843,9 +854,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       setFalNumImages(1);
       return;
     }
-    const clamped = Math.min(4, Math.max(1, Math.floor(value)));
+    const maxFalNumImages = getFalNumImageMaxForModel(falModelId); // Clamp using the active model cap.
+    const clamped = Math.min(maxFalNumImages, Math.max(1, Math.floor(value)));
     setFalNumImages(clamped);
-  }, []);
+  }, [falModelId]);
 
   const handleFalScaleFactorChange = useCallback((value: string) => {
     const parsed = Number(value);

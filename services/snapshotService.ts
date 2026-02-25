@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import { Tool } from '../types';
 import {
+  getFalNumImageMaxForModel,
   isApiProvider,
   isFalAspectRatioSelectionValue,
   isFalImageSizeSelectionValue,
@@ -700,7 +701,8 @@ export const normalizeSnapshotImageMetadata = (
         }
         return Math.min(max, Math.max(min, parsed));
       };
-      const numImages = normalizeNumberOption((typed as { numImages?: unknown }).numImages, 1, 4);
+      const maxFalNumImages = getFalNumImageMaxForModel(modelId); // Resolve output cap from stored model id.
+      const numImages = normalizeNumberOption((typed as { numImages?: unknown }).numImages, 1, maxFalNumImages);
       if (numImages !== undefined) {
         normalizedOptions.numImages = Math.floor(numImages);
       }

@@ -53,6 +53,7 @@ export type FalImageSizePreset =
   | '1440x2560'
   | 'auto'
   | 'auto_2K'
+  | 'auto_3K'
   | 'auto_4K';
 
 export type FalImageSizeOption = 'default' | FalImageSizePreset;

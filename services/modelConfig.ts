@@ -12,8 +12,10 @@ export const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit' as co
 export const NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-pro' as const;
 export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
+export const SEEDREAM_V5_LITE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/edit' as const;
 export const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 export const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
+export const SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/text-to-image' as const;
 export const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
 export const REVE_EDIT_MODEL_ID = 'fal-ai/reve/edit' as const;
 export const REVE_REMIX_MODEL_ID = 'fal-ai/reve/remix' as const;
@@ -104,8 +106,9 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
-  { value: SEEDREAM_MODEL_ID, label: 'Seedream v4' },
-  { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream v4.5' },
+  { value: SEEDREAM_MODEL_ID, label: 'Seedream 4' },
+  { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream 4.5' },
+  { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Wan 2.6 Image' },
  ] as const;
@@ -535,14 +538,17 @@ export const isWan26ImageMaxImagesSelectionValue = (value: unknown): value is Wa
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS_BASE, ...FAL_VIDEO_MODEL_OPTIONS_BASE] as const;
 export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];
-export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID] as const;
+export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID] as const;
 export type SeedreamModelId = typeof SEEDREAM_MODEL_IDS[number];
 export const SEEDREAM_TEXT_TO_IMAGE_MAP: Record<SeedreamModelId, string> = {
   [SEEDREAM_MODEL_ID]: SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
   [SEEDREAM_V45_MODEL_ID]: SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
+  [SEEDREAM_V5_LITE_MODEL_ID]: SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
 };
 export const isSeedreamV45ModelId = (value: string | undefined): boolean =>
   value === SEEDREAM_V45_MODEL_ID || value === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID;
+export const isSeedreamV5LiteModelId = (value: string | undefined): boolean =>
+  value === SEEDREAM_V5_LITE_MODEL_ID || value === SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID; // Match both edit and t2i IDs.
 
 export type FalModelMode = 'image' | 'video';
 export type FalImageSizeSelectionValue = 'placeholder' | 'default' | FalImageSizePreset;
@@ -655,11 +661,28 @@ export const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectio
   { value: '1440x2560', label: '1440 x 2560' },
   { value: 'auto', label: 'Auto' },
   { value: 'auto_2K', label: 'Auto 2K' },
+  { value: 'auto_3K', label: 'Auto 3K' },
   { value: 'auto_4K', label: 'Auto 4K' },
 ] as const;
-export const getSeedreamImageSizeOptions = (_modelId: string | undefined) => FAL_IMAGE_SIZE_OPTIONS;
+export const SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
+  { value: 'square_hd', label: 'Square HD' },
+  { value: 'square', label: 'Square' },
+  { value: 'portrait_4_3', label: 'Portrait 3:4' },
+  { value: 'portrait_16_9', label: 'Portrait 9:16' },
+  { value: 'landscape_4_3', label: 'Landscape 4:3' },
+  { value: 'landscape_16_9', label: 'Landscape 16:9' },
+  { value: 'auto_2K', label: 'Auto 2K' },
+  { value: 'auto_3K', label: 'Auto 3K' },
+] as const;
+export const getSeedreamImageSizeOptions = (modelId: string | undefined) =>
+  isSeedreamV5LiteModelId(modelId) ? SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS : FAL_IMAGE_SIZE_OPTIONS; // Keep v4/v4.5 behavior unchanged.
 
 export const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
+export const FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE = [1, 2, 3, 4, 5, 6] as const;
+export const getFalNumImageMaxForModel = (modelId: string | undefined): number =>
+  isSeedreamV5LiteModelId(modelId) ? 6 : 4; // Seedream 5 Lite supports up to 6 outputs.
+export const getFalNumImageOptionsForModel = (modelId: string | undefined): ReadonlyArray<number> =>
+  isSeedreamV5LiteModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS; // Drive picker values from model capability.
 export const FAL_CRYSTAL_SCALE_FACTOR_OPTIONS = Array.from({ length: 10 }, (_, index) => {
   const factor = index + 1;
   return { value: `${factor}`, label: `${factor}x` } as const;
@@ -769,6 +792,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [NANO_BANANA_PRO_EDIT_MODEL_ID]: 14,
   [SEEDREAM_MODEL_ID]: 7,
   [SEEDREAM_V45_MODEL_ID]: 10,
+  [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.
   [KLING_IMAGE_MODEL_ID]: 10,
   [REVE_TEXT_TO_IMAGE_MODEL_ID]: 5, // Reve remix supports up to 6 total images (1 primary + 5 references)
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)

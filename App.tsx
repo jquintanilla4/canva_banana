@@ -258,7 +258,7 @@ export default function App() {
       return;
     }
     if (fal.falModelId === SEEDREAM_V45_MODEL_ID && maxReferenceImages >= 10) {
-      setToastMessage('Seedream v4.5 only accepts up to 10 reference images.');
+      setToastMessage('Seedream 4.5 only accepts up to 10 reference images.');
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }

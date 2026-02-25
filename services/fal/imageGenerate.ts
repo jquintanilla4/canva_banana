@@ -11,6 +11,7 @@ import { isSeedreamTextToImageModelId, normalizeModelId, resolveSeedreamCustomSi
 import {
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
+  getFalNumImageMaxForModel,
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
@@ -89,7 +90,8 @@ export const generateImage = async (
   }
 
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
-    const normalized = Math.min(4, Math.max(1, Math.floor(numImagesOption)));
+    const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
+    const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {
       body.num_images = normalized;
     }
