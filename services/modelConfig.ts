@@ -4,6 +4,7 @@ import type {
   FalImageSizePreset,
   FalResolutionOption,
   FalVideoDuration,
+  GenerationProviderId,
   GenerationKind,
 } from '../types';
 
@@ -57,6 +58,7 @@ export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as c
 export const SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const; // Sora 2 Pro image-to-video
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
+export const SEEDANCE_2_VIDEO_MODEL_ID = 'volcengine/seedance-2' as const;
 export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as const;
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video' as const;
@@ -71,6 +73,7 @@ export type KlingO1Variant = 'refI2V' | 'edit' | 'fflf' | 'refV2V';
 export type Kling26ControlVariant = 'standard' | 'pro';
 export type Kling26ControlDriver = 'image' | 'video';
 export type Veo31Variant = 'i2v-fflf' | 'extend';
+export type Seedance2Variant = 'smart' | 'reference';
 export type Kling26ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
@@ -127,6 +130,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: SORA_2_PRO_VIDEO_MODEL_ID, label: 'Sora 2 Pro' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
+  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
   { value: VEO_31_IMAGE_TO_VIDEO_MODEL_ID, label: 'Veo 3.1' },
   { value: WAN_26_I2V_MODEL_ID, label: 'Wan 2.6' },
@@ -167,6 +171,56 @@ export const KLING26_CONTROL_VARIANT_OPTIONS: ReadonlyArray<{ value: Kling26Cont
 export const KLING26_CONTROL_DRIVER_OPTIONS: ReadonlyArray<{ value: Kling26ControlDriver; label: string }> = [
   { value: 'video', label: 'Video (30s)' },
   { value: 'image', label: 'Image (10s)' },
+] as const;
+
+export type Seedance2AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
+export type Seedance2ResolutionSelectionValue = '480p' | '720p';
+export type Seedance2DurationSelectionValue = '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+export type Seedance2BooleanSelectionValue = 'true' | 'false';
+
+export const SEEDANCE2_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant; label: string }> = [
+  { value: 'smart', label: 'Smart' },
+  { value: 'reference', label: 'Reference' },
+] as const;
+
+export const SEEDANCE2_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Seedance2AspectRatioSelectionValue; label: string }> = [
+  { value: '21:9', label: '21:9' },
+  { value: '16:9', label: '16:9' },
+  { value: '4:3', label: '4:3' },
+  { value: '1:1', label: '1:1' },
+  { value: '3:4', label: '3:4' },
+  { value: '9:16', label: '9:16' },
+  { value: 'adaptive', label: 'Adaptive' },
+] as const;
+
+export const SEEDANCE2_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Seedance2ResolutionSelectionValue; label: string }> = [
+  { value: '480p', label: '480p' },
+  { value: '720p', label: '720p' },
+] as const;
+
+export const SEEDANCE2_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance2DurationSelectionValue; label: string }> = [
+  { value: '4', label: '4s' },
+  { value: '5', label: '5s' },
+  { value: '6', label: '6s' },
+  { value: '7', label: '7s' },
+  { value: '8', label: '8s' },
+  { value: '9', label: '9s' },
+  { value: '10', label: '10s' },
+  { value: '11', label: '11s' },
+  { value: '12', label: '12s' },
+  { value: '13', label: '13s' },
+  { value: '14', label: '14s' },
+  { value: '15', label: '15s' },
+] as const;
+
+export const SEEDANCE2_AUDIO_OPTIONS: ReadonlyArray<{ value: Seedance2BooleanSelectionValue; label: string }> = [
+  { value: 'false', label: 'Audio Off' },
+  { value: 'true', label: 'Audio On' },
+] as const;
+
+export const SEEDANCE2_CAMERA_FIXED_OPTIONS: ReadonlyArray<{ value: Seedance2BooleanSelectionValue; label: string }> = [
+  { value: 'false', label: 'Camera Free' },
+  { value: 'true', label: 'Camera Fixed' },
 ] as const;
 
 export const KLING26_CONTROL_SOUND_OPTIONS: ReadonlyArray<{ value: Kling26ControlSoundSelectionValue; label: string }> = [
@@ -488,6 +542,21 @@ export const isSeedance15ResolutionSelectionValue = (value: unknown): value is S
 export const isSeedance15DurationSelectionValue = (value: unknown): value is Seedance15DurationSelectionValue =>
   value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12';
 
+export const isSeedance2VideoModel = (modelId: string | undefined): boolean =>
+  modelId === SEEDANCE_2_VIDEO_MODEL_ID;
+
+export const isSeedance2Variant = (value: unknown): value is Seedance2Variant =>
+  value === 'smart' || value === 'reference';
+
+export const isSeedance2AspectRatioSelectionValue = (value: unknown): value is Seedance2AspectRatioSelectionValue =>
+  value === '21:9' || value === '16:9' || value === '4:3' || value === '1:1' || value === '3:4' || value === '9:16' || value === 'adaptive';
+
+export const isSeedance2ResolutionSelectionValue = (value: unknown): value is Seedance2ResolutionSelectionValue =>
+  value === '480p' || value === '720p';
+
+export const isSeedance2DurationSelectionValue = (value: unknown): value is Seedance2DurationSelectionValue =>
+  value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
+
 // Flux2 Max image size options
 export type Flux2MaxImageSizeSelectionValue = 'landscape_4_3' | 'landscape_16_9' | 'portrait_4_3' | 'portrait_16_9' | 'square' | 'square_hd';
 
@@ -630,6 +699,8 @@ export const isWan26DurationSelectionValue = (value: unknown): value is Wan26Dur
 
 export const isApiProvider = (value: unknown): value is ApiProviderId =>
   value === 'google' || value === 'fal';
+export const isGenerationProvider = (value: unknown): value is GenerationProviderId =>
+  value === 'google' || value === 'fal' || value === 'volcengine';
 export const isFalModelMode = (value: unknown): value is FalModelMode =>
   value === 'image' || value === 'video';
 export const isGenerationKind = (value: unknown): value is GenerationKind =>
@@ -816,6 +887,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [VEO_31_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [WAN_26_I2V_MODEL_ID]: 0,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
+  [SEEDANCE_2_VIDEO_MODEL_ID]: 2,
   [SCAIL_VIDEO_MODEL_ID]: 0,
 };
 

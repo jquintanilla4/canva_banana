@@ -35,6 +35,9 @@ type Args = {
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isVeo31VideoModel: boolean;
+  isSeedance2VideoModel: boolean;
+  seedance2Variant: 'smart' | 'reference';
+  seedance2ReferenceAssetCount: number;
   veo31Variant: 'i2v-fflf' | 'extend';
   falModelId: string;
   falNumImages: number;
@@ -75,6 +78,9 @@ export function useGenerationGuards({
   isKling26ControlVideoModel,
   isHailuoVideoModel,
   isVeo31VideoModel,
+  isSeedance2VideoModel,
+  seedance2Variant,
+  seedance2ReferenceAssetCount,
   veo31Variant,
   falModelId,
   falNumImages,
@@ -91,6 +97,7 @@ export function useGenerationGuards({
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falModelId === WAN_26_I2V_MODEL_ID;
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
+  const isSeedance2ReferenceMode = isSeedance2VideoModel && seedance2Variant === 'reference';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
   const isFalVideoInputMode = isWanVideoInputMode
@@ -100,11 +107,17 @@ export function useGenerationGuards({
     || isVeo31ExtendMode
     || isScailVideoModel;
   const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
+  const hasPrimaryImage = Boolean(activePrimaryImage);
+  const hasSeedance2SmartUnsupportedSelection = apiProvider === 'fal'
+    && isVideoMode
+    && isSeedance2VideoModel
+    && !isSeedance2ReferenceMode
+    && primarySelectionMediaType !== null
+    && !hasPrimaryImage;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
     const usingFal = apiProvider === 'fal';
     const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
-    const hasPrimaryImage = Boolean(activePrimaryImage);
     const hasPrimaryVideoSelected = primarySelectionMediaType === 'video';
     const isGrokImagineVideoEditMode = isGrokImagineVideoModel && hasPrimaryVideoSelected;
     const hasWanAnimateStillImage = isWanAnimateVideoModel || isOneToAllAnimateVideoModel
@@ -129,7 +142,7 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isSeedance2VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKling26Control = usingFal && isKling26ControlVideoModel && !hasKling26ControlStillImage;
@@ -142,6 +155,8 @@ export function useGenerationGuards({
 
     const submitDisabled = isPromptMissing ||
       (shouldValidateFalOptions && isNumImagesInvalid) ||
+      (usingFal && isSeedance2ReferenceMode && seedance2ReferenceAssetCount === 0) ||
+      hasSeedance2SmartUnsupportedSelection ||
       requiresSelectedImageForUpscale ||
       requiresSelectedImageForVideo ||
       requiresSelectedImageForWanAnimate ||
@@ -154,6 +169,20 @@ export function useGenerationGuards({
 
     const promptPlaceholderText = (() => {
       if (isVideoMode) {
+        if (isSeedance2VideoModel) {
+          if (isSeedance2ReferenceMode) {
+            return seedance2ReferenceAssetCount > 0
+              ? 'Seedance 2 Reference: shift-click up to 2 images, 2 videos, and 1 audio, then describe the scene you want...'
+              : 'Seedance 2 Reference: shift-click up to 2 images, 2 videos, and 1 audio to tag references, then describe the scene...';
+          }
+          if (hasSeedance2SmartUnsupportedSelection) {
+            return 'Seedance 2 Smart uses a still image as the first frame. Clear the current video or audio selection to run text-to-video...';
+          }
+          if (hasPrimaryImage) {
+            return 'Describe the motion or scene you want this image to turn into, or add an end frame for first/last-frame mode...';
+          }
+          return 'Describe the video you want to create, or select an image for image-to-video...';
+        }
         if (isLipsyncVideoModel) {
           return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a video and audio clip to lip sync.`;
         }
@@ -253,6 +282,7 @@ export function useGenerationGuards({
     hasSelectedStillImage,
     hasSourceAudio,
     hasSourceVideo,
+    hasSeedance2SmartUnsupportedSelection,
     primarySelectionMediaType,
     isGrokImagineVideoModel,
     isNanoBananaModel,
@@ -263,6 +293,7 @@ export function useGenerationGuards({
     isKlingO1EditMode,
     isKlingO1VideoInputMode,
     isKlingVideoModel,
+    isSeedance2VideoModel,
     isWanAnimateVideoModel,
     isScailVideoModel,
     isInfinitalkVideoModel,
@@ -275,6 +306,8 @@ export function useGenerationGuards({
     isUpscaleModel,
     isVideoMode,
     prompt,
+    seedance2ReferenceAssetCount,
+    seedance2Variant,
     tool,
   ]);
 }

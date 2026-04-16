@@ -44,6 +44,8 @@ interface CanvasProps {
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
+  referenceVideoIds: string[];
+  referenceAudioIds: string[];
   referenceImageOrderLabels?: Record<string, string> | null;
   elementImageIds: string[];
   elementImageOrderLabels?: Record<string, string> | null;
@@ -123,6 +125,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   selectedImageIds,
   selectedNoteIds,
   referenceImageIds,
+  referenceVideoIds,
+  referenceAudioIds,
   referenceImageOrderLabels,
   elementImageIds,
   elementImageOrderLabels,
@@ -351,6 +355,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       selectedNoteIds,
       primarySelectedNoteId,
       referenceImageIds,
+      referenceVideoIds,
+      referenceAudioIds,
       referenceImageOrderLabels,
       elementImageIds,
       elementImageOrderLabels,
@@ -367,7 +373,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       cropMode,
       transformMode,
     });
-  }, [cropMode, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan26I2VMode, notes, pan, paths, primarySelectedNoteId, referenceImageIds, referenceImageOrderLabels, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
+  }, [cropMode, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan26I2VMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {

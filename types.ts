@@ -29,6 +29,7 @@ export interface ImageDimensions {
 
 export type CanvasImageSource = 'generated' | 'imported' | 'snapshot' | 'derived';
 export type ApiProviderId = 'google' | 'fal';
+export type GenerationProviderId = ApiProviderId | 'volcengine';
 
 export interface CanvasImageMetadata {
   source: CanvasImageSource;
@@ -85,6 +86,7 @@ export type FalResolutionOption = '1K' | '2K' | '4K';
 export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
+export type Seedance2Variant = 'smart' | 'reference';
 
 export type GenerationFalOptions = Partial<{
   imageSizeSelection: FalImageSizeOption;
@@ -139,21 +141,34 @@ export type GenerationFalOptions = Partial<{
   seedance15Audio: boolean;
 }>;
 
+export type GenerationVolcengineOptions = Partial<{
+  seedance2Variant: Seedance2Variant;
+  seedance2AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
+  seedance2Resolution: '480p' | '720p';
+  seedance2Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  seedance2GenerateAudio: boolean;
+  seedance2CameraFixed: boolean;
+}>;
+
 export interface GenerationInputs {
   kind: GenerationKind;
   prompt: string;
-  provider: ApiProviderId;
+  provider: GenerationProviderId;
   modelId?: string;
   modelLabel?: string;
   modelMode?: 'image' | 'video';
   primaryImageId?: string;
   originalSourceImageId?: string;
   referenceImageIds?: string[];
+  referenceVideoIds?: string[];
+  referenceAudioIds?: string[];
   elementImageIds?: string[];
   videoLastFrameImageId?: string;
   sourceVideoId?: string;
+  sourceAudioId?: string;
   url?: string;
   falOptions?: GenerationFalOptions;
+  volcengineOptions?: GenerationVolcengineOptions;
 }
 
 export interface CanvasImage {
@@ -196,6 +211,7 @@ export interface FalQueueJob {
   prompt: string;
   modelId: string;
   modelLabel: string;
+  provider: GenerationProviderId;
   status: FalJobStatus;
   requestId?: string;
   logs: string[];

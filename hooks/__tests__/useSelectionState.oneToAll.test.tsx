@@ -23,6 +23,8 @@ type TestFalSettings = Pick<
   | 'isKling26ControlVideoModel'
   | 'isWan26I2VVideoModel'
   | 'isSeedance15VideoModel'
+  | 'isSeedance2VideoModel'
+  | 'seedance2Variant'
   | 'isVeo31VideoModel'
   | 'veo31Variant'
 >;
@@ -72,6 +74,8 @@ describe('useSelectionState (one-to-all)', () => {
       isKling26ControlVideoModel: false,
       isWan26I2VVideoModel: false,
       isSeedance15VideoModel: false,
+      isSeedance2VideoModel: false,
+      seedance2Variant: 'smart',
       isVeo31VideoModel: false,
       veo31Variant: 'i2v-fflf',
     } satisfies TestFalSettings;

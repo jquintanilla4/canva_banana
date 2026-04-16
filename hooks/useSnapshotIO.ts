@@ -29,6 +29,10 @@ import {
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
+  isSeedance2AspectRatioSelectionValue,
+  isSeedance2DurationSelectionValue,
+  isSeedance2ResolutionSelectionValue,
+  isSeedance2Variant,
   isSora2ProAspectRatioSelectionValue,
   isSora2ProDurationSelectionValue,
   isSora2ProResolutionSelectionValue,
@@ -163,6 +167,12 @@ export function useSnapshotIO({
     veo31Resolution,
     veo31AspectRatio,
     veo31GenerateAudio,
+    seedance2Variant,
+    seedance2AspectRatio,
+    seedance2Resolution,
+    seedance2Duration,
+    seedance2GenerateAudio,
+    seedance2CameraFixed,
     setFalModelMode,
     setFalImageModelId,
     setFalVideoModelId,
@@ -196,17 +206,27 @@ export function useSnapshotIO({
     setVeo31Resolution,
     setVeo31AspectRatio,
     setVeo31GenerateAudio,
+    setSeedance2Variant,
+    setSeedance2AspectRatio,
+    setSeedance2Resolution,
+    setSeedance2Duration,
+    setSeedance2GenerateAudio,
+    setSeedance2CameraFixed,
   } = fal;
 
   const {
     selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
+    referenceVideoIds,
+    referenceAudioIds,
     elementImageIds,
     videoLastFrameImageId,
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
+    setReferenceVideoIds,
+    setReferenceAudioIds,
     setElementImageIds,
     setVideoLastFrameImageId,
   } = selection;
@@ -256,9 +276,17 @@ export function useSnapshotIO({
       veo31Resolution,
       veo31AspectRatio,
       veo31GenerateAudio,
+      seedance2Variant,
+      seedance2AspectRatio,
+      seedance2Resolution,
+      seedance2Duration,
+      seedance2GenerateAudio,
+      seedance2CameraFixed,
       selectedImageIds: [...selectedImageIds],
       selectedNoteIds: [...selectedNoteIds],
       referenceImageIds: [...referenceImageIds],
+      ...(referenceVideoIds.length ? { referenceVideoIds: [...referenceVideoIds] } : {}),
+      ...(referenceAudioIds.length ? { referenceAudioIds: [...referenceAudioIds] } : {}),
       ...(elementImageIds.length ? { elementImageIds: [...elementImageIds] } : {}),
       ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
     };
@@ -303,6 +331,12 @@ export function useSnapshotIO({
     veo31Resolution,
     veo31AspectRatio,
     veo31GenerateAudio,
+    seedance2Variant,
+    seedance2AspectRatio,
+    seedance2Resolution,
+    seedance2Duration,
+    seedance2GenerateAudio,
+    seedance2CameraFixed,
     falImageSizeSelection,
     falModelId,
     falNoiseScale,
@@ -311,7 +345,9 @@ export function useSnapshotIO({
     elementImageIds,
     falScaleFactor,
     prompt,
+    referenceAudioIds,
     referenceImageIds,
+    referenceVideoIds,
     selectedImageIds,
     selectedNoteIds,
     tool,
@@ -641,9 +677,29 @@ export function useSnapshotIO({
         if (typeof meta.veo31GenerateAudio === 'boolean') {
           setVeo31GenerateAudio(meta.veo31GenerateAudio);
         }
+        if (isSeedance2Variant(meta.seedance2Variant)) {
+          setSeedance2Variant(meta.seedance2Variant);
+        }
+        if (isSeedance2AspectRatioSelectionValue(meta.seedance2AspectRatio)) {
+          setSeedance2AspectRatio(meta.seedance2AspectRatio);
+        }
+        if (isSeedance2ResolutionSelectionValue(meta.seedance2Resolution)) {
+          setSeedance2Resolution(meta.seedance2Resolution);
+        }
+        if (isSeedance2DurationSelectionValue(meta.seedance2Duration)) {
+          setSeedance2Duration(meta.seedance2Duration);
+        }
+        if (typeof meta.seedance2GenerateAudio === 'boolean') {
+          setSeedance2GenerateAudio(meta.seedance2GenerateAudio);
+        }
+        if (typeof meta.seedance2CameraFixed === 'boolean') {
+          setSeedance2CameraFixed(meta.seedance2CameraFixed);
+        }
         setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
+        setReferenceVideoIds(Array.isArray(meta.referenceVideoIds) ? [...meta.referenceVideoIds] : []);
+        setReferenceAudioIds(Array.isArray(meta.referenceAudioIds) ? [...meta.referenceAudioIds] : []);
         setElementImageIds(Array.isArray(meta.elementImageIds) ? [...meta.elementImageIds] : []);
         if (typeof meta.videoLastFrameImageId === 'string' && meta.videoLastFrameImageId.length > 0) {
           setVideoLastFrameImageId(meta.videoLastFrameImageId);
@@ -654,6 +710,8 @@ export function useSnapshotIO({
         setSelectedImageIds([]);
         setSelectedNoteIds([]);
         setReferenceImageIds([]);
+        setReferenceVideoIds([]);
+        setReferenceAudioIds([]);
         setElementImageIds([]);
         setVideoLastFrameImageId(null);
       }
@@ -708,6 +766,12 @@ export function useSnapshotIO({
     setVeo31Resolution,
     setVeo31AspectRatio,
     setVeo31GenerateAudio,
+    setSeedance2Variant,
+    setSeedance2AspectRatio,
+    setSeedance2Resolution,
+    setSeedance2Duration,
+    setSeedance2GenerateAudio,
+    setSeedance2CameraFixed,
     setFalImageModelId,
     setFalImageSizeSelection,
     setFalModelMode,
@@ -717,7 +781,9 @@ export function useSnapshotIO({
     setFalScaleFactor,
     setFalVideoModelId,
     setPrompt,
+    setReferenceAudioIds,
     setReferenceImageIds,
+    setReferenceVideoIds,
     setElementImageIds,
     setSelectedImageIds,
     setSelectedNoteIds,

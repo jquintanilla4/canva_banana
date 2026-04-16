@@ -44,13 +44,16 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
     <aside className="absolute bottom-28 right-4 z-20 w-80 max-w-[calc(100vw-2rem)]">
       <div className="bg-gray-900/80 backdrop-blur-sm rounded-lg shadow-2xl border border-gray-700/60 p-3">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-300">Fal Queue</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-300">Generation Queue</h2>
           <span className="text-xs text-gray-400">{jobs.length} job{jobs.length === 1 ? '' : 's'}</span>
         </div>
         <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {sortedJobs.map(job => {
             const lastLog = [...job.logs].reverse().find(log => !isSuppressedFalLogMessage(log));
             const displayModelLabel = (() => {
+              if (job.provider !== 'fal') {
+                return job.modelLabel;
+              }
               if (!blindTestEnabled && !openSourceAliasEnabled) {
                 return job.modelLabel;
               }
@@ -77,6 +80,9 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                         Generation ID: {job.requestId}
                       </p>
                     )}
+                    <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">
+                      {job.provider === 'volcengine' ? 'VOLCENGINE' : 'FAL'}
+                    </p>
                   </div>
                   <span className={`text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${statusStyles[job.status]}`}>
                     {statusLabels[job.status]}

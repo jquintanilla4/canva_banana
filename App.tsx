@@ -286,7 +286,8 @@ export default function App() {
     || fal.isKling26VideoModel
     || isKlingO1FflfMode
     || isVeo31TailCapable
-    || fal.isSeedance15VideoModel; // End-frame capable modes.
+    || fal.isSeedance15VideoModel
+    || (fal.isSeedance2VideoModel && fal.seedance2Variant === 'smart'); // End-frame capable modes.
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const selection = useSelectionState({
@@ -301,6 +302,8 @@ export default function App() {
     selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
+    referenceVideoIds,
+    referenceAudioIds,
     elementImageIds,
     videoLastFrameImageId,
     sourceVideoId,
@@ -312,6 +315,8 @@ export default function App() {
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
+    setReferenceVideoIds,
+    setReferenceAudioIds,
     setElementImageIds,
     setVideoLastFrameImageId,
     setSourceVideoId,
@@ -911,6 +916,25 @@ export default function App() {
     includeTailFrame: isKlingO1FflfMode,
     tailImageId: videoLastFrameImageId,
   });
+  const isSeedance2ReferenceMode = fal.isSeedance2VideoModel && fal.seedance2Variant === 'reference';
+  const seedance2ReferenceAssetCount = referenceImageIds.length + referenceVideoIds.length + referenceAudioIds.length;
+  const seedance2ReferenceOrderLabels = useMemo(() => {
+    if (!isSeedance2ReferenceMode) {
+      return null;
+    }
+    const labels: Record<string, string> = {};
+    referenceImageIds.slice(0, 2).forEach((id, index) => {
+      labels[id] = `Ref Img ${index + 1}`;
+    });
+    referenceVideoIds.slice(0, 2).forEach((id, index) => {
+      labels[id] = `Ref Video ${index + 1}`;
+    });
+    referenceAudioIds.slice(0, 1).forEach(id => {
+      labels[id] = 'Ref Audio';
+    });
+    return Object.keys(labels).length > 0 ? labels : null;
+  }, [isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds]);
+  const canvasReferenceOrderLabels = seedance2ReferenceOrderLabels ?? klingReferenceOrderLabels;
 
   const hasSourceVideoSelected = Boolean(sourceVideoId);
   const hasSourceAudioSelected = Boolean(sourceAudioId);
@@ -993,6 +1017,9 @@ export default function App() {
     isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
+    isSeedance2VideoModel: fal.isSeedance2VideoModel,
+    seedance2Variant: fal.seedance2Variant,
+    seedance2ReferenceAssetCount,
     veo31Variant: fal.veo31Variant,
     falModelId: fal.falModelId,
     falNumImages: fal.falNumImages,
@@ -1027,6 +1054,7 @@ export default function App() {
     isVeo31VideoModel: fal.isVeo31VideoModel,
     isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
     isSeedance15VideoModel: fal.isSeedance15VideoModel,
+    isSeedance2VideoModel: fal.isSeedance2VideoModel,
     hailuoVariant: fal.hailuoVariant,
     falVideoDuration: fal.falVideoDuration,
     klingVariant: fal.klingVariant,
@@ -1072,6 +1100,12 @@ export default function App() {
     seedance15Duration: fal.seedance15Duration,
     seedance15CameraFixed: fal.seedance15CameraFixed,
     seedance15Audio: fal.seedance15Audio,
+    seedance2Variant: fal.seedance2Variant,
+    seedance2AspectRatio: fal.seedance2AspectRatio,
+    seedance2Resolution: fal.seedance2Resolution,
+    seedance2Duration: fal.seedance2Duration,
+    seedance2GenerateAudio: fal.seedance2GenerateAudio,
+    seedance2CameraFixed: fal.seedance2CameraFixed,
     flux2MaxImageSize: fal.flux2MaxImageSize,
     isWan26ImageModel: fal.isWan26ImageModel,
     wan26ImageAspectRatio: fal.wan26ImageAspectRatio,
@@ -1129,6 +1163,12 @@ export default function App() {
     onSeedance15DurationChange: fal.handleSeedance15DurationChange,
     onSeedance15CameraFixedChange: fal.handleSeedance15CameraFixedChange,
     onSeedance15AudioChange: fal.handleSeedance15AudioChange,
+    onSeedance2VariantChange: fal.handleSeedance2VariantChange,
+    onSeedance2AspectRatioChange: fal.handleSeedance2AspectRatioChange,
+    onSeedance2ResolutionChange: fal.handleSeedance2ResolutionChange,
+    onSeedance2DurationChange: fal.handleSeedance2DurationChange,
+    onSeedance2GenerateAudioChange: fal.handleSeedance2GenerateAudioChange,
+    onSeedance2CameraFixedChange: fal.handleSeedance2CameraFixedChange,
     onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
     onWan26ImageAspectRatioChange: fal.handleWan26ImageAspectRatioChange,
     onWan26ImageMaxImagesChange: fal.handleWan26ImageMaxImagesChange,
@@ -1148,6 +1188,10 @@ export default function App() {
     blindTestMappingRef.current,
     blindTestEnabled,
   );
+  const providerLabels = useMemo<Record<ApiProviderId, string>>(() => ({
+    google: PROVIDER_LABELS.google,
+    fal: fal.isSeedance2VideoModel ? 'VOLCENGINE' : PROVIDER_LABELS.fal,
+  }), [fal.isSeedance2VideoModel]);
   const shouldShowNegativePrompt = shouldShowVideoNegativePrompt || fal.isWan26ImageModel;
   const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);
   const promptOutlineColor = isCameraPromptAccentActive
@@ -1242,7 +1286,9 @@ export default function App() {
           selectedImageIds={selectedImageIds}
           selectedNoteIds={selectedNoteIds}
           referenceImageIds={referenceImageIds}
-          referenceImageOrderLabels={klingReferenceOrderLabels}
+          referenceVideoIds={referenceVideoIds}
+          referenceAudioIds={referenceAudioIds}
+          referenceImageOrderLabels={canvasReferenceOrderLabels}
           elementImageIds={elementImageIds}
           elementImageOrderLabels={klingElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
@@ -1352,7 +1398,7 @@ export default function App() {
         <ProviderSwitcher
           providers={AVAILABLE_PROVIDERS}
           activeProvider={apiProvider}
-          labels={PROVIDER_LABELS}
+          labels={providerLabels}
           disabled={isLoading}
           onSelect={setApiProvider}
         />
@@ -1376,7 +1422,11 @@ export default function App() {
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
           promptPlaceholder={
-            fal.isWan26ImageModel
+            fal.isSeedance2VideoModel
+              ? (fal.seedance2Variant === 'reference'
+                ? 'Seedance 2 Reference: shift-click up to 2 images, 2 videos, and 1 audio to tag references, then describe the scene... (Cmd/Ctrl + Enter to generate)'
+                : 'Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Add an end frame for first/last-frame mode... (Cmd/Ctrl + Enter to generate)')
+              : fal.isWan26ImageModel
               ? 'Describe your generation, or your edit, or use @ to reference images (4 images in total)... (Cmd/Ctrl + Enter to generate)'
               : isKlingModel || fal.isKlingO1VideoModel || fal.isFlux2MaxModel
                 ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'

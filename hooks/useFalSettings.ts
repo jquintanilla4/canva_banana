@@ -28,6 +28,7 @@ import {
   WAN_26_I2V_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
@@ -49,6 +50,10 @@ import {
   normalizeVeo31Variant,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
+  isSeedance2AspectRatioSelectionValue,
+  isSeedance2DurationSelectionValue,
+  isSeedance2ResolutionSelectionValue,
+  isSeedance2Variant,
   isWan26ImageAspectRatioSelectionValue,
   isWan26ImageMaxImagesSelectionValue,
 } from '../services/modelConfig';
@@ -87,6 +92,10 @@ import type {
   Seedance15AspectRatioSelectionValue,
   Seedance15ResolutionSelectionValue,
   Seedance15DurationSelectionValue,
+  Seedance2AspectRatioSelectionValue,
+  Seedance2DurationSelectionValue,
+  Seedance2ResolutionSelectionValue,
+  Seedance2Variant,
   Wan26DurationSelectionValue,
   Wan26ResolutionSelectionValue,
   Wan26ImageAspectRatioSelectionValue,
@@ -120,6 +129,7 @@ type FalDerivedState = {
   isSora2ProVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
+  isSeedance2VideoModel: boolean;
   isVeo31VideoModel: boolean;
   isFlux2MaxModel: boolean;
   isWan26ImageModel: boolean;
@@ -177,6 +187,12 @@ type FalHandlers = {
   handleSeedance15DurationChange: (value: string) => void;
   handleSeedance15CameraFixedChange: (value: boolean) => void;
   handleSeedance15AudioChange: (value: boolean) => void;
+  handleSeedance2VariantChange: (value: string) => void;
+  handleSeedance2AspectRatioChange: (value: string) => void;
+  handleSeedance2ResolutionChange: (value: string) => void;
+  handleSeedance2DurationChange: (value: string) => void;
+  handleSeedance2GenerateAudioChange: (value: boolean) => void;
+  handleSeedance2CameraFixedChange: (value: boolean) => void;
   handleFlux2MaxImageSizeChange: (value: string) => void;
   handleWan26ImageAspectRatioChange: (value: string) => void;
   handleWan26ImageMaxImagesChange: (value: string) => void;
@@ -238,6 +254,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   seedance15Duration: Seedance15DurationSelectionValue;
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
+  seedance2Variant: Seedance2Variant;
+  seedance2AspectRatio: Seedance2AspectRatioSelectionValue;
+  seedance2Resolution: Seedance2ResolutionSelectionValue;
+  seedance2Duration: Seedance2DurationSelectionValue;
+  seedance2GenerateAudio: boolean;
+  seedance2CameraFixed: boolean;
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
   wan26ImageAspectRatio: Wan26ImageAspectRatioSelectionValue;
   wan26ImageMaxImages: Wan26ImageMaxImagesSelectionValue;
@@ -296,6 +318,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setSeedance15Duration: Dispatch<SetStateAction<Seedance15DurationSelectionValue>>;
   setSeedance15CameraFixed: Dispatch<SetStateAction<boolean>>;
   setSeedance15Audio: Dispatch<SetStateAction<boolean>>;
+  setSeedance2Variant: Dispatch<SetStateAction<Seedance2Variant>>;
+  setSeedance2AspectRatio: Dispatch<SetStateAction<Seedance2AspectRatioSelectionValue>>;
+  setSeedance2Resolution: Dispatch<SetStateAction<Seedance2ResolutionSelectionValue>>;
+  setSeedance2Duration: Dispatch<SetStateAction<Seedance2DurationSelectionValue>>;
+  setSeedance2GenerateAudio: Dispatch<SetStateAction<boolean>>;
+  setSeedance2CameraFixed: Dispatch<SetStateAction<boolean>>;
   setFlux2MaxImageSize: Dispatch<SetStateAction<Flux2MaxImageSizeSelectionValue>>;
   setWan26ImageAspectRatio: Dispatch<SetStateAction<Wan26ImageAspectRatioSelectionValue>>;
   setWan26ImageMaxImages: Dispatch<SetStateAction<Wan26ImageMaxImagesSelectionValue>>;
@@ -358,6 +386,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
   const [seedance15CameraFixed, setSeedance15CameraFixed] = useState<boolean>(false);
   const [seedance15Audio, setSeedance15Audio] = useState<boolean>(false);
+  const [seedance2Variant, setSeedance2Variant] = useState<Seedance2Variant>('smart');
+  const [seedance2AspectRatio, setSeedance2AspectRatio] = useState<Seedance2AspectRatioSelectionValue>('16:9');
+  const [seedance2Resolution, setSeedance2Resolution] = useState<Seedance2ResolutionSelectionValue>('720p');
+  const [seedance2Duration, setSeedance2Duration] = useState<Seedance2DurationSelectionValue>('5');
+  const [seedance2GenerateAudio, setSeedance2GenerateAudio] = useState<boolean>(false);
+  const [seedance2CameraFixed, setSeedance2CameraFixed] = useState<boolean>(false);
   const [flux2MaxImageSize, setFlux2MaxImageSize] = useState<Flux2MaxImageSizeSelectionValue>('landscape_4_3');
   const [wan26ImageAspectRatio, setWan26ImageAspectRatio] = useState<Wan26ImageAspectRatioSelectionValue>('landscape_16_9');
   const [wan26ImageMaxImages, setWan26ImageMaxImages] = useState<Wan26ImageMaxImagesSelectionValue>('1');
@@ -387,6 +421,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isSora2ProVideoModel = isVideoMode && falVideoModelId === SORA_2_PRO_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
+  const isSeedance2VideoModel = isVideoMode && falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID;
   const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan26ImageModel = !isVideoMode && falImageModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
@@ -818,6 +853,38 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance15Audio(value);
   }, []);
 
+  const handleSeedance2VariantChange = useCallback((value: string) => {
+    if (isSeedance2Variant(value)) {
+      setSeedance2Variant(value);
+    }
+  }, []);
+
+  const handleSeedance2AspectRatioChange = useCallback((value: string) => {
+    if (isSeedance2AspectRatioSelectionValue(value)) {
+      setSeedance2AspectRatio(value);
+    }
+  }, []);
+
+  const handleSeedance2ResolutionChange = useCallback((value: string) => {
+    if (isSeedance2ResolutionSelectionValue(value)) {
+      setSeedance2Resolution(value);
+    }
+  }, []);
+
+  const handleSeedance2DurationChange = useCallback((value: string) => {
+    if (isSeedance2DurationSelectionValue(value)) {
+      setSeedance2Duration(value);
+    }
+  }, []);
+
+  const handleSeedance2GenerateAudioChange = useCallback((value: boolean) => {
+    setSeedance2GenerateAudio(Boolean(value));
+  }, []);
+
+  const handleSeedance2CameraFixedChange = useCallback((value: boolean) => {
+    setSeedance2CameraFixed(Boolean(value));
+  }, []);
+
   const handleFlux2MaxImageSizeChange = useCallback((value: string) => {
     if (isFlux2MaxImageSizeSelectionValue(value)) {
       setFlux2MaxImageSize(value);
@@ -941,6 +1008,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     seedance15Duration,
     seedance15CameraFixed,
     seedance15Audio,
+    seedance2Variant,
+    seedance2AspectRatio,
+    seedance2Resolution,
+    seedance2Duration,
+    seedance2GenerateAudio,
+    seedance2CameraFixed,
     flux2MaxImageSize,
     wan26ImageAspectRatio,
     wan26ImageMaxImages,
@@ -968,6 +1041,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isVeo31VideoModel,
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
+    isSeedance2VideoModel,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,
@@ -1019,6 +1093,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSeedance15DurationChange,
     handleSeedance15CameraFixedChange,
     handleSeedance15AudioChange,
+    handleSeedance2VariantChange,
+    handleSeedance2AspectRatioChange,
+    handleSeedance2ResolutionChange,
+    handleSeedance2DurationChange,
+    handleSeedance2GenerateAudioChange,
+    handleSeedance2CameraFixedChange,
     handleFlux2MaxImageSizeChange,
     handleWan26ImageAspectRatioChange,
     handleWan26ImageMaxImagesChange,
@@ -1077,6 +1157,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance15Duration,
     setSeedance15CameraFixed,
     setSeedance15Audio,
+    setSeedance2Variant,
+    setSeedance2AspectRatio,
+    setSeedance2Resolution,
+    setSeedance2Duration,
+    setSeedance2GenerateAudio,
+    setSeedance2CameraFixed,
     setFlux2MaxImageSize,
     setWan26ImageAspectRatio,
     setWan26ImageMaxImages,

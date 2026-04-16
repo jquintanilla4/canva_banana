@@ -22,6 +22,8 @@ type TestFalSettings = Pick<
   | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
   | 'isSeedance15VideoModel'
+  | 'isSeedance2VideoModel'
+  | 'seedance2Variant'
   | 'isVeo31VideoModel'
   | 'veo31Variant'
 >;
@@ -66,6 +68,8 @@ describe('useSelectionState (grok imagine)', () => {
       isKling26VideoModel: false,
       isKling26ControlVideoModel: false,
       isSeedance15VideoModel: false,
+      isSeedance2VideoModel: false,
+      seedance2Variant: 'smart',
       isVeo31VideoModel: false,
       veo31Variant: 'i2v-fflf',
     } satisfies TestFalSettings;
@@ -95,4 +99,3 @@ describe('useSelectionState (grok imagine)', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 });
-

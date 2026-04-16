@@ -12,17 +12,21 @@ import type {
 import { Tool } from '../types';
 import {
   getFalNumImageMaxForModel,
-  isApiProvider,
   isFalAspectRatioSelectionValue,
   isFalImageSizeSelectionValue,
   isFalModelMode,
   isFalResolutionSelectionValue,
+  isGenerationProvider,
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isSeedance2AspectRatioSelectionValue,
+  isSeedance2DurationSelectionValue,
+  isSeedance2ResolutionSelectionValue,
+  isSeedance2Variant,
   isSora2ProAspectRatioSelectionValue,
   isSora2ProDurationSelectionValue,
   isSora2ProResolutionSelectionValue,
@@ -105,9 +109,17 @@ export type SnapshotManifestV2 = {
         veo31Resolution?: string;
         veo31AspectRatio?: string;
         veo31GenerateAudio?: boolean;
+        seedance2Variant?: string;
+        seedance2AspectRatio?: string;
+        seedance2Resolution?: string;
+        seedance2Duration?: string;
+        seedance2GenerateAudio?: boolean;
+        seedance2CameraFixed?: boolean;
 	      selectedImageIds: string[];
 	      selectedNoteIds: string[];
 	      referenceImageIds: string[];
+      referenceVideoIds?: string[];
+      referenceAudioIds?: string[];
       elementImageIds?: string[];
       videoLastFrameImageId?: string | null;
     } | undefined;
@@ -185,9 +197,17 @@ export type SnapshotMetaState = {
   veo31Resolution?: string;
   veo31AspectRatio?: string;
   veo31GenerateAudio?: boolean;
+  seedance2Variant?: string;
+  seedance2AspectRatio?: string;
+  seedance2Resolution?: string;
+  seedance2Duration?: string;
+  seedance2GenerateAudio?: boolean;
+  seedance2CameraFixed?: boolean;
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
+  referenceVideoIds?: string[];
+  referenceAudioIds?: string[];
   elementImageIds?: string[];
   videoLastFrameImageId?: string | null;
 };
@@ -663,7 +683,7 @@ export const normalizeSnapshotImageMetadata = (
     }
     const raw = rawGeneration as Partial<GenerationInputs>;
     const kind = isGenerationKind(raw.kind) ? raw.kind : undefined;
-    const provider = isApiProvider(raw.provider) ? raw.provider : undefined;
+    const provider = isGenerationProvider(raw.provider) ? raw.provider : undefined;
     if (!kind || !provider) {
       return undefined;
     }
@@ -673,12 +693,25 @@ export const normalizeSnapshotImageMetadata = (
     const modelLabel = typeof raw.modelLabel === 'string' ? raw.modelLabel.trim() : undefined;
     const modelMode = isFalModelMode(raw.modelMode) ? raw.modelMode : undefined;
     const primaryImageId = typeof raw.primaryImageId === 'string' ? raw.primaryImageId : undefined;
+    const originalSourceImageId = typeof raw.originalSourceImageId === 'string' ? raw.originalSourceImageId : undefined;
     const referenceImageIds = Array.isArray(raw.referenceImageIds)
       ? raw.referenceImageIds.filter((id): id is string => typeof id === 'string')
+      : undefined;
+    const referenceVideoIds = Array.isArray(raw.referenceVideoIds)
+      ? raw.referenceVideoIds.filter((id): id is string => typeof id === 'string')
+      : undefined;
+    const referenceAudioIds = Array.isArray(raw.referenceAudioIds)
+      ? raw.referenceAudioIds.filter((id): id is string => typeof id === 'string')
+      : undefined;
+    const elementImageIds = Array.isArray(raw.elementImageIds)
+      ? raw.elementImageIds.filter((id): id is string => typeof id === 'string')
       : undefined;
     const videoLastFrameImageId = typeof raw.videoLastFrameImageId === 'string'
       ? raw.videoLastFrameImageId
       : undefined;
+    const sourceVideoId = typeof raw.sourceVideoId === 'string' ? raw.sourceVideoId : undefined;
+    const sourceAudioId = typeof raw.sourceAudioId === 'string' ? raw.sourceAudioId : undefined;
+    const url = typeof raw.url === 'string' ? raw.url : undefined;
 
     const falOptionsRaw = raw.falOptions;
     let falOptions: GenerationInputs['falOptions'] | undefined;
@@ -857,6 +890,34 @@ export const normalizeSnapshotImageMetadata = (
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
     }
 
+    const volcengineOptionsRaw = raw.volcengineOptions;
+    let volcengineOptions: GenerationInputs['volcengineOptions'] | undefined;
+    if (volcengineOptionsRaw && typeof volcengineOptionsRaw === 'object') {
+      const typed = volcengineOptionsRaw as GenerationInputs['volcengineOptions'];
+      const normalizedOptions: GenerationInputs['volcengineOptions'] = {};
+      if (isSeedance2Variant((typed as { seedance2Variant?: unknown }).seedance2Variant)) {
+        normalizedOptions.seedance2Variant = typed.seedance2Variant;
+      }
+      if (isSeedance2AspectRatioSelectionValue((typed as { seedance2AspectRatio?: unknown }).seedance2AspectRatio)) {
+        normalizedOptions.seedance2AspectRatio = typed.seedance2AspectRatio;
+      }
+      if (isSeedance2ResolutionSelectionValue((typed as { seedance2Resolution?: unknown }).seedance2Resolution)) {
+        normalizedOptions.seedance2Resolution = typed.seedance2Resolution;
+      }
+      if (isSeedance2DurationSelectionValue((typed as { seedance2Duration?: unknown }).seedance2Duration)) {
+        normalizedOptions.seedance2Duration = typed.seedance2Duration;
+      }
+      const seedance2GenerateAudioValue = (typed as { seedance2GenerateAudio?: unknown }).seedance2GenerateAudio;
+      if (typeof seedance2GenerateAudioValue === 'boolean') {
+        normalizedOptions.seedance2GenerateAudio = seedance2GenerateAudioValue;
+      }
+      const seedance2CameraFixedValue = (typed as { seedance2CameraFixed?: unknown }).seedance2CameraFixed;
+      if (typeof seedance2CameraFixedValue === 'boolean') {
+        normalizedOptions.seedance2CameraFixed = seedance2CameraFixedValue;
+      }
+      volcengineOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
+    }
+
     return {
       kind,
       prompt,
@@ -865,9 +926,17 @@ export const normalizeSnapshotImageMetadata = (
       ...(modelLabel ? { modelLabel } : {}),
       ...(modelMode ? { modelMode } : {}),
       ...(primaryImageId ? { primaryImageId } : {}),
+      ...(originalSourceImageId ? { originalSourceImageId } : {}),
       ...(referenceImageIds && referenceImageIds.length > 0 ? { referenceImageIds } : {}),
+      ...(referenceVideoIds && referenceVideoIds.length > 0 ? { referenceVideoIds } : {}),
+      ...(referenceAudioIds && referenceAudioIds.length > 0 ? { referenceAudioIds } : {}),
+      ...(elementImageIds && elementImageIds.length > 0 ? { elementImageIds } : {}),
       ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
+      ...(sourceVideoId ? { sourceVideoId } : {}),
+      ...(sourceAudioId ? { sourceAudioId } : {}),
+      ...(url ? { url } : {}),
       ...(falOptions ? { falOptions } : {}),
+      ...(volcengineOptions ? { volcengineOptions } : {}),
     };
   };
 

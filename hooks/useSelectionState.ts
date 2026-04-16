@@ -31,6 +31,8 @@ type SelectionFalSettings = Pick<
   | 'isLipsyncVideoModel'
   | 'isInfinitalkVideoModel'
   | 'isSeedance15VideoModel'
+  | 'isSeedance2VideoModel'
+  | 'seedance2Variant'
   | 'isVeo31VideoModel'
   | 'veo31Variant'
 >;
@@ -47,6 +49,8 @@ export type SelectionStateResult = {
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
+  referenceVideoIds: string[];
+  referenceAudioIds: string[];
   elementImageIds: string[];
   videoLastFrameImageId: string | null;
   sourceVideoId: string | null;
@@ -59,6 +63,8 @@ export type SelectionStateResult = {
   setSelectedImageIds: Dispatch<SetStateAction<string[]>>;
   setSelectedNoteIds: Dispatch<SetStateAction<string[]>>;
   setReferenceImageIds: Dispatch<SetStateAction<string[]>>;
+  setReferenceVideoIds: Dispatch<SetStateAction<string[]>>;
+  setReferenceAudioIds: Dispatch<SetStateAction<string[]>>;
   setElementImageIds: Dispatch<SetStateAction<string[]>>;
   setVideoLastFrameImageId: Dispatch<SetStateAction<string | null>>;
   setSourceVideoId: Dispatch<SetStateAction<string | null>>;
@@ -88,6 +94,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
     isSeedance15VideoModel,
+    isSeedance2VideoModel,
+    seedance2Variant,
     isVeo31VideoModel,
     veo31Variant,
   } = fal;
@@ -108,6 +116,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falVideoModelId === SCAIL_VIDEO_MODEL_ID;
   const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
   const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
+  const isSeedance2ReferenceMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isSeedance2VideoModel
+    && seedance2Variant === 'reference';
   const isVideoInputMode = isKlingO1VideoInputMode
     || isWanVideoInputMode
     || isAudioInputMode
@@ -116,11 +128,17 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     || isScailVideoModel;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
   const isSeedance15FflfMode = isSeedance15VideoModel;
+  const isSeedance2SmartMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isSeedance2VideoModel
+    && seedance2Variant === 'smart';
   const isVeo31TailCapable = isVeo31VideoModel && veo31Variant === 'i2v-fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
   const [referenceImageIds, setReferenceImageIds] = useState<string[]>([]);
+  const [referenceVideoIds, setReferenceVideoIds] = useState<string[]>([]);
+  const [referenceAudioIds, setReferenceAudioIds] = useState<string[]>([]);
   const [elementImageIds, setElementImageIds] = useState<string[]>([]);
   const [videoLastFrameImageId, setVideoLastFrameImageId] = useState<string | null>(null);
   const [sourceVideoId, setSourceVideoId] = useState<string | null>(null);
@@ -144,17 +162,41 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   // Ensure selections stay valid when images are deleted or imported.
   useEffect(() => {
     const imageIdSet = new Set(images.map(img => img.id));
-    if (imageIdSet.size === images.length && selectedImageIds.length === 0 && referenceImageIds.length === 0 && elementImageIds.length === 0 && !videoLastFrameImageId && !sourceVideoId && !sourceAudioId) {
+    if (
+      imageIdSet.size === images.length
+      && selectedImageIds.length === 0
+      && referenceImageIds.length === 0
+      && referenceVideoIds.length === 0
+      && referenceAudioIds.length === 0
+      && elementImageIds.length === 0
+      && !videoLastFrameImageId
+      && !sourceVideoId
+      && !sourceAudioId
+    ) {
       return;
     }
 
     setSelectedImageIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
     setReferenceImageIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
+    setReferenceVideoIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
+    setReferenceAudioIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
     setElementImageIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
     setVideoLastFrameImageId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
     setSourceVideoId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
     setSourceAudioId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
-  }, [elementImageIds.length, images, referenceImageIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
+  }, [elementImageIds.length, images, referenceAudioIds.length, referenceImageIds.length, referenceVideoIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
+
+  useEffect(() => {
+    if (isSeedance2ReferenceMode) {
+      return;
+    }
+    if (referenceVideoIds.length > 0) {
+      setReferenceVideoIds([]);
+    }
+    if (referenceAudioIds.length > 0) {
+      setReferenceAudioIds([]);
+    }
+  }, [isSeedance2ReferenceMode, referenceAudioIds.length, referenceVideoIds.length]);
 
   // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All / Scail / Lip Sync).
   useEffect(() => {
@@ -236,6 +278,42 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       && falModelMode === 'video'
       && isKlingO1VideoModelId(falVideoModelId);
 
+    if (reference && isSeedance2ReferenceMode && targetImage?.mediaType === 'video') {
+      if (!imageId) {
+        setReferenceVideoIds([]);
+        return;
+      }
+      setReferenceVideoIds(prevIds => {
+        if (prevIds.includes(imageId)) {
+          return prevIds.filter(id => id !== imageId);
+        }
+        if (prevIds.length < 2) {
+          return [...prevIds, imageId];
+        }
+        onError('Seedance 2 reference supports up to 2 videos.');
+        return prevIds;
+      });
+      return;
+    }
+
+    if (reference && isSeedance2ReferenceMode && targetImage?.mediaType === 'audio') {
+      if (!imageId) {
+        setReferenceAudioIds([]);
+        return;
+      }
+      setReferenceAudioIds(prevIds => {
+        if (prevIds.includes(imageId)) {
+          return prevIds.filter(id => id !== imageId);
+        }
+        if (prevIds.length < 1) {
+          return [imageId];
+        }
+        onError('Seedance 2 reference supports up to 1 audio track.');
+        return prevIds;
+      });
+      return;
+    }
+
     if (reference && targetImage?.mediaType === 'video') {
       if (isOneToAllVideoSelection) {
         onReferenceLimit(0);
@@ -250,7 +328,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isSeedance15FflfMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -313,11 +391,24 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (reference) {
-      if (primaryImageId && imageId === primaryImageId) {
+      if (primaryImageId && imageId === primaryImageId && !isSeedance2ReferenceMode) {
         return;
       }
       if (!imageId) {
         setReferenceImageIds([]);
+        return;
+      }
+      if (isSeedance2ReferenceMode) {
+        setReferenceImageIds(prevIds => {
+          if (prevIds.includes(imageId)) {
+            return prevIds.filter(id => id !== imageId);
+          }
+          if (prevIds.length < 2) {
+            return [...prevIds, imageId];
+          }
+          onError('Seedance 2 reference supports up to 2 images.');
+          return prevIds;
+        });
         return;
       }
       // Reference images power Kling prompts; enforce per-model limits.
@@ -359,6 +450,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         setSelectedImageIds([]);
         setSelectedNoteIds([]);
         setReferenceImageIds([]);
+        setReferenceVideoIds([]);
+        setReferenceAudioIds([]);
         setElementImageIds([]);
         setVideoLastFrameImageId(null);
         setSourceVideoId(null);
@@ -369,6 +462,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (multi) {
       if (!isKlingImageModel) {
         setReferenceImageIds([]);
+      }
+      if (!isSeedance2ReferenceMode) {
+        setReferenceVideoIds([]);
+        setReferenceAudioIds([]);
       }
       if (!isKlingO1VideoSelection) {
         setElementImageIds([]);
@@ -396,6 +493,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (primaryImageId === imageId && selectedImageIds.length === 1) {
       setSelectedNoteIds([]);
       setReferenceImageIds([]);
+      if (!isSeedance2ReferenceMode) {
+        setReferenceVideoIds([]);
+        setReferenceAudioIds([]);
+      }
       if (!isKlingO1VideoSelection) {
         setElementImageIds([]);
       }
@@ -433,6 +534,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (!isKlingImageModel) {
       setReferenceImageIds([]);
     }
+    if (!isSeedance2ReferenceMode) {
+      setReferenceVideoIds([]);
+      setReferenceAudioIds([]);
+    }
     if (!isKlingO1VideoSelection) {
       setElementImageIds([]);
     }
@@ -449,6 +554,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isKling26VideoModel,
     isKlingO1FflfMode,
     isSeedance15FflfMode,
+    isSeedance2SmartMode,
     isVeo31TailCapable,
     klingVariant,
     onError,
@@ -456,7 +562,9 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     primaryImageId,
     isKlingImageModel,
     falModelId,
+    referenceAudioIds.length,
     referenceImageIds.length,
+    referenceVideoIds.length,
     elementImageIds.length,
 	    selectedImageIds.length,
 	    videoLastFrameImageId,
@@ -465,6 +573,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
 	    sourceVideoId,
 	    isAudioInputMode,
 	    sourceAudioId,
+      isSeedance2ReferenceMode,
 	  ]);
 
   const handleNoteSelection = useCallback((
@@ -478,6 +587,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         setSelectedNoteIds([]);
         setSelectedImageIds([]);
         setReferenceImageIds([]);
+        setReferenceVideoIds([]);
+        setReferenceAudioIds([]);
         setElementImageIds([]);
         setVideoLastFrameImageId(null);
       }
@@ -497,6 +608,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (primaryNoteId === noteId && selectedNoteIds.length === 1) {
       setSelectedImageIds([]);
       setReferenceImageIds([]);
+      setReferenceVideoIds([]);
+      setReferenceAudioIds([]);
       setElementImageIds([]);
       setVideoLastFrameImageId(null);
       return;
@@ -513,6 +626,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     selectedImageIds,
     selectedNoteIds,
     referenceImageIds,
+    referenceVideoIds,
+    referenceAudioIds,
     elementImageIds,
     videoLastFrameImageId,
     sourceVideoId,
@@ -525,6 +640,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setSelectedImageIds,
     setSelectedNoteIds,
     setReferenceImageIds,
+    setReferenceVideoIds,
+    setReferenceAudioIds,
     setElementImageIds,
     setVideoLastFrameImageId,
     setSourceVideoId,

@@ -21,6 +21,8 @@ type DrawCanvasArgs = {
   selectedNoteIds: string[];
   primarySelectedNoteId: string | null;
   referenceImageIds: string[];
+  referenceVideoIds: string[];
+  referenceAudioIds: string[];
   referenceImageOrderLabels?: Record<string, string> | null;
   elementImageIds: string[];
   elementImageOrderLabels?: Record<string, string> | null;
@@ -50,6 +52,8 @@ export function drawCanvas({
   selectedNoteIds,
   primarySelectedNoteId,
   referenceImageIds,
+  referenceVideoIds,
+  referenceAudioIds,
   referenceImageOrderLabels,
   elementImageIds,
   elementImageOrderLabels,
@@ -195,6 +199,10 @@ export function drawCanvas({
     const padding = 5 / scale;
     const isFflfSelectedVideo = isKlingO1FflfMode && image.mediaType === 'video' && selectedImageIds.includes(image.id);
 
+    const isReferenceTagged = referenceImageIds.includes(image.id)
+      || referenceVideoIds.includes(image.id)
+      || referenceAudioIds.includes(image.id); // Seedance reference mode can tag non-image media.
+
     if (elementImageIds.includes(image.id)) {
       ctx.strokeStyle = '#a855f7'; // purple-500 for elements
       ctx.lineWidth = 4 / scale;
@@ -274,7 +282,7 @@ export function drawCanvas({
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (referenceImageIds.includes(image.id)) {
+    } else if (isReferenceTagged) {
       ctx.strokeStyle = '#10b981'; // emerald-500 for reference
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
@@ -284,7 +292,7 @@ export function drawCanvas({
 
     const isKlingSourceVideo = isKlingO1VideoInputMode && sourceVideoId === image.id;
     const referenceOrderLabel = isKlingSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id];
-    const shouldShowReferenceBadge = !!referenceOrderLabel && (isKlingSourceVideo || image.mediaType === 'image');
+    const shouldShowReferenceBadge = !!referenceOrderLabel;
     if (shouldShowReferenceBadge) {
       const badgePaddingX = 8 / scale;
       const badgePaddingY = 6 / scale;
