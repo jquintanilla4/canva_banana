@@ -10,6 +10,7 @@ import {
   GRID_BASE_SIZE,
   GRID_MAX_SIZE,
   GRID_MIN_SIZE,
+  GRID_VISUAL_SCALE,
   KEYBOARD_ZOOM_MULTIPLIER,
   KEYBOARD_ZOOM_OUT_MULTIPLIER,
   MAX_NOTE_FONT_SIZE,
@@ -778,12 +779,12 @@ export const Canvas: React.FC<CanvasProps> = ({
   const transformingBounds = useMemo(() => imageBeingTransformed ? getImageBounds(imageBeingTransformed) : null, [getImageBounds, imageBeingTransformed]);
 
   const gridSpacing = useMemo(() => {
-    const size = GRID_BASE_SIZE * Math.max(scale * 0.25, MIN_SCALE);
+    const size = GRID_BASE_SIZE * GRID_VISUAL_SCALE * Math.max(scale * 0.25, MIN_SCALE); // Shrink the grid layer without touching canvas coordinates.
     return Math.max(GRID_MIN_SIZE, Math.min(GRID_MAX_SIZE, size));
   }, [scale]);
 
   const dotRadius = useMemo(() => {
-    const scaled = DOT_BASE_SIZE * Math.sqrt(scale);
+    const scaled = DOT_BASE_SIZE * GRID_VISUAL_SCALE * Math.sqrt(scale); // Keep dot size in step with the tighter grid spacing.
     return Math.max(DOT_MIN_SIZE, Math.min(DOT_MAX_SIZE, scaled));
   }, [scale]);
 

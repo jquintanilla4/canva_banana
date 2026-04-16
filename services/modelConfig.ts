@@ -214,13 +214,13 @@ export const SEEDANCE2_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance2Duratio
 ] as const;
 
 export const SEEDANCE2_AUDIO_OPTIONS: ReadonlyArray<{ value: Seedance2BooleanSelectionValue; label: string }> = [
-  { value: 'false', label: 'Audio Off' },
-  { value: 'true', label: 'Audio On' },
+  { value: 'false', label: 'Off' },
+  { value: 'true', label: 'On' },
 ] as const;
 
 export const SEEDANCE2_CAMERA_FIXED_OPTIONS: ReadonlyArray<{ value: Seedance2BooleanSelectionValue; label: string }> = [
-  { value: 'false', label: 'Camera Free' },
-  { value: 'true', label: 'Camera Fixed' },
+  { value: 'false', label: 'Free' },
+  { value: 'true', label: 'Fixed' },
 ] as const;
 
 export const KLING26_CONTROL_SOUND_OPTIONS: ReadonlyArray<{ value: Kling26ControlSoundSelectionValue; label: string }> = [

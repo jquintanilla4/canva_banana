@@ -1,5 +1,30 @@
 import React, { useRef, useEffect, useLayoutEffect } from 'react';
 import { ChevronDownIcon, LayerUpIcon } from './Icons';
+import { getRootFontSizePx } from '../utils/uiScale';
+
+const PROMPT_BAR_BASE_MAX_WIDTH_REM = 69.1; // Keeps the existing desktop prompt bar width as the baseline.
+const PROMPT_BAR_HORIZONTAL_GUTTER_REM = 1.5; // Leaves a little space from the viewport edges on narrow screens.
+const PROMPT_TEXTAREA_MIN_HEIGHT_REM = 5.75; // Keeps the textarea tall enough for 3 rows.
+const PROMPT_TEXTAREA_MAX_HEIGHT_REM = 16.8125; // Caps textarea growth before it scrolls.
+
+const getPromptBarHorizontalGutterPx = (): number => PROMPT_BAR_HORIZONTAL_GUTTER_REM * getRootFontSizePx();
+
+const getPromptBarBaseMaxWidthPx = (): number => {
+  if (typeof window === 'undefined') {
+    return PROMPT_BAR_BASE_MAX_WIDTH_REM * 16;
+  }
+
+  const rootFontSize = getRootFontSizePx();
+  return PROMPT_BAR_BASE_MAX_WIDTH_REM * rootFontSize;
+};
+
+const getPromptBarViewportClampPx = (): number => {
+  if (typeof window === 'undefined') {
+    return getPromptBarBaseMaxWidthPx();
+  }
+
+  return Math.max(320, window.innerWidth - getPromptBarHorizontalGutterPx());
+};
 
 interface ModelOption {
   value: string;
@@ -80,9 +105,13 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const wasLoading = useRef(isLoading);
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
+  const controlsViewportRef = useRef<HTMLDivElement>(null);
+  const controlsStripRef = useRef<HTMLDivElement>(null);
+  const widthMeasureFrameRef = useRef<number | null>(null);
   const [showKlingSuggestions, setShowKlingSuggestions] = React.useState(false);
   const [suggestionPosition, setSuggestionPosition] = React.useState<{ left: number; top: number } | null>(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(0);
+  const [promptBarMaxWidthPx, setPromptBarMaxWidthPx] = React.useState(() => getPromptBarBaseMaxWidthPx());
 
   const handleSubmitShortcut = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -109,6 +138,31 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     const minWidth = textWidth + paddingLeft + paddingRight + arrowAllowance;
     selectEl.style.width = `${Math.ceil(minWidth)}px`;
   };
+
+  const updatePromptBarWidth = React.useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const baseWidthPx = getPromptBarBaseMaxWidthPx();
+    const viewportClampPx = getPromptBarViewportClampPx();
+    setPromptBarMaxWidthPx(Math.min(baseWidthPx, viewportClampPx));
+
+    if (widthMeasureFrameRef.current !== null) {
+      window.cancelAnimationFrame(widthMeasureFrameRef.current);
+    }
+
+    widthMeasureFrameRef.current = window.requestAnimationFrame(() => {
+      const controlsViewport = controlsViewportRef.current;
+      const controlsStrip = controlsStripRef.current;
+      const overflowWidthPx = controlsViewport && controlsStrip
+        ? Math.max(0, controlsStrip.scrollWidth - controlsViewport.clientWidth)
+        : 0;
+      const desiredWidthPx = baseWidthPx + overflowWidthPx;
+      setPromptBarMaxWidthPx(Math.min(desiredWidthPx, viewportClampPx));
+      widthMeasureFrameRef.current = null;
+    });
+  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -150,6 +204,39 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       ?.map(control => `${control.id}-${control.value}-${control.options.map(option => option.label).join('~')}`)
       .join('|') ?? '',
   ]);
+
+  useLayoutEffect(() => {
+    updatePromptBarWidth();
+  }, [
+    selectedModel,
+    modelControls
+      ?.map(control => `${control.id}-${control.value}-${control.options.map(option => option.label).join('~')}`)
+      .join('|') ?? '',
+    updatePromptBarWidth,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleResize = () => {
+      updatePromptBarWidth();
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [updatePromptBarWidth]);
+
+  useEffect(() => {
+    return () => {
+      if (widthMeasureFrameRef.current !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(widthMeasureFrameRef.current);
+      }
+    };
+  }, []);
 
   const klingOptions = React.useMemo(() => {
     if (!klingSuggestionsEnabled) return [];
@@ -300,7 +387,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const negativePromptContainerStyle = negativePromptOutlineColor ? { borderColor: negativePromptOutlineColor } : undefined;
 
   return (
-    <footer className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.02rem] p-[0.61rem] w-full max-w-[69.1rem]">
+    <footer
+      className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.02rem] p-[0.61rem]"
+      style={{ width: `calc(100% - ${PROMPT_BAR_HORIZONTAL_GUTTER_REM}rem)`, maxWidth: `${promptBarMaxWidthPx}px` }}
+      data-testid="prompt-bar-footer"
+    >
       <div className="flex flex-col gap-3">
         {showNegativePrompt && (
           <div className={negativePromptContainerClass} style={negativePromptContainerStyle}>
@@ -309,22 +400,22 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 <span className="text-xs font-semibold text-red-200 uppercase tracking-wide">Negative prompt</span>
               </div>
               <textarea
-              ref={negativeTextareaRef}
-              value={negativePrompt ?? ''}
-              onChange={(e) => onNegativePromptChange?.(e.target.value)}
-              onKeyDown={handleSubmitShortcut}
-              placeholder={resolvedNegativePromptPlaceholder}
-              disabled={isLoading || !onNegativePromptChange}
-              rows={3}
-              className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
-              style={{ minHeight: '92px', maxHeight: '269px' }}
+                ref={negativeTextareaRef}
+                value={negativePrompt ?? ''}
+                onChange={(e) => onNegativePromptChange?.(e.target.value)}
+                onKeyDown={handleSubmitShortcut}
+                placeholder={resolvedNegativePromptPlaceholder}
+                disabled={isLoading || !onNegativePromptChange}
+                rows={3}
+                className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+                style={{ minHeight: `${PROMPT_TEXTAREA_MIN_HEIGHT_REM}rem`, maxHeight: `${PROMPT_TEXTAREA_MAX_HEIGHT_REM}rem` }}
                 aria-label="Negative prompt input"
               />
             </div>
           </div>
         )}
         <div className={promptContainerClass} style={promptContainerStyle}>
-          <div className="flex flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
             <textarea
               ref={textareaRef}
               value={prompt}
@@ -334,7 +425,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               disabled={inputDisabled || isLoading}
               rows={3}
               className={promptTextareaClassName}
-              style={{ minHeight: '92px', maxHeight: '269px' }}
+              style={{ minHeight: `${PROMPT_TEXTAREA_MIN_HEIGHT_REM}rem`, maxHeight: `${PROMPT_TEXTAREA_MAX_HEIGHT_REM}rem` }}
               aria-label="Prompt input"
             />
             {showKlingSuggestions && klingOptions.length > 0 && suggestionPosition && (
@@ -362,125 +453,135 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               </div>
             )}
             <div className="flex flex-col gap-2 mt-[0.47rem] ml-[0.5rem]">
-              <div className="relative flex flex-wrap items-center gap-3">
-                <div className="flex items-center bg-gray-800/80 rounded-full p-1">
-                  {modelModeOptions.map(option => {
-                    const isActive = option.value === modelMode;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => onModelModeChange(option.value)}
-                        disabled={resolvedModeDisabled}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-150 ${isActive ? activeModeClassName : 'text-gray-300 hover:text-white'} disabled:opacity-60 disabled:cursor-not-allowed`}
-                        aria-pressed={isActive}
-                        aria-label={`Switch to ${option.label} models`}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="relative">
-                  <label className="sr-only" htmlFor="model-select">
-                    {modelSelectLabel}
-                  </label>
-                  <select
-                    id="model-select"
-                    ref={modelSelectRef}
-                    value={selectedModel}
-                    onChange={(e) => onModelChange(e.target.value)}
-                    disabled={modelSelectDisabled}
-                    className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
-                    style={selectHighlightStyle}
-                    aria-label={modelSelectLabel}
-                  >
-                    {modelOptions.map(option => (
-                      <option
-                        key={option.value}
-                        value={option.value}
-                        style={option.highlightColor ? { color: option.highlightColor } : undefined}
-                      >
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
-                </div>
-                {modelControls?.map(control => (
-                  <div className="relative flex items-center gap-1" key={control.id}>
-                    {control.hideSelectedValue ? (
-                      <div
-                        className={`relative inline-flex items-center focus-within:outline-none ${control.disabled ? 'opacity-60' : ''}`}
-                      >
-                        <span
-                          className={`text-sm px-[0.4rem] pr-[1.8rem] py-[0.34rem] select-none ${control.disabled ? 'text-gray-400' : 'text-white'}`}
+              <div
+                className="w-full max-w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                ref={controlsViewportRef}
+                data-testid="prompt-bar-control-viewport"
+              >
+                <div
+                  className="relative flex min-w-full w-max flex-nowrap items-center gap-3 pr-2"
+                  ref={controlsStripRef}
+                  data-testid="prompt-bar-control-strip"
+                >
+                  <div className="flex items-center bg-gray-800/80 rounded-full p-1">
+                    {modelModeOptions.map(option => {
+                      const isActive = option.value === modelMode;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => onModelModeChange(option.value)}
+                          disabled={resolvedModeDisabled}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-150 ${isActive ? activeModeClassName : 'text-gray-300 hover:text-white'} disabled:opacity-60 disabled:cursor-not-allowed`}
+                          aria-pressed={isActive}
+                          aria-label={`Switch to ${option.label} models`}
                         >
-                          {control.prefixLabel ?? ''}
-                        </span>
-                        <label className="sr-only" htmlFor={control.id}>
-                          {control.ariaLabel}
-                        </label>
-                        <select
-                          id={control.id}
-                          ref={el => {
-                            // Avoid autosizing hidden-value selects; their visual width is driven by the label.
-                            if (el) {
-                              controlSelectRefs.current.delete(control.id);
-                            }
-                          }}
-                          value={control.value}
-                          onChange={(e) => control.onChange(e.target.value)}
-                          disabled={control.disabled}
-                          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 disabled:cursor-not-allowed"
-                          aria-label={control.ariaLabel}
-                        >
-                          {control.options.map(option => (
-                            <option key={option.value} value={option.value} disabled={option.disabled}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDownIcon
-                          className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80"
-                          aria-hidden="true"
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        {control.prefixLabel && <span className="text-sm text-gray-200">{control.prefixLabel}</span>}
-                        <label className="sr-only" htmlFor={control.id}>
-                          {control.ariaLabel}
-                        </label>
-                        <select
-                          id={control.id}
-                          ref={el => {
-                            if (el) {
-                              controlSelectRefs.current.set(control.id, el);
-                            } else {
-                              controlSelectRefs.current.delete(control.id);
-                            }
-                          }}
-                          value={control.value}
-                          onChange={(e) => control.onChange(e.target.value)}
-                          disabled={control.disabled}
-                          className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
-                          aria-label={control.ariaLabel}
-                        >
-                          {control.options.map(option => (
-                            <option key={option.value} value={option.value} disabled={option.disabled}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDownIcon
-                          className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80"
-                          aria-hidden="true"
-                        />
-                      </>
-                    )}
+                          {option.label}
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
+                  <div className="relative">
+                    <label className="sr-only" htmlFor="model-select">
+                      {modelSelectLabel}
+                    </label>
+                    <select
+                      id="model-select"
+                      ref={modelSelectRef}
+                      value={selectedModel}
+                      onChange={(e) => onModelChange(e.target.value)}
+                      disabled={modelSelectDisabled}
+                      className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
+                      style={selectHighlightStyle}
+                      aria-label={modelSelectLabel}
+                    >
+                      {modelOptions.map(option => (
+                        <option
+                          key={option.value}
+                          value={option.value}
+                          style={option.highlightColor ? { color: option.highlightColor } : undefined}
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
+                  </div>
+                  {modelControls?.map(control => (
+                    <div className="relative flex items-center gap-1" key={control.id}>
+                      {control.hideSelectedValue ? (
+                        <div
+                          className={`relative inline-flex items-center focus-within:outline-none ${control.disabled ? 'opacity-60' : ''}`}
+                        >
+                          <span
+                            className={`text-sm px-[0.4rem] pr-[1.8rem] py-[0.34rem] select-none ${control.disabled ? 'text-gray-400' : 'text-white'}`}
+                          >
+                            {control.prefixLabel ?? ''}
+                          </span>
+                          <label className="sr-only" htmlFor={control.id}>
+                            {control.ariaLabel}
+                          </label>
+                          <select
+                            id={control.id}
+                            ref={el => {
+                              // Avoid autosizing hidden-value selects; their visual width is driven by the label.
+                              if (el) {
+                                controlSelectRefs.current.delete(control.id);
+                              }
+                            }}
+                            value={control.value}
+                            onChange={(e) => control.onChange(e.target.value)}
+                            disabled={control.disabled}
+                            className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 disabled:cursor-not-allowed"
+                            aria-label={control.ariaLabel}
+                          >
+                            {control.options.map(option => (
+                              <option key={option.value} value={option.value} disabled={option.disabled}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDownIcon
+                            className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80"
+                            aria-hidden="true"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          {control.prefixLabel && <span className="text-sm text-gray-200">{control.prefixLabel}</span>}
+                          <label className="sr-only" htmlFor={control.id}>
+                            {control.ariaLabel}
+                          </label>
+                          <select
+                            id={control.id}
+                            ref={el => {
+                              if (el) {
+                                controlSelectRefs.current.set(control.id, el);
+                              } else {
+                                controlSelectRefs.current.delete(control.id);
+                              }
+                            }}
+                            value={control.value}
+                            onChange={(e) => control.onChange(e.target.value)}
+                            disabled={control.disabled}
+                            className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
+                            aria-label={control.ariaLabel}
+                          >
+                            {control.options.map(option => (
+                              <option key={option.value} value={option.value} disabled={option.disabled}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDownIcon
+                            className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80"
+                            aria-hidden="true"
+                          />
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
               {modelControls?.map(control => control.errorMessage ? (
                 <p key={`${control.id}-error`} className="text-xs text-red-400">
@@ -494,7 +595,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             aria-label="Generate"
             onClick={onSubmit}
             disabled={isLoading || submitDisabled}
-            className={`h-[2.64rem] w-[2.64rem] text-white font-semibold rounded-full transition-all duration-200 ease-in-out disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center ${submitButtonAccentClassName}`}
+            className={`h-[2.64rem] w-[2.64rem] shrink-0 text-white font-semibold rounded-full transition-all duration-200 ease-in-out disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center ${submitButtonAccentClassName}`}
           >
             {isLoading ? (
               <svg className="animate-spin h-[1.1rem] w-[1.1rem] text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
