@@ -18,8 +18,8 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
   - Play/pause for audio/video and waveform previews
 - **Project management**:
   - Snapshot import/export (`.bcsnap`)
-  - Autosave backups with restore
-  - Session persistence
+  - Autosave backups with restore after snapshot export
+  - Snapshot-based session restore
 - **Observability + experiments**:
   - Fal queue panel with job status
   - Metadata overlays, debug log panel
@@ -37,17 +37,28 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
    ```
 
 2. **Set up environment variables:**
-   - Set `GEMINI_API_KEY` (or `API_KEY`) in [.env.local](.env.local) for Google Gemini.
+   - Set `GEMINI_API_KEY` in [.env.local](.env.local) for Google Gemini.
    - Set `FAL_API_KEY` for Fal.ai.
    - Optional: `FAL_API_URL` to point at a different gateway.
-   - Optional: `FAL_MODEL_ID` to override the default Fal model.
+   - Optional: `FAL_MODEL_ID` to override the default Fal image model.
    
-   If an API key is not provided for one of the providers, it is hidden in the UI. If both are set, use the Cloud switcher to pick a provider per request.
+   If `FAL_API_KEY` is not set, the Cloud switcher only shows Google and Fal-specific controls stay disabled. If both providers are configured, use the Cloud switcher to pick a provider per request.
 
 3. **Run the app:**
    ```bash
    npm run dev
    ```
+
+   The Vite dev server runs on `http://localhost:3000`.
+
+### Other Commands
+
+```bash
+npm run build
+npm run preview
+npm run typecheck
+npm run test -- --run
+```
 
 ### Troubleshooting
 
@@ -85,7 +96,7 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
 
 ### Importing and Exporting
 
-**Session Snapshots**: Export your entire workspace (media, notes, annotations, settings) as a `.bcsnap` binary snapshot. Import snapshots from the file menu to restore previous sessions. Exporting a snapshot also starts autosave backups (restore from File -> Backups).
+**Session Snapshots**: Export your entire workspace (media, notes, annotations, settings) as a `.bcsnap` binary snapshot. Import snapshots from the file menu to restore a saved workspace state. Exporting a snapshot starts an autosave session and enables restore from `File -> Backups`.
 
 **Individual Media**: Export selected images, videos, or audio using the download action in the toolbar.
 
