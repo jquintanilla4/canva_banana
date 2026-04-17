@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction, SyntheticEvent } from 'react';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
@@ -105,6 +105,7 @@ import { getNaturalSize, loadMediaFromBlob, rasterizeImages } from '../services/
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
 import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/volcengineService';
+import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
 
 type UseGenerationArgs = {
   appMode: AppMode;
@@ -221,6 +222,8 @@ const buildStillImageFile = async (
   return new File([rasterized.file], `${fileNameBase}.png`, { type: rasterized.file.type || 'image/png' }); // Rotated frames need a baked file.
 };
 
+const ACTIVE_SEEDANCE_REQUEST_MESSAGE = 'This Seedance request is already running. Change the prompt or selected media to submit again.'; // Duplicate Seedance runs stay scoped to the same request.
+
 export const useGeneration = (args: UseGenerationArgs) => {
   const {
     appMode,
@@ -248,6 +251,25 @@ export const useGeneration = (args: UseGenerationArgs) => {
       setError(null);
     }, 4000);
   }, [setError]);
+
+  const activeSeedanceRequestKeysRef = useRef<Set<string>>(new Set());
+  const [activeSeedanceRequestKeys, setActiveSeedanceRequestKeys] = useState<string[]>([]);
+
+  const registerActiveSeedanceRequestKey = useCallback((requestKey: string): boolean => {
+    if (activeSeedanceRequestKeysRef.current.has(requestKey)) {
+      return false;
+    }
+    activeSeedanceRequestKeysRef.current.add(requestKey);
+    setActiveSeedanceRequestKeys(prev => [...prev, requestKey]);
+    return true; // Block duplicate clicks before React finishes re-rendering.
+  }, []);
+
+  const unregisterActiveSeedanceRequestKey = useCallback((requestKey: string) => {
+    if (!activeSeedanceRequestKeysRef.current.delete(requestKey)) {
+      return;
+    }
+    setActiveSeedanceRequestKeys(prev => prev.filter(activeKey => activeKey !== requestKey));
+  }, []);
 
   const {
     falModelMode,
@@ -341,6 +363,47 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setElementImageIds,
     setVideoLastFrameImageId,
   } = selection;
+
+  const currentSeedanceRequestKey = useMemo(() => {
+    if (apiProvider !== 'fal' || falModelMode !== 'video' || falVideoModelId !== SEEDANCE_2_VIDEO_MODEL_ID) {
+      return null;
+    }
+
+    return buildSeedance2RequestKey({
+      prompt,
+      variant: seedance2Variant,
+      aspectRatio: seedance2AspectRatio,
+      resolution: seedance2Resolution,
+      duration: seedance2Duration,
+      generateAudio: seedance2GenerateAudio,
+      cameraFixed: seedance2CameraFixed,
+      primaryImageId,
+      videoLastFrameImageId,
+      referenceImageIds,
+      referenceVideoIds,
+      referenceAudioIds,
+      images,
+    });
+  }, [
+    apiProvider,
+    falModelMode,
+    falVideoModelId,
+    images,
+    primaryImageId,
+    prompt,
+    referenceAudioIds,
+    referenceImageIds,
+    referenceVideoIds,
+    seedance2AspectRatio,
+    seedance2CameraFixed,
+    seedance2Duration,
+    seedance2GenerateAudio,
+    seedance2Resolution,
+    seedance2Variant,
+    videoLastFrameImageId,
+  ]);
+
+  const isSeedanceSubmitLocked = currentSeedanceRequestKey !== null && activeSeedanceRequestKeys.includes(currentSeedanceRequestKey);
 
   // Centralized generation orchestrator for both providers (Fal/Gemini) across text-to-image, edits, upscales, and video.
   const handleGenerate = useCallback(async (generationOverrideOrEvent?: GenerationInputs | SyntheticEvent) => {
@@ -475,6 +538,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     const usingFal = generationProviderForRun === 'fal';
     const usingVolcengine = generationProviderForRun === 'volcengine';
+    const usesGlobalLoadingLock = generationProviderForRun === 'google';
     const isVideoMode = generationProviderForRun !== 'google' && falModelModeForRun === 'video';
     const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelIdForRun);
     const normalizedFalImageSizeSelectionForRun = isSeedreamV5LiteModelId(falModelIdForRun) && falImageSizeSelectionForRun === 'default'
@@ -676,6 +740,59 @@ export const useGeneration = (args: UseGenerationArgs) => {
           return;
         }
 
+        const tailFrame = videoLastFrameImageIdForRun
+          ? images.find(img => img.id === videoLastFrameImageIdForRun) ?? null
+          : null;
+        if (tailFrame && !isImageCanvasMedia(tailFrame)) {
+          setError('Select a still image on the canvas to use as the ending frame.');
+          return;
+        }
+
+        const referenceImageCanvasItems = referenceImageIdsForRun
+          .map(id => images.find(img => img.id === id))
+          .filter(isImageCanvasMedia);
+        if (referenceImageCanvasItems.length !== referenceImageIdsForRun.length) {
+          setError('Seedance 2 image references must be still images.');
+          return;
+        }
+
+        const referenceVideoCanvasItems = referenceVideoIdsForRun
+          .map(id => images.find(img => img.id === id))
+          .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'video'));
+        if (referenceVideoCanvasItems.length !== referenceVideoIdsForRun.length) {
+          setError('Seedance 2 video references must be videos on the canvas.');
+          return;
+        }
+
+        const referenceAudioCanvasItems = referenceAudioIdsForRun
+          .map(id => images.find(img => img.id === id))
+          .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'audio'));
+        if (referenceAudioCanvasItems.length !== referenceAudioIdsForRun.length) {
+          setError('Seedance 2 audio references must be audio clips on the canvas.');
+          return;
+        }
+
+        const seedanceRequestKey = buildSeedance2RequestKey({
+          prompt: trimmedPrompt,
+          variant: seedance2VariantForRun,
+          aspectRatio: seedance2AspectRatioForRun,
+          resolution: seedance2ResolutionForRun,
+          duration: seedance2DurationForRun,
+          generateAudio: seedance2GenerateAudioForRun,
+          cameraFixed: seedance2CameraFixedForRun,
+          primaryImageId: primaryImageIdForRun,
+          videoLastFrameImageId: videoLastFrameImageIdForRun,
+          referenceImageIds: referenceImageIdsForRun,
+          referenceVideoIds: referenceVideoIdsForRun,
+          referenceAudioIds: referenceAudioIdsForRun,
+          images,
+        });
+
+        if (!registerActiveSeedanceRequestKey(seedanceRequestKey)) {
+          showTemporaryError(ACTIVE_SEEDANCE_REQUEST_MESSAGE);
+          return;
+        }
+
         let jobQueued = false;
         const enqueueVolcengineJob = () => {
           if (jobQueued) {
@@ -707,40 +824,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
           const firstFrameImageFile = activePrimary
             ? await buildStillImageFile(activePrimary, `seedance2-first-frame-${Date.now()}`)
             : undefined;
-          const tailFrame = videoLastFrameImageIdForRun
-            ? images.find(img => img.id === videoLastFrameImageIdForRun) ?? null
-            : null;
-          if (tailFrame && !isImageCanvasMedia(tailFrame)) {
-            setError('Select a still image on the canvas to use as the ending frame.');
-            return;
-          }
           const tailFrameImage = tailFrame && isImageCanvasMedia(tailFrame) ? tailFrame : null;
           const lastFrameImageFile = tailFrameImage && seedance2VariantForRun === 'smart'
             ? await buildStillImageFile(tailFrameImage, `seedance2-last-frame-${Date.now()}`)
             : undefined;
-
-          const referenceImageCanvasItems = referenceImageIdsForRun
-            .map(id => images.find(img => img.id === id))
-            .filter(isImageCanvasMedia);
-          if (referenceImageCanvasItems.length !== referenceImageIdsForRun.length) {
-            setError('Seedance 2 image references must be still images.');
-            return;
-          }
-          const referenceVideoCanvasItems = referenceVideoIdsForRun
-            .map(id => images.find(img => img.id === id))
-            .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'video'));
-          if (referenceVideoCanvasItems.length !== referenceVideoIdsForRun.length) {
-            setError('Seedance 2 video references must be videos on the canvas.');
-            return;
-          }
-          const referenceAudioCanvasItems = referenceAudioIdsForRun
-            .map(id => images.find(img => img.id === id))
-            .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'audio'));
-          if (referenceAudioCanvasItems.length !== referenceAudioIdsForRun.length) {
-            setError('Seedance 2 audio references must be audio clips on the canvas.');
-            return;
-          }
-
           enqueueVolcengineJob();
           setError(null);
 
@@ -919,6 +1006,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             )));
           }
           setError(message);
+        } finally {
+          unregisterActiveSeedanceRequestKey(seedanceRequestKey);
         }
 
         return;
@@ -1533,7 +1622,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           kind: isTextToImage ? 'text-to-image' : isUpscaleModel ? 'upscale' : 'edit',
         },
       });
-    } else {
+    } else if (usesGlobalLoadingLock) {
       setIsLoading(true);
     }
 
@@ -1973,7 +2062,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
           return job;
         }));
-      } else {
+      } else if (usesGlobalLoadingLock) {
         setIsLoading(false);
       }
       if (fileSizeMessage) {
@@ -1982,7 +2071,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         setError(userFacingMessage);
       }
     } finally {
-      if (!usingFal) {
+      if (usesGlobalLoadingLock) {
         setIsLoading(false);
       }
     }
@@ -2062,6 +2151,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     sourceAudioId,
     setError,
     showTemporaryError,
+    registerActiveSeedanceRequestKey,
     setIsLoading,
     setFalJobs,
     setState,
@@ -2077,7 +2167,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     onGenerationComplete,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
+    unregisterActiveSeedanceRequestKey,
   ]);
 
-  return handleGenerate;
+  return {
+    handleGenerate,
+    isSeedanceSubmitLocked,
+  };
 };

@@ -747,7 +747,10 @@ export default function App() {
   ), [cameraSettings, isCameraSettingsEnabled]);
 
   // Centralized generation handler that calls provider APIs and writes results back to canvas state.
-  const handleGenerate = useGeneration({
+  const {
+    handleGenerate,
+    isSeedanceSubmitLocked,
+  } = useGeneration({
     appMode,
     tool,
     prompt,
@@ -1412,7 +1415,7 @@ export default function App() {
           onSubmit={handleGenerate}
           isLoading={isLoading}
           inputDisabled={disablePromptInput}
-          submitDisabled={submitDisabled}
+          submitDisabled={submitDisabled || isSeedanceSubmitLocked}
           modelOptions={promptBarModelOptions}
           selectedModel={fal.falModelId}
           onModelChange={fal.handleFalModelChange}
