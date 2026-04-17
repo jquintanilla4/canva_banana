@@ -16,7 +16,7 @@ type GenerateSeedanceVideoOptions = {
   variant: Seedance2Variant;
   aspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
   duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
-  resolution: '480p' | '720p';
+  resolution: '480p' | '720p' | '1080p';
   generateAudio: boolean;
   cameraFixed: boolean;
   primaryImageFile?: File | null;

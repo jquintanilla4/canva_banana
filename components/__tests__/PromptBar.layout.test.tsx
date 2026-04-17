@@ -53,7 +53,7 @@ const modelControls = [
     ariaLabel: 'Select Seedance 2 resolution',
     options: [
       { value: '720p', label: '720p' },
-      { value: '1080p', label: '1080p' },
+      { value: '1080p', label: '1080p (TBR)', disabled: true }, // Mirrors the provisional disabled Seedance 2 UI label.
     ],
     value: '1080p',
     onChange: vi.fn(),

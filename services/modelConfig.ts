@@ -174,7 +174,7 @@ export const KLING26_CONTROL_DRIVER_OPTIONS: ReadonlyArray<{ value: Kling26Contr
 ] as const;
 
 export type Seedance2AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
-export type Seedance2ResolutionSelectionValue = '480p' | '720p';
+export type Seedance2ResolutionSelectionValue = '480p' | '720p' | '1080p';
 export type Seedance2DurationSelectionValue = '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
 export type Seedance2BooleanSelectionValue = 'true' | 'false';
 
@@ -193,9 +193,10 @@ export const SEEDANCE2_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Seedance2Asp
   { value: 'adaptive', label: 'Adaptive' },
 ] as const;
 
-export const SEEDANCE2_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Seedance2ResolutionSelectionValue; label: string }> = [
+export const SEEDANCE2_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Seedance2ResolutionSelectionValue; label: string; disabled?: boolean }> = [
   { value: '480p', label: '480p' },
   { value: '720p', label: '720p' },
+  { value: '1080p', label: '1080p (TBR)', disabled: true }, // Keep this visible while blocking selection until docs catch up.
 ] as const;
 
 export const SEEDANCE2_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance2DurationSelectionValue; label: string }> = [
@@ -552,7 +553,7 @@ export const isSeedance2AspectRatioSelectionValue = (value: unknown): value is S
   value === '21:9' || value === '16:9' || value === '4:3' || value === '1:1' || value === '3:4' || value === '9:16' || value === 'adaptive';
 
 export const isSeedance2ResolutionSelectionValue = (value: unknown): value is Seedance2ResolutionSelectionValue =>
-  value === '480p' || value === '720p';
+  value === '480p' || value === '720p' || value === '1080p';
 
 export const isSeedance2DurationSelectionValue = (value: unknown): value is Seedance2DurationSelectionValue =>
   value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';

@@ -80,7 +80,7 @@ async def submit_seedance_job(
             variant=variant if variant in {"smart", "reference"} else "smart",
             ratio=ratio if ratio in {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "adaptive"} else "16:9",
             duration=duration,
-            resolution=resolution if resolution in {"480p", "720p"} else None,
+            resolution=resolution if resolution in {"480p", "720p", "1080p"} else None,
             generate_audio=generate_audio,
             camera_fixed=camera_fixed,
             primary_image=await _read_upload(primary_image),

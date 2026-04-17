@@ -1023,7 +1023,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       id: 'seedance2-resolution-select',
       prefixLabel: 'Resolution',
       ariaLabel: 'Select Seedance 2 resolution',
-      options: SEEDANCE2_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      options: SEEDANCE2_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label, disabled: option.disabled })),
       value: seedance2Resolution,
       onChange: onSeedance2ResolutionChange,
       disabled: isLoading,

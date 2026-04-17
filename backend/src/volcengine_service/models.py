@@ -8,7 +8,7 @@ from typing import Literal
 SeedanceVariant = Literal["smart", "reference"]  # UI variant names.
 VolcengineJobStatus = Literal["IN_QUEUE", "IN_PROGRESS", "COMPLETED", "FAILED"]  # Queue statuses expected by the UI.
 SeedanceRatio = Literal["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "adaptive"]  # Supported ratio values.
-SeedanceResolution = Literal["480p", "720p"]  # Supported explicit resolution values.
+SeedanceResolution = Literal["480p", "720p", "1080p"]  # Supported explicit resolution values.
 
 DEFAULT_MODEL_ID = "doubao-seedance-2-0-260128"  # Seedance 2 production model.
 MODEL_LABELS = {

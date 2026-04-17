@@ -144,7 +144,7 @@ export type GenerationFalOptions = Partial<{
 export type GenerationVolcengineOptions = Partial<{
   seedance2Variant: Seedance2Variant;
   seedance2AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
-  seedance2Resolution: '480p' | '720p';
+  seedance2Resolution: '480p' | '720p' | '1080p';
   seedance2Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
