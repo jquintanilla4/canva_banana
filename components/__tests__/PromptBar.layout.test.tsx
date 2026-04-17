@@ -1,5 +1,6 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import React from 'react';
 import { PromptBar } from '../PromptBar';
 import { DEFAULT_ROOT_FONT_SIZE_PX, DEFAULT_UI_SCALE } from '../../utils/uiScale';
 
@@ -118,6 +119,58 @@ const renderPromptBar = () => render(
   />
 );
 
+const PromptBarMentionHarness = () => {
+  const [prompt, setPrompt] = React.useState('Use @Image1 and ');
+
+  return (
+    <PromptBar
+      prompt={prompt}
+      onPromptChange={setPrompt}
+      onSubmit={vi.fn()}
+      isLoading={false}
+      inputDisabled={false}
+      submitDisabled={false}
+      modelOptions={[
+        { value: 'seedance-2', label: 'Seedance 2' },
+      ]}
+      selectedModel="seedance-2"
+      onModelChange={vi.fn()}
+      modelSelectDisabled={false}
+      modelMode="video"
+      onModelModeChange={vi.fn()}
+      modelControls={modelControls}
+      klingSuggestionsEnabled
+      klingSuggestionOptions={['@Image1', '@Image2']}
+    />
+  );
+};
+
+const PromptBarAutocompleteHarness = () => {
+  const [prompt, setPrompt] = React.useState(''); // Start empty so the test uses the real autocomplete insert path.
+
+  return (
+    <PromptBar
+      prompt={prompt}
+      onPromptChange={setPrompt}
+      onSubmit={vi.fn()}
+      isLoading={false}
+      inputDisabled={false}
+      submitDisabled={false}
+      modelOptions={[
+        { value: 'seedance-2', label: 'Seedance 2' },
+      ]}
+      selectedModel="seedance-2"
+      onModelChange={vi.fn()}
+      modelSelectDisabled={false}
+      modelMode="video"
+      onModelModeChange={vi.fn()}
+      modelControls={modelControls}
+      klingSuggestionsEnabled
+      klingSuggestionOptions={['@Image1', '@Video1', '@Audio1']}
+    />
+  );
+};
+
 const flushPromptBarLayout = async () => {
   await act(async () => {
     vi.runAllTimers();
@@ -194,5 +247,87 @@ describe('PromptBar layout', () => {
 
     expect(parseFloat(footer.style.maxWidth)).toBeCloseTo(expectedViewportClampPx, 1);
     expect(parseFloat(footer.style.maxWidth)).toBeLessThan(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320);
+  });
+
+  it('keeps mention suggestions open while typing a second seedance reference token', async () => {
+    render(<PromptBarMentionHarness />);
+    await flushPromptBarLayout();
+
+    const textarea = screen.getByLabelText('Prompt input') as HTMLTextAreaElement;
+    const secondMentionPrefix = 'Use @Image1 and @';
+    const secondMentionQuery = 'Use @Image1 and @I';
+
+    fireEvent.change(textarea, {
+      target: {
+        value: secondMentionPrefix,
+        selectionStart: secondMentionPrefix.length,
+      },
+    });
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+
+    fireEvent.change(textarea, {
+      target: {
+        value: secondMentionQuery,
+        selectionStart: secondMentionQuery.length,
+      },
+    });
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(screen.getByText('@Image1')).toBeTruthy();
+    expect(screen.getByText('@Image2')).toBeTruthy();
+  });
+
+  it('keeps recognizing later @ mentions after inserting an earlier one from autocomplete', async () => {
+    render(<PromptBarAutocompleteHarness />);
+    await flushPromptBarLayout();
+
+    const textarea = screen.getByLabelText('Prompt input') as HTMLTextAreaElement;
+    const firstMentionQuery = '@V';
+    const secondMentionPrefix = '@Video1 then @';
+    const thirdMentionPrefix = '@Video1 then @Image1 and @';
+
+    fireEvent.change(textarea, {
+      target: {
+        value: firstMentionQuery,
+        selectionStart: firstMentionQuery.length,
+      },
+    });
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(screen.getByText('@Video1')).toBeTruthy();
+
+    textarea.setSelectionRange(firstMentionQuery.length, firstMentionQuery.length); // Keep Enter aligned with the typed token.
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    await flushPromptBarLayout();
+
+    expect(textarea.value).toBe('@Video1');
+
+    fireEvent.change(textarea, {
+      target: {
+        value: secondMentionPrefix,
+        selectionStart: secondMentionPrefix.length,
+      },
+    });
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(screen.getByText('@Image1')).toBeTruthy();
+    expect(screen.getByText('@Video1')).toBeTruthy();
+
+    textarea.setSelectionRange(secondMentionPrefix.length, secondMentionPrefix.length); // Mirror the real caret before the next insert.
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    await flushPromptBarLayout();
+
+    expect(textarea.value).toBe('@Video1 then @Image1');
+
+    fireEvent.change(textarea, {
+      target: {
+        value: thirdMentionPrefix,
+        selectionStart: thirdMentionPrefix.length,
+      },
+    });
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(screen.getByText('@Audio1')).toBeTruthy();
   });
 });

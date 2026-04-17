@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from pathlib import Path
+from typing import Iterator
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request as FastAPIRequest, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from volcengine_service.media import get_ffprobe_status, probe_media_duration_seconds
+from volcengine_service.models import JobState
 from volcengine_service.models import DEFAULT_MODEL_ID, MediaInput, SeedanceJobPayload
 from volcengine_service.store import job_store
 from volcengine_service.worker import create_job, serialize_job
@@ -83,6 +89,80 @@ def _cleanup_media_items(media_items: list[MediaInput]) -> None:
         media.cleanup()  # Best-effort cleanup is enough because temp file removal is idempotent.
 
 
+def _build_job_response(request: FastAPIRequest, job: JobState) -> dict[str, object]:
+    output_proxy_url = (
+        str(request.url_for("download_seedance_job_output", job_id=job.id))
+        if job.output_url
+        else None
+    )  # Hand the frontend a same-backend URL so browser fetches avoid provider CORS blocks.
+    last_frame_proxy_url = (
+        str(request.url_for("download_seedance_job_last_frame", job_id=job.id))
+        if job.last_frame_url
+        else None
+    )  # Keep last-frame downloads on the same transport path as videos.
+    return serialize_job(
+        job,
+        output_url=output_proxy_url,
+        last_frame_url=last_frame_proxy_url,
+    )  # Preserve the raw provider URLs separately for debugging.
+
+
+def _build_job_response_from_url(base_url: str, job: JobState) -> dict[str, object]:
+    http_base_url = base_url.replace("ws://", "http://", 1).replace("wss://", "https://", 1)  # WebSocket requests should still hand back HTTP proxy asset URLs.
+    output_proxy_url = (
+        f"{http_base_url.rstrip('/')}/api/volcengine/jobs/{job.id}/output"
+        if job.output_url
+        else None
+    )  # WebSocket clients still need the same proxied asset paths as REST clients.
+    last_frame_proxy_url = (
+        f"{http_base_url.rstrip('/')}/api/volcengine/jobs/{job.id}/last-frame"
+        if job.last_frame_url
+        else None
+    )  # Reuse the REST path layout so frontend URL normalization stays unchanged.
+    return serialize_job(
+        job,
+        output_url=output_proxy_url,
+        last_frame_url=last_frame_proxy_url,
+    )  # Keep WebSocket payloads aligned with the REST serializer.
+
+
+def _stream_remote_asset(remote_url: str) -> StreamingResponse:
+    try:
+        upstream_response = urlopen(
+            Request(
+                remote_url,
+                headers={
+                    "Accept": "*/*",
+                    "User-Agent": "Canva Banana Volcengine Service/0.1",
+                },
+            ),
+            timeout=60,
+        )  # Server-side downloads bypass the provider bucket's missing browser CORS headers.
+    except HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Volcengine asset download failed with HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Volcengine asset download failed: {exc.reason}") from exc
+
+    media_type = upstream_response.headers.get_content_type() or "application/octet-stream"  # Reuse the provider mime when available.
+    response_headers: dict[str, str] = {}
+    for header_name in ("Content-Disposition", "Content-Length", "ETag", "Last-Modified"):
+        header_value = upstream_response.headers.get(header_name)
+        if header_value:
+            response_headers[header_name] = header_value  # Mirror useful file metadata for direct opens and downloads.
+
+    def iter_content() -> Iterator[bytes]:
+        try:
+            while True:
+                chunk = upstream_response.read(1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            upstream_response.close()  # Release the upstream connection even if the client disconnects.
+
+    return StreamingResponse(iter_content(), media_type=media_type, headers=response_headers)
+
+
 @app.get("/health")
 def healthcheck() -> dict[str, object]:
     ffprobe_status = get_ffprobe_status()
@@ -97,6 +177,7 @@ def healthcheck() -> dict[str, object]:
 
 @app.post("/api/volcengine/jobs")
 async def submit_seedance_job(
+    request: FastAPIRequest,
     prompt: str = Form(...),
     model_id: str = Form(DEFAULT_MODEL_ID),
     variant: str = Form("smart"),
@@ -148,7 +229,7 @@ async def submit_seedance_job(
         )
         job = create_job(payload)
         payload = None  # The worker now owns the staged media lifecycle.
-        return serialize_job(job)
+        return _build_job_response(request, job)
     except ValueError as exc:
         if payload is not None:
             payload.cleanup()  # Discard staged files for rejected jobs.
@@ -164,8 +245,70 @@ async def submit_seedance_job(
 
 
 @app.get("/api/volcengine/jobs/{job_id}")
-def get_seedance_job(job_id: str) -> dict[str, object]:
+def get_seedance_job(job_id: str, request: FastAPIRequest) -> dict[str, object]:
     job = job_store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return serialize_job(job)
+    return _build_job_response(request, job)
+
+
+@app.websocket("/api/volcengine/jobs/{job_id}/ws")
+async def stream_seedance_job(job_id: str, websocket: WebSocket) -> None:
+    await websocket.accept()  # Accept first so the client receives an explicit close code on missing jobs.
+    job_queue: asyncio.Queue[JobState] = asyncio.Queue()  # Queue job snapshots as the worker mutates them.
+    event_loop = asyncio.get_running_loop()
+    websocket_base_url = str(websocket.base_url).rstrip("/")  # Build proxy asset URLs from the active request host.
+    closed = False
+
+    def handle_job_update(job: JobState) -> None:
+        if closed:
+            return
+        try:
+            event_loop.call_soon_threadsafe(job_queue.put_nowait, job)
+        except RuntimeError:
+            return  # Ignore late worker notifications after the request loop is gone.
+
+    subscription = job_store.subscribe(job_id, handle_job_update)
+    if subscription is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Job not found")
+        return
+
+    current_job, unsubscribe = subscription
+
+    try:
+        await websocket.send_json(_build_job_response_from_url(websocket_base_url, current_job))
+        if current_job.status in job_store.TERMINAL_STATUSES:
+            await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)  # Close immediately after the terminal snapshot is delivered.
+            return
+
+        while True:
+            next_job = await job_queue.get()
+            await websocket.send_json(_build_job_response_from_url(websocket_base_url, next_job))
+            if next_job.status in job_store.TERMINAL_STATUSES:
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)  # Deliver the final state before the socket shuts down.
+                return
+    except WebSocketDisconnect:
+        return
+    finally:
+        closed = True
+        unsubscribe()  # Remove the per-job listener when the client disconnects.
+
+
+@app.get("/api/volcengine/jobs/{job_id}/output", name="download_seedance_job_output")
+def download_seedance_job_output(job_id: str) -> StreamingResponse:
+    job = job_store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.output_url:
+        raise HTTPException(status_code=404, detail="Job output is not available")
+    return _stream_remote_asset(job.output_url)  # Proxy the generated video through the local backend for browser compatibility.
+
+
+@app.get("/api/volcengine/jobs/{job_id}/last-frame", name="download_seedance_job_last_frame")
+def download_seedance_job_last_frame(job_id: str) -> StreamingResponse:
+    job = job_store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.last_frame_url:
+        raise HTTPException(status_code=404, detail="Job last frame is not available")
+    return _stream_remote_asset(job.last_frame_url)  # Keep optional last-frame assets reachable through the same proxy path.

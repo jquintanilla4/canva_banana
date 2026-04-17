@@ -156,4 +156,32 @@ describe('useSelectionState (seedance 2 reference)', () => {
     expect(result.current.referenceAudioIds).toHaveLength(3);
     expect(onError).toHaveBeenCalledWith('Seedance 2 reference supports up to 3 audio tracks.');
   });
+
+  it('keeps seedance reference labels in the order assets were chosen across media types', () => {
+    const assets = [
+      buildCanvasMedia('image-1', 'image'),
+      buildCanvasMedia('image-2', 'image'),
+      buildCanvasMedia('video-1', 'video'),
+      buildCanvasMedia('audio-1', 'audio'),
+    ];
+    const fal = createFalStub();
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: assets,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => {
+      result.current.handleImageSelection('image-1');
+      result.current.handleImageSelection('image-2', { reference: true });
+      result.current.handleImageSelection('video-1', { reference: true });
+      result.current.handleImageSelection('audio-1', { reference: true });
+    });
+
+    expect(result.current.seedanceReferenceOrderIds).toEqual(['image-1', 'image-2', 'video-1', 'audio-1']);
+  });
 });

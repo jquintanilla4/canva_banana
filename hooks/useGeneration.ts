@@ -101,7 +101,7 @@ import type {
 } from '../types';
 import { Tool } from '../types';
 import { getImageBounds, isOverlapping } from '../utils/canvasGeometry';
-import { getNaturalSize, loadMediaFromBlob, rasterizeImages } from '../services/mediaService';
+import { getNaturalSize, isVideoFileType, loadMediaFromBlob, rasterizeImages } from '../services/mediaService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
 import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/volcengineService';
@@ -117,6 +117,10 @@ import {
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
 } from '../utils/seedanceReferences';
+import {
+  getSeedanceReferencePromptMentionError,
+  normalizeSeedanceReferencePromptMentions,
+} from '../utils/seedancePromptMentions';
 
 type UseGenerationArgs = {
   appMode: AppMode;
@@ -204,6 +208,18 @@ const mergeQueueLogMessages = (existing: string[], incoming?: string[]): string[
     next.push(normalized);
   });
   return next; // Keep queue logs de-duped across polls.
+};
+
+const fetchGeneratedVideoBlob = async (videoUrl: string, videoLabel: string): Promise<Blob> => {
+  const response = await fetch(videoUrl);
+  if (!response.ok) {
+    throw new Error(`${videoLabel} download failed (HTTP ${response.status}).`); // Surface backend proxy failures instead of handing HTML to the video loader.
+  }
+  const videoBlob = await response.blob();
+  if (videoBlob.type && !isVideoFileType(videoBlob.type)) {
+    throw new Error(`${videoLabel} did not return a video file (${videoBlob.type}).`); // Catch provider error documents before the canvas loader tries to decode them.
+  }
+  return videoBlob;
 };
 
 const applyVolcengineQueueUpdateToJob = (
@@ -359,6 +375,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
+    seedanceReferenceOrderIds,
     elementImageIds,
     videoLastFrameImageId,
     sourceVideoId,
@@ -386,15 +403,20 @@ export const useGeneration = (args: UseGenerationArgs) => {
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
-  }), [apiProvider, falModelMode, falVideoModelId, images, referenceAudioIds, referenceImageIds, referenceVideoIds, seedance2Variant, selectedImageIds]);
+    orderedReferenceIds: seedanceReferenceOrderIds,
+  }), [apiProvider, falModelMode, falVideoModelId, images, referenceAudioIds, referenceImageIds, referenceVideoIds, seedance2Variant, seedanceReferenceOrderIds, selectedImageIds]);
 
   const currentSeedanceRequestKey = useMemo(() => {
     if (apiProvider !== 'fal' || falModelMode !== 'video' || falVideoModelId !== SEEDANCE_2_VIDEO_MODEL_ID) {
       return null;
     }
 
+    const normalizedSeedancePrompt = seedance2Variant === 'reference'
+      ? normalizeSeedanceReferencePromptMentions(prompt)
+      : prompt;
+
     return buildSeedance2RequestKey({
-      prompt,
+      prompt: normalizedSeedancePrompt,
       variant: seedance2Variant,
       aspectRatio: seedance2AspectRatio,
       resolution: seedance2Resolution,
@@ -560,6 +582,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       referenceImageIds: baseReferenceImageIdsForRun,
       referenceVideoIds: baseReferenceVideoIdsForRun,
       referenceAudioIds: baseReferenceAudioIdsForRun,
+      orderedReferenceIds: seedanceReferenceOrderIds,
     });
     const elementImageIdsForRun = generationOverride ? generationOverride.elementImageIds ?? [] : elementImageIds;
     const videoLastFrameImageIdForRun = generationOverride?.videoLastFrameImageId ?? videoLastFrameImageId;
@@ -758,6 +781,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const primarySelection = primaryImageIdForRun ? images.find(img => img.id === primaryImageIdForRun) ?? null : null;
         const isSeedance2ReferenceMode = seedance2VariantForRun === 'reference';
         const referenceAssetCount = referenceImageIdsForRun.length + referenceVideoIdsForRun.length + referenceAudioIdsForRun.length;
+        const seedancePromptForRun = isSeedance2ReferenceMode
+          ? normalizeSeedanceReferencePromptMentions(trimmedPrompt)
+          : trimmedPrompt;
 
         if (!isSeedance2ReferenceMode && primarySelection && primarySelection.mediaType !== 'image') {
           setError('Seedance 2 Smart uses a still image as the first frame. Select an image or clear the selection.');
@@ -770,6 +796,17 @@ export const useGeneration = (args: UseGenerationArgs) => {
         if (isSeedance2ReferenceMode && referenceAssetCount === 0) {
           setError('Seedance 2 Reference requires at least one tagged reference asset.');
           return;
+        }
+        if (isSeedance2ReferenceMode) {
+          const promptMentionError = getSeedanceReferencePromptMentionError(seedancePromptForRun, {
+            imageCount: referenceImageIdsForRun.length,
+            videoCount: referenceVideoIdsForRun.length,
+            audioCount: referenceAudioIdsForRun.length,
+          });
+          if (promptMentionError) {
+            setError(promptMentionError);
+            return;
+          }
         }
         if (
           referenceImageIdsForRun.length > SEEDANCE_REFERENCE_IMAGE_LIMIT
@@ -833,7 +870,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         }
 
         const seedanceRequestKey = buildSeedance2RequestKey({
-          prompt: trimmedPrompt,
+          prompt: seedancePromptForRun,
           variant: seedance2VariantForRun,
           aspectRatio: seedance2AspectRatioForRun,
           resolution: seedance2ResolutionForRun,
@@ -860,7 +897,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
           const newJob: FalQueueJob = {
             id: volcengineJobId,
-            prompt: trimmedPrompt,
+            prompt: seedancePromptForRun,
             modelId: falModelIdForRun,
             modelLabel: jobModelLabel,
             provider: 'volcengine',
@@ -874,7 +911,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             direction: 'outbound',
             source: 'volcengine',
             title: jobModelLabel,
-            message: 'Submitting request',
+            message: 'Preparing request',
             data: { jobId: volcengineJobId, kind: 'video', variant: seedance2VariantForRun },
           });
           jobQueued = true;
@@ -905,7 +942,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             return new File([img.file], img.file.name || `seedance2-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
           }));
 
-          const videoResult = await generateSeedanceVideo(trimmedPrompt, {
+          const videoResult = await generateSeedanceVideo(seedancePromptForRun, {
             modelId: 'doubao-seedance-2-0-260128',
             variant: seedance2VariantForRun,
             aspectRatio: seedance2AspectRatioForRun,
@@ -939,8 +976,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           )));
 
           try {
-            const response = await fetch(videoResult.videoUrl);
-            const videoBlob = await response.blob();
+            const videoBlob = await fetchGeneratedVideoBlob(videoResult.videoUrl, 'Seedance 2 result');
             const fileType = videoBlob.type || 'video/mp4';
             const extension = fileType.split('/')[1]?.split(';')[0] || 'mp4';
             const videoFileName = `generated_seedance2_video.${extension}`;
@@ -1003,10 +1039,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
               metadata: {
                 source: 'generated',
                 modelLabel: jobModelLabel,
-                prompt: trimmedPrompt,
+                prompt: seedancePromptForRun,
                 generation: {
                   kind: 'video',
-                  prompt: trimmedPrompt,
+                  prompt: seedancePromptForRun,
                   provider: 'volcengine',
                   modelId: falModelIdForRun,
                   modelLabel: jobModelLabel,
@@ -1406,8 +1442,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         }));
 
         try {
-          const response = await fetch(videoResult.videoUrl);
-          const videoBlob = await response.blob();
+          const videoBlob = await fetchGeneratedVideoBlob(videoResult.videoUrl, `${jobModelLabel} result`);
           const fileType = videoBlob.type || 'video/mp4';
           const extension = fileType.split('/')[1]?.split(';')[0] || 'mp4';
           const videoFileName = `generated_video.${extension}`;

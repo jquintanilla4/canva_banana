@@ -17,7 +17,7 @@ const makeCanvasItem = (id: string, mediaType: CanvasImage['mediaType']): Canvas
 }); // Minimal canvas item shape for reference resolution tests.
 
 describe('buildEffectiveSeedanceReferenceIds', () => {
-  it('appends selected media after explicitly tagged seedance references', () => {
+  it('falls back to the active selection grouping when no explicit pick order is provided', () => {
     const images = [
       makeCanvasItem('selected-image', 'image'),
       makeCanvasItem('selected-video', 'video'),
@@ -37,9 +37,34 @@ describe('buildEffectiveSeedanceReferenceIds', () => {
     });
 
     expect(result).toEqual({
-      referenceImageIds: ['tagged-image', 'selected-image'],
-      referenceVideoIds: ['tagged-video', 'selected-video'],
-      referenceAudioIds: ['tagged-audio', 'selected-audio'],
+      referenceImageIds: ['selected-image', 'tagged-image'],
+      referenceVideoIds: ['selected-video', 'tagged-video'],
+      referenceAudioIds: ['selected-audio', 'tagged-audio'],
+    });
+  });
+
+  it('keeps the first chosen asset as Image1 when later picks are tagged as references', () => {
+    const images = [
+      makeCanvasItem('first-selected-image', 'image'),
+      makeCanvasItem('later-tagged-image', 'image'),
+      makeCanvasItem('later-tagged-video', 'video'),
+      makeCanvasItem('later-tagged-audio', 'audio'),
+    ];
+
+    const result = buildEffectiveSeedanceReferenceIds({
+      enabled: true,
+      images,
+      selectedImageIds: ['first-selected-image'],
+      referenceImageIds: ['later-tagged-image'],
+      referenceVideoIds: ['later-tagged-video'],
+      referenceAudioIds: ['later-tagged-audio'],
+      orderedReferenceIds: ['first-selected-image', 'later-tagged-image', 'later-tagged-video', 'later-tagged-audio'],
+    });
+
+    expect(result).toEqual({
+      referenceImageIds: ['first-selected-image', 'later-tagged-image'],
+      referenceVideoIds: ['later-tagged-video'],
+      referenceAudioIds: ['later-tagged-audio'],
     });
   });
 

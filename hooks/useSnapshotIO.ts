@@ -220,6 +220,7 @@ export function useSnapshotIO({
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
+    seedanceReferenceOrderIds,
     elementImageIds,
     videoLastFrameImageId,
     setSelectedImageIds,
@@ -227,6 +228,7 @@ export function useSnapshotIO({
     setReferenceImageIds,
     setReferenceVideoIds,
     setReferenceAudioIds,
+    setSeedanceReferenceOrderIds,
     setElementImageIds,
     setVideoLastFrameImageId,
   } = selection;
@@ -287,6 +289,7 @@ export function useSnapshotIO({
       referenceImageIds: [...referenceImageIds],
       ...(referenceVideoIds.length ? { referenceVideoIds: [...referenceVideoIds] } : {}),
       ...(referenceAudioIds.length ? { referenceAudioIds: [...referenceAudioIds] } : {}),
+      ...(seedanceReferenceOrderIds.length ? { seedanceReferenceOrderIds: [...seedanceReferenceOrderIds] } : {}), // Snapshot restore should preserve Seedance label order.
       ...(elementImageIds.length ? { elementImageIds: [...elementImageIds] } : {}),
       ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
     };
@@ -700,6 +703,7 @@ export function useSnapshotIO({
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
         setReferenceVideoIds(Array.isArray(meta.referenceVideoIds) ? [...meta.referenceVideoIds] : []);
         setReferenceAudioIds(Array.isArray(meta.referenceAudioIds) ? [...meta.referenceAudioIds] : []);
+        setSeedanceReferenceOrderIds(Array.isArray(meta.seedanceReferenceOrderIds) ? [...meta.seedanceReferenceOrderIds] : []); // Older snapshots safely fall back to rebuilding the order.
         setElementImageIds(Array.isArray(meta.elementImageIds) ? [...meta.elementImageIds] : []);
         if (typeof meta.videoLastFrameImageId === 'string' && meta.videoLastFrameImageId.length > 0) {
           setVideoLastFrameImageId(meta.videoLastFrameImageId);
@@ -712,6 +716,7 @@ export function useSnapshotIO({
         setReferenceImageIds([]);
         setReferenceVideoIds([]);
         setReferenceAudioIds([]);
+        setSeedanceReferenceOrderIds([]);
         setElementImageIds([]);
         setVideoLastFrameImageId(null);
       }

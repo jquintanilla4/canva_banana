@@ -310,6 +310,7 @@ export default function App() {
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
+    seedanceReferenceOrderIds,
     elementImageIds,
     videoLastFrameImageId,
     sourceVideoId,
@@ -921,7 +922,8 @@ export default function App() {
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
-  }), [images, isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
+    orderedReferenceIds: seedanceReferenceOrderIds,
+  }), [images, isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, seedanceReferenceOrderIds, selectedImageIds]);
   const {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,

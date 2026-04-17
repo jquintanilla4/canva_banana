@@ -260,7 +260,12 @@ def create_job(payload: SeedanceJobPayload) -> JobState:
     return job
 
 
-def serialize_job(job: JobState) -> dict[str, object]:
+def serialize_job(
+    job: JobState,
+    *,
+    output_url: str | None = None,
+    last_frame_url: str | None = None,
+) -> dict[str, object]:
     return {
         "id": job.id,
         "modelId": job.model_id,
@@ -273,8 +278,10 @@ def serialize_job(job: JobState) -> dict[str, object]:
         "logs": list(job.logs),
         "requestId": job.request_id,
         "remoteTaskId": job.remote_task_id,
-        "outputUrl": job.output_url,
-        "lastFrameUrl": job.last_frame_url,
+        "outputUrl": output_url if output_url is not None else job.output_url,
+        "providerOutputUrl": job.output_url,
+        "lastFrameUrl": last_frame_url if last_frame_url is not None else job.last_frame_url,
+        "providerLastFrameUrl": job.last_frame_url,
         "error": job.error,
         "provider": "volcengine",
-    }
+    }  # Return proxyable asset URLs without discarding the raw provider URLs used for debugging.

@@ -26,6 +26,100 @@ const getPromptBarViewportClampPx = (): number => {
   return Math.max(320, window.innerWidth - getPromptBarHorizontalGutterPx());
 };
 
+type ActiveKlingMention = {
+  startIndex: number;
+  query: string;
+};
+
+const ACTIVE_KLING_MENTION_REGEX = /^@[A-Za-z]*\d*$/; // Keep mention parsing limited to the autocomplete token under the caret.
+const KLING_SUGGESTION_MENU_WIDTH_PX = 160; // Match the Tailwind w-40 menu width so later mentions stay onscreen.
+const TEXTAREA_CARET_MIRROR_STYLE_PROPS = [ // Copy the text metrics that affect wrapped caret placement.
+  'boxSizing',
+  'width',
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+  'borderTopWidth',
+  'borderRightWidth',
+  'borderBottomWidth',
+  'borderLeftWidth',
+  'fontStyle',
+  'fontVariant',
+  'fontWeight',
+  'fontStretch',
+  'fontSize',
+  'fontFamily',
+  'lineHeight',
+  'letterSpacing',
+  'textTransform',
+  'textAlign',
+  'textIndent',
+  'textDecoration',
+  'direction',
+  'wordSpacing',
+  'tabSize',
+] as const;
+
+const getActiveKlingMention = (value: string, caret: number): ActiveKlingMention | null => {
+  const textBeforeCaret = value.slice(0, caret);
+  const mentionStartIndex = textBeforeCaret.lastIndexOf('@');
+  if (mentionStartIndex === -1) {
+    return null;
+  }
+  const mentionText = textBeforeCaret.slice(mentionStartIndex);
+  if (mentionText.length === 0 || /[\s]/.test(mentionText) || !ACTIVE_KLING_MENTION_REGEX.test(mentionText)) {
+    return null;
+  }
+  return {
+    startIndex: mentionStartIndex,
+    query: mentionText.slice(1),
+  };
+};
+
+const getTextareaCaretPosition = (
+  textarea: HTMLTextAreaElement,
+  value: string,
+  caret: number,
+): { left: number; top: number } | null => {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const computedStyle = window.getComputedStyle(textarea);
+  const mirror = document.createElement('div');
+  const marker = document.createElement('span');
+
+  mirror.setAttribute('aria-hidden', 'true');
+  mirror.style.position = 'absolute';
+  mirror.style.visibility = 'hidden';
+  mirror.style.pointerEvents = 'none';
+  mirror.style.whiteSpace = 'pre-wrap'; // Match textarea wrapping so the caret anchor stays on the active line.
+  mirror.style.wordBreak = 'break-word'; // Long tokens should wrap in the mirror just like the textarea.
+  mirror.style.overflowWrap = 'break-word';
+
+  TEXTAREA_CARET_MIRROR_STYLE_PROPS.forEach(property => {
+    mirror.style[property] = computedStyle[property];
+  });
+
+  mirror.textContent = value.slice(0, caret);
+  marker.textContent = value.slice(caret) || '.';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+
+  const mirrorRect = mirror.getBoundingClientRect();
+  const markerRect = marker.getBoundingClientRect();
+  const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight || '16');
+  const lineHeight = Number.isFinite(parsedLineHeight) ? parsedLineHeight : 16; // Browsers can return "normal", so keep the fallback numeric.
+
+  document.body.removeChild(mirror);
+
+  return {
+    left: markerRect.left - mirrorRect.left - textarea.scrollLeft,
+    top: markerRect.top - mirrorRect.top - textarea.scrollTop + lineHeight,
+  };
+};
+
 interface ModelOption {
   value: string;
   label: string;
@@ -111,6 +205,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const [showKlingSuggestions, setShowKlingSuggestions] = React.useState(false);
   const [suggestionPosition, setSuggestionPosition] = React.useState<{ left: number; top: number } | null>(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(0);
+  const [activeKlingQuery, setActiveKlingQuery] = React.useState('');
   const [promptBarMaxWidthPx, setPromptBarMaxWidthPx] = React.useState(() => getPromptBarBaseMaxWidthPx());
 
   const handleSubmitShortcut = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -252,49 +347,70 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     return Array.from({ length: klingReferenceCount }, (_, idx) => `@Image${idx + 1}`);
   }, [klingReferenceCount, klingSuggestionOptions, klingSuggestionsEnabled]);
 
+  const filteredKlingOptions = React.useMemo(() => {
+    if (!klingSuggestionsEnabled) {
+      return [];
+    }
+    if (activeKlingQuery.length === 0) {
+      return klingOptions;
+    }
+    const normalizedQuery = `@${activeKlingQuery.toLowerCase()}`;
+    return klingOptions.filter(option => option.toLowerCase().startsWith(normalizedQuery)); // Keep the list open while the user types the rest of the token.
+  }, [activeKlingQuery, klingOptions, klingSuggestionsEnabled]);
+
   useEffect(() => {
-    if (!showKlingSuggestions || klingOptions.length === 0) {
+    if (!showKlingSuggestions || filteredKlingOptions.length === 0) {
       setActiveSuggestionIndex(0);
       return;
     }
-    setActiveSuggestionIndex(prev => Math.min(Math.max(prev, 0), klingOptions.length - 1));
-  }, [klingOptions.length, showKlingSuggestions]);
+    setActiveSuggestionIndex(prev => Math.min(Math.max(prev, 0), filteredKlingOptions.length - 1));
+  }, [filteredKlingOptions.length, showKlingSuggestions]);
 
   const handlePromptChange = (value: string, selectionStart: number | null) => {
     onPromptChange(value);
     if (!klingSuggestionsEnabled || klingOptions.length === 0) {
       setShowKlingSuggestions(false);
+      setActiveKlingQuery('');
       setActiveSuggestionIndex(0);
       return;
     }
     const caret = selectionStart ?? value.length;
-    const charBeforeCaret = value.charAt(Math.max(0, caret - 1));
-    if (charBeforeCaret === '@') {
-      setShowKlingSuggestions(true);
-      setActiveSuggestionIndex(0);
-      const textarea = textareaRef.current;
-      if (textarea) {
-        const { offsetLeft, offsetTop } = textarea;
-        const lineHeight = parseFloat(window.getComputedStyle(textarea).lineHeight || '16');
-        const font = window.getComputedStyle(textarea).font || `${window.getComputedStyle(textarea).fontSize} ${window.getComputedStyle(textarea).fontFamily}`;
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const textUntilCaret = value.slice(0, caret);
-        let caretX = 0;
-        if (ctx) {
-          ctx.font = font;
-          const lines = textUntilCaret.split('\n');
-          const currentLine = lines[lines.length - 1] ?? '';
-          caretX = ctx.measureText(currentLine).width;
-        }
-        const lineIndex = textUntilCaret.split('\n').length - 1;
-        const top = offsetTop + lineIndex * lineHeight + lineHeight;
-        setSuggestionPosition({ left: offsetLeft + caretX + 14, top });
-      }
-    } else {
+    const activeMention = getActiveKlingMention(value, caret);
+    if (!activeMention) {
       setShowKlingSuggestions(false);
+      setActiveKlingQuery('');
       setSuggestionPosition(null);
       setActiveSuggestionIndex(0);
+      return;
+    }
+
+    const normalizedQuery = `@${activeMention.query.toLowerCase()}`;
+    const hasMatchingOptions = activeMention.query.length === 0
+      || klingOptions.some(option => option.toLowerCase().startsWith(normalizedQuery));
+    if (!hasMatchingOptions) {
+      setShowKlingSuggestions(false);
+      setActiveKlingQuery(activeMention.query);
+      setSuggestionPosition(null);
+      setActiveSuggestionIndex(0);
+      return;
+    }
+
+    setShowKlingSuggestions(true);
+    setActiveKlingQuery(activeMention.query);
+    setActiveSuggestionIndex(0);
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const { offsetLeft, offsetTop } = textarea;
+      const caretPosition = getTextareaCaretPosition(textarea, value, caret);
+      if (!caretPosition) {
+        setSuggestionPosition(null);
+        return;
+      }
+      const maxLeft = Math.max(offsetLeft, offsetLeft + textarea.clientWidth - KLING_SUGGESTION_MENU_WIDTH_PX); // Clamp later mentions back inside the prompt bar.
+      setSuggestionPosition({
+        left: Math.min(offsetLeft + caretPosition.left, maxLeft),
+        top: offsetTop + caretPosition.top,
+      });
     }
   };
 
@@ -303,24 +419,24 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       handleSubmitShortcut(event);
       return;
     }
-    if (!showKlingSuggestions || klingOptions.length === 0) {
+    if (!showKlingSuggestions || filteredKlingOptions.length === 0) {
       handleSubmitShortcut(event);
       return;
     }
 
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setActiveSuggestionIndex(prev => (prev + 1) % klingOptions.length);
+      setActiveSuggestionIndex(prev => (prev + 1) % filteredKlingOptions.length);
       return;
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      setActiveSuggestionIndex(prev => (prev - 1 + klingOptions.length) % klingOptions.length);
+      setActiveSuggestionIndex(prev => (prev - 1 + filteredKlingOptions.length) % filteredKlingOptions.length);
       return;
     }
     if (event.key === 'Enter') {
       event.preventDefault();
-      const suggestion = klingOptions[activeSuggestionIndex] ?? klingOptions[0];
+      const suggestion = filteredKlingOptions[activeSuggestionIndex] ?? filteredKlingOptions[0];
       if (suggestion) {
         insertKlingSuggestion(suggestion);
       }
@@ -328,6 +444,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     }
     if (event.key === 'Escape') {
       setShowKlingSuggestions(false);
+      setActiveKlingQuery('');
       setSuggestionPosition(null);
       setActiveSuggestionIndex(0);
       return;
@@ -340,11 +457,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     if (!textarea) return;
     const value = textarea.value;
     const caret = textarea.selectionStart;
-    const startIdx = value.lastIndexOf('@', caret - 1);
-    if (startIdx === -1) {
+    const activeMention = getActiveKlingMention(value, caret);
+    if (!activeMention) {
       return;
     }
-    const before = value.slice(0, startIdx);
+    const before = value.slice(0, activeMention.startIndex);
     const after = value.slice(caret);
     const nextValue = `${before}${suggestion}${after}`;
     onPromptChange(nextValue);
@@ -354,6 +471,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       textarea.focus();
     });
     setShowKlingSuggestions(false);
+    setActiveKlingQuery('');
+    setSuggestionPosition(null);
     setActiveSuggestionIndex(0);
   };
 
@@ -428,10 +547,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               style={{ minHeight: `${PROMPT_TEXTAREA_MIN_HEIGHT_REM}rem`, maxHeight: `${PROMPT_TEXTAREA_MAX_HEIGHT_REM}rem` }}
               aria-label="Prompt input"
             />
-            {showKlingSuggestions && klingOptions.length > 0 && suggestionPosition && (
+            {showKlingSuggestions && filteredKlingOptions.length > 0 && suggestionPosition && (
               <div className="absolute z-20" style={{ left: suggestionPosition.left, top: suggestionPosition.top }}>
                 <div className="mt-1 w-40 rounded-md border border-gray-700 bg-gray-800 shadow-lg" role="listbox">
-                  {klingOptions.map((option, index) => {
+                  {filteredKlingOptions.map((option, index) => {
                     const isActive = index === activeSuggestionIndex;
                     return (
                     <button

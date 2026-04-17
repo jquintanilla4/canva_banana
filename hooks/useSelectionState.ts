@@ -56,6 +56,7 @@ export type SelectionStateResult = {
   referenceImageIds: string[];
   referenceVideoIds: string[];
   referenceAudioIds: string[];
+  seedanceReferenceOrderIds: string[];
   elementImageIds: string[];
   videoLastFrameImageId: string | null;
   sourceVideoId: string | null;
@@ -70,6 +71,7 @@ export type SelectionStateResult = {
   setReferenceImageIds: Dispatch<SetStateAction<string[]>>;
   setReferenceVideoIds: Dispatch<SetStateAction<string[]>>;
   setReferenceAudioIds: Dispatch<SetStateAction<string[]>>;
+  setSeedanceReferenceOrderIds: Dispatch<SetStateAction<string[]>>;
   setElementImageIds: Dispatch<SetStateAction<string[]>>;
   setVideoLastFrameImageId: Dispatch<SetStateAction<string | null>>;
   setSourceVideoId: Dispatch<SetStateAction<string | null>>;
@@ -144,6 +146,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const [referenceImageIds, setReferenceImageIds] = useState<string[]>([]);
   const [referenceVideoIds, setReferenceVideoIds] = useState<string[]>([]);
   const [referenceAudioIds, setReferenceAudioIds] = useState<string[]>([]);
+  const [seedanceReferenceOrderIds, setSeedanceReferenceOrderIds] = useState<string[]>([]);
   const [elementImageIds, setElementImageIds] = useState<string[]>([]);
   const [videoLastFrameImageId, setVideoLastFrameImageId] = useState<string | null>(null);
   const [sourceVideoId, setSourceVideoId] = useState<string | null>(null);
@@ -173,6 +176,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       && referenceImageIds.length === 0
       && referenceVideoIds.length === 0
       && referenceAudioIds.length === 0
+      && seedanceReferenceOrderIds.length === 0
       && elementImageIds.length === 0
       && !videoLastFrameImageId
       && !sourceVideoId
@@ -185,11 +189,12 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setReferenceImageIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
     setReferenceVideoIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
     setReferenceAudioIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
+    setSeedanceReferenceOrderIds(prevIds => prevIds.filter(id => imageIdSet.has(id))); // Dropped assets should also leave the Seedance label order.
     setElementImageIds(prevIds => prevIds.filter(id => imageIdSet.has(id)));
     setVideoLastFrameImageId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
     setSourceVideoId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
     setSourceAudioId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
-  }, [elementImageIds.length, images, referenceAudioIds.length, referenceImageIds.length, referenceVideoIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
+  }, [elementImageIds.length, images, referenceAudioIds.length, referenceImageIds.length, referenceVideoIds.length, seedanceReferenceOrderIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
 
   useEffect(() => {
     if (isSeedance2ReferenceMode) {
@@ -202,6 +207,30 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       setReferenceAudioIds([]);
     }
   }, [isSeedance2ReferenceMode, referenceAudioIds.length, referenceVideoIds.length]);
+
+  useEffect(() => {
+    const effectiveSeedanceReferenceIds = isSeedance2ReferenceMode
+      ? Array.from(new Set([
+        ...selectedImageIds,
+        ...referenceImageIds,
+        ...referenceVideoIds,
+        ...referenceAudioIds,
+      ]))
+      : [];
+
+    setSeedanceReferenceOrderIds(prevIds => {
+      if (effectiveSeedanceReferenceIds.length === 0) {
+        return prevIds.length === 0 ? prevIds : []; // Empty selections should also clear the order cache.
+      }
+      const effectiveSeedanceReferenceIdSet = new Set(effectiveSeedanceReferenceIds); // Only keep ids that still count as active refs.
+      const preservedIds = prevIds.filter(id => effectiveSeedanceReferenceIdSet.has(id)); // Existing picks keep their place.
+      const preservedIdSet = new Set(preservedIds); // New ids append after preserved ones.
+      const appendedIds = effectiveSeedanceReferenceIds.filter(id => !preservedIdSet.has(id));
+      const nextIds = [...preservedIds, ...appendedIds];
+      const isUnchanged = nextIds.length === prevIds.length && nextIds.every((id, index) => id === prevIds[index]); // Avoid extra state churn when nothing moved.
+      return isUnchanged ? prevIds : nextIds;
+    });
+  }, [isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
 
   // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All / Scail / Lip Sync).
   useEffect(() => {
@@ -633,6 +662,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
+    seedanceReferenceOrderIds,
     elementImageIds,
     videoLastFrameImageId,
     sourceVideoId,
@@ -647,6 +677,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setReferenceImageIds,
     setReferenceVideoIds,
     setReferenceAudioIds,
+    setSeedanceReferenceOrderIds,
     setElementImageIds,
     setVideoLastFrameImageId,
     setSourceVideoId,

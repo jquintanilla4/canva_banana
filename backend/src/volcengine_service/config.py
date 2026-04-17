@@ -8,16 +8,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-def _find_env_path() -> Path:
+def _find_env_path(file_name: str) -> Path:
     cwd = Path.cwd()  # Start from the current working directory.
     for candidate in (cwd, *cwd.parents):
-        env_path = candidate / ".env"  # Prefer the repo-level env file.
+        env_path = candidate / file_name  # Search upward so repo-root env files still load from backend commands.
         if env_path.exists():
             return env_path
-    return cwd / ".env"  # Fall back to the local cwd path.
+    return cwd / file_name  # Fall back to the local cwd path.
 
 
-load_dotenv(dotenv_path=_find_env_path(), override=False)  # Respect existing shell env values.
+load_dotenv(dotenv_path=_find_env_path(".env.local"), override=False)  # Local overrides should win when shell env is absent.
+load_dotenv(dotenv_path=_find_env_path(".env"), override=False)  # Shared defaults fill any keys missing from .env.local.
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ def get_settings() -> Settings:
         volcengine_secret_key=os.environ.get("VOLCENGINE_SECRET_KEY", "").strip(),  # TOS secret key.
         tos_bucket_name=os.environ.get("TOS_BUCKET_NAME", "seedance-assets").strip() or "seedance-assets",  # Public asset bucket.
         tos_region=os.environ.get("TOS_REGION", "cn-beijing").strip() or "cn-beijing",  # Bucket region.
-        poll_interval_seconds=max(2, int(os.environ.get("VOLCENGINE_POLL_INTERVAL_SECONDS", "5"))),  # Backend poll cadence.
+        poll_interval_seconds=max(2, int(os.environ.get("VOLCENGINE_POLL_INTERVAL_SECONDS", "15"))),  # Backend poll cadence defaults to 15 seconds.
         job_ttl_seconds=max(300, int(os.environ.get("VOLCENGINE_JOB_TTL_SECONDS", "14400"))),  # Drop old finished jobs after 4 hours by default.
         max_terminal_jobs=max(10, int(os.environ.get("VOLCENGINE_MAX_TERMINAL_JOBS", "400"))),  # Keep extra completed jobs around without growing forever.
         max_logs_per_job=max(10, int(os.environ.get("VOLCENGINE_MAX_LOGS_PER_JOB", "100"))),  # Preserve more queue history while still capping memory growth.

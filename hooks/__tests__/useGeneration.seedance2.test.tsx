@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
-import { Tool, type CanvasImage } from '../../types';
+import { Tool, type CanvasImage, type FalQueueJob } from '../../types';
 import { generateSeedanceVideo } from '../../services/volcengineService';
 import type { UseFalSettingsResult } from '../useFalSettings';
 import type { SelectionStateResult } from '../useSelectionState';
@@ -94,6 +94,7 @@ const createSelectionStub = (overrides: Partial<SelectionStateResult> = {}): Sel
   referenceImageIds: [],
   referenceVideoIds: [],
   referenceAudioIds: [],
+  seedanceReferenceOrderIds: [],
   elementImageIds: [],
   videoLastFrameImageId: null,
   sourceVideoId: null,
@@ -108,6 +109,7 @@ const createSelectionStub = (overrides: Partial<SelectionStateResult> = {}): Sel
   setReferenceImageIds: vi.fn(),
   setReferenceVideoIds: vi.fn(),
   setReferenceAudioIds: vi.fn(),
+  setSeedanceReferenceOrderIds: vi.fn(),
   setElementImageIds: vi.fn(),
   setVideoLastFrameImageId: vi.fn(),
   setSourceVideoId: vi.fn(),
@@ -275,5 +277,125 @@ describe('useGeneration (seedance 2)', () => {
 
     expect(setError).toHaveBeenCalledWith('Seedance 2 reference audio clips must total 15 seconds or less.');
     expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+  });
+
+  it('normalizes manually typed Seedance image mentions before submit', async () => {
+    const fal = createFalStub();
+    fal.seedance2Variant = 'reference';
+    const image1 = buildCanvasMedia('image-1', 'image');
+
+    vi.mocked(generateSeedanceVideo).mockImplementation(() => new Promise(() => {})); // Keep the request pending so we can inspect the submit payload.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Match @image 1 exactly',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [image1.id],
+        referenceImageIds: [image1.id],
+        seedanceReferenceOrderIds: [image1.id],
+      }),
+      images: [image1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateSeedanceVideo)).toHaveBeenCalledWith(
+      'Match @Image1 exactly',
+      expect.any(Object),
+    );
+  });
+
+  it('blocks Seedance reference submissions when the prompt mentions an unavailable label', async () => {
+    const fal = createFalStub();
+    fal.seedance2Variant = 'reference';
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const setError = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Match @Image2 exactly',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [image1.id],
+        referenceImageIds: [image1.id],
+        seedanceReferenceOrderIds: [image1.id],
+      }),
+      images: [image1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(setError).toHaveBeenCalledWith('@Image2 does not match any selected Seedance reference. Check the canvas label and try again.');
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the normalized backend reachability error in the queue row and banner', async () => {
+    const backendMessage = 'Seedance 2 could not reach the local Volcengine backend at http://localhost:8000. Run `uv sync --project backend` once, then `npm run backend:dev`.';
+    let queuedJobs: FalQueueJob[] = [];
+    vi.mocked(generateSeedanceVideo).mockRejectedValueOnce(new Error(backendMessage));
+
+    const setError = vi.fn();
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      queuedJobs = typeof value === 'function' ? value(queuedJobs) : value;
+    });
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A fox running through snow',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal: createFalStub(),
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs,
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(setError).toHaveBeenCalledWith(backendMessage);
+    expect(queuedJobs).toHaveLength(1);
+    expect(queuedJobs[0]).toEqual(expect.objectContaining({
+      provider: 'volcengine',
+      status: 'FAILED',
+      error: backendMessage,
+    }));
   });
 });

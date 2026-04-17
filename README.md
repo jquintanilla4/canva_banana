@@ -38,7 +38,8 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
 
 2. **Set up environment variables:**
    - Set `GEMINI_API_KEY` in [.env.local](.env.local) for Google Gemini.
-   - Set `FAL_API_KEY` for Fal.ai.
+   - Set `FAL_API_KEY` in [.env.local](.env.local) for Fal.ai.
+   - Set `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` in [.env.local](.env.local) for Seedance 2.
    - Optional: `FAL_API_URL` to point at a different gateway.
    - Optional: `FAL_MODEL_ID` to override the default Fal image model.
    
@@ -61,6 +62,7 @@ uv run --project backend uvicorn volcengine_service.main:app --app-dir backend/s
 ```
 
 - `uv sync --project backend` installs a bundled `ffprobe` fallback for reference audio/video validation.
+- The backend now reads `.env.local` first and falls back to `.env`, so the same repo-root env file works for Vite and FastAPI.
 - If you already onboarded before this dependency was added, rerun `uv sync --project backend` after pulling the latest changes.
 - You can override the binary location with `VOLCENGINE_FFPROBE_PATH` if your machine already has a preferred `ffprobe` install.
 
