@@ -106,6 +106,17 @@ import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
 import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/volcengineService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
+import {
+  buildEffectiveSeedanceReferenceIds,
+  getCanvasMediaDurationSeconds,
+  SEEDANCE_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS,
+  SEEDANCE_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS,
+  SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS,
+  SEEDANCE_REFERENCE_VIDEO_LIMIT,
+  SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
+} from '../utils/seedanceReferences';
 
 type UseGenerationArgs = {
   appMode: AppMode;
@@ -364,6 +375,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setVideoLastFrameImageId,
   } = selection;
 
+  const {
+    referenceImageIds: effectiveSeedanceReferenceImageIds,
+    referenceVideoIds: effectiveSeedanceReferenceVideoIds,
+    referenceAudioIds: effectiveSeedanceReferenceAudioIds,
+  } = useMemo(() => buildEffectiveSeedanceReferenceIds({
+    enabled: apiProvider === 'fal' && falModelMode === 'video' && falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID && seedance2Variant === 'reference',
+    images,
+    selectedImageIds,
+    referenceImageIds,
+    referenceVideoIds,
+    referenceAudioIds,
+  }), [apiProvider, falModelMode, falVideoModelId, images, referenceAudioIds, referenceImageIds, referenceVideoIds, seedance2Variant, selectedImageIds]);
+
   const currentSeedanceRequestKey = useMemo(() => {
     if (apiProvider !== 'fal' || falModelMode !== 'video' || falVideoModelId !== SEEDANCE_2_VIDEO_MODEL_ID) {
       return null;
@@ -379,9 +403,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
       cameraFixed: seedance2CameraFixed,
       primaryImageId,
       videoLastFrameImageId,
-      referenceImageIds,
-      referenceVideoIds,
-      referenceAudioIds,
+      referenceImageIds: effectiveSeedanceReferenceImageIds,
+      referenceVideoIds: effectiveSeedanceReferenceVideoIds,
+      referenceAudioIds: effectiveSeedanceReferenceAudioIds,
       images,
     });
   }, [
@@ -391,9 +415,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     images,
     primaryImageId,
     prompt,
-    referenceAudioIds,
-    referenceImageIds,
-    referenceVideoIds,
+    effectiveSeedanceReferenceAudioIds,
+    effectiveSeedanceReferenceImageIds,
+    effectiveSeedanceReferenceVideoIds,
     seedance2AspectRatio,
     seedance2CameraFixed,
     seedance2Duration,
@@ -522,9 +546,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ? images.find(img => img.id === primaryImageIdForRun) || null
       : null;
     const activePrimary = isImageCanvasMedia(primaryImageForRun) ? primaryImageForRun : null;
-    const referenceImageIdsForRun = generationOverride ? generationOverride.referenceImageIds ?? [] : referenceImageIds;
-    const referenceVideoIdsForRun = generationOverride ? generationOverride.referenceVideoIds ?? [] : referenceVideoIds;
-    const referenceAudioIdsForRun = generationOverride ? generationOverride.referenceAudioIds ?? [] : referenceAudioIds;
+    const baseReferenceImageIdsForRun = generationOverride ? generationOverride.referenceImageIds ?? [] : referenceImageIds;
+    const baseReferenceVideoIdsForRun = generationOverride ? generationOverride.referenceVideoIds ?? [] : referenceVideoIds;
+    const baseReferenceAudioIdsForRun = generationOverride ? generationOverride.referenceAudioIds ?? [] : referenceAudioIds;
+    const {
+      referenceImageIds: referenceImageIdsForRun,
+      referenceVideoIds: referenceVideoIdsForRun,
+      referenceAudioIds: referenceAudioIdsForRun,
+    } = buildEffectiveSeedanceReferenceIds({
+      enabled: seedance2VariantForRun === 'reference' && !generationOverride,
+      images,
+      selectedImageIds,
+      referenceImageIds: baseReferenceImageIdsForRun,
+      referenceVideoIds: baseReferenceVideoIdsForRun,
+      referenceAudioIds: baseReferenceAudioIdsForRun,
+    });
     const elementImageIdsForRun = generationOverride ? generationOverride.elementImageIds ?? [] : elementImageIds;
     const videoLastFrameImageIdForRun = generationOverride?.videoLastFrameImageId ?? videoLastFrameImageId;
     const sourceVideoIdForRun = generationOverride?.sourceVideoId ?? sourceVideoId;
@@ -735,8 +771,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2 Reference requires at least one tagged reference asset.');
           return;
         }
-        if (referenceImageIdsForRun.length > 2 || referenceVideoIdsForRun.length > 2 || referenceAudioIdsForRun.length > 1) {
-          setError('Seedance 2 Reference supports up to 2 images, 2 videos, and 1 audio.');
+        if (
+          referenceImageIdsForRun.length > SEEDANCE_REFERENCE_IMAGE_LIMIT
+          || referenceVideoIdsForRun.length > SEEDANCE_REFERENCE_VIDEO_LIMIT
+          || referenceAudioIdsForRun.length > SEEDANCE_REFERENCE_AUDIO_LIMIT
+        ) {
+          setError(`Seedance 2 Reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips.`);
           return;
         }
 
@@ -763,12 +803,32 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2 video references must be videos on the canvas.');
           return;
         }
+        const referenceVideoDurations = referenceVideoCanvasItems.map(getCanvasMediaDurationSeconds); // Seedance validates reference video duration per clip and in total.
+        if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS || durationSeconds > SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)) {
+          setError(`Seedance 2 reference videos must each be between ${SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS} and ${SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS} seconds.`);
+          return;
+        }
+        const totalReferenceVideoDurationSeconds = referenceVideoDurations.reduce((totalDurationSeconds, durationSeconds) => totalDurationSeconds + (durationSeconds ?? 0), 0);
+        if (totalReferenceVideoDurationSeconds > SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS) {
+          setError(`Seedance 2 reference videos must total ${SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS} seconds or less.`);
+          return;
+        }
 
         const referenceAudioCanvasItems = referenceAudioIdsForRun
           .map(id => images.find(img => img.id === id))
           .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'audio'));
         if (referenceAudioCanvasItems.length !== referenceAudioIdsForRun.length) {
           setError('Seedance 2 audio references must be audio clips on the canvas.');
+          return;
+        }
+        const referenceAudioDurations = referenceAudioCanvasItems.map(getCanvasMediaDurationSeconds); // Seedance validates reference audio duration per clip and in total.
+        if (referenceAudioDurations.some(durationSeconds => durationSeconds === null || durationSeconds < SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS || durationSeconds > SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)) {
+          setError(`Seedance 2 reference audio clips must each be between ${SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS} and ${SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS} seconds.`);
+          return;
+        }
+        const totalReferenceAudioDurationSeconds = referenceAudioDurations.reduce((totalDurationSeconds, durationSeconds) => totalDurationSeconds + (durationSeconds ?? 0), 0);
+        if (totalReferenceAudioDurationSeconds > SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS) {
+          setError(`Seedance 2 reference audio clips must total ${SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS} seconds or less.`);
           return;
         }
 

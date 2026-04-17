@@ -23,6 +23,8 @@ class MediaInput:
     content_type: str
     temp_path: Path
     size_bytes: int
+    duration_seconds: float | None = None
+    duration_probe_skipped: bool = False
 
     def read_bytes(self) -> bytes:
         return self.temp_path.read_bytes()  # Read the staged upload only when the worker needs it.

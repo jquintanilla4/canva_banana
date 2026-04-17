@@ -12,6 +12,11 @@ import {
   WAN_26_I2V_MODEL_ID,
   type FalModelId,
 } from '../services/modelConfig';
+import {
+  SEEDANCE_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE_REFERENCE_VIDEO_LIMIT,
+} from '../utils/seedanceReferences';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -172,14 +177,14 @@ export function useGenerationGuards({
         if (isSeedance2VideoModel) {
           if (isSeedance2ReferenceMode) {
             return seedance2ReferenceAssetCount > 0
-              ? 'Seedance 2 Reference: shift-click up to 2 images, 2 videos, and 1 audio, then describe the scene you want...'
-              : 'Seedance 2 Reference: shift-click up to 2 images, 2 videos, and 1 audio to tag references, then describe the scene...';
+              ? `Seedance 2 Reference: select or shift-click up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips as @Image1, @Video1, or @Audio1, then describe the scene you want...`
+              : 'Seedance 2 Reference: select canvas media to label @Image1, @Video1, or @Audio1 references, then describe the scene...';
           }
           if (hasSeedance2SmartUnsupportedSelection) {
             return 'Seedance 2 Smart uses a still image as the first frame. Clear the current video or audio selection to run text-to-video...';
           }
           if (hasPrimaryImage) {
-            return 'Describe the motion or scene you want this image to turn into, or add an end frame for first/last-frame mode...';
+            return 'Describe the motion or scene you want this image to turn into, or shift-click another still image to set the end frame...';
           }
           return 'Describe the video you want to create, or select an image for image-to-video...';
         }

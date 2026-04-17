@@ -888,7 +888,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [VEO_31_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [WAN_26_I2V_MODEL_ID]: 0,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
-  [SEEDANCE_2_VIDEO_MODEL_ID]: 2,
+  [SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Seedance 2 reference mode supports up to 9 image refs.
   [SCAIL_VIDEO_MODEL_ID]: 0,
 };
 

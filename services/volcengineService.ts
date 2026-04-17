@@ -45,6 +45,14 @@ type VolcengineJobResponse = {
   provider: 'volcengine';
 };
 
+type VolcengineHealthResponse = {
+  status: string;
+  ffprobeAvailable?: boolean;
+  ffprobeSource?: 'env' | 'system' | 'bundled' | 'missing';
+  ffprobePath?: string | null;
+  ffprobeWarning?: string | null;
+};
+
 const DEFAULT_VOLCENGINE_API_BASE_URL = 'http://localhost:8000'; // Local backend default.
 const POLL_INTERVAL_MS = 3000; // Keep UI updates reasonably fresh.
 
@@ -69,6 +77,38 @@ const parseJobResponse = async (response: Response): Promise<VolcengineJobRespon
     throw new Error(typeof (data as { detail?: unknown }).detail === 'string' ? (data as { detail?: string }).detail as string : 'Volcengine request failed.');
   }
   return data as VolcengineJobResponse;
+};
+
+const maybeLogFfprobeFallback = async (
+  baseUrl: string,
+  options: GenerateSeedanceVideoOptions,
+): Promise<void> => {
+  if (!options.referenceVideoFiles?.length && !options.referenceAudioFiles?.length) {
+    return;
+  }
+
+  try {
+    const healthResponse = await fetch(`${baseUrl}/health`);
+    if (!healthResponse.ok) {
+      return;
+    }
+    const health = await healthResponse.json() as VolcengineHealthResponse;
+    if (health.ffprobeAvailable === false) {
+      addDebugLog({
+        direction: 'info',
+        source: 'volcengine',
+        title: 'Volcengine backend',
+        message: 'ffprobe unavailable; backend reference duration validation is using the fallback path',
+        data: {
+          ffprobeSource: health.ffprobeSource,
+          ffprobePath: health.ffprobePath,
+          ffprobeWarning: health.ffprobeWarning,
+        },
+      });
+    }
+  } catch {
+    // Health preflight warnings should never block a generation request.
+  }
 };
 
 export const generateSeedanceVideo = async (
@@ -115,6 +155,7 @@ export const generateSeedanceVideo = async (
   });
 
   const baseUrl = getVolcengineApiBaseUrl();
+  await maybeLogFfprobeFallback(baseUrl, options);
   const submitResponse = await fetch(`${baseUrl}/api/volcengine/jobs`, {
     method: 'POST',
     body: formData,

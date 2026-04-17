@@ -51,6 +51,19 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
 
    The Vite dev server runs on `http://localhost:3000`.
 
+### Seedance 2 Backend
+
+Seedance 2 uses the local FastAPI backend in [backend/README.md](backend/README.md).
+
+```bash
+uv sync --project backend
+uv run --project backend uvicorn volcengine_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000
+```
+
+- `uv sync --project backend` installs a bundled `ffprobe` fallback for reference audio/video validation.
+- If you already onboarded before this dependency was added, rerun `uv sync --project backend` after pulling the latest changes.
+- You can override the binary location with `VOLCENGINE_FFPROBE_PATH` if your machine already has a preferred `ffprobe` install.
+
 ### Other Commands
 
 ```bash

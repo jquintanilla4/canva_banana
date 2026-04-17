@@ -13,6 +13,11 @@ import {
 } from '../services/modelConfig';
 import type { ApiProviderId, CanvasImage, CanvasNote } from '../types';
 import type { UseFalSettingsResult } from './useFalSettings';
+import {
+  SEEDANCE_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE_REFERENCE_VIDEO_LIMIT,
+} from '../utils/seedanceReferences';
 
 type SelectionFalSettings = Pick<
   UseFalSettingsResult,
@@ -287,10 +292,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         if (prevIds.includes(imageId)) {
           return prevIds.filter(id => id !== imageId);
         }
-        if (prevIds.length < 2) {
+        if (prevIds.length < SEEDANCE_REFERENCE_VIDEO_LIMIT) {
           return [...prevIds, imageId];
         }
-        onError('Seedance 2 reference supports up to 2 videos.');
+        onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
         return prevIds;
       });
       return;
@@ -305,10 +310,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         if (prevIds.includes(imageId)) {
           return prevIds.filter(id => id !== imageId);
         }
-        if (prevIds.length < 1) {
-          return [imageId];
+        if (prevIds.length < SEEDANCE_REFERENCE_AUDIO_LIMIT) {
+          return [...prevIds, imageId];
         }
-        onError('Seedance 2 reference supports up to 1 audio track.');
+        onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
         return prevIds;
       });
       return;
@@ -403,10 +408,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
           if (prevIds.includes(imageId)) {
             return prevIds.filter(id => id !== imageId);
           }
-          if (prevIds.length < 2) {
+          if (prevIds.length < SEEDANCE_REFERENCE_IMAGE_LIMIT) {
             return [...prevIds, imageId];
           }
-          onError('Seedance 2 reference supports up to 2 images.');
+          onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images.`);
           return prevIds;
         });
         return;

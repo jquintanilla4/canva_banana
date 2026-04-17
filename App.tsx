@@ -60,6 +60,12 @@ import { useDebugLogState } from './hooks/useDebugLogState';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
 import type { FalModelMode } from './services/modelConfig';
 import {
+  buildEffectiveSeedanceReferenceIds,
+  SEEDANCE_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE_REFERENCE_VIDEO_LIMIT,
+} from './utils/seedanceReferences';
+import {
   EMPTY_CAMERA_SELECTION,
   buildCameraPromptPrefix,
   cloneCameraSelection,
@@ -336,7 +342,6 @@ export default function App() {
     () => selectedImageIds.some(id => images.find(img => img.id === id)?.mediaType === 'image'),
     [images, selectedImageIds],
   );
-
   // Handles snapshot import/export so canvases can be saved, loaded, or shared.
   const {
     exportSnapshot: handleExportSnapshot,
@@ -904,14 +909,30 @@ export default function App() {
     }
   }, [appMode, handleModeChange, isAnnotateModeDisabled]);
 
+  const isSeedance2ReferenceMode = fal.isSeedance2VideoModel && fal.seedance2Variant === 'reference'; // Seedance reference mode labels the merged selected and tagged refs.
+  const {
+    referenceImageIds: effectiveSeedanceReferenceImageIds,
+    referenceVideoIds: effectiveSeedanceReferenceVideoIds,
+    referenceAudioIds: effectiveSeedanceReferenceAudioIds,
+  } = useMemo(() => buildEffectiveSeedanceReferenceIds({
+    enabled: isSeedance2ReferenceMode,
+    images,
+    selectedImageIds,
+    referenceImageIds,
+    referenceVideoIds,
+    referenceAudioIds,
+  }), [images, isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
   const {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel,
+    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
-    referenceImageIds,
+    includePrimaryImageAsReference: !isSeedance2ReferenceMode, // Seedance reference mode should not auto-label the current primary pick.
+    referenceImageIds: effectiveSeedanceReferenceImageIds,
+    referenceVideoIds: effectiveSeedanceReferenceVideoIds,
+    referenceAudioIds: effectiveSeedanceReferenceAudioIds,
     labelElements: fal.isKlingO1VideoModel,
     elementImageIds,
     isEditMode: isKlingO1VideoInputMode,
@@ -919,25 +940,8 @@ export default function App() {
     includeTailFrame: isKlingO1FflfMode,
     tailImageId: videoLastFrameImageId,
   });
-  const isSeedance2ReferenceMode = fal.isSeedance2VideoModel && fal.seedance2Variant === 'reference';
-  const seedance2ReferenceAssetCount = referenceImageIds.length + referenceVideoIds.length + referenceAudioIds.length;
-  const seedance2ReferenceOrderLabels = useMemo(() => {
-    if (!isSeedance2ReferenceMode) {
-      return null;
-    }
-    const labels: Record<string, string> = {};
-    referenceImageIds.slice(0, 2).forEach((id, index) => {
-      labels[id] = `Ref Img ${index + 1}`;
-    });
-    referenceVideoIds.slice(0, 2).forEach((id, index) => {
-      labels[id] = `Ref Video ${index + 1}`;
-    });
-    referenceAudioIds.slice(0, 1).forEach(id => {
-      labels[id] = 'Ref Audio';
-    });
-    return Object.keys(labels).length > 0 ? labels : null;
-  }, [isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds]);
-  const canvasReferenceOrderLabels = seedance2ReferenceOrderLabels ?? klingReferenceOrderLabels;
+  const seedance2ReferenceAssetCount = effectiveSeedanceReferenceImageIds.length + effectiveSeedanceReferenceVideoIds.length + effectiveSeedanceReferenceAudioIds.length; // Seedance reference mode treats selected media as effective refs too.
+  const canvasReferenceOrderLabels = klingReferenceOrderLabels; // Reuse the same badge map for canvas labels and prompt mentions.
 
   const hasSourceVideoSelected = Boolean(sourceVideoId);
   const hasSourceAudioSelected = Boolean(sourceAudioId);
@@ -980,12 +984,13 @@ export default function App() {
     isKlingO1VideoModel: fal.isKlingO1VideoModel,
     isKlingO1EditMode: fal.isKlingO1EditMode,
     isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
+    isSeedance2ReferenceMode,
     isReveModel,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isWan26ImageModel: fal.isWan26ImageModel,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
-    referenceImageIds,
+    referenceImageIds: effectiveSeedanceReferenceImageIds,
     hasSingleImageSelected,
     primarySelectionMediaType,
   });
@@ -1427,8 +1432,8 @@ export default function App() {
           promptPlaceholder={
             fal.isSeedance2VideoModel
               ? (fal.seedance2Variant === 'reference'
-                ? 'Seedance 2 Reference: shift-click up to 2 images, 2 videos, and 1 audio to tag references, then describe the scene... (Cmd/Ctrl + Enter to generate)'
-                : 'Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Add an end frame for first/last-frame mode... (Cmd/Ctrl + Enter to generate)')
+                ? `Seedance 2 Reference: select or shift-click up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... (Cmd/Ctrl + Enter to generate)`
+                : 'Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... (Cmd/Ctrl + Enter to generate)')
               : fal.isWan26ImageModel
               ? 'Describe your generation, or your edit, or use @ to reference images (4 images in total)... (Cmd/Ctrl + Enter to generate)'
               : isKlingModel || fal.isKlingO1VideoModel || fal.isFlux2MaxModel
@@ -1442,7 +1447,7 @@ export default function App() {
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
           cameraThemeActive={isCameraPromptAccentActive}
-          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel}
+          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
         />

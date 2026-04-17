@@ -6,6 +6,7 @@ type UseKlingPromptMentionsArgs = {
   isKlingO1VideoModel: boolean;
   isKlingO1EditMode: boolean;
   isKlingO1RefV2VMode?: boolean;
+  isSeedance2ReferenceMode?: boolean; // Reuses the Kling mention UX for Seedance reference prompts.
   isReveModel?: boolean;
   isFlux2MaxModel?: boolean;
   isWan26ImageModel?: boolean;
@@ -26,6 +27,7 @@ export const useKlingPromptMentions = ({
   isKlingO1VideoModel,
   isKlingO1EditMode,
   isKlingO1RefV2VMode = false,
+  isSeedance2ReferenceMode = false,
   isReveModel = false,
   isFlux2MaxModel = false,
   isWan26ImageModel = false,
@@ -35,16 +37,16 @@ export const useKlingPromptMentions = ({
   hasSingleImageSelected,
   primarySelectionMediaType,
 }: UseKlingPromptMentionsArgs): UseKlingPromptMentionsResult => {
-  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode; // Both Kling O1 video-input variants share the same "Video" mention behavior.
   return useMemo(() => {
-    if (!isKlingModel && !isKlingO1VideoModel && !isReveModel && !isFlux2MaxModel && !isWan26ImageModel) {
+    if (!isKlingModel && !isKlingO1VideoModel && !isSeedance2ReferenceMode && !isReveModel && !isFlux2MaxModel && !isWan26ImageModel) {
       return { klingPromptMentions: [], klingReferenceCount: 0 };
     }
 
     const hasPrimaryImageSelected = hasSingleImageSelected && primarySelectionMediaType === 'image';
     const hasPrimaryVideoSelected = hasSingleImageSelected && primarySelectionMediaType === 'video';
 
-    const referenceMentions = referenceOrderLabels ? Object.values(referenceOrderLabels) : [];
+    const referenceMentions = referenceOrderLabels ? Object.values(referenceOrderLabels) : []; // Canvas badges become autocomplete options.
     const elementMentions = elementOrderLabels
       ? Object.values(elementOrderLabels).map(label => (label.startsWith('@') ? label : `@${label}`))
       : [];
@@ -81,6 +83,7 @@ export const useKlingPromptMentions = ({
     isKlingModel,
     isKlingO1VideoModel,
     isKlingO1VideoInputMode,
+    isSeedance2ReferenceMode,
     isReveModel,
     isFlux2MaxModel,
     isWan26ImageModel,

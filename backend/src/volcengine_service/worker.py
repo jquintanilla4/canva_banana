@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import math
 import time
 from threading import Thread
+from typing import Literal
 from uuid import uuid4
 
 from volcenginesdkarkruntime import Ark
@@ -9,11 +11,21 @@ from volcenginesdkarkruntime import Ark
 from volcengine_service.config import Settings, get_settings
 from volcengine_service.media import media_to_data_url, upload_video_to_tos
 from volcengine_service.models import (
+    MediaInput,
     MODEL_LABELS,
     JobState,
     SeedanceJobPayload,
 )
 from volcengine_service.store import job_store
+
+SEEDANCE_REFERENCE_IMAGE_LIMIT = 9  # Seedance 2 docs allow up to 9 image refs.
+SEEDANCE_REFERENCE_VIDEO_LIMIT = 3  # Seedance 2 docs allow up to 3 video refs.
+SEEDANCE_REFERENCE_AUDIO_LIMIT = 3  # Seedance 2 docs allow up to 3 audio refs.
+SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS = 2.0  # Each reference clip must be at least 2 seconds long.
+SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS = 15.0  # Each reference clip must be at most 15 seconds long.
+SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS = 15.0  # Reference videos must stay within 15 seconds combined.
+SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS = 15.0  # Reference audios must stay within 15 seconds combined.
+SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS = 0.05  # Small tolerance avoids rejecting files due to container rounding noise.
 
 
 def _now_ms() -> int:
@@ -22,6 +34,49 @@ def _now_ms() -> int:
 
 def _log(job_id: str, message: str) -> None:
     job_store.append_log(job_id, message, _now_ms())  # Keep log writes centralized.
+
+
+def _uses_duration_validation_fallback(media_items: list[MediaInput]) -> bool:
+    return any(media.duration_probe_skipped for media in media_items)  # Missing ffprobe should relax backend validation instead of blocking uploads.
+
+
+def _validate_reference_media_durations(
+    media_items: list[MediaInput],
+    *,
+    media_kind: Literal["video", "audio"],
+) -> None:
+    if not media_items:
+        return
+    if _uses_duration_validation_fallback(media_items):
+        return  # The frontend already validates canvas media durations before upload when ffprobe is unavailable.
+
+    total_duration_limit_seconds = (
+        SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS
+        if media_kind == "video"
+        else SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS
+    )  # Seedance uses different combined caps for videos and audios.
+    total_duration_seconds = 0.0
+    min_duration_seconds = SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS - SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS
+    max_duration_seconds = SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS + SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS
+    total_duration_limit_with_tolerance = total_duration_limit_seconds + SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS
+    per_clip_label = "videos" if media_kind == "video" else "audio clips"
+    singular_label = "video" if media_kind == "video" else "audio clip"
+
+    for media in media_items:
+        duration_seconds = media.duration_seconds
+        if duration_seconds is None or not math.isfinite(duration_seconds):
+            raise ValueError(f"Could not read Seedance 2 reference {singular_label} duration for {media.file_name}")
+        if duration_seconds < min_duration_seconds or duration_seconds > max_duration_seconds:
+            raise ValueError(
+                f"Seedance 2 reference {per_clip_label} must each be between "
+                f"{int(SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS)} and {int(SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)} seconds"
+            )
+        total_duration_seconds += duration_seconds
+
+    if total_duration_seconds > total_duration_limit_with_tolerance:
+        raise ValueError(
+            f"Seedance 2 reference {per_clip_label} must total {int(total_duration_limit_seconds)} seconds or less"
+        )
 
 
 def get_client(settings: Settings) -> Ark:
@@ -89,14 +144,16 @@ def _validate_payload(payload: SeedanceJobPayload) -> None:
             raise ValueError("Last-frame mode requires a first-frame image")
         return
 
-    if len(payload.reference_images) > 2:
-        raise ValueError("Seedance 2 reference supports up to 2 images")
-    if len(payload.reference_videos) > 2:
-        raise ValueError("Seedance 2 reference supports up to 2 videos")
-    if len(payload.reference_audios) > 1:
-        raise ValueError("Seedance 2 reference supports up to 1 audio track")
+    if len(payload.reference_images) > SEEDANCE_REFERENCE_IMAGE_LIMIT:
+        raise ValueError(f"Seedance 2 reference supports up to {SEEDANCE_REFERENCE_IMAGE_LIMIT} images")
+    if len(payload.reference_videos) > SEEDANCE_REFERENCE_VIDEO_LIMIT:
+        raise ValueError(f"Seedance 2 reference supports up to {SEEDANCE_REFERENCE_VIDEO_LIMIT} videos")
+    if len(payload.reference_audios) > SEEDANCE_REFERENCE_AUDIO_LIMIT:
+        raise ValueError(f"Seedance 2 reference supports up to {SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks")
     if not payload.reference_images and not payload.reference_videos and not payload.reference_audios:
         raise ValueError("Reference mode requires at least one reference asset")
+    _validate_reference_media_durations(payload.reference_videos, media_kind="video")
+    _validate_reference_media_durations(payload.reference_audios, media_kind="audio")
 
 
 def _create_remote_task(client: Ark, payload: SeedanceJobPayload, content: list[dict[str, object]]) -> object:
@@ -119,6 +176,8 @@ def _execute_job(job_id: str, payload: SeedanceJobPayload) -> None:
     try:
         job_store.update(job_id, status="IN_PROGRESS", updated_at=_now_ms())
         _log(job_id, "Preparing Volcengine request")
+        if _uses_duration_validation_fallback(payload.reference_videos) or _uses_duration_validation_fallback(payload.reference_audios):
+            _log(job_id, "ffprobe unavailable; skipping backend reference duration validation and relying on frontend/provider checks")  # Keep degraded installs debuggable.
         client = get_client(settings)
         content = _build_content(job_id, payload, settings)
         remote_task = _create_remote_task(client, payload, content)
