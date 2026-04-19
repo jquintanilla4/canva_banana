@@ -99,6 +99,10 @@ export function useKeyboardShortcuts({
         setTool(Tool.NOTE);
         return;
       }
+      if (key === 'g') {
+        setTool(Tool.VIDEO_PROMPT_AREA);
+        return;
+      }
       if (key === 'b') {
         if (appMode !== 'CANVAS') {
           setTool(Tool.BRUSH);

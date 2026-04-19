@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus } from 'react-icons/fa';
 import { RiCameraLensLine } from 'react-icons/ri';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
 import { RxCursorArrow, RxFontSize } from 'react-icons/rx';
@@ -45,6 +45,9 @@ export const CameraSettingsIcon = RiCameraLensLine as React.FC<IconProps>;
 export const MicrophoneIcon = FaMicrophone as React.FC<IconProps>;
 export const StopIcon = FaStop as React.FC<IconProps>;
 export const BlindTestIcon = FaUserSecret as React.FC<IconProps>;
+export const CrosshairIcon = FaCrosshairs as React.FC<IconProps>;
+export const PlusIcon = FaPlus as React.FC<IconProps>;
+export const MinusIcon = FaMinus as React.FC<IconProps>;
 export const FontSizeIcon = RxFontSize as React.FC<IconProps>;
 export const FontSizeDownIcon: React.FC<IconProps> = ({ className }) => (
   <svg className={className} viewBox="0 0 16 16" fill="currentColor">

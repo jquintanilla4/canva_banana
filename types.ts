@@ -6,6 +6,7 @@ export enum Tool {
   FREE_SELECTION = 'FREE_SELECTION',
   NOTE = 'NOTE',
   ERASE = 'ERASE',
+  VIDEO_PROMPT_AREA = 'VIDEO_PROMPT_AREA',
 }
 
 export type AppMode = 'CANVAS' | 'ANNOTATE';
@@ -202,6 +203,51 @@ export interface CanvasNote {
   text: string;
   backgroundColor: string;
   fontSize?: number;
+}
+
+export interface CanvasRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface CanvasVideoPromptArea extends CanvasRect {
+  id: string;
+  sequence: number;
+  label: string;
+  orderedMediaIds: string[]; // Preserves entry order even when some items are ignored.
+  promptBarId: string | null; // Each area can own at most one embedded prompt bar.
+}
+
+export interface CanvasVideoPromptBar extends CanvasRect {
+  id: string;
+  assignedAreaId: string | null; // Null means the bar is still a draggable draft.
+  prompt: string;
+  negativePrompt: string;
+  seedance2Variant: Seedance2Variant;
+  seedance2AspectRatio: GenerationVolcengineOptions['seedance2AspectRatio'];
+  seedance2Resolution: GenerationVolcengineOptions['seedance2Resolution'];
+  seedance2Duration: GenerationVolcengineOptions['seedance2Duration'];
+  seedance2GenerateAudio: boolean;
+  seedance2CameraFixed: boolean;
+}
+
+export interface VideoPromptAreaMembership {
+  orderedMediaIds: string[];
+  acceptedImageIds: string[];
+  acceptedVideoIds: string[];
+  acceptedAudioIds: string[];
+  ignoredMediaIds: string[];
+  orderLabels: Record<string, string>;
+}
+
+export interface VideoModelCapabilityProfile {
+  id: string;
+  supportedMediaTypes: ReadonlyArray<CanvasMediaType>;
+  maxImages: number;
+  maxVideos: number;
+  maxAudios: number;
 }
 
 export type FalJobStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';

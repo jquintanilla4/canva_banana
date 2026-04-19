@@ -121,6 +121,7 @@ import {
   getSeedanceReferencePromptMentionError,
   normalizeSeedanceReferencePromptMentions,
 } from '../utils/seedancePromptMentions';
+import type { AppState } from './useCanvasHistory';
 
 type UseGenerationArgs = {
   appMode: AppMode;
@@ -136,7 +137,7 @@ type UseGenerationArgs = {
   setError: (message: string | null) => void;
   setIsLoading: (value: boolean) => void;
   setFalJobs: Dispatch<SetStateAction<FalQueueJob[]>>;
-  setState: (updater: (prevState: { images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] }) => { images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] }) => void;
+  setState: (updater: (prevState: AppState) => AppState) => void;
   setToastMessage: (message: string | null) => void;
   setTool: (tool: Tool) => void;
   onGenerationComplete?: () => void;

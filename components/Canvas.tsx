@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode } from '../types';
+import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership } from '../types';
 import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, FontSizeDownIcon, FontSizeUpIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, FontSizeDownIcon, FontSizeUpIcon, MinusIcon } from './Icons';
 import {
   DEFAULT_NOTE_FONT_SIZE,
   DOT_BASE_SIZE,
@@ -27,6 +27,8 @@ import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { drawCanvas } from './canvas/render/drawCanvas';
 import { getNoteTextColor } from './canvas/noteColors';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
+import { PromptBar, type PromptBarControlConfig } from './PromptBar';
+import { DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET, DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT, getAreaPromptBarRect, getMentionOptionsFromMembership, getVideoPromptBarVisualScale, syncVideoPromptAreaMembership } from '../utils/videoPromptAreas';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -35,6 +37,13 @@ interface CanvasProps {
   onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[] }) => void;
   notes: CanvasNote[];
   onNotesChange: (notes: CanvasNote[]) => void;
+  videoPromptAreas: CanvasVideoPromptArea[];
+  onVideoPromptAreasChange: (areas: CanvasVideoPromptArea[]) => void;
+  videoPromptBars: CanvasVideoPromptBar[];
+  onVideoPromptBarsChange: (bars: CanvasVideoPromptBar[]) => void;
+  selectedVideoPromptAreaId: string | null;
+  onVideoPromptAreaSelect: (id: string | null) => void;
+  videoPromptAreaMemberships: Record<string, VideoPromptAreaMembership>;
   tool: Tool;
   appMode: AppMode;
   paths: Path[];
@@ -48,6 +57,7 @@ interface CanvasProps {
   referenceVideoIds: string[];
   referenceAudioIds: string[];
   referenceImageOrderLabels?: Record<string, string> | null;
+  disabledMediaIds?: string[];
   elementImageIds: string[];
   elementImageOrderLabels?: Record<string, string> | null;
   videoLastFrameImageId: string | null;
@@ -92,6 +102,13 @@ interface CanvasProps {
   transformMode: { imageId: string; } | null;
   onStartTransform: (imageId: string) => void;
   onExitTransform: () => void;
+  isLoading: boolean;
+  onVideoPromptBarFocus: (barId: string) => void;
+  onVideoPromptBarBlur: (barId: string) => void;
+  onVideoPromptBarUpdate: (barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => void;
+  onVideoPromptBarSubmit: (barId: string) => void;
+  buildVideoPromptBarControls: (bar: CanvasVideoPromptBar) => ReadonlyArray<PromptBarControlConfig>;
+  embeddedVideoPromptBarModelOptions: ReadonlyArray<{ value: string; label: string }>;
 }
 
 const ActionButton: React.FC<{
@@ -116,6 +133,13 @@ export const Canvas: React.FC<CanvasProps> = ({
   onImagesChange,
   notes,
   onNotesChange,
+  videoPromptAreas,
+  onVideoPromptAreasChange,
+  videoPromptBars,
+  onVideoPromptBarsChange,
+  selectedVideoPromptAreaId,
+  onVideoPromptAreaSelect,
+  videoPromptAreaMemberships,
   tool,
   appMode,
   paths,
@@ -129,6 +153,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   referenceVideoIds,
   referenceAudioIds,
   referenceImageOrderLabels,
+  disabledMediaIds = [],
   elementImageIds,
   elementImageOrderLabels,
   videoLastFrameImageId,
@@ -174,7 +199,15 @@ export const Canvas: React.FC<CanvasProps> = ({
   transformMode,
   onStartTransform,
   onExitTransform,
+  isLoading,
+  onVideoPromptBarFocus,
+  onVideoPromptBarBlur,
+  onVideoPromptBarUpdate,
+  onVideoPromptBarSubmit,
+  buildVideoPromptBarControls,
+  embeddedVideoPromptBarModelOptions,
 }) => {
+  type VideoPromptAreaDragMode = 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br'; // Area resizing should track which corner the user grabbed.
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -182,6 +215,16 @@ export const Canvas: React.FC<CanvasProps> = ({
   const notePointerDownWhileEditingRef = useRef(false);
   const noteEditHandledRef = useRef(false);
   const [isNoteColorPickerOpen, setIsNoteColorPickerOpen] = useState(false);
+  const [videoPromptAreaDragState, setVideoPromptAreaDragState] = useState<{
+    areaId: string;
+    mode: VideoPromptAreaDragMode;
+    startPoint: Point;
+    startRect: { x: number; y: number; width: number; height: number };
+  } | null>(null);
+  const [videoPromptBarDragState, setVideoPromptBarDragState] = useState<{
+    barId: string;
+    pointerOffset: Point;
+  } | null>(null);
 
   const noteColorOptions = useMemo(() => ([
     { label: 'Dark gray blue', value: '#1f2937' },
@@ -206,6 +249,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   const primarySelectedImageId = selectedImageIds[0] ?? null;
   const primarySelectedNoteId = selectedNoteIds[0] ?? null;
+  const isAreaSelectionTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
+  const areaLabelFontSize = Math.max(11, Math.min(16, 11 / Math.max(scale, 0.7))); // Keep area titles readable even when the canvas is zoomed far out.
 
   const getCanvasContext = () => canvasRef.current?.getContext('2d');
 
@@ -276,6 +321,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     isDraggingOver,
     brushPreviewPosition,
     marqueeRect,
+    videoPromptAreaDraftRect,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
@@ -290,6 +336,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     appMode,
     images,
     notes,
+    videoPromptAreas,
     paths,
     isNoteEditing: Boolean(editingNoteId),
     pan,
@@ -305,10 +352,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     transformMode,
     onImagesChange,
     onNotesChange,
+    onVideoPromptAreasChange,
     onPathsChange,
     onCommit,
     onImageSelect,
     onNoteSelect,
+    onVideoPromptAreaSelect,
     onFilesDrop,
     onNoteDoubleClick,
     onCropRectChange,
@@ -359,6 +408,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       referenceVideoIds,
       referenceAudioIds,
       referenceImageOrderLabels,
+      disabledMediaIds,
       elementImageIds,
       elementImageOrderLabels,
       videoLastFrameImageId,
@@ -374,7 +424,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       cropMode,
       transformMode,
     });
-  }, [cropMode, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan26I2VMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
+  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan26I2VMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {
@@ -665,6 +715,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           case Tool.NOTE: cursor = 'cell'; break;
           case Tool.BRUSH:
           case Tool.ERASE:
+          case Tool.VIDEO_PROMPT_AREA:
             cursor = 'crosshair'; break;
           case Tool.SELECTION: cursor = isDragging ? 'grabbing' : 'default'; break;
           default: cursor = 'default';
@@ -863,12 +914,253 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, [images, onError, onImageSelect, onImagesChange]);
 
+  const clampVideoPromptAreaRect = useCallback((rect: { x: number; y: number; width: number; height: number }) => ({
+    x: rect.x,
+    y: rect.y,
+    width: Math.max(280, rect.width),
+    height: Math.max(220, rect.height),
+  }), []);
+
+  const getWorldPointFromClientPoint = useCallback((clientX: number, clientY: number): Point => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return { x: 0, y: 0 };
+    }
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - pan.x) / scale,
+      y: (clientY - rect.top - pan.y) / scale,
+    };
+  }, [pan.x, pan.y, scale]);
+
+  const handleVideoPromptAreaPointerDown = useCallback((areaId: string, mode: VideoPromptAreaDragMode) => (event: React.MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!isAreaSelectionTool) {
+      return;
+    }
+    const targetArea = videoPromptAreas.find(area => area.id === areaId);
+    if (!targetArea) {
+      return;
+    }
+    onVideoPromptAreaSelect(areaId);
+    setVideoPromptAreaDragState({
+      areaId,
+      mode,
+      startPoint: getWorldPointFromClientPoint(event.clientX, event.clientY),
+      startRect: { x: targetArea.x, y: targetArea.y, width: targetArea.width, height: targetArea.height },
+    });
+  }, [getWorldPointFromClientPoint, isAreaSelectionTool, onVideoPromptAreaSelect, videoPromptAreas]);
+
+  const getDraggedVideoPromptAreaRect = useCallback((dragState: NonNullable<typeof videoPromptAreaDragState>, dx: number, dy: number) => {
+    if (dragState.mode === 'move') {
+      return {
+        x: dragState.startRect.x + dx,
+        y: dragState.startRect.y + dy,
+        width: dragState.startRect.width,
+        height: dragState.startRect.height,
+      };
+    }
+
+    if (dragState.mode === 'resize-tl') {
+      return clampVideoPromptAreaRect({
+        x: dragState.startRect.x + dx,
+        y: dragState.startRect.y + dy,
+        width: dragState.startRect.width - dx,
+        height: dragState.startRect.height - dy,
+      });
+    }
+
+    if (dragState.mode === 'resize-tr') {
+      return clampVideoPromptAreaRect({
+        x: dragState.startRect.x,
+        y: dragState.startRect.y + dy,
+        width: dragState.startRect.width + dx,
+        height: dragState.startRect.height - dy,
+      });
+    }
+
+    if (dragState.mode === 'resize-bl') {
+      return clampVideoPromptAreaRect({
+        x: dragState.startRect.x + dx,
+        y: dragState.startRect.y,
+        width: dragState.startRect.width - dx,
+        height: dragState.startRect.height + dy,
+      });
+    }
+
+    return clampVideoPromptAreaRect({
+      x: dragState.startRect.x,
+      y: dragState.startRect.y,
+      width: dragState.startRect.width + dx,
+      height: dragState.startRect.height + dy,
+    });
+  }, [clampVideoPromptAreaRect]);
+
+  const handleVideoPromptBarPointerDown = useCallback((barId: string) => (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const targetBar = videoPromptBars.find(bar => bar.id === barId);
+    if (!targetBar) {
+      return;
+    }
+    const pointerPoint = getWorldPointFromClientPoint(event.clientX, event.clientY);
+    setVideoPromptBarDragState({
+      barId,
+      pointerOffset: {
+        x: pointerPoint.x - targetBar.x,
+        y: pointerPoint.y - targetBar.y,
+      },
+    });
+  }, [getWorldPointFromClientPoint, videoPromptBars]);
+
+  const handleDeleteVideoPromptBar = useCallback((barId: string) => {
+    const nextAreas = videoPromptAreas.map(area => (
+      area.promptBarId === barId ? { ...area, promptBarId: null } : area
+    ));
+    const nextBars = videoPromptBars.filter(bar => bar.id !== barId);
+    onVideoPromptAreasChange(nextAreas);
+    onVideoPromptBarsChange(nextBars);
+    onCommit({ videoPromptAreas: nextAreas, videoPromptBars: nextBars });
+  }, [onCommit, onVideoPromptAreasChange, onVideoPromptBarsChange, videoPromptAreas, videoPromptBars]);
+
+  const finishVideoPromptBarDrag = useCallback((barId: string, nextBars: CanvasVideoPromptBar[]) => {
+    const draggedBar = nextBars.find(bar => bar.id === barId);
+    if (!draggedBar) {
+      return;
+    }
+    const barCenter = { x: draggedBar.x + draggedBar.width / 2, y: draggedBar.y + draggedBar.height / 2 };
+    const targetArea = [...videoPromptAreas].reverse().find(area => (
+      barCenter.x >= area.x
+      && barCenter.x <= area.x + area.width
+      && barCenter.y >= area.y
+      && barCenter.y <= area.y + area.height
+    ));
+
+    let nextVideoPromptAreas = videoPromptAreas.map(area => (
+      area.promptBarId === barId ? { ...area, promptBarId: null } : area
+    ));
+    let committedBars = nextBars;
+
+    if (targetArea) {
+      const occupiedArea = nextVideoPromptAreas.find(area => area.id === targetArea.id);
+      if (occupiedArea?.promptBarId && occupiedArea.promptBarId !== barId) {
+        onError?.('Only one video prompt bar is allowed in each video prompt area.');
+      } else {
+        const snappedRect = getAreaPromptBarRect(targetArea);
+        committedBars = nextBars.map(bar => (
+          bar.id === barId
+            ? { ...bar, assignedAreaId: targetArea.id, ...snappedRect }
+            : bar
+        ));
+        nextVideoPromptAreas = nextVideoPromptAreas.map(area => (
+          area.id === targetArea.id ? { ...area, promptBarId: barId } : area
+        ));
+      }
+    } else {
+      committedBars = nextBars.map(bar => (
+        bar.id === barId ? { ...bar, assignedAreaId: null } : bar
+      ));
+    }
+
+    onVideoPromptAreasChange(nextVideoPromptAreas);
+    onVideoPromptBarsChange(committedBars);
+    onCommit({ videoPromptAreas: nextVideoPromptAreas, videoPromptBars: committedBars });
+  }, [onCommit, onError, onVideoPromptAreasChange, onVideoPromptBarsChange, videoPromptAreas]);
+
+  const handleMouseMoveWithOverlays = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (videoPromptAreaDragState) {
+      const point = getWorldPointFromClientPoint(event.clientX, event.clientY);
+      const dx = point.x - videoPromptAreaDragState.startPoint.x;
+      const dy = point.y - videoPromptAreaDragState.startPoint.y;
+      const nextAreas = videoPromptAreas.map(area => {
+        if (area.id !== videoPromptAreaDragState.areaId) {
+          return area;
+        }
+        return { ...area, ...getDraggedVideoPromptAreaRect(videoPromptAreaDragState, dx, dy) };
+      });
+      const nextBars = videoPromptBars.map(bar => {
+        const owningArea = nextAreas.find(area => area.id === bar.assignedAreaId);
+        return owningArea ? { ...bar, ...getAreaPromptBarRect(owningArea) } : bar;
+      });
+      onVideoPromptAreasChange(nextAreas);
+      onVideoPromptBarsChange(nextBars);
+      return;
+    }
+
+    if (videoPromptBarDragState) {
+      const pointerPoint = getWorldPointFromClientPoint(event.clientX, event.clientY);
+      const nextBars = videoPromptBars.map(bar => (
+        bar.id === videoPromptBarDragState.barId
+          ? {
+            ...bar,
+            assignedAreaId: null,
+            x: pointerPoint.x - videoPromptBarDragState.pointerOffset.x,
+            y: pointerPoint.y - videoPromptBarDragState.pointerOffset.y,
+          }
+          : bar
+      ));
+      onVideoPromptBarsChange(nextBars);
+      return;
+    }
+
+    handleMouseMove(event);
+  }, [getDraggedVideoPromptAreaRect, getWorldPointFromClientPoint, handleMouseMove, onVideoPromptAreasChange, onVideoPromptBarsChange, videoPromptAreaDragState, videoPromptAreas, videoPromptBarDragState, videoPromptBars]);
+
+  const handleMouseUpWithOverlays = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (videoPromptAreaDragState) {
+      const wasAreaRectChanged = videoPromptAreas.some(area => (
+        area.id === videoPromptAreaDragState.areaId
+        && (
+          area.x !== videoPromptAreaDragState.startRect.x
+          || area.y !== videoPromptAreaDragState.startRect.y
+          || area.width !== videoPromptAreaDragState.startRect.width
+          || area.height !== videoPromptAreaDragState.startRect.height
+        )
+      ));
+      if (!wasAreaRectChanged) {
+        setVideoPromptAreaDragState(null);
+        return;
+      }
+      const resizedAreas = videoPromptAreas.map(area => (
+        area.id === videoPromptAreaDragState.areaId ? { ...area, ...clampVideoPromptAreaRect(area) } : area
+      ));
+      const nextAreas = syncVideoPromptAreaMembership(resizedAreas, images);
+      const nextBars = videoPromptBars.map(bar => {
+        const owningArea = nextAreas.find(area => area.id === bar.assignedAreaId);
+        return owningArea ? { ...bar, ...getAreaPromptBarRect(owningArea) } : bar;
+      });
+      onVideoPromptAreasChange(nextAreas);
+      onVideoPromptBarsChange(nextBars);
+      onCommit({ videoPromptAreas: nextAreas, videoPromptBars: nextBars });
+      setVideoPromptAreaDragState(null);
+      return;
+    }
+
+    if (videoPromptBarDragState) {
+      finishVideoPromptBarDrag(videoPromptBarDragState.barId, videoPromptBars);
+      setVideoPromptBarDragState(null);
+      return;
+    }
+
+    handleMouseUp(event);
+  }, [clampVideoPromptAreaRect, finishVideoPromptBarDrag, handleMouseUp, onCommit, onVideoPromptAreasChange, onVideoPromptBarsChange, videoPromptAreaDragState, videoPromptAreas, videoPromptBarDragState, videoPromptBars]);
+
+  const embeddedPromptBars = useMemo(() => (
+    videoPromptBars.map(bar => {
+      const assignedArea = bar.assignedAreaId
+        ? videoPromptAreas.find(area => area.id === bar.assignedAreaId) ?? null
+        : null;
+      return { bar, assignedArea };
+    })
+  ), [videoPromptAreas, videoPromptBars]);
+
   /* eslint-disable jsx-a11y/no-noninteractive-tabindex */
   return (
     /* Canvas needs focus for keyboard shortcuts (ESC deselect) */
     <div
       ref={containerRef}
-      className="relative w-full h-full min-h-0 bg-black overflow-hidden outline-none focus:outline-none"
+      className="relative z-0 w-full h-full min-h-0 bg-black overflow-hidden outline-none focus:outline-none"
       tabIndex={0}
       data-canvas-root="true"
       style={{
@@ -879,21 +1171,208 @@ export const Canvas: React.FC<CanvasProps> = ({
       }}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseDown={handleMouseDownWithEditGuard}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseMove={handleMouseMoveWithOverlays}
+      onMouseUp={handleMouseUpWithOverlays}
+      onMouseLeave={handleMouseUpWithOverlays}
       onDoubleClick={handleDoubleClick}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           onImageSelect(null);
           onNoteSelect(null);
+          onVideoPromptAreaSelect(null);
         }
       }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
+      {videoPromptAreas.map(area => (
+        <div
+          key={area.id}
+          className={`pointer-events-none absolute rounded-2xl border-[3px] bg-[#030303] shadow-[0_18px_50px_rgba(0,0,0,0.3)] ${selectedVideoPromptAreaId === area.id ? 'border-sky-400/80' : 'border-white/30'}`}
+          style={{
+            left: `${area.x * scale + pan.x}px`,
+            top: `${area.y * scale + pan.y}px`,
+            width: `${area.width * scale}px`,
+            height: `${area.height * scale}px`,
+            zIndex: 1,
+          }}
+        >
+          <div className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ${selectedVideoPromptAreaId === area.id ? 'ring-sky-300/55' : 'ring-white/8'}`} />
+          {!area.promptBarId && area.orderedMediaIds.length === 0 && (
+            <div className="pointer-events-none absolute inset-x-6 top-20 rounded-xl border border-dashed border-white/15 bg-black/10 px-4 py-5 text-sm text-gray-400">
+              Drag a video prompt bar here to activate this area.
+            </div>
+          )}
+        </div>
+      ))}
+      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full z-10" />
+      {videoPromptAreas.map(area => {
+        const screenLeft = area.x * scale + pan.x;
+        const screenTop = area.y * scale + pan.y;
+        const screenWidth = area.width * scale;
+        const screenHeight = area.height * scale;
+        return (
+          <div
+            key={`${area.id}-overlay`}
+            className="pointer-events-none absolute"
+            style={{
+              left: `${screenLeft}px`,
+              top: `${screenTop}px`,
+              width: `${screenWidth}px`,
+              height: `${screenHeight}px`,
+              zIndex: 22,
+            }}
+          >
+            <div className="absolute left-3 top-3 flex items-center gap-2">
+              <button
+                type="button"
+                onMouseDown={handleVideoPromptAreaPointerDown(area.id, 'move')}
+                className={`pointer-events-auto rounded-md px-3 py-1 font-semibold uppercase tracking-[0.12em] ${selectedVideoPromptAreaId === area.id ? 'bg-sky-500/25 text-sky-100' : 'bg-black/55 text-gray-200'}`}
+                style={{ fontSize: `${areaLabelFontSize}px` }}
+              >
+                {area.label}
+              </button>
+            </div>
+            {selectedVideoPromptAreaId === area.id && isAreaSelectionTool && (
+              <>
+                <button
+                  type="button"
+                  onMouseDown={handleVideoPromptAreaPointerDown(area.id, 'resize-tl')}
+                  className="pointer-events-auto absolute -left-2 -top-2 h-4 w-4 rounded-sm border border-sky-300/80 bg-sky-400/25"
+                  aria-label={`Resize top left of ${area.label}`}
+                />
+                <button
+                  type="button"
+                  onMouseDown={handleVideoPromptAreaPointerDown(area.id, 'resize-tr')}
+                  className="pointer-events-auto absolute -right-2 -top-2 h-4 w-4 rounded-sm border border-sky-300/80 bg-sky-400/25"
+                  aria-label={`Resize top right of ${area.label}`}
+                />
+                <button
+                  type="button"
+                  onMouseDown={handleVideoPromptAreaPointerDown(area.id, 'resize-bl')}
+                  className="pointer-events-auto absolute -bottom-2 -left-2 h-4 w-4 rounded-sm border border-sky-300/80 bg-sky-400/25"
+                  aria-label={`Resize bottom left of ${area.label}`}
+                />
+                <button
+                  type="button"
+                  onMouseDown={handleVideoPromptAreaPointerDown(area.id, 'resize-br')}
+                  className="pointer-events-auto absolute -bottom-2 -right-2 h-4 w-4 rounded-sm border border-sky-300/80 bg-sky-400/25"
+                  aria-label={`Resize bottom right of ${area.label}`}
+                />
+              </>
+            )}
+          </div>
+        );
+      })}
+      {embeddedPromptBars.map(({ bar, assignedArea }) => {
+        const barMembership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : null;
+        const isAssigned = Boolean(assignedArea);
+        const assignedAreaScreenWidth = assignedArea ? assignedArea.width * scale : undefined;
+        const barVisualScale = getVideoPromptBarVisualScale(scale, bar.width, assignedAreaScreenWidth);
+        const dragHandleHeight = isAssigned ? DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT : 0;
+        const screenRect = isAssigned && assignedArea
+          ? {
+            left: assignedArea.x * scale + pan.x + (assignedArea.width * scale - bar.width * barVisualScale) / 2,
+            top: assignedArea.y * scale + pan.y + (assignedArea.height - DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET) * scale - (bar.height + dragHandleHeight) * barVisualScale,
+            width: bar.width,
+            height: bar.height,
+          }
+          : {
+            left: bar.x * scale + pan.x,
+            top: bar.y * scale + pan.y,
+            width: bar.width,
+            height: bar.height,
+          };
+
+        if (!isAssigned) {
+          return (
+            <div
+              key={bar.id}
+              className="absolute rounded-2xl border border-white/15 bg-gray-900/92 p-3 shadow-2xl"
+              style={{
+                left: `${screenRect.left}px`,
+                top: `${screenRect.top}px`,
+                width: `${Math.max(screenRect.width, 280)}px`,
+                transform: `scale(${barVisualScale})`,
+                transformOrigin: 'top left',
+                zIndex: 35,
+              }}
+            >
+              <button
+                type="button"
+                onMouseDown={handleVideoPromptBarPointerDown(bar.id)}
+                className="mb-3 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.18em] text-gray-300"
+              >
+                Seedance 2 video prompt bar
+              </button>
+              <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-5 text-sm text-gray-400">
+                Drag this into a video prompt area to make it editable.
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div
+            key={bar.id}
+            className="absolute"
+            style={{
+              left: `${screenRect.left}px`,
+              top: `${screenRect.top}px`,
+              width: `${screenRect.width}px`,
+              transform: `scale(${barVisualScale})`,
+              transformOrigin: 'top left',
+              zIndex: 18,
+            }}
+          >
+            <div className="relative" style={{ width: `${screenRect.width}px` }}>
+              <button
+                type="button"
+                onMouseDown={handleVideoPromptBarPointerDown(bar.id)}
+                className="absolute left-0 top-[0.2rem] rounded-lg border border-white/10 bg-black/35 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-gray-200"
+              >
+                Seedance 2
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteVideoPromptBar(bar.id)}
+                className="absolute left-[-2.6rem] bottom-[0.2rem] flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/55 text-gray-200 transition-colors duration-200 hover:bg-red-500/25 hover:text-red-100"
+                aria-label={`Delete ${assignedArea?.label ?? 'video prompt bar'}`}
+                title="Delete video prompt bar"
+              >
+                <MinusIcon className="h-3 w-3" />
+              </button>
+              <div style={{ paddingTop: `${dragHandleHeight}px` }}>
+                <PromptBar
+                  layout="inline"
+                  prompt={bar.prompt}
+                  onPromptChange={(nextPrompt) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, prompt: nextPrompt }))}
+                  onSubmit={() => onVideoPromptBarSubmit(bar.id)}
+                  isLoading={isLoading}
+                  inputDisabled={false}
+                  submitDisabled={!barMembership || (barMembership.acceptedImageIds.length + barMembership.acceptedVideoIds.length + barMembership.acceptedAudioIds.length) === 0}
+                  modelOptions={embeddedVideoPromptBarModelOptions}
+                  selectedModel={embeddedVideoPromptBarModelOptions[0]?.value ?? 'volcengine/seedance-2'}
+                  onModelChange={() => {}}
+                  modelSelectDisabled
+                  modelMode="video"
+                  onModelModeChange={() => {}}
+                  modelModeDisabled
+                  showModeSwitch={false}
+                  modelControls={buildVideoPromptBarControls(bar)}
+                  promptPlaceholder="Describe the Seedance 2 video using the ordered media in this area... (Cmd/Ctrl + Enter to generate)"
+                  klingSuggestionsEnabled
+                  klingReferenceCount={barMembership ? Object.keys(barMembership.orderLabels).length : 0}
+                  klingSuggestionOptions={barMembership ? getMentionOptionsFromMembership(barMembership) : []}
+                  onPromptFocus={() => onVideoPromptBarFocus(bar.id)}
+                  onPromptBlur={() => onVideoPromptBarBlur(bar.id)}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
       {shouldRenderBrushPreview && (
         <div
           className="pointer-events-none absolute rounded-full border border-white/80"
@@ -916,6 +1395,18 @@ export const Canvas: React.FC<CanvasProps> = ({
             width: `${marqueeRect.width}px`,
             height: `${marqueeRect.height}px`,
             zIndex: 40,
+          }}
+        />
+      )}
+      {videoPromptAreaDraftRect && (
+        <div
+          className="absolute rounded-2xl border border-white/35 bg-[#25272c]/40 pointer-events-none"
+          style={{
+            left: `${videoPromptAreaDraftRect.left}px`,
+            top: `${videoPromptAreaDraftRect.top}px`,
+            width: `${videoPromptAreaDraftRect.width}px`,
+            height: `${videoPromptAreaDraftRect.height}px`,
+            zIndex: 30,
           }}
         />
       )}

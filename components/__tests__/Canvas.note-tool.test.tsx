@@ -18,7 +18,7 @@ const buildNote = (): CanvasNote => ({
 describe('Canvas note tool flow', () => {
   it('enters edit mode right after creating a note', () => {
     const Harness = () => {
-      const { displayedNotes, setLiveNotes, commit } = useCanvasHistory({ images: [], paths: [], notes: [] });
+      const { displayedNotes, setLiveNotes, commit } = useCanvasHistory({ images: [], paths: [], notes: [], videoPromptAreas: [], videoPromptBars: [] });
       const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
       return (
@@ -27,6 +27,13 @@ describe('Canvas note tool flow', () => {
           onImagesChange={vi.fn()}
           notes={displayedNotes}
           onNotesChange={setLiveNotes}
+          videoPromptAreas={[]}
+          onVideoPromptAreasChange={vi.fn()}
+          videoPromptBars={[]}
+          onVideoPromptBarsChange={vi.fn()}
+          selectedVideoPromptAreaId={null}
+          onVideoPromptAreaSelect={vi.fn()}
+          videoPromptAreaMemberships={{}}
           tool={Tool.NOTE}
           appMode="CANVAS"
           paths={[]}
@@ -40,6 +47,7 @@ describe('Canvas note tool flow', () => {
           referenceVideoIds={[]}
           referenceAudioIds={[]}
           referenceImageOrderLabels={null}
+          disabledMediaIds={[]}
           elementImageIds={[]}
           elementImageOrderLabels={null}
           videoLastFrameImageId={null}
@@ -47,7 +55,11 @@ describe('Canvas note tool flow', () => {
           tailSelectionEnabled={false}
           isKlingO1VideoInputMode={false}
           isKlingO1FflfMode={false}
+          isSeedance15FflfMode={false}
+          isKling26ControlVideoInputMode={false}
+          isVeo31ExtendMode={false}
           isWanAnimateVideoInputMode={false}
+          isWan26I2VMode={false}
           onError={vi.fn()}
           onImageSelect={vi.fn()}
           onNoteSelect={vi.fn()}
@@ -80,6 +92,13 @@ describe('Canvas note tool flow', () => {
           transformMode={null}
           onStartTransform={vi.fn()}
           onExitTransform={vi.fn()}
+          isLoading={false}
+          onVideoPromptBarFocus={vi.fn()}
+          onVideoPromptBarBlur={vi.fn()}
+          onVideoPromptBarUpdate={vi.fn()}
+          onVideoPromptBarSubmit={vi.fn()}
+          buildVideoPromptBarControls={vi.fn(() => [])}
+          embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
           onCommit={commit}
         />
       );
@@ -123,6 +142,13 @@ describe('Canvas note tool flow', () => {
           onImagesChange={vi.fn()}
           notes={notes}
           onNotesChange={handleNotesChange}
+          videoPromptAreas={[]}
+          onVideoPromptAreasChange={vi.fn()}
+          videoPromptBars={[]}
+          onVideoPromptBarsChange={vi.fn()}
+          selectedVideoPromptAreaId={null}
+          onVideoPromptAreaSelect={vi.fn()}
+          videoPromptAreaMemberships={{}}
           tool={Tool.NOTE}
           appMode="CANVAS"
           paths={[]}
@@ -136,6 +162,7 @@ describe('Canvas note tool flow', () => {
           referenceVideoIds={[]}
           referenceAudioIds={[]}
           referenceImageOrderLabels={null}
+          disabledMediaIds={[]}
           elementImageIds={[]}
           elementImageOrderLabels={null}
           videoLastFrameImageId={null}
@@ -143,7 +170,11 @@ describe('Canvas note tool flow', () => {
           tailSelectionEnabled={false}
           isKlingO1VideoInputMode={false}
           isKlingO1FflfMode={false}
+          isSeedance15FflfMode={false}
+          isKling26ControlVideoInputMode={false}
+          isVeo31ExtendMode={false}
           isWanAnimateVideoInputMode={false}
+          isWan26I2VMode={false}
           onError={vi.fn()}
           onImageSelect={vi.fn()}
           onNoteSelect={vi.fn()}
@@ -176,6 +207,13 @@ describe('Canvas note tool flow', () => {
           transformMode={null}
           onStartTransform={vi.fn()}
           onExitTransform={vi.fn()}
+          isLoading={false}
+          onVideoPromptBarFocus={vi.fn()}
+          onVideoPromptBarBlur={vi.fn()}
+          onVideoPromptBarUpdate={vi.fn()}
+          onVideoPromptBarSubmit={vi.fn()}
+          buildVideoPromptBarControls={vi.fn(() => [])}
+          embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
           onCommit={vi.fn()}
         />
       );

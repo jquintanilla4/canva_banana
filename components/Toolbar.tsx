@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Tool, AppMode } from '../types';
-import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon, CameraSettingsIcon } from './Icons';
+import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon, CameraSettingsIcon, CrosshairIcon } from './Icons';
 import { MAX_STROKE_SIZE, MIN_STROKE_SIZE } from './canvas/constants';
 import { CameraSettingsPopover } from './CameraSettingsPopover';
 import { hasCameraSettings, type CameraSettingsSelection } from '../utils/cameraSettings';
@@ -201,7 +201,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   useEffect(() => () => clearCloseTimeout(), []);
 
   return (
-    <header className="absolute top-0 left-1/2 -translate-x-1/2 z-10 mt-4 px-3 py-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex h-12 items-center space-x-4">
+    <header className="absolute top-0 left-1/2 -translate-x-1/2 z-50 mt-4 px-3 py-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex h-12 items-center space-x-4">
       <div className="flex h-full items-center border-r border-gray-600 pr-4">
         <div
           className="relative flex h-full items-center"
@@ -239,6 +239,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
         <ToolButton label="Select (V)" isActive={activeTool === Tool.SELECTION} onClick={() => onToolChange(Tool.SELECTION)}>
           <SelectionIcon className="w-4 h-4" />
+        </ToolButton>
+        <ToolButton label="Video Prompt Area (G)" isActive={activeTool === Tool.VIDEO_PROMPT_AREA} onClick={() => onToolChange(Tool.VIDEO_PROMPT_AREA)}>
+          <CrosshairIcon className="w-4 h-4" />
         </ToolButton>
         <ToolButton label="Free Select (F)" isActive={activeTool === Tool.FREE_SELECTION} onClick={() => onToolChange(Tool.FREE_SELECTION)}>
           <FreeSelectionIcon className="w-4 h-4" />

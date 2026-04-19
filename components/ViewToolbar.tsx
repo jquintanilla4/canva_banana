@@ -36,7 +36,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
       : 'Enable Blind Test Mode (Option/Alt + click for aliases)';
 
   return (
-    <div className="absolute bottom-4 right-4 z-10 flex items-center space-x-2">
+    <div className="absolute bottom-4 right-4 z-40 flex items-center space-x-2">
       <button
         type="button"
         onClick={onToggleBlindTest}

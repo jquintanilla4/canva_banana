@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CanvasImage, CanvasNote, Path } from '../types';
+import type { CanvasImage, CanvasNote, CanvasVideoPromptArea, CanvasVideoPromptBar, Path } from '../types';
 import { getVideoObjectUrl } from '../services/mediaService';
 
-export type AppState = { images: CanvasImage[]; paths: Path[]; notes: CanvasNote[] };
+export type AppState = {
+  images: CanvasImage[];
+  paths: Path[];
+  notes: CanvasNote[];
+  videoPromptAreas: CanvasVideoPromptArea[];
+  videoPromptBars: CanvasVideoPromptBar[];
+};
 // CommitOverrides let callers provide already-updated slices (e.g., when state is staged elsewhere)
 // so the history snapshot captures that exact data instead of the last committed baseline.
-export type CommitOverrides = Partial<Pick<AppState, 'images' | 'paths' | 'notes'>>;
+export type CommitOverrides = Partial<Pick<AppState, 'images' | 'paths' | 'notes' | 'videoPromptAreas' | 'videoPromptBars'>>;
 
 const DEFAULT_MAX_HISTORY_SIZE = 30;
 
@@ -21,7 +27,13 @@ const getStateSignature = (state: AppState): string => {
     .join(';');
   const pathSignature = state.paths.map(p => `${p.points.length},${p.tool}`).join(',');
   const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length},${n.fontSize ?? ''},${n.backgroundColor}`).join(';');
-  return `${imageSignature}|${pathSignature}|${noteSignature}`;
+  const videoPromptAreaSignature = state.videoPromptAreas
+    .map(area => `${area.id},${area.sequence},${area.x.toFixed(2)},${area.y.toFixed(2)},${area.width.toFixed(2)},${area.height.toFixed(2)},${area.promptBarId ?? ''},${area.orderedMediaIds.join(',')}`)
+    .join(';');
+  const videoPromptBarSignature = state.videoPromptBars
+    .map(bar => `${bar.id},${bar.assignedAreaId ?? ''},${bar.x.toFixed(2)},${bar.y.toFixed(2)},${bar.width.toFixed(2)},${bar.height.toFixed(2)},${bar.prompt.length},${bar.negativePrompt.length},${bar.seedance2Variant},${bar.seedance2AspectRatio},${bar.seedance2Resolution},${bar.seedance2Duration},${bar.seedance2GenerateAudio ? 1 : 0},${bar.seedance2CameraFixed ? 1 : 0}`)
+    .join(';');
+  return `${imageSignature}|${pathSignature}|${noteSignature}|${videoPromptAreaSignature}|${videoPromptBarSignature}`;
 };
 
 type UseCanvasHistoryOptions = {
@@ -29,7 +41,7 @@ type UseCanvasHistoryOptions = {
 };
 
 export const useCanvasHistory = (
-  initialState: AppState = { images: [], paths: [], notes: [] },
+  initialState: AppState = { images: [], paths: [], notes: [], videoPromptAreas: [], videoPromptBars: [] },
   options: UseCanvasHistoryOptions = {},
 ) => {
   const maxHistory = options.maxHistory ?? DEFAULT_MAX_HISTORY_SIZE;
@@ -43,11 +55,15 @@ export const useCanvasHistory = (
   const [liveImages, setLiveImages] = useState<CanvasImage[] | null>(null);
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const [liveNotes, setLiveNotes] = useState<CanvasNote[] | null>(null);
+  const [liveVideoPromptAreas, setLiveVideoPromptAreas] = useState<CanvasVideoPromptArea[] | null>(null);
+  const [liveVideoPromptBars, setLiveVideoPromptBars] = useState<CanvasVideoPromptBar[] | null>(null);
 
   const currentState = historyState.history[historyState.index];
   const displayedImages = liveImages ?? currentState.images;
   const displayedPaths = livePaths ?? currentState.paths;
   const displayedNotes = liveNotes ?? currentState.notes;
+  const displayedVideoPromptAreas = liveVideoPromptAreas ?? currentState.videoPromptAreas;
+  const displayedVideoPromptBars = liveVideoPromptBars ?? currentState.videoPromptBars;
 
   // Use functional updates so callers can mutate canvas slices without worrying about stale closures.
   const setState = useCallback((updater: (prevState: AppState) => AppState) => {
@@ -77,8 +93,21 @@ export const useCanvasHistory = (
   // Optional overrides are used when a caller already has the next slice handy (e.g., video play toggles)
   // and wants to snapshot that immediately without waiting for live state to sync.
   const commit = useCallback((overrides?: CommitOverrides) => {
-    const hasOverrides = Boolean(overrides && (overrides.images || overrides.paths || overrides.notes));
-    if (!hasOverrides && liveImages === null && livePaths === null && liveNotes === null) {
+    const hasOverrides = Boolean(overrides && (
+      overrides.images
+      || overrides.paths
+      || overrides.notes
+      || overrides.videoPromptAreas
+      || overrides.videoPromptBars
+    ));
+    if (
+      !hasOverrides
+      && liveImages === null
+      && livePaths === null
+      && liveNotes === null
+      && liveVideoPromptAreas === null
+      && liveVideoPromptBars === null
+    ) {
       return;
     }
 
@@ -88,6 +117,8 @@ export const useCanvasHistory = (
         images: overrides?.images ?? liveImages ?? prevState.images,
         paths: overrides?.paths ?? livePaths ?? prevState.paths,
         notes: overrides?.notes ?? liveNotes ?? prevState.notes,
+        videoPromptAreas: overrides?.videoPromptAreas ?? liveVideoPromptAreas ?? prevState.videoPromptAreas,
+        videoPromptBars: overrides?.videoPromptBars ?? liveVideoPromptBars ?? prevState.videoPromptBars,
       };
 
       if (getStateSignature(nextState) === getStateSignature(prevState)) {
@@ -110,7 +141,9 @@ export const useCanvasHistory = (
     setLiveImages(null);
     setLivePaths(null);
     setLiveNotes(null);
-  }, [liveImages, livePaths, liveNotes, maxHistory]);
+    setLiveVideoPromptAreas(null);
+    setLiveVideoPromptBars(null);
+  }, [liveImages, liveNotes, livePaths, liveVideoPromptAreas, liveVideoPromptBars, maxHistory]);
 
   const undo = useCallback(() => {
     commit();
@@ -136,6 +169,8 @@ export const useCanvasHistory = (
     setLiveImages(null);
     setLivePaths(null);
     setLiveNotes(null);
+    setLiveVideoPromptAreas(null);
+    setLiveVideoPromptBars(null);
     setHistoryState({ history: [nextState], index: 0 });
   }, []);
 
@@ -188,13 +223,19 @@ export const useCanvasHistory = (
     images: currentState.images,
     paths: currentState.paths,
     notes: currentState.notes,
+    videoPromptAreas: currentState.videoPromptAreas,
+    videoPromptBars: currentState.videoPromptBars,
     displayedImages,
     displayedPaths,
     displayedNotes,
+    displayedVideoPromptAreas,
+    displayedVideoPromptBars,
     setState,
     setLiveImages,
     setLivePaths,
     setLiveNotes,
+    setLiveVideoPromptAreas,
+    setLiveVideoPromptBars,
     commit,
     undo,
     redo,

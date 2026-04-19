@@ -24,6 +24,7 @@ type DrawCanvasArgs = {
   referenceVideoIds: string[];
   referenceAudioIds: string[];
   referenceImageOrderLabels?: Record<string, string> | null;
+  disabledMediaIds?: string[];
   elementImageIds: string[];
   elementImageOrderLabels?: Record<string, string> | null;
   videoLastFrameImageId: string | null;
@@ -55,6 +56,7 @@ export function drawCanvas({
   referenceVideoIds,
   referenceAudioIds,
   referenceImageOrderLabels,
+  disabledMediaIds = [],
   elementImageIds,
   elementImageOrderLabels,
   videoLastFrameImageId,
@@ -78,6 +80,7 @@ export function drawCanvas({
 
   // Draw images
   images.forEach(image => {
+    const isDisabledMedia = disabledMediaIds.includes(image.id);
     const rotation = getImageRotation(image);
     const center = getImageCenter(image);
     const halfWidth = image.width / 2;
@@ -88,6 +91,7 @@ export function drawCanvas({
     ctx.save();
     ctx.translate(center.x, center.y);
     ctx.rotate(rotation);
+    ctx.globalAlpha = isDisabledMedia ? 0.28 : 1; // Unsupported or overflow media should stay visible but look inactive.
 
     if (image.element instanceof HTMLImageElement) {
       if (!image.element.complete || image.element.naturalWidth === 0 || image.element.naturalHeight === 0) {
@@ -195,6 +199,8 @@ export function drawCanvas({
         ctx.restore();
       }
     }
+
+    ctx.globalAlpha = 1;
 
     const padding = 5 / scale;
     const isFflfSelectedVideo = isKlingO1FflfMode && image.mediaType === 'video' && selectedImageIds.includes(image.id);

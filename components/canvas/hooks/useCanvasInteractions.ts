@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type React from 'react';
-import { type AppMode, type CanvasImage, type CanvasNote, type Path, type Point, Tool } from '../../../types';
+import { type AppMode, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type Path, type Point, Tool } from '../../../types';
 import { MIN_NOTE_HEIGHT, MIN_NOTE_WIDTH, RESIZE_HANDLE_SIZE } from '../constants';
 import { getImageBounds, getImageRotation, worldToImageLocal } from '../geometry';
 import {
@@ -11,6 +11,9 @@ import {
   type CropAction,
   type TransformAction,
 } from '../hitTest';
+import { buildVideoPromptAreaLabel, clampAreaRect, isPointInRect, syncVideoPromptAreaMembership } from '../../../utils/videoPromptAreas';
+
+const MIN_DRAG_PREVIEW_PX = 3; // Match marquee selection so area previews only appear after a real drag starts.
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number } } | null;
 type TransformModeState = { imageId: string } | null;
@@ -22,6 +25,7 @@ type UseCanvasInteractionsArgs = {
   appMode: AppMode;
   images: CanvasImage[];
   notes: CanvasNote[];
+  videoPromptAreas: CanvasVideoPromptArea[];
   paths: Path[];
   isNoteEditing: boolean;
   pan: Point;
@@ -37,10 +41,12 @@ type UseCanvasInteractionsArgs = {
   transformMode: TransformModeState;
   onImagesChange: (images: CanvasImage[]) => void;
   onNotesChange: (notes: CanvasNote[]) => void;
+  onVideoPromptAreasChange: (areas: CanvasVideoPromptArea[]) => void;
   onPathsChange: (paths: Path[]) => void;
-  onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[] }) => void;
+  onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[]; videoPromptAreas?: CanvasVideoPromptArea[] }) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
+  onVideoPromptAreaSelect: (id: string | null) => void;
   onFilesDrop: (files: FileList, point: Point) => void;
   onNoteDoubleClick: (id: string) => void;
   onCropRectChange: (rect: { x: number; y: number; width: number; height: number }) => void;
@@ -58,6 +64,7 @@ type UseCanvasInteractionsResult = {
   isDraggingOver: boolean;
   brushPreviewPosition: { x: number; y: number } | null;
   marqueeRect: { left: number; top: number; width: number; height: number } | null;
+  videoPromptAreaDraftRect: { left: number; top: number; width: number; height: number } | null;
   handleMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   handleMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void;
   handleMouseUp: (e: React.MouseEvent<HTMLDivElement>) => void;
@@ -74,6 +81,7 @@ export function useCanvasInteractions({
   appMode,
   images,
   notes,
+  videoPromptAreas,
   paths,
   isNoteEditing,
   pan,
@@ -89,10 +97,12 @@ export function useCanvasInteractions({
   transformMode,
   onImagesChange,
   onNotesChange,
+  onVideoPromptAreasChange,
   onPathsChange,
   onCommit,
   onImageSelect,
   onNoteSelect,
+  onVideoPromptAreaSelect,
   onFilesDrop,
   onNoteDoubleClick,
   onCropRectChange,
@@ -119,6 +129,8 @@ export function useCanvasInteractions({
   const [marqueeStart, setMarqueeStart] = useState<Point | null>(null);
   const [marqueeCurrent, setMarqueeCurrent] = useState<Point | null>(null);
   const [brushPreviewPosition, setBrushPreviewPosition] = useState<{ x: number; y: number } | null>(null);
+  const [videoPromptAreaStart, setVideoPromptAreaStart] = useState<Point | null>(null);
+  const [videoPromptAreaCurrent, setVideoPromptAreaCurrent] = useState<Point | null>(null);
 
   const [cropAction, setCropAction] = useState<CropAction | null>(null);
   const [cropDragStart, setCropDragStart] = useState<{ point: Point; rect: { x: number; y: number; width: number; height: number } } | null>(null);
@@ -167,6 +179,27 @@ export function useCanvasInteractions({
       height: height * scale,
     };
   }, [isMarqueeSelecting, marqueeStart, marqueeCurrent, scale, pan]);
+
+  const videoPromptAreaDraftRect = useMemo(() => {
+    if (!videoPromptAreaStart || !videoPromptAreaCurrent) {
+      return null;
+    }
+    const widthPx = Math.abs(videoPromptAreaCurrent.x - videoPromptAreaStart.x) * scale;
+    const heightPx = Math.abs(videoPromptAreaCurrent.y - videoPromptAreaStart.y) * scale;
+    if (Math.max(widthPx, heightPx) <= MIN_DRAG_PREVIEW_PX) {
+      return null; // Clicking without dragging should not preview a minimum-sized area.
+    }
+    const minX = Math.min(videoPromptAreaStart.x, videoPromptAreaCurrent.x);
+    const minY = Math.min(videoPromptAreaStart.y, videoPromptAreaCurrent.y);
+    const width = Math.abs(videoPromptAreaCurrent.x - videoPromptAreaStart.x);
+    const height = Math.abs(videoPromptAreaCurrent.y - videoPromptAreaStart.y);
+    return {
+      left: minX * scale + pan.x,
+      top: minY * scale + pan.y,
+      width: width * scale,
+      height: height * scale,
+    };
+  }, [pan, scale, videoPromptAreaCurrent, videoPromptAreaStart]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     containerRef.current?.focus({ preventScroll: true });
@@ -237,8 +270,16 @@ export function useCanvasInteractions({
       const updatedNotes = [...notes, newNote];
       onNotesChange(updatedNotes);
       onCommit({ notes: updatedNotes });
+      onVideoPromptAreaSelect(null);
       onNoteSelect(newNote.id);
       onNoteDoubleClick(newNote.id);
+      return;
+    }
+
+    if (activeTool === Tool.VIDEO_PROMPT_AREA) {
+      onVideoPromptAreaSelect(null);
+      setVideoPromptAreaStart(point);
+      setVideoPromptAreaCurrent(point);
       return;
     }
 
@@ -296,18 +337,21 @@ export function useCanvasInteractions({
       if (note) {
         const wantsNoteMultiSelect = isMultiSelectKey || e.shiftKey;
         if (wantsNoteMultiSelect) {
+          onVideoPromptAreaSelect(null);
           onNoteSelect(note.id, { multi: true });
           return;
         }
 
         const noteAlreadySelected = selectedNoteIds.includes(note.id);
         if (!noteAlreadySelected) {
+          onVideoPromptAreaSelect(null);
           onNoteSelect(note.id);
         }
 
         const noteIdsToDrag = noteAlreadySelected ? selectedNoteIds : [note.id];
         const imageIdsToDrag = noteAlreadySelected ? selectedImageIds : [];
 
+        onVideoPromptAreaSelect(null);
         beginDrag(imageIdsToDrag, noteIdsToDrag);
         return;
       }
@@ -315,35 +359,50 @@ export function useCanvasInteractions({
       const image = getImageAtPoint(point, images);
       if (image) {
         if (wantsTailSelection) {
+          onVideoPromptAreaSelect(null);
           onImageSelect(image.id, { lastFrame: true });
           return;
         }
         if (isElementToggle) {
+          onVideoPromptAreaSelect(null);
           onImageSelect(image.id, { element: true });
           return;
         }
         if (isReferenceToggle) {
+          onVideoPromptAreaSelect(null);
           onImageSelect(image.id, { reference: true });
           return;
         }
         if (isMultiSelectKey) {
+          onVideoPromptAreaSelect(null);
           onImageSelect(image.id, { multi: true });
           return;
         }
 
         const imageAlreadySelected = selectedImageIds.includes(image.id);
         if (!imageAlreadySelected) {
+          onVideoPromptAreaSelect(null);
           onImageSelect(image.id);
         }
 
         const imageIdsToDrag = imageAlreadySelected ? selectedImageIds : [image.id];
         const noteIdsToDrag = imageAlreadySelected ? selectedNoteIds : [];
 
+        onVideoPromptAreaSelect(null);
         beginDrag(imageIdsToDrag, noteIdsToDrag);
         return;
       }
 
+      const area = [...videoPromptAreas].reverse().find(currentArea => isPointInRect(point, currentArea));
+      if (area && !isMultiSelectKey) {
+        onImageSelect(null);
+        onNoteSelect(null);
+        onVideoPromptAreaSelect(area.id);
+        return;
+      }
+
       if (!isMultiSelectKey) {
+        onVideoPromptAreaSelect(null);
         onImageSelect(null);
         onNoteSelect(null);
       }
@@ -369,14 +428,17 @@ export function useCanvasInteractions({
         const image = getImageAtPoint(point, images);
         if (image) {
           if (wantsTailSelection) {
+            onVideoPromptAreaSelect(null);
             onImageSelect(image.id, { lastFrame: true });
             return;
           }
           if (isElementToggle) {
+            onVideoPromptAreaSelect(null);
             onImageSelect(image.id, { element: true });
             return;
           }
           if (isReferenceToggle) {
+            onVideoPromptAreaSelect(null);
             onImageSelect(image.id, { reference: true });
             return;
           }
@@ -436,6 +498,11 @@ export function useCanvasInteractions({
 
     if (isMarqueeSelecting) {
       setMarqueeCurrent(hoverPoint);
+      return;
+    }
+
+    if (videoPromptAreaStart) {
+      setVideoPromptAreaCurrent(hoverPoint);
       return;
     }
 
@@ -781,13 +848,50 @@ export function useCanvasInteractions({
           .map(note => note.id);
 
         if (imageIdsInBounds.length === 0 && noteIdsInBounds.length === 0) {
+          onVideoPromptAreaSelect(null);
           onImageSelect(null);
           onNoteSelect(null);
         } else {
+          onVideoPromptAreaSelect(null);
           imageIdsInBounds.forEach(id => onImageSelect(id, { multi: true }));
           noteIdsInBounds.forEach(id => onNoteSelect(id, { multi: true }));
         }
       }
+    }
+
+    if (videoPromptAreaStart && videoPromptAreaCurrent) {
+      const pixelWidth = Math.abs(videoPromptAreaCurrent.x - videoPromptAreaStart.x) * scale;
+      const pixelHeight = Math.abs(videoPromptAreaCurrent.y - videoPromptAreaStart.y) * scale;
+      if (Math.max(pixelWidth, pixelHeight) <= MIN_DRAG_PREVIEW_PX) {
+        setVideoPromptAreaStart(null);
+        setVideoPromptAreaCurrent(null);
+        return;
+      }
+      const normalizedRect = clampAreaRect({
+        x: videoPromptAreaStart.x,
+        y: videoPromptAreaStart.y,
+        width: videoPromptAreaCurrent.x - videoPromptAreaStart.x,
+        height: videoPromptAreaCurrent.y - videoPromptAreaStart.y,
+      });
+      const nextSequence = videoPromptAreas.reduce((maxSequence, area) => Math.max(maxSequence, area.sequence), 0) + 1;
+      const nextAreaId = crypto.randomUUID();
+      const nextAreas = syncVideoPromptAreaMembership([
+        ...videoPromptAreas,
+        {
+          id: nextAreaId,
+          sequence: nextSequence,
+          label: buildVideoPromptAreaLabel(nextSequence),
+          promptBarId: null,
+          orderedMediaIds: [],
+          ...normalizedRect,
+        },
+      ], images);
+      onVideoPromptAreasChange(nextAreas);
+      onCommit({ videoPromptAreas: nextAreas });
+      onVideoPromptAreaSelect(nextAreaId);
+      setVideoPromptAreaStart(null);
+      setVideoPromptAreaCurrent(null);
+      return;
     }
 
     if (isMarqueeSelecting) {
@@ -836,6 +940,12 @@ export function useCanvasInteractions({
     setResizeStartDimensions(null);
 
     if (wasActive) {
+      if (draggedImageIds.length > 0) {
+        const nextAreas = syncVideoPromptAreaMembership(videoPromptAreas, images);
+        onVideoPromptAreasChange(nextAreas);
+        onCommit({ images, videoPromptAreas: nextAreas });
+        return;
+      }
       onCommit();
     }
   };
@@ -883,6 +993,7 @@ export function useCanvasInteractions({
     isDraggingOver,
     brushPreviewPosition,
     marqueeRect,
+    videoPromptAreaDraftRect,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,

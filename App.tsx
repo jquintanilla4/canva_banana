@@ -10,6 +10,9 @@ import {
   AppMode,
   ApiProviderId,
   type CanvasNote,
+  type CanvasVideoPromptArea,
+  type CanvasVideoPromptBar,
+  type VideoPromptAreaMembership,
 } from './types';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
@@ -22,6 +25,13 @@ import {
   SCAIL_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
+  SEEDANCE2_ASPECT_RATIO_OPTIONS,
+  SEEDANCE2_AUDIO_OPTIONS,
+  SEEDANCE2_CAMERA_FIXED_OPTIONS,
+  SEEDANCE2_DURATION_OPTIONS,
+  SEEDANCE2_RESOLUTION_OPTIONS,
+  SEEDANCE2_VARIANT_OPTIONS,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
@@ -66,6 +76,12 @@ import {
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from './utils/seedanceReferences';
 import {
+  buildVideoPromptAreaMembership,
+  getAreaPromptBarRect,
+  SEEDANCE_2_VIDEO_PROMPT_PROFILE,
+} from './utils/videoPromptAreas';
+import { PlusIcon } from './components/Icons';
+import {
   EMPTY_CAMERA_SELECTION,
   buildCameraPromptPrefix,
   cloneCameraSelection,
@@ -100,6 +116,8 @@ export default function App() {
   const [eraserSize, setEraserSize] = useState(20);
   const [brushColor, setBrushColor] = useState('#ff0000');
   const [prompt, setPrompt] = useState('');
+  const [activeEmbeddedPromptBarId, setActiveEmbeddedPromptBarId] = useState<string | null>(null);
+  const [selectedVideoPromptAreaId, setSelectedVideoPromptAreaId] = useState<string | null>(null);
   const [cameraSettings, setCameraSettings] = useState<CameraSettingsSelection>(
     () => cloneCameraSelection(EMPTY_CAMERA_SELECTION),
   );
@@ -109,20 +127,26 @@ export default function App() {
     images,                // Committed canvas images
     paths,                 // Committed drawing paths (brush/annotate)
     notes,                 // Committed notes
+    videoPromptAreas,      // Committed video prompt areas
+    videoPromptBars,       // Committed video prompt bars
     displayedImages,       // Images currently displayed (may include live edits)
     displayedPaths,        // Paths currently displayed (may include live edits)
     displayedNotes,        // Notes currently displayed (may include live edits)
+    displayedVideoPromptAreas, // Areas currently displayed (may include live edits)
+    displayedVideoPromptBars, // Bars currently displayed (may include live edits)
     setState,              // Update state with undo/redo support
     setLiveImages,         // Stage in-progress edits to images
     setLivePaths,          // Stage in-progress edits to paths
     setLiveNotes,          // Stage in-progress edits to notes
+    setLiveVideoPromptAreas, // Stage in-progress area edits
+    setLiveVideoPromptBars, // Stage in-progress prompt bar edits
     commit: handleCommit,  // Commit staged (live) edits as a new history entry
     undo,                  // Undo last committed action
     redo,                  // Redo last undone action
     canUndo,               // Whether undo is currently possible
     canRedo,               // Whether redo is currently possible
     resetHistory,          // Reset canvas state and undo/redo stack
-  } = useCanvasHistory({ images: [], paths: [], notes: [] });
+  } = useCanvasHistory({ images: [], paths: [], notes: [], videoPromptAreas: [], videoPromptBars: [] });
 
   // Brush/annotate layers (paths) are the only things we clear with the eraser button.
   const hasClearablePaths = displayedPaths.some(
@@ -339,6 +363,67 @@ export default function App() {
     setZoomToSelectionTrigger(prev => prev + 1);
   }, [selectedImageIds.length, selectedNoteIds.length]);
 
+  const handleVideoPromptAreasChange = useCallback((nextAreas: CanvasVideoPromptArea[]) => {
+    setLiveVideoPromptAreas(nextAreas);
+  }, [setLiveVideoPromptAreas]);
+
+  const handleVideoPromptBarsChange = useCallback((nextBars: CanvasVideoPromptBar[]) => {
+    setLiveVideoPromptBars(nextBars);
+  }, [setLiveVideoPromptBars]);
+
+  const handleCreateVideoPromptBar = useCallback(() => {
+    if (displayedVideoPromptAreas.length === 0) {
+      return;
+    }
+    const selectedArea = selectedVideoPromptAreaId
+      ? displayedVideoPromptAreas.find(area => area.id === selectedVideoPromptAreaId) ?? null
+      : null;
+    const targetArea = selectedArea && !selectedArea.promptBarId
+      ? selectedArea
+      : [...displayedVideoPromptAreas].reverse().find(area => !area.promptBarId) ?? null;
+    if (!targetArea) {
+      setError('Each video prompt area already has a prompt bar.');
+      return;
+    }
+    const snappedRect = getAreaPromptBarRect(targetArea);
+    const newBar: CanvasVideoPromptBar = {
+      id: crypto.randomUUID(),
+      assignedAreaId: targetArea.id,
+      prompt: '',
+      negativePrompt: '',
+      seedance2Variant: 'reference',
+      seedance2AspectRatio: '16:9',
+      seedance2Resolution: '720p',
+      seedance2Duration: '5',
+      seedance2GenerateAudio: false,
+      seedance2CameraFixed: false,
+      ...snappedRect,
+    };
+    setState(prevState => ({
+      ...prevState,
+      videoPromptAreas: prevState.videoPromptAreas.map(area => (
+        area.id === targetArea.id ? { ...area, promptBarId: newBar.id } : area
+      )),
+      videoPromptBars: [...prevState.videoPromptBars, newBar],
+    }));
+  }, [displayedVideoPromptAreas, selectedVideoPromptAreaId, setError, setState]);
+
+  const handleEmbeddedPromptBarUpdate = useCallback((barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => {
+    setLiveVideoPromptBars(displayedVideoPromptBars.map(bar => (
+      bar.id === barId ? updater(bar) : bar
+    )));
+  }, [displayedVideoPromptBars, setLiveVideoPromptBars]);
+
+  useEffect(() => {
+    if (!selectedVideoPromptAreaId) {
+      return;
+    }
+    const hasSelectedArea = displayedVideoPromptAreas.some(area => area.id === selectedVideoPromptAreaId);
+    if (!hasSelectedArea) {
+      setSelectedVideoPromptAreaId(null);
+    }
+  }, [displayedVideoPromptAreas, selectedVideoPromptAreaId]);
+
   const hasSelectedStillImage = useMemo(
     () => selectedImageIds.some(id => images.find(img => img.id === id)?.mediaType === 'image'),
     [images, selectedImageIds],
@@ -374,6 +459,8 @@ export default function App() {
     displayedImages,
     displayedNotes,
     displayedPaths,
+    displayedVideoPromptAreas,
+    displayedVideoPromptBars,
     resetHistory,
     providerAvailability,
     availableProviders: AVAILABLE_PROVIDERS,
@@ -495,6 +582,10 @@ export default function App() {
       notes: selectedNoteIds.length
         ? prevState.notes.filter(note => !selectedNoteIds.includes(note.id))
         : prevState.notes,
+      videoPromptAreas: prevState.videoPromptAreas.map(area => ({
+        ...area,
+        orderedMediaIds: area.orderedMediaIds.filter(mediaId => !selectedImageIds.includes(mediaId)),
+      })),
     }));
 
     if (selectedImageIds.length) {
@@ -776,9 +867,21 @@ export default function App() {
     onGenerationComplete: handleGenerationComplete,
   });
 
+  const isEmbeddedPromptBarActive = activeEmbeddedPromptBarId !== null;
+
   useEffect(() => {
     autosaveSnapshotRef.current = autosaveSnapshot;
   }, [autosaveSnapshot]);
+
+  useEffect(() => {
+    if (!activeEmbeddedPromptBarId) {
+      return;
+    }
+    const activeBar = displayedVideoPromptBars.find(bar => bar.id === activeEmbeddedPromptBarId);
+    if (!activeBar?.assignedAreaId) {
+      setActiveEmbeddedPromptBarId(null);
+    }
+  }, [activeEmbeddedPromptBarId, displayedVideoPromptBars]);
 
   useEffect(() => {
     if (generationTick === 0) {
@@ -942,8 +1045,77 @@ export default function App() {
     includeTailFrame: isKlingO1FflfMode,
     tailImageId: videoLastFrameImageId,
   });
+  const videoPromptAreaMemberships = useMemo(() => (
+    displayedVideoPromptAreas.reduce<Record<string, VideoPromptAreaMembership>>((acc, area) => {
+      acc[area.id] = buildVideoPromptAreaMembership(area, displayedImages, SEEDANCE_2_VIDEO_PROMPT_PROFILE);
+      return acc;
+    }, {})
+  ), [displayedImages, displayedVideoPromptAreas]);
+  const videoPromptAreaMembershipList = useMemo(() => (
+    Object.values(videoPromptAreaMemberships) as VideoPromptAreaMembership[]
+  ), [videoPromptAreaMemberships]);
+  const videoPromptAreaLabelMap = useMemo(() => (
+    videoPromptAreaMembershipList.reduce<Record<string, string>>((acc, membership) => {
+      Object.entries(membership.orderLabels).forEach(([mediaId, label]) => {
+        acc[mediaId] = label;
+      });
+      return acc;
+    }, {})
+  ), [videoPromptAreaMembershipList]);
+  const ignoredVideoPromptMediaIds = useMemo(() => (
+    videoPromptAreaMembershipList.flatMap(membership => membership.ignoredMediaIds)
+  ), [videoPromptAreaMembershipList]);
+  const acceptedVideoPromptImageIds = useMemo(() => (
+    videoPromptAreaMembershipList.flatMap(membership => membership.acceptedImageIds)
+  ), [videoPromptAreaMembershipList]);
+  const acceptedVideoPromptVideoIds = useMemo(() => (
+    videoPromptAreaMembershipList.flatMap(membership => membership.acceptedVideoIds)
+  ), [videoPromptAreaMembershipList]);
+  const acceptedVideoPromptAudioIds = useMemo(() => (
+    videoPromptAreaMembershipList.flatMap(membership => membership.acceptedAudioIds)
+  ), [videoPromptAreaMembershipList]);
   const seedance2ReferenceAssetCount = effectiveSeedanceReferenceImageIds.length + effectiveSeedanceReferenceVideoIds.length + effectiveSeedanceReferenceAudioIds.length; // Seedance reference mode treats selected media as effective refs too.
-  const canvasReferenceOrderLabels = klingReferenceOrderLabels; // Reuse the same badge map for canvas labels and prompt mentions.
+  const canvasReferenceOrderLabels = useMemo(() => ({
+    ...(klingReferenceOrderLabels ?? {}),
+    ...videoPromptAreaLabelMap,
+  }), [klingReferenceOrderLabels, videoPromptAreaLabelMap]); // Area labels should render on canvas without replacing the legacy reference flow.
+  const canvasReferenceImageIds = useMemo(() => (
+    Array.from(new Set([...referenceImageIds, ...acceptedVideoPromptImageIds]))
+  ), [acceptedVideoPromptImageIds, referenceImageIds]);
+  const canvasReferenceVideoIds = useMemo(() => (
+    Array.from(new Set([...referenceVideoIds, ...acceptedVideoPromptVideoIds]))
+  ), [acceptedVideoPromptVideoIds, referenceVideoIds]);
+  const canvasReferenceAudioIds = useMemo(() => (
+    Array.from(new Set([...referenceAudioIds, ...acceptedVideoPromptAudioIds]))
+  ), [acceptedVideoPromptAudioIds, referenceAudioIds]);
+  const handleEmbeddedVideoPromptSubmit = useCallback((barId: string) => {
+    const targetBar = displayedVideoPromptBars.find(bar => bar.id === barId);
+    if (!targetBar || !targetBar.assignedAreaId) {
+      return;
+    }
+    const membership = videoPromptAreaMemberships[targetBar.assignedAreaId];
+    if (!membership) {
+      return;
+    }
+    void handleGenerate({
+      kind: 'video',
+      prompt: targetBar.prompt,
+      provider: 'volcengine',
+      modelId: SEEDANCE_2_VIDEO_MODEL_ID,
+      modelMode: 'video',
+      referenceImageIds: membership.acceptedImageIds,
+      referenceVideoIds: membership.acceptedVideoIds,
+      referenceAudioIds: membership.acceptedAudioIds,
+      volcengineOptions: {
+        seedance2Variant: targetBar.seedance2Variant,
+        seedance2AspectRatio: targetBar.seedance2AspectRatio,
+        seedance2Resolution: targetBar.seedance2Resolution,
+        seedance2Duration: targetBar.seedance2Duration,
+        seedance2GenerateAudio: targetBar.seedance2GenerateAudio,
+        seedance2CameraFixed: targetBar.seedance2CameraFixed,
+      },
+    });
+  }, [displayedVideoPromptBars, handleGenerate, videoPromptAreaMemberships]);
 
   const hasSourceVideoSelected = Boolean(sourceVideoId);
   const hasSourceAudioSelected = Boolean(sourceAudioId);
@@ -996,6 +1168,77 @@ export default function App() {
     hasSingleImageSelected,
     primarySelectionMediaType,
   });
+  const embeddedVideoPromptBarModelOptions = useMemo(() => ([
+    { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
+  ]), []);
+  const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => ([
+    {
+      id: `${bar.id}-seedance-variant`,
+      ariaLabel: 'Seedance 2 variant',
+      options: SEEDANCE2_VARIANT_OPTIONS,
+      value: bar.seedance2Variant,
+      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2Variant: value === 'smart' ? 'smart' : 'reference',
+      })),
+      disabled: isLoading,
+    },
+    {
+      id: `${bar.id}-seedance-aspect-ratio`,
+      ariaLabel: 'Seedance 2 aspect ratio',
+      options: SEEDANCE2_ASPECT_RATIO_OPTIONS,
+      value: bar.seedance2AspectRatio ?? '16:9',
+      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2AspectRatio: value as CanvasVideoPromptBar['seedance2AspectRatio'],
+      })),
+      disabled: isLoading,
+    },
+    {
+      id: `${bar.id}-seedance-resolution`,
+      ariaLabel: 'Seedance 2 resolution',
+      options: SEEDANCE2_RESOLUTION_OPTIONS,
+      value: bar.seedance2Resolution ?? '720p',
+      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2Resolution: value as CanvasVideoPromptBar['seedance2Resolution'],
+      })),
+      disabled: isLoading,
+    },
+    {
+      id: `${bar.id}-seedance-duration`,
+      ariaLabel: 'Seedance 2 duration',
+      options: SEEDANCE2_DURATION_OPTIONS,
+      value: bar.seedance2Duration ?? '5',
+      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2Duration: value as CanvasVideoPromptBar['seedance2Duration'],
+      })),
+      disabled: isLoading,
+    },
+    {
+      id: `${bar.id}-seedance-audio`,
+      ariaLabel: 'Seedance 2 audio',
+      options: SEEDANCE2_AUDIO_OPTIONS,
+      value: bar.seedance2GenerateAudio ? 'on' : 'off',
+      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2GenerateAudio: value === 'on',
+      })),
+      disabled: isLoading,
+    },
+    {
+      id: `${bar.id}-seedance-camera-fixed`,
+      ariaLabel: 'Seedance 2 camera lock',
+      options: SEEDANCE2_CAMERA_FIXED_OPTIONS,
+      value: bar.seedance2CameraFixed ? 'on' : 'off',
+      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2CameraFixed: value === 'on',
+      })),
+      disabled: isLoading,
+    },
+  ]), [handleEmbeddedPromptBarUpdate, isLoading]);
 
   // Validation layer for prompt submission that enforces provider/model-specific rules.
   const {
@@ -1280,12 +1523,19 @@ export default function App() {
       <RecordingOverlay duration={recordingDuration} visible={isRecording} />
 
       {/* Main drawing area */}
-      <main className="relative flex-1 min-h-0">
+      <main className="relative z-0 flex-1 min-h-0">
         <Canvas
           images={displayedImages}
           onImagesChange={setLiveImages}
           notes={displayedNotes}
           onNotesChange={handleNotesChange}
+          videoPromptAreas={displayedVideoPromptAreas}
+          onVideoPromptAreasChange={handleVideoPromptAreasChange}
+          videoPromptBars={displayedVideoPromptBars}
+          onVideoPromptBarsChange={handleVideoPromptBarsChange}
+          selectedVideoPromptAreaId={selectedVideoPromptAreaId}
+          onVideoPromptAreaSelect={setSelectedVideoPromptAreaId}
+          videoPromptAreaMemberships={videoPromptAreaMemberships}
           tool={tool}
           appMode={appMode}
           paths={displayedPaths}
@@ -1295,10 +1545,11 @@ export default function App() {
           brushColor={brushColor}
           selectedImageIds={selectedImageIds}
           selectedNoteIds={selectedNoteIds}
-          referenceImageIds={referenceImageIds}
-          referenceVideoIds={referenceVideoIds}
-          referenceAudioIds={referenceAudioIds}
+          referenceImageIds={canvasReferenceImageIds}
+          referenceVideoIds={canvasReferenceVideoIds}
+          referenceAudioIds={canvasReferenceAudioIds}
           referenceImageOrderLabels={canvasReferenceOrderLabels}
+          disabledMediaIds={ignoredVideoPromptMediaIds}
           elementImageIds={elementImageIds}
           elementImageOrderLabels={klingElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
@@ -1344,6 +1595,15 @@ export default function App() {
           transformMode={transformMode}
           onStartTransform={handleStartTransform}
           onExitTransform={handleExitTransform}
+          isLoading={isLoading}
+          onVideoPromptBarFocus={setActiveEmbeddedPromptBarId}
+          onVideoPromptBarBlur={(barId) => {
+            setActiveEmbeddedPromptBarId(currentId => (currentId === barId ? null : currentId));
+          }}
+          onVideoPromptBarUpdate={handleEmbeddedPromptBarUpdate}
+          onVideoPromptBarSubmit={handleEmbeddedVideoPromptSubmit}
+          buildVideoPromptBarControls={buildEmbeddedVideoPromptBarControls}
+          embeddedVideoPromptBarModelOptions={embeddedVideoPromptBarModelOptions}
         />
         <ViewToolbar
           onZoomToFit={handleZoomToFit}
@@ -1421,8 +1681,8 @@ export default function App() {
           onPromptChange={setPrompt}
           onSubmit={handleGenerate}
           isLoading={isLoading}
-          inputDisabled={disablePromptInput}
-          submitDisabled={submitDisabled || isSeedanceSubmitLocked}
+          inputDisabled={disablePromptInput || isEmbeddedPromptBarActive}
+          submitDisabled={submitDisabled || isSeedanceSubmitLocked || isEmbeddedPromptBarActive}
           modelOptions={promptBarModelOptions}
           selectedModel={fal.falModelId}
           onModelChange={fal.handleFalModelChange}
@@ -1452,6 +1712,19 @@ export default function App() {
           klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
+          sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}
+          leadingAccessory={(
+            <button
+              type="button"
+              onClick={handleCreateVideoPromptBar}
+              disabled={displayedVideoPromptAreas.length === 0 || isLoading}
+              className={`shrink-0 self-center rounded-2xl bg-gray-900/70 text-white shadow-xl transition-all duration-300 ease-out hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-45 ${isEmbeddedPromptBarActive ? 'h-[2.75rem] w-[2.75rem]' : 'h-[3.2rem] w-[3.2rem]'}`}
+              aria-label="Create video prompt bar"
+              title={displayedVideoPromptAreas.length === 0 ? 'Create a video prompt area first' : 'Create video prompt bar'}
+            >
+              <PlusIcon className="mx-auto h-4 w-4" />
+            </button>
+          )}
         />
       )}
     </div>

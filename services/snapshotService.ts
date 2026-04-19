@@ -5,6 +5,8 @@ import type {
   CanvasImageMetadata,
   CanvasMediaType,
   CanvasNote,
+  CanvasVideoPromptArea,
+  CanvasVideoPromptBar,
   GenerationInputs,
   Path,
   Point,
@@ -67,10 +69,12 @@ export type SnapshotManifestV2 = {
   version: 2;
   createdAt: string;
   state: {
-    images: SnapshotImageManifest[];
-    notes: CanvasNote[];
-    paths: Path[];
-    meta?: {
+      images: SnapshotImageManifest[];
+      notes: CanvasNote[];
+      paths: Path[];
+      videoPromptAreas?: CanvasVideoPromptArea[];
+      videoPromptBars?: CanvasVideoPromptBar[];
+      meta?: {
       appMode: string;
       tool: string;
       brushSize: number;
@@ -155,6 +159,8 @@ export type SerializedSnapshotV1 = {
     images: SerializedCanvasImageV1[];
     notes: CanvasNote[];
     paths: Path[];
+    videoPromptAreas?: CanvasVideoPromptArea[];
+    videoPromptBars?: CanvasVideoPromptBar[];
     meta?: SnapshotMetaState;
   };
 };
@@ -218,6 +224,8 @@ export type RestoredSnapshotState = {
   images: CanvasImage[];
   notes: CanvasNote[];
   paths: Path[];
+  videoPromptAreas: CanvasVideoPromptArea[];
+  videoPromptBars: CanvasVideoPromptBar[];
   meta?: SerializedSnapshotV1['state']['meta'];
 };
 
@@ -365,9 +373,11 @@ export const buildSnapshotBinaryFromState = async (params: {
   images: CanvasImage[];
   notes: CanvasNote[];
   paths: Path[];
+  videoPromptAreas: CanvasVideoPromptArea[];
+  videoPromptBars: CanvasVideoPromptBar[];
   meta: SnapshotMetaState;
 }): Promise<SnapshotBinary> => {
-  const { images, notes, paths, meta } = params;
+  const { images, notes, paths, videoPromptAreas, videoPromptBars, meta } = params;
   const imagesWithManifests: SnapshotBinary['images'] = await Promise.all(
     images.map(async (img) => {
       const manifest: SnapshotImageManifest = {
@@ -400,6 +410,8 @@ export const buildSnapshotBinaryFromState = async (params: {
         ...path,
         points: path.points.map(point => ({ ...point })),
       })),
+      videoPromptAreas: videoPromptAreas.map(area => ({ ...area, orderedMediaIds: [...area.orderedMediaIds] })),
+      videoPromptBars: videoPromptBars.map(bar => ({ ...bar })),
       meta,
     },
   };
@@ -422,6 +434,8 @@ export const restoreSnapshotFromFile = async (
   let restoredImages: CanvasImage[] = [];
   let snapshotNotes: CanvasNote[] = [];
   let snapshotPaths: Path[] = [];
+  let snapshotVideoPromptAreas: CanvasVideoPromptArea[] = [];
+  let snapshotVideoPromptBars: CanvasVideoPromptBar[] = [];
   let meta: SerializedSnapshotV1['state']['meta'] | undefined;
   // Audio snapshots need special handling because they render as waveform images.
   const restoreAudioImage = async (params: {
@@ -550,6 +564,12 @@ export const restoreSnapshotFromFile = async (
         points: Array.isArray(path.points) ? path.points.map(point => ({ ...point })) : [],
       }))
       : [];
+    snapshotVideoPromptAreas = Array.isArray(state.videoPromptAreas)
+      ? state.videoPromptAreas.map(area => ({ ...area, orderedMediaIds: Array.isArray(area.orderedMediaIds) ? [...area.orderedMediaIds] : [] }))
+      : [];
+    snapshotVideoPromptBars = Array.isArray(state.videoPromptBars)
+      ? state.videoPromptBars.map(bar => ({ ...bar }))
+      : [];
     meta = state.meta as SerializedSnapshotV1['state']['meta'];
   } else {
     const raw = await file.text();
@@ -558,7 +578,7 @@ export const restoreSnapshotFromFile = async (
       throw new Error('Snapshot file is invalid.');
     }
 
-    const { images = [], notes = [], paths = [], meta: parsedMeta } = parsed.state;
+    const { images = [], notes = [], paths = [], videoPromptAreas = [], videoPromptBars = [], meta: parsedMeta } = parsed.state;
 
     if (!Array.isArray(images) || !Array.isArray(notes) || !Array.isArray(paths)) {
       throw new Error('Snapshot data is incomplete.');
@@ -629,6 +649,12 @@ export const restoreSnapshotFromFile = async (
         ? path.points.map(point => ({ ...point }))
         : [],
     }));
+    snapshotVideoPromptAreas = Array.isArray(videoPromptAreas)
+      ? videoPromptAreas.map(area => ({ ...area, orderedMediaIds: Array.isArray(area.orderedMediaIds) ? [...area.orderedMediaIds] : [] }))
+      : [];
+    snapshotVideoPromptBars = Array.isArray(videoPromptBars)
+      ? videoPromptBars.map(bar => ({ ...bar }))
+      : [];
     meta = parsedMeta as SerializedSnapshotV1['state']['meta'];
   }
 
@@ -668,10 +694,40 @@ export const restoreSnapshotFromFile = async (
     };
   });
 
+  const sanitizedVideoPromptAreas: CanvasVideoPromptArea[] = snapshotVideoPromptAreas.map((area, index) => ({
+    id: typeof area?.id === 'string' && area.id.length > 0 ? area.id : crypto.randomUUID(),
+    sequence: typeof area?.sequence === 'number' && Number.isFinite(area.sequence) ? area.sequence : index + 1,
+    label: typeof area?.label === 'string' && area.label.length > 0 ? area.label : `Video prompt area ${String(index + 1).padStart(2, '0')}`,
+    x: typeof area?.x === 'number' ? area.x : 0,
+    y: typeof area?.y === 'number' ? area.y : 0,
+    width: typeof area?.width === 'number' ? area.width : 280,
+    height: typeof area?.height === 'number' ? area.height : 220,
+    promptBarId: typeof area?.promptBarId === 'string' ? area.promptBarId : null,
+    orderedMediaIds: Array.isArray(area?.orderedMediaIds) ? area.orderedMediaIds.filter((id): id is string => typeof id === 'string') : [],
+  }));
+  const sanitizedVideoPromptBars: CanvasVideoPromptBar[] = snapshotVideoPromptBars.map(bar => ({
+    id: typeof bar?.id === 'string' && bar.id.length > 0 ? bar.id : crypto.randomUUID(),
+    assignedAreaId: typeof bar?.assignedAreaId === 'string' ? bar.assignedAreaId : null,
+    x: typeof bar?.x === 'number' ? bar.x : 0,
+    y: typeof bar?.y === 'number' ? bar.y : 0,
+    width: typeof bar?.width === 'number' ? bar.width : 920,
+    height: typeof bar?.height === 'number' ? bar.height : 190,
+    prompt: typeof bar?.prompt === 'string' ? bar.prompt : '',
+    negativePrompt: typeof bar?.negativePrompt === 'string' ? bar.negativePrompt : '',
+    seedance2Variant: bar?.seedance2Variant === 'smart' ? 'smart' : 'reference',
+    seedance2AspectRatio: typeof bar?.seedance2AspectRatio === 'string' ? bar.seedance2AspectRatio : '16:9',
+    seedance2Resolution: typeof bar?.seedance2Resolution === 'string' ? bar.seedance2Resolution : '720p',
+    seedance2Duration: typeof bar?.seedance2Duration === 'string' ? bar.seedance2Duration : '5',
+    seedance2GenerateAudio: Boolean(bar?.seedance2GenerateAudio),
+    seedance2CameraFixed: Boolean(bar?.seedance2CameraFixed),
+  }));
+
   return {
     images: restoredImages,
     notes: sanitizedNotes,
     paths: sanitizedPaths,
+    videoPromptAreas: sanitizedVideoPromptAreas,
+    videoPromptBars: sanitizedVideoPromptBars,
     meta,
   };
 };

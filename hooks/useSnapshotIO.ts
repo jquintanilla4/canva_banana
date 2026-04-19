@@ -5,6 +5,8 @@ import type {
   AppMode,
   CanvasImage,
   CanvasNote,
+  CanvasVideoPromptArea,
+  CanvasVideoPromptBar,
   Path,
 } from '../types';
 import { Tool } from '../types';
@@ -78,6 +80,8 @@ type SnapshotIOArgs = {
   displayedImages: CanvasImage[];
   displayedNotes: CanvasNote[];
   displayedPaths: Path[];
+  displayedVideoPromptAreas: CanvasVideoPromptArea[];
+  displayedVideoPromptBars: CanvasVideoPromptBar[];
   resetHistory: (state: AppState) => void;
   providerAvailability: Record<ApiProvider, boolean>;
   availableProviders: ApiProvider[];
@@ -104,6 +108,8 @@ export function useSnapshotIO({
   displayedImages,
   displayedNotes,
   displayedPaths,
+  displayedVideoPromptAreas,
+  displayedVideoPromptBars,
   resetHistory,
   providerAvailability,
   availableProviders,
@@ -238,6 +244,8 @@ export function useSnapshotIO({
       images: displayedImages,
       notes: displayedNotes,
       paths: displayedPaths,
+      videoPromptAreas: displayedVideoPromptAreas,
+      videoPromptBars: displayedVideoPromptBars,
     };
     const meta: SnapshotMetaState = {
       appMode,
@@ -298,6 +306,8 @@ export function useSnapshotIO({
       images: snapshotState.images,
       notes: snapshotState.notes,
       paths: snapshotState.paths,
+      videoPromptAreas: snapshotState.videoPromptAreas,
+      videoPromptBars: snapshotState.videoPromptBars,
       meta,
     });
   }, [
@@ -308,6 +318,8 @@ export function useSnapshotIO({
     displayedImages,
     displayedNotes,
     displayedPaths,
+    displayedVideoPromptAreas,
+    displayedVideoPromptBars,
     eraserSize,
     falAspectRatioSelection,
     falCreativity,
@@ -384,6 +396,8 @@ export function useSnapshotIO({
       images: displayedImages,
       notes: displayedNotes,
       paths: displayedPaths,
+      videoPromptAreas: displayedVideoPromptAreas,
+      videoPromptBars: displayedVideoPromptBars,
     };
 
     autosaveQueueRef.current = autosaveQueueRef.current
@@ -417,6 +431,8 @@ export function useSnapshotIO({
     displayedImages,
     displayedNotes,
     displayedPaths,
+    displayedVideoPromptAreas,
+    displayedVideoPromptBars,
     setError,
     writeSnapshotToHandle,
   ]);
@@ -534,6 +550,8 @@ export function useSnapshotIO({
         images: restored.images,
         paths: restored.paths,
         notes: restored.notes,
+        videoPromptAreas: restored.videoPromptAreas,
+        videoPromptBars: restored.videoPromptBars,
       };
 
       resetHistory(nextState);
