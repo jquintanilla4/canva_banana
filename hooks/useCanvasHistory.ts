@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CanvasImage, CanvasNote, CanvasVideoPromptArea, CanvasVideoPromptBar, Path } from '../types';
 import { getVideoObjectUrl } from '../services/mediaService';
+import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../utils/canvasColorOptions';
 
 export type AppState = {
   images: CanvasImage[];
@@ -28,7 +29,7 @@ const getStateSignature = (state: AppState): string => {
   const pathSignature = state.paths.map(p => `${p.points.length},${p.tool}`).join(',');
   const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length},${n.fontSize ?? ''},${n.backgroundColor}`).join(';');
   const videoPromptAreaSignature = state.videoPromptAreas
-    .map(area => `${area.id},${area.sequence},${area.x.toFixed(2)},${area.y.toFixed(2)},${area.width.toFixed(2)},${area.height.toFixed(2)},${area.promptBarId ?? ''},${area.orderedMediaIds.join(',')}`)
+    .map(area => `${area.id},${area.sequence},${area.x.toFixed(2)},${area.y.toFixed(2)},${area.width.toFixed(2)},${area.height.toFixed(2)},${area.borderColor ?? DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR},${area.promptBarId ?? ''},${area.orderedMediaIds.join(',')}`)
     .join(';');
   const videoPromptBarSignature = state.videoPromptBars
     .map(bar => `${bar.id},${bar.assignedAreaId ?? ''},${bar.x.toFixed(2)},${bar.y.toFixed(2)},${bar.width.toFixed(2)},${bar.height.toFixed(2)},${bar.prompt.length},${bar.negativePrompt.length},${bar.seedance2Variant},${bar.seedance2AspectRatio},${bar.seedance2Resolution},${bar.seedance2Duration},${bar.seedance2GenerateAudio ? 1 : 0},${bar.seedance2CameraFixed ? 1 : 0}`)

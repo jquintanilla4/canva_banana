@@ -26,6 +26,7 @@ import { getImageBounds } from './canvas/geometry';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { drawCanvas } from './canvas/render/drawCanvas';
 import { getNoteTextColor } from './canvas/noteColors';
+import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, NOTE_COLOR_OPTIONS, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
 import { PromptBar, type PromptBarControlConfig } from './PromptBar';
 import { DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET, DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT, getAreaPromptBarRect, getMentionOptionsFromMembership, getVideoPromptBarVisualScale, syncVideoPromptAreaMembership } from '../utils/videoPromptAreas';
@@ -34,7 +35,7 @@ interface CanvasProps {
   images: CanvasImage[];
   onImagesChange: (images: CanvasImage[]) => void;
   // onCommit accepts optional state overrides so callers can snapshot freshly-updated slices immediately.
-  onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[] }) => void;
+  onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[]; videoPromptAreas?: CanvasVideoPromptArea[]; videoPromptBars?: CanvasVideoPromptBar[] }) => void;
   notes: CanvasNote[];
   onNotesChange: (notes: CanvasNote[]) => void;
   videoPromptAreas: CanvasVideoPromptArea[];
@@ -95,6 +96,7 @@ interface CanvasProps {
   onNoteDuplicate: (noteId: string) => void;
   onNoteFontSizeChange: (noteId: string, delta: number) => void;
   onNoteColorChange: (noteId: string, color: string) => void;
+  onVideoPromptAreaBorderColorChange?: (areaId: string, color: string) => void;
   onImagePromptCopy: (imageId: string) => void;
   onImageDuplicate: (imageId: string) => void;
   onRerunGeneration: (imageId: string) => void;
@@ -192,6 +194,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onNoteDuplicate,
   onNoteFontSizeChange,
   onNoteColorChange,
+  onVideoPromptAreaBorderColorChange,
   onImagePromptCopy,
   onImageDuplicate,
   onRerunGeneration,
@@ -212,9 +215,11 @@ export const Canvas: React.FC<CanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const noteColorPickerRef = useRef<HTMLDivElement>(null);
+  const videoPromptAreaColorPickerRef = useRef<HTMLDivElement>(null);
   const notePointerDownWhileEditingRef = useRef(false);
   const noteEditHandledRef = useRef(false);
   const [isNoteColorPickerOpen, setIsNoteColorPickerOpen] = useState(false);
+  const [isVideoPromptAreaColorPickerOpen, setIsVideoPromptAreaColorPickerOpen] = useState(false);
   const [videoPromptAreaDragState, setVideoPromptAreaDragState] = useState<{
     areaId: string;
     mode: VideoPromptAreaDragMode;
@@ -225,16 +230,6 @@ export const Canvas: React.FC<CanvasProps> = ({
     barId: string;
     pointerOffset: Point;
   } | null>(null);
-
-  const noteColorOptions = useMemo(() => ([
-    { label: 'Dark gray blue', value: '#1f2937' },
-    { label: 'Black', value: '#000000' },
-    { label: 'Orange', value: '#f97316' },
-    { label: 'Mustard yellow', value: '#e1b927' },
-    { label: 'Dark purple', value: '#4c1d95' },
-    { label: 'Dark green', value: '#166534' },
-    { label: 'Dark red', value: '#7f1d1d' },
-  ]), []);
 
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
@@ -786,10 +781,20 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!targetId) return null;
     return notes.find(n => n.id === targetId) || null;
   }, [notes, primarySelectedNoteId, editingNoteId, selectedNoteIds.length]);
+  const selectedVideoPromptArea = useMemo(() => {
+    if (!selectedVideoPromptAreaId || selectedNote || selectedImageIds.length > 0) {
+      return null;
+    }
+    return videoPromptAreas.find(area => area.id === selectedVideoPromptAreaId) ?? null;
+  }, [selectedImageIds.length, selectedNote, selectedVideoPromptAreaId, videoPromptAreas]);
 
   useEffect(() => {
     setIsNoteColorPickerOpen(false);
   }, [editingNoteId, selectedNote?.id]);
+
+  useEffect(() => {
+    setIsVideoPromptAreaColorPickerOpen(false);
+  }, [selectedVideoPromptArea?.id]);
 
   useEffect(() => {
     if (!isNoteColorPickerOpen) {
@@ -810,6 +815,26 @@ export const Canvas: React.FC<CanvasProps> = ({
       document.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [isNoteColorPickerOpen]);
+
+  useEffect(() => {
+    if (!isVideoPromptAreaColorPickerOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const container = videoPromptAreaColorPickerRef.current;
+      const target = event.target as Node | null;
+      if (!container || !target) {
+        return;
+      }
+      if (!container.contains(target)) {
+        setIsVideoPromptAreaColorPickerOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [isVideoPromptAreaColorPickerOpen]);
   const selectedImage = useMemo(() => {
     if (selectedImageIds.length !== 1) return null;
     const targetId = primarySelectedImageId;
@@ -1189,16 +1214,20 @@ export const Canvas: React.FC<CanvasProps> = ({
       {videoPromptAreas.map(area => (
         <div
           key={area.id}
-          className={`pointer-events-none absolute rounded-2xl border-[3px] bg-[#030303] shadow-[0_18px_50px_rgba(0,0,0,0.3)] ${selectedVideoPromptAreaId === area.id ? 'border-sky-400/80' : 'border-white/30'}`}
+          className="pointer-events-none absolute rounded-2xl border-[3px] bg-[#030303] shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
           style={{
             left: `${area.x * scale + pan.x}px`,
             top: `${area.y * scale + pan.y}px`,
             width: `${area.width * scale}px`,
             height: `${area.height * scale}px`,
+            borderColor: area.borderColor ?? DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR,
             zIndex: 1,
           }}
         >
-          <div className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ${selectedVideoPromptAreaId === area.id ? 'ring-sky-300/55' : 'ring-white/8'}`} />
+          <div
+            className={`pointer-events-none absolute inset-[-6px] rounded-[1.35rem] border transition-colors ${selectedVideoPromptAreaId === area.id ? 'border-sky-300/70' : 'border-transparent'}`}
+          />
+          <div className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ${selectedVideoPromptAreaId === area.id ? 'ring-sky-300/45' : 'ring-white/8'}`} />
           {!area.promptBarId && area.orderedMediaIds.length === 0 && (
             <div className="pointer-events-none absolute inset-x-6 top-20 rounded-xl border border-dashed border-white/15 bg-black/10 px-4 py-5 text-sm text-gray-400">
               Drag a video prompt bar here to activate this area.
@@ -1482,7 +1511,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             </ActionButton>
             {isNoteColorPickerOpen && (
               <div className="absolute left-1/2 -translate-x-1/2 mt-2 flex items-center gap-2 rounded-md border border-gray-600 bg-gray-900/95 p-2 shadow-xl">
-                {noteColorOptions.map(option => {
+                {NOTE_COLOR_OPTIONS.map(option => {
                   const isActive = option.value === selectedNote.backgroundColor;
                   return (
                     <button
@@ -1515,6 +1544,51 @@ export const Canvas: React.FC<CanvasProps> = ({
           >
             <DuplicateIcon className="w-4 h-4" />
           </ActionButton>
+        </div>
+      )}
+      {selectedVideoPromptArea && (
+        <div
+          className="flex items-center space-x-2"
+          style={{
+            position: 'absolute',
+            left: `${(selectedVideoPromptArea.x + selectedVideoPromptArea.width / 2) * scale + pan.x}px`,
+            top: `${(selectedVideoPromptArea.y + selectedVideoPromptArea.height) * scale + pan.y + 14}px`,
+            transform: 'translateX(-50%)',
+            zIndex: 100,
+          }}
+        >
+          <div className="relative" ref={videoPromptAreaColorPickerRef}>
+            <ActionButton
+              onClick={() => setIsVideoPromptAreaColorPickerOpen(prev => !prev)}
+              disabled={false}
+              title="Video Prompt Area Border Color"
+            >
+              <span
+                className="block h-4 w-4 rounded-sm border border-white/70"
+                style={{ backgroundColor: selectedVideoPromptArea.borderColor ?? DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR }}
+              />
+            </ActionButton>
+            {isVideoPromptAreaColorPickerOpen && (
+              <div className="absolute left-1/2 mt-2 flex -translate-x-1/2 items-center gap-2 rounded-md border border-gray-600 bg-gray-900/95 p-2 shadow-xl">
+                {VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS.map(option => {
+                  const isActive = option.value === (selectedVideoPromptArea.borderColor ?? DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR);
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      title={option.label}
+                      onClick={() => {
+                        onVideoPromptAreaBorderColorChange?.(selectedVideoPromptArea.id, option.value);
+                        setIsVideoPromptAreaColorPickerOpen(false);
+                      }}
+                      className={`h-6 w-6 rounded-sm border ${isActive ? 'border-white' : 'border-gray-500'} shadow`}
+                      style={{ backgroundColor: option.value }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
       {selectedImage && !cropMode && !transformMode && (

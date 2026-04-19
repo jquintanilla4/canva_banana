@@ -216,6 +216,7 @@ export interface CanvasVideoPromptArea extends CanvasRect {
   id: string;
   sequence: number;
   label: string;
+  borderColor?: string; // Hex border color for the prompt area shell.
   orderedMediaIds: string[]; // Preserves entry order even when some items are ignored.
   promptBarId: string | null; // Each area can own at most one embedded prompt bar.
 }

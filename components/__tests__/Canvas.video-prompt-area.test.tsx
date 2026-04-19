@@ -438,6 +438,132 @@ describe('Canvas video prompt area tool', () => {
     expect(getByRole('button', { name: 'Resize top left of Video prompt area 01' })).toBeTruthy();
   });
 
+  it('uses the shared color swatch picker to change the selected area border color', async () => {
+    const Harness = () => {
+      const [areas, setAreas] = useState<CanvasVideoPromptArea[]>([{
+        id: 'area-1',
+        sequence: 1,
+        label: 'Video prompt area 01',
+        borderColor: '#d1d5db',
+        x: 40,
+        y: 60,
+        width: 320,
+        height: 240,
+        promptBarId: null,
+        orderedMediaIds: [],
+      }]);
+      const [selectedAreaId, setSelectedAreaId] = useState<string | null>('area-1');
+
+      const handleAreaBorderColorChange = (areaId: string, color: string) => {
+        setAreas(currentAreas => currentAreas.map(area => (
+          area.id === areaId ? { ...area, borderColor: color } : area
+        )));
+      };
+
+      return (
+        <Canvas
+          images={[]}
+          onImagesChange={vi.fn()}
+          notes={[]}
+          onNotesChange={vi.fn()}
+          videoPromptAreas={areas}
+          onVideoPromptAreasChange={setAreas}
+          videoPromptBars={[]}
+          onVideoPromptBarsChange={vi.fn()}
+          selectedVideoPromptAreaId={selectedAreaId}
+          onVideoPromptAreaSelect={setSelectedAreaId}
+          videoPromptAreaMemberships={{}}
+          tool={Tool.SELECTION}
+          appMode="CANVAS"
+          paths={[]}
+          onPathsChange={vi.fn()}
+          brushSize={10}
+          eraserSize={10}
+          brushColor="#000000"
+          selectedImageIds={[]}
+          selectedNoteIds={[]}
+          referenceImageIds={[]}
+          referenceVideoIds={[]}
+          referenceAudioIds={[]}
+          referenceImageOrderLabels={null}
+          disabledMediaIds={[]}
+          elementImageIds={[]}
+          elementImageOrderLabels={null}
+          videoLastFrameImageId={null}
+          sourceVideoId={null}
+          tailSelectionEnabled={false}
+          isKlingO1VideoInputMode={false}
+          isKlingO1FflfMode={false}
+          isSeedance15FflfMode={false}
+          isKling26ControlVideoInputMode={false}
+          isVeo31ExtendMode={false}
+          isWanAnimateVideoInputMode={false}
+          isWan26I2VMode={false}
+          onError={vi.fn()}
+          onImageSelect={vi.fn()}
+          onNoteSelect={vi.fn()}
+          zoomToFitTrigger={0}
+          zoomToSelectionTrigger={0}
+          zoomInTrigger={0}
+          zoomOutTrigger={0}
+          onFilesDrop={vi.fn()}
+          editingNoteId={null}
+          onNoteDoubleClick={vi.fn()}
+          onNoteTextChange={vi.fn()}
+          onNoteEditEnd={vi.fn()}
+          onImageOrderChange={vi.fn()}
+          isImageOverlapping={false}
+          canMoveUp={false}
+          canMoveDown={false}
+          cropMode={null}
+          onCropRectChange={vi.fn()}
+          onStartCrop={vi.fn()}
+          onConfirmCrop={vi.fn()}
+          onCancelCrop={vi.fn()}
+          onNoteCopy={vi.fn()}
+          onNoteDuplicate={vi.fn()}
+          onNoteFontSizeChange={vi.fn()}
+          onNoteColorChange={vi.fn()}
+          onVideoPromptAreaBorderColorChange={handleAreaBorderColorChange}
+          onImagePromptCopy={vi.fn()}
+          onImageDuplicate={vi.fn()}
+          onRerunGeneration={vi.fn()}
+          showMetadataOverlay={false}
+          transformMode={null}
+          onStartTransform={vi.fn()}
+          onExitTransform={vi.fn()}
+          isLoading={false}
+          onVideoPromptBarFocus={vi.fn()}
+          onVideoPromptBarBlur={vi.fn()}
+          onVideoPromptBarUpdate={vi.fn()}
+          onVideoPromptBarSubmit={vi.fn()}
+          buildVideoPromptBarControls={() => []}
+          embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
+          onCommit={vi.fn()}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    const swatchButton = screen.getByTitle('Video Prompt Area Border Color');
+    const swatch = swatchButton.querySelector('span') as HTMLSpanElement | null;
+    expect(swatch).not.toBeNull();
+    expect(window.getComputedStyle(swatch as HTMLSpanElement).backgroundColor).toBe('rgb(209, 213, 219)');
+
+    await act(async () => {
+      fireEvent.click(swatchButton);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('Orange'));
+      await Promise.resolve();
+    });
+
+    expect(window.getComputedStyle(swatch as HTMLSpanElement).backgroundColor).toBe('rgb(249, 115, 22)');
+  });
+
   it('renders embedded bars without a negative prompt field and with a delete button', () => {
     render(
       <Canvas

@@ -47,6 +47,7 @@ import {
   loadMediaFromDataUrl,
 } from './mediaService';
 import { generateWaveformImage, loadAudioFromBlob } from './audioService';
+import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../utils/canvasColorOptions';
 
 // Handles snapshot serialization/deserialization so canvases can be saved/restored across sessions.
 export type SnapshotImageManifest = {
@@ -698,6 +699,7 @@ export const restoreSnapshotFromFile = async (
     id: typeof area?.id === 'string' && area.id.length > 0 ? area.id : crypto.randomUUID(),
     sequence: typeof area?.sequence === 'number' && Number.isFinite(area.sequence) ? area.sequence : index + 1,
     label: typeof area?.label === 'string' && area.label.length > 0 ? area.label : `Video prompt area ${String(index + 1).padStart(2, '0')}`,
+    borderColor: typeof area?.borderColor === 'string' && area.borderColor.length > 0 ? area.borderColor : DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR,
     x: typeof area?.x === 'number' ? area.x : 0,
     y: typeof area?.y === 'number' ? area.y : 0,
     width: typeof area?.width === 'number' ? area.width : 280,

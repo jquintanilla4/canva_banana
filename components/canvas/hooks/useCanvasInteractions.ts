@@ -11,6 +11,7 @@ import {
   type CropAction,
   type TransformAction,
 } from '../hitTest';
+import { DEFAULT_NOTE_BACKGROUND, DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../../../utils/canvasColorOptions';
 import { buildVideoPromptAreaLabel, clampAreaRect, isPointInRect, syncVideoPromptAreaMembership } from '../../../utils/videoPromptAreas';
 
 const MIN_DRAG_PREVIEW_PX = 3; // Match marquee selection so area previews only appear after a real drag starts.
@@ -265,7 +266,7 @@ export function useCanvasInteractions({
         width: 600,
         height: 300,
         text: '',
-        backgroundColor: '#1f2937',
+        backgroundColor: DEFAULT_NOTE_BACKGROUND,
       };
       const updatedNotes = [...notes, newNote];
       onNotesChange(updatedNotes);
@@ -881,6 +882,7 @@ export function useCanvasInteractions({
           id: nextAreaId,
           sequence: nextSequence,
           label: buildVideoPromptAreaLabel(nextSequence),
+          borderColor: DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR,
           promptBarId: null,
           orderedMediaIds: [],
           ...normalizedRect,

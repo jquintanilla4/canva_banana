@@ -995,6 +995,18 @@ export default function App() {
     });
   }, [setState]);
 
+  const handleVideoPromptAreaBorderColorChange = useCallback((areaId: string, color: string) => {
+    setState(prevState => {
+      const areaIndex = prevState.videoPromptAreas.findIndex(area => area.id === areaId);
+      if (areaIndex === -1) {
+        return prevState;
+      }
+      const nextAreas = [...prevState.videoPromptAreas];
+      nextAreas[areaIndex] = { ...nextAreas[areaIndex], borderColor: color };
+      return { ...prevState, videoPromptAreas: nextAreas };
+    });
+  }, [setState]);
+
   const selectedImageIndex = primaryImageId ? images.findIndex(img => img.id === primaryImageId) : -1;
   const isImageOverlapping = primaryImageId && selectedImageIndex !== -1 ? images.some(other => other.id !== primaryImageId && isOverlapping(images[selectedImageIndex], other)) : false;
   const canMoveUp = selectedImageIndex > -1 && selectedImageIndex < images.length - 1;
@@ -1588,6 +1600,7 @@ export default function App() {
           onNoteDuplicate={handleDuplicateNote}
           onNoteFontSizeChange={handleNoteFontSizeChange}
           onNoteColorChange={handleNoteColorChange}
+          onVideoPromptAreaBorderColorChange={handleVideoPromptAreaBorderColorChange}
           onImagePromptCopy={handleImagePromptCopy}
           onImageDuplicate={handleDuplicateImage}
           onRerunGeneration={handleRerunGeneration}
@@ -1718,11 +1731,11 @@ export default function App() {
               type="button"
               onClick={handleCreateVideoPromptBar}
               disabled={displayedVideoPromptAreas.length === 0 || isLoading}
-              className={`shrink-0 self-center rounded-2xl bg-gray-900/70 text-white shadow-xl transition-all duration-300 ease-out hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-45 ${isEmbeddedPromptBarActive ? 'h-[2.75rem] w-[2.75rem]' : 'h-[3.2rem] w-[3.2rem]'}`}
+              className={`flex shrink-0 self-start items-center justify-center rounded-2xl bg-gray-900/70 text-white shadow-xl transition-all duration-300 ease-out hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-45 ${isEmbeddedPromptBarActive ? 'h-[2.28rem] w-[2.28rem]' : 'h-[3.2rem] w-[3.2rem]'}`}
               aria-label="Create video prompt bar"
               title={displayedVideoPromptAreas.length === 0 ? 'Create a video prompt area first' : 'Create video prompt bar'}
             >
-              <PlusIcon className="mx-auto h-4 w-4" />
+              <PlusIcon className="h-4 w-4" />
             </button>
           )}
         />
