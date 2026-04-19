@@ -119,6 +119,29 @@ const renderPromptBar = () => render(
   />
 );
 
+const renderInlinePromptBar = (maxInlineWidthPx?: number) => render(
+  <PromptBar
+    layout="inline"
+    prompt="Animate the subject"
+    onPromptChange={vi.fn()}
+    onSubmit={vi.fn()}
+    isLoading={false}
+    inputDisabled={false}
+    submitDisabled={false}
+    modelOptions={[
+      { value: 'seedance-2', label: 'Seedance 2' },
+      { value: 'wan-2.6', label: 'Wan 2.6' },
+    ]}
+    selectedModel="seedance-2"
+    onModelChange={vi.fn()}
+    modelSelectDisabled={false}
+    modelMode="video"
+    onModelModeChange={vi.fn()}
+    modelControls={modelControls}
+    maxInlineWidthPx={maxInlineWidthPx}
+  />
+);
+
 const PromptBarMentionHarness = () => {
   const [prompt, setPrompt] = React.useState('Use @Image1 and ');
 
@@ -247,6 +270,32 @@ describe('PromptBar layout', () => {
 
     expect(parseFloat(footer.style.maxWidth)).toBeCloseTo(expectedViewportClampPx, 1);
     expect(parseFloat(footer.style.maxWidth)).toBeLessThan(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320);
+  });
+
+  it('reuses the shared computed width for inline full-size prompt bars', async () => {
+    installControlWidthMocks({ viewportWidth: 620, stripWidth: 940 });
+    renderInlinePromptBar();
+    await flushPromptBarLayout();
+
+    const inline = screen.getByTestId('prompt-bar-inline');
+
+    expect(parseFloat(inline.style.width)).toBeCloseTo(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320, 1);
+    expect(parseFloat(inline.style.maxWidth)).toBeCloseTo(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320, 1);
+  });
+
+  it('caps inline prompt bars to the provided width while keeping the controls scrollable', async () => {
+    installControlWidthMocks({ viewportWidth: 620, stripWidth: 940 });
+    renderInlinePromptBar(540);
+    await flushPromptBarLayout();
+
+    const inline = screen.getByTestId('prompt-bar-inline');
+    const controlsViewport = screen.getByTestId('prompt-bar-control-viewport');
+    const controlsStrip = screen.getByTestId('prompt-bar-control-strip');
+
+    expect(parseFloat(inline.style.width)).toBe(540);
+    expect(parseFloat(inline.style.maxWidth)).toBe(540);
+    expect(controlsViewport.className).toContain('overflow-x-auto');
+    expect(controlsStrip.className).toContain('flex-nowrap');
   });
 
   it('keeps mention suggestions open while typing a second seedance reference token', async () => {

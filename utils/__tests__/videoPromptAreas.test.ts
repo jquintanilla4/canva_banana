@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CanvasImage, CanvasVideoPromptArea } from '../../types';
 import {
   buildVideoPromptAreaMembership,
+  FULL_VIDEO_PROMPT_BAR_SCALE_THRESHOLD,
   getAreaPromptBarRect,
   getEmbeddedVideoPromptBarRenderWidth,
   getEmbeddedVideoPromptBarSizeMode,
@@ -97,6 +98,18 @@ describe('video prompt area helpers', () => {
 
   it('still respects the owning area fit once it clears the readability floor', () => {
     expect(getVideoPromptBarVisualScale(1, 920, 900)).toBeCloseTo((900 - 48) / 920, 5);
+  });
+
+  it('snaps assigned bars to full scale once the canvas reaches the 50 percent threshold', () => {
+    expect(getVideoPromptBarVisualScale(FULL_VIDEO_PROMPT_BAR_SCALE_THRESHOLD, 920, 1600)).toBe(1);
+  });
+
+  it('eases assigned bars toward full scale just below the 50 percent threshold', () => {
+    expect(getVideoPromptBarVisualScale(FULL_VIDEO_PROMPT_BAR_SCALE_THRESHOLD - 0.01, 920, 1600)).toBeCloseTo(0.99, 5);
+  });
+
+  it('smoothly scales assigned bars through the reduced full-shell range', () => {
+    expect(getVideoPromptBarVisualScale(0.42, 920, 1600)).toBeCloseTo(0.92, 5);
   });
 
   it('keeps assigned bars full above the 30 percent zoom threshold', () => {

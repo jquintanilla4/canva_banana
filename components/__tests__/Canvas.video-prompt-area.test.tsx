@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { Canvas } from '../Canvas';
 import { Tool, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
+import { EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING } from '../../utils/videoPromptAreas';
 
 describe('Canvas video prompt area tool', () => {
   afterEach(() => {
@@ -564,7 +565,7 @@ describe('Canvas video prompt area tool', () => {
     expect(window.getComputedStyle(swatch as HTMLSpanElement).backgroundColor).toBe('rgb(249, 115, 22)');
   });
 
-  it('renders embedded bars without a negative prompt field and with a delete button', () => {
+  it('keeps assigned bars full through 50 percent zoom before switching to the reduced shell', () => {
     const { container } = render(
       <Canvas
         images={[]}
@@ -577,7 +578,7 @@ describe('Canvas video prompt area tool', () => {
           label: 'Video prompt area 01',
           x: 40,
           y: 60,
-          width: 1200,
+          width: 2600,
           height: 900,
           promptBarId: 'bar-1',
           orderedMediaIds: ['image-1'],
@@ -687,16 +688,334 @@ describe('Canvas video prompt area tool', () => {
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
     const modelBadgeButton = screen.getByRole('button', { name: 'Seedance 2' });
     const embeddedPromptShell = modelBadgeButton.closest('[data-embedded-prompt-size-mode]') as HTMLElement;
+    const embeddedPromptScaleShell = embeddedPromptShell.firstElementChild as HTMLElement;
+    const embeddedPromptBar = screen.getByTestId('prompt-bar-inline');
 
     expect(embeddedPromptShell.dataset.embeddedPromptSizeMode).toBe('full');
+    expect(embeddedPromptShell.style.top).toBe(`${60 + 900 - EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING}px`);
+    expect(embeddedPromptShell.style.transform).toBe('translate(-50%, -100%)');
     expect(screen.getByLabelText('Select video model')).toBeTruthy();
+    expect(embeddedPromptScaleShell.style.transform).toBe('scale(1)');
+    expect(embeddedPromptScaleShell.style.transformOrigin).toBe('bottom center');
+    expect(parseFloat(embeddedPromptBar.style.width)).toBeGreaterThan(920);
 
-    for (let iteration = 0; iteration < 14; iteration += 1) {
+    for (let iteration = 0; iteration < 7; iteration += 1) {
+      fireEvent.wheel(root, { deltaY: 100, clientX: 400, clientY: 300 });
+    }
+
+    expect(embeddedPromptShell.dataset.embeddedPromptSizeMode).toBe('full');
+    expect(embeddedPromptScaleShell.style.transform).toBe('scale(1)');
+
+    fireEvent.wheel(root, { deltaY: 100, clientX: 400, clientY: 300 });
+
+    expect(embeddedPromptShell.dataset.embeddedPromptSizeMode).toBe('full');
+    expect(parseFloat(embeddedPromptScaleShell.style.transform.replace('scale(', '').replace(')', ''))).toBeGreaterThan(0.8);
+    expect(parseFloat(embeddedPromptScaleShell.style.transform.replace('scale(', '').replace(')', ''))).toBeLessThan(1);
+
+    for (let iteration = 0; iteration < 6; iteration += 1) {
       fireEvent.wheel(root, { deltaY: 100, clientX: 400, clientY: 300 });
     }
 
     expect(embeddedPromptShell.dataset.embeddedPromptSizeMode).toBe('mini');
     expect(screen.queryByLabelText('Select video model')).toBeNull();
-    expect(embeddedPromptShell.style.transform).toBe('scale(0.8)');
+    expect(embeddedPromptScaleShell.style.transform).toBe('scale(0.8)');
+  });
+
+  it('keeps the full shell at the legacy readable width in narrow areas', () => {
+    const { container } = render(
+      <Canvas
+        images={[]}
+        onImagesChange={vi.fn()}
+        notes={[]}
+        onNotesChange={vi.fn()}
+        videoPromptAreas={[{
+          id: 'area-1',
+          sequence: 1,
+          label: 'Video prompt area 01',
+          x: 40,
+          y: 60,
+          width: 280,
+          height: 900,
+          promptBarId: 'bar-1',
+          orderedMediaIds: ['image-1'],
+        }]}
+        onVideoPromptAreasChange={vi.fn()}
+        videoPromptBars={[{
+          id: 'bar-1',
+          assignedAreaId: 'area-1',
+          prompt: '',
+          negativePrompt: '',
+          seedance2Variant: 'reference',
+          seedance2AspectRatio: '16:9',
+          seedance2Resolution: '720p',
+          seedance2Duration: '5',
+          seedance2GenerateAudio: false,
+          seedance2CameraFixed: false,
+          x: 180,
+          y: 600,
+          width: 920,
+          height: 190,
+        }]}
+        onVideoPromptBarsChange={vi.fn()}
+        selectedVideoPromptAreaId={null}
+        onVideoPromptAreaSelect={vi.fn()}
+        videoPromptAreaMemberships={{
+          'area-1': {
+            orderedMediaIds: ['image-1'],
+            acceptedImageIds: ['image-1'],
+            acceptedVideoIds: [],
+            acceptedAudioIds: [],
+            ignoredMediaIds: [],
+            orderLabels: { 'image-1': '@Image1' },
+          },
+        }}
+        tool={Tool.SELECTION}
+        appMode="CANVAS"
+        paths={[]}
+        onPathsChange={vi.fn()}
+        brushSize={10}
+        eraserSize={10}
+        brushColor="#000000"
+        selectedImageIds={[]}
+        selectedNoteIds={[]}
+        referenceImageIds={[]}
+        referenceVideoIds={[]}
+        referenceAudioIds={[]}
+        referenceImageOrderLabels={null}
+        disabledMediaIds={[]}
+        elementImageIds={[]}
+        elementImageOrderLabels={null}
+        videoLastFrameImageId={null}
+        sourceVideoId={null}
+        tailSelectionEnabled={false}
+        isKlingO1VideoInputMode={false}
+        isKlingO1FflfMode={false}
+        isSeedance15FflfMode={false}
+        isKling26ControlVideoInputMode={false}
+        isVeo31ExtendMode={false}
+        isWanAnimateVideoInputMode={false}
+        isWan26I2VMode={false}
+        onError={vi.fn()}
+        onImageSelect={vi.fn()}
+        onNoteSelect={vi.fn()}
+        zoomToFitTrigger={0}
+        zoomToSelectionTrigger={0}
+        zoomInTrigger={0}
+        zoomOutTrigger={0}
+        onFilesDrop={vi.fn()}
+        editingNoteId={null}
+        onNoteDoubleClick={vi.fn()}
+        onNoteTextChange={vi.fn()}
+        onNoteEditEnd={vi.fn()}
+        onImageOrderChange={vi.fn()}
+        isImageOverlapping={false}
+        canMoveUp={false}
+        canMoveDown={false}
+        cropMode={null}
+        onCropRectChange={vi.fn()}
+        onStartCrop={vi.fn()}
+        onConfirmCrop={vi.fn()}
+        onCancelCrop={vi.fn()}
+        onNoteCopy={vi.fn()}
+        onNoteDuplicate={vi.fn()}
+        onNoteFontSizeChange={vi.fn()}
+        onNoteColorChange={vi.fn()}
+        onImagePromptCopy={vi.fn()}
+        onImageDuplicate={vi.fn()}
+        onRerunGeneration={vi.fn()}
+        showMetadataOverlay={false}
+        transformMode={null}
+        onStartTransform={vi.fn()}
+        onExitTransform={vi.fn()}
+        isLoading={false}
+        onVideoPromptBarFocus={vi.fn()}
+        onVideoPromptBarBlur={vi.fn()}
+        onVideoPromptBarUpdate={vi.fn()}
+        onVideoPromptBarSubmit={vi.fn()}
+        buildVideoPromptBarControls={() => []}
+        embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
+        onCommit={vi.fn()}
+      />
+    );
+
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    for (let iteration = 0; iteration < 8; iteration += 1) {
+      fireEvent.wheel(root, { deltaY: 100, clientX: 400, clientY: 300 });
+    }
+
+    const embeddedPromptShell = screen.getByRole('button', { name: 'Seedance 2' }).closest('[data-embedded-prompt-size-mode]') as HTMLElement;
+    const embeddedPromptScaleShell = embeddedPromptShell.firstElementChild as HTMLElement;
+    const embeddedPromptBar = screen.getByTestId('prompt-bar-inline');
+
+    expect(embeddedPromptShell.dataset.embeddedPromptSizeMode).toBe('full');
+    expect(parseFloat(embeddedPromptScaleShell.style.transform.replace('scale(', '').replace(')', ''))).toBeGreaterThan(0.8);
+    expect(parseFloat(embeddedPromptBar.style.width)).toBe(920);
+  });
+
+  it('anchors assigned-bar drags to the rendered shell bounds', async () => {
+    const handleVideoPromptBarsChange = vi.fn();
+    const { container } = render(
+      <Canvas
+        images={[]}
+        onImagesChange={vi.fn()}
+        notes={[]}
+        onNotesChange={vi.fn()}
+        videoPromptAreas={[{
+          id: 'area-1',
+          sequence: 1,
+          label: 'Video prompt area 01',
+          x: 40,
+          y: 60,
+          width: 2600,
+          height: 900,
+          promptBarId: 'bar-1',
+          orderedMediaIds: ['image-1'],
+        }]}
+        onVideoPromptAreasChange={vi.fn()}
+        videoPromptBars={[{
+          id: 'bar-1',
+          assignedAreaId: 'area-1',
+          prompt: '',
+          negativePrompt: '',
+          seedance2Variant: 'reference',
+          seedance2AspectRatio: '16:9',
+          seedance2Resolution: '720p',
+          seedance2Duration: '5',
+          seedance2GenerateAudio: false,
+          seedance2CameraFixed: false,
+          x: 180,
+          y: 600,
+          width: 920,
+          height: 190,
+        }]}
+        onVideoPromptBarsChange={handleVideoPromptBarsChange}
+        selectedVideoPromptAreaId={null}
+        onVideoPromptAreaSelect={vi.fn()}
+        videoPromptAreaMemberships={{
+          'area-1': {
+            orderedMediaIds: ['image-1'],
+            acceptedImageIds: ['image-1'],
+            acceptedVideoIds: [],
+            acceptedAudioIds: [],
+            ignoredMediaIds: [],
+            orderLabels: { 'image-1': '@Image1' },
+          },
+        }}
+        tool={Tool.SELECTION}
+        appMode="CANVAS"
+        paths={[]}
+        onPathsChange={vi.fn()}
+        brushSize={10}
+        eraserSize={10}
+        brushColor="#000000"
+        selectedImageIds={[]}
+        selectedNoteIds={[]}
+        referenceImageIds={[]}
+        referenceVideoIds={[]}
+        referenceAudioIds={[]}
+        referenceImageOrderLabels={null}
+        disabledMediaIds={[]}
+        elementImageIds={[]}
+        elementImageOrderLabels={null}
+        videoLastFrameImageId={null}
+        sourceVideoId={null}
+        tailSelectionEnabled={false}
+        isKlingO1VideoInputMode={false}
+        isKlingO1FflfMode={false}
+        isSeedance15FflfMode={false}
+        isKling26ControlVideoInputMode={false}
+        isVeo31ExtendMode={false}
+        isWanAnimateVideoInputMode={false}
+        isWan26I2VMode={false}
+        onError={vi.fn()}
+        onImageSelect={vi.fn()}
+        onNoteSelect={vi.fn()}
+        zoomToFitTrigger={0}
+        zoomToSelectionTrigger={0}
+        zoomInTrigger={0}
+        zoomOutTrigger={0}
+        onFilesDrop={vi.fn()}
+        editingNoteId={null}
+        onNoteDoubleClick={vi.fn()}
+        onNoteTextChange={vi.fn()}
+        onNoteEditEnd={vi.fn()}
+        onImageOrderChange={vi.fn()}
+        isImageOverlapping={false}
+        canMoveUp={false}
+        canMoveDown={false}
+        cropMode={null}
+        onCropRectChange={vi.fn()}
+        onStartCrop={vi.fn()}
+        onConfirmCrop={vi.fn()}
+        onCancelCrop={vi.fn()}
+        onNoteCopy={vi.fn()}
+        onNoteDuplicate={vi.fn()}
+        onNoteFontSizeChange={vi.fn()}
+        onNoteColorChange={vi.fn()}
+        onImagePromptCopy={vi.fn()}
+        onImageDuplicate={vi.fn()}
+        onRerunGeneration={vi.fn()}
+        showMetadataOverlay={false}
+        transformMode={null}
+        onStartTransform={vi.fn()}
+        onExitTransform={vi.fn()}
+        isLoading={false}
+        onVideoPromptBarFocus={vi.fn()}
+        onVideoPromptBarBlur={vi.fn()}
+        onVideoPromptBarUpdate={vi.fn()}
+        onVideoPromptBarSubmit={vi.fn()}
+        buildVideoPromptBarControls={() => []}
+        embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
+        onCommit={vi.fn()}
+      />
+    );
+
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    const modelBadgeButton = screen.getByRole('button', { name: 'Seedance 2' });
+    const renderedShell = modelBadgeButton.parentElement as HTMLElement;
+    const canvasRect = {
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 1200,
+      bottom: 800,
+      width: 1200,
+      height: 800,
+      toJSON: () => ({}),
+    } as DOMRect;
+    const renderedShellRect = {
+      x: 100,
+      y: 200,
+      left: 100,
+      top: 200,
+      right: 1180,
+      bottom: 420,
+      width: 1080,
+      height: 220,
+      toJSON: () => ({}),
+    } as DOMRect;
+
+    Object.defineProperty(canvas, 'getBoundingClientRect', { configurable: true, value: () => canvasRect });
+    Object.defineProperty(renderedShell, 'getBoundingClientRect', { configurable: true, value: () => renderedShellRect });
+
+    await act(async () => {
+      fireEvent.mouseDown(modelBadgeButton, { clientX: 110, clientY: 210 });
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      fireEvent.mouseMove(root, { clientX: 120, clientY: 220 });
+      await Promise.resolve();
+    });
+
+    const nextBars = handleVideoPromptBarsChange.mock.lastCall?.[0] as CanvasVideoPromptBar[] | undefined;
+
+    expect(nextBars).toBeTruthy();
+    expect(nextBars?.[0]?.assignedAreaId).toBeNull();
+    expect(nextBars?.[0]?.x).toBe(110);
+    expect(nextBars?.[0]?.y).toBe(210);
   });
 });

@@ -175,6 +175,7 @@ interface PromptBarProps {
   leadingAccessory?: React.ReactNode;
   outerClassName?: string;
   outerStyle?: React.CSSProperties;
+  maxInlineWidthPx?: number;
   onPromptFocus?: () => void;
   onPromptBlur?: () => void;
 }
@@ -211,6 +212,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   leadingAccessory,
   outerClassName,
   outerStyle,
+  maxInlineWidthPx,
   onPromptFocus,
   onPromptBlur,
 }) => {
@@ -518,6 +520,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
   const modelSelectLabel = modelMode === 'video' ? 'Select video model' : 'Select image edit model';
   const resolvedModeDisabled = modelModeDisabled || modelSelectDisabled;
+  const resolvedInlineWidthPx = Math.max(0, Math.min(promptBarMaxWidthPx, maxInlineWidthPx ?? Number.POSITIVE_INFINITY)); // Inline bars reuse the shared width logic before the area cap trims them.
   const modelModeOptions: Array<{ value: 'image' | 'video'; label: string }> = [
     { value: 'image', label: 'Image' },
     { value: 'video', label: 'Video' },
@@ -758,7 +761,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
   if (layout === 'inline') {
     return (
-      <div className={outerClassName} style={outerStyle}>
+      <div
+        className={`transition-[width,max-width] duration-200 ease-out ${outerClassName ?? ''}`.trim()}
+        style={{ width: `${resolvedInlineWidthPx}px`, maxWidth: `${resolvedInlineWidthPx}px`, ...outerStyle }}
+        data-testid="prompt-bar-inline"
+      >
         {content}
       </div>
     );

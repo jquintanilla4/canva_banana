@@ -30,14 +30,13 @@ import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, NOTE_COLOR_OPTIONS, VIDEO_PROMP
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
 import { PromptBar, type PromptBarControlConfig } from './PromptBar';
 import {
-  DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET,
   DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT,
+  EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING,
   getAreaPromptBarRect,
   getEmbeddedVideoPromptBarRenderWidth,
   getEmbeddedVideoPromptBarSizeMode,
   getMentionOptionsFromMembership,
   getVideoPromptBarVisualScale,
-  MINI_VIDEO_PROMPT_BAR_SIZE,
   syncVideoPromptAreaMembership,
 } from '../utils/videoPromptAreas';
 
@@ -1043,11 +1042,15 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
     const pointerPoint = getWorldPointFromClientPoint(event.clientX, event.clientY);
+    const dragOriginRect = event.currentTarget.parentElement?.getBoundingClientRect();
+    const dragOriginPoint = dragOriginRect
+      ? getWorldPointFromClientPoint(dragOriginRect.left, dragOriginRect.top)
+      : { x: targetBar.x, y: targetBar.y }; // Fall back to the stored rect when the DOM shell bounds are unavailable.
     setVideoPromptBarDragState({
       barId,
       pointerOffset: {
-        x: pointerPoint.x - targetBar.x,
-        y: pointerPoint.y - targetBar.y,
+        x: pointerPoint.x - dragOriginPoint.x,
+        y: pointerPoint.y - dragOriginPoint.y,
       },
     });
   }, [getWorldPointFromClientPoint, videoPromptBars]);
@@ -1312,18 +1315,20 @@ export const Canvas: React.FC<CanvasProps> = ({
         const isAssigned = Boolean(assignedArea);
         const assignedAreaScreenWidth = assignedArea ? assignedArea.width * scale : undefined;
         const embeddedPromptBarSizeMode = isAssigned ? getEmbeddedVideoPromptBarSizeMode(scale, assignedAreaScreenWidth) : 'full';
-        const renderedBarWidth = isAssigned
+        const renderedBarWidth = isAssigned && embeddedPromptBarSizeMode === 'mini'
           ? getEmbeddedVideoPromptBarRenderWidth(embeddedPromptBarSizeMode, assignedAreaScreenWidth)
           : bar.width;
-        const renderedBarHeight = embeddedPromptBarSizeMode === 'mini' ? MINI_VIDEO_PROMPT_BAR_SIZE.height : bar.height;
-        const barVisualScale = getVideoPromptBarVisualScale(scale, renderedBarWidth, assignedAreaScreenWidth);
-        const dragHandleHeight = isAssigned ? DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT : 0;
+        const embeddedPromptBarAreaInset = embeddedPromptBarSizeMode === 'mini' ? 24 : 48; // Mini shells use a tighter inset so the compact affordance stays readable.
+        const maxInlineWidthPx = isAssigned && typeof assignedAreaScreenWidth === 'number'
+          ? Math.max(renderedBarWidth, Math.max(0, assignedAreaScreenWidth - embeddedPromptBarAreaInset))
+          : undefined; // Wide areas can widen the shell, but narrow areas should keep the legacy readable width.
+        const barVisualScale = isAssigned && embeddedPromptBarSizeMode === 'full'
+          ? getVideoPromptBarVisualScale(scale, bar.width)
+          : getVideoPromptBarVisualScale(scale, renderedBarWidth, assignedAreaScreenWidth);
         const screenRect = isAssigned && assignedArea
           ? {
-            left: assignedArea.x * scale + pan.x + (assignedArea.width * scale - renderedBarWidth * barVisualScale) / 2,
-            top: assignedArea.y * scale + pan.y + (assignedArea.height - DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET) * scale - (renderedBarHeight + dragHandleHeight) * barVisualScale,
-            width: renderedBarWidth,
-            height: renderedBarHeight,
+            centerX: assignedArea.x * scale + pan.x + (assignedArea.width * scale) / 2,
+            bottomAnchorY: assignedArea.y * scale + pan.y + assignedArea.height * scale - EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING, // The visual shell should sit inside the area instead of riding its border.
           }
           : {
             left: bar.x * scale + pan.x,
@@ -1366,15 +1371,19 @@ export const Canvas: React.FC<CanvasProps> = ({
             className="absolute"
             data-embedded-prompt-size-mode={embeddedPromptBarSizeMode}
             style={{
-              left: `${screenRect.left}px`,
-              top: `${screenRect.top}px`,
-              width: `${screenRect.width}px`,
-              transform: `scale(${barVisualScale})`,
-              transformOrigin: 'top left',
+              left: `${screenRect.centerX}px`,
+              top: `${screenRect.bottomAnchorY}px`,
+              transform: 'translate(-50%, -100%)', // Bottom-align the wrapper to the area anchor before the inner shell scales.
               zIndex: 18,
             }}
           >
-            <div className="relative" style={{ width: `${screenRect.width}px` }}>
+            <div
+              className="relative inline-block align-top transition-transform duration-200 ease-out"
+              style={{
+                transform: `scale(${barVisualScale})`,
+                transformOrigin: 'bottom center', // Assigned bars should scale around the bottom anchor so zoom changes do not drift upward.
+              }}
+            >
               <button
                 type="button"
                 onMouseDown={handleVideoPromptBarPointerDown(bar.id)}
@@ -1391,10 +1400,11 @@ export const Canvas: React.FC<CanvasProps> = ({
               >
                 <MinusIcon className="h-3 w-3" />
               </button>
-              <div style={{ paddingTop: `${dragHandleHeight}px` }}>
+              <div style={{ paddingTop: `${DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT}px` }}>
                 <PromptBar
                   layout="inline"
                   sizeMode={embeddedPromptBarSizeMode}
+                  maxInlineWidthPx={maxInlineWidthPx}
                   prompt={bar.prompt}
                   onPromptChange={(nextPrompt) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, prompt: nextPrompt }))}
                   onSubmit={() => onVideoPromptBarSubmit(bar.id)}

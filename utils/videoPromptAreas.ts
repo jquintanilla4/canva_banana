@@ -18,9 +18,11 @@ export const DEFAULT_VIDEO_PROMPT_BAR_SIZE = { width: 920, height: 190 } as cons
 export const MINI_VIDEO_PROMPT_BAR_SIZE = { width: 420, height: 84 } as const; // Compact mode keeps the embedded shell readable when the full bar would dominate the area.
 export const DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT = 30; // Assigned bars reserve space for the draggable model badge above the prompt shell.
 export const DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET = -46; // The rendered Seedance shell is shorter than its logical rect, so this keeps the visible bar aligned to the area bottom.
+export const EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING = 20; // Keep the rendered shell inside the area with a fixed bottom breathing room.
 export const MIN_VIDEO_PROMPT_AREA_WIDTH = 280; // Areas need enough width to fit one prompt bar comfortably.
 export const MIN_VIDEO_PROMPT_AREA_HEIGHT = 220; // Areas need height for the prompt bar plus media staging room.
 export const MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE = 0.8; // Embedded bars should stay readable instead of collapsing at far zoom levels.
+export const FULL_VIDEO_PROMPT_BAR_SCALE_THRESHOLD = 0.5; // Assigned bars snap to the full shell once the canvas reaches 50 percent zoom.
 export const MINI_VIDEO_PROMPT_BAR_SCALE_THRESHOLD = 0.3; // Mini mode should only kick in once the canvas is below 30% zoom.
 export const MINI_VIDEO_PROMPT_BAR_MIN_WIDTH = 140; // Compact mode can squeeze further, but this keeps the shell usable.
 
@@ -65,11 +67,35 @@ export const getVideoPromptBarVisualScale = (
   promptBarWidth: number,
   areaScreenWidth?: number,
 ): number => {
+  const maxScaleThatFitsArea = typeof areaScreenWidth === 'number'
+    ? (areaScreenWidth - 48) / promptBarWidth
+    : Number.POSITIVE_INFINITY; // Area-fit clamping only applies when the owner is known.
+
+  if (canvasScale >= FULL_VIDEO_PROMPT_BAR_SCALE_THRESHOLD) {
+    if (typeof areaScreenWidth !== 'number') {
+      return 1;
+    }
+    return Math.max(0, Math.min(1, maxScaleThatFitsArea));
+  }
+
+  if (canvasScale >= MINI_VIDEO_PROMPT_BAR_SCALE_THRESHOLD) {
+    const progressToFullScale = (canvasScale - MINI_VIDEO_PROMPT_BAR_SCALE_THRESHOLD)
+      / (FULL_VIDEO_PROMPT_BAR_SCALE_THRESHOLD - MINI_VIDEO_PROMPT_BAR_SCALE_THRESHOLD); // The 30-50 percent range should ease into the full shell instead of snapping.
+    const easedScale = MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE
+      + (1 - MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE) * progressToFullScale;
+    if (typeof areaScreenWidth !== 'number') {
+      return easedScale;
+    }
+    if (maxScaleThatFitsArea < MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE) {
+      return MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE;
+    }
+    return Math.min(easedScale, maxScaleThatFitsArea);
+  }
+
   const minimumScale = Math.max(canvasScale, MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE);
-  if (!areaScreenWidth) {
+  if (typeof areaScreenWidth !== 'number') {
     return minimumScale;
   }
-  const maxScaleThatFitsArea = (areaScreenWidth - 48) / promptBarWidth;
   if (maxScaleThatFitsArea < MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE) {
     return MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE;
   }
