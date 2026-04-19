@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { CanvasImage, CanvasVideoPromptArea } from '../../types';
-import { buildVideoPromptAreaMembership, getAreaPromptBarRect, getVideoPromptBarVisualScale, syncVideoPromptAreaMembership } from '../videoPromptAreas';
+import {
+  buildVideoPromptAreaMembership,
+  getAreaPromptBarRect,
+  getEmbeddedVideoPromptBarRenderWidth,
+  getEmbeddedVideoPromptBarSizeMode,
+  getVideoPromptBarVisualScale,
+  MINI_VIDEO_PROMPT_BAR_SIZE,
+  syncVideoPromptAreaMembership,
+} from '../videoPromptAreas';
 
 const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType']): CanvasImage => ({
   id,
@@ -80,11 +88,32 @@ describe('video prompt area helpers', () => {
   });
 
   it('keeps video prompt bars readable when the canvas is zoomed far out', () => {
-    expect(getVideoPromptBarVisualScale(0.12, 920, 1600)).toBe(0.5);
+    expect(getVideoPromptBarVisualScale(0.12, 920, 1600)).toBe(0.8);
   });
 
-  it('caps the prompt bar scale so it still fits inside a narrower area', () => {
-    expect(getVideoPromptBarVisualScale(0.12, 920, 360)).toBeCloseTo((360 - 48) / 920, 5);
+  it('keeps the readability floor even when the area fit would be smaller', () => {
+    expect(getVideoPromptBarVisualScale(0.12, 920, 360)).toBe(0.8);
+  });
+
+  it('still respects the owning area fit once it clears the readability floor', () => {
+    expect(getVideoPromptBarVisualScale(1, 920, 900)).toBeCloseTo((900 - 48) / 920, 5);
+  });
+
+  it('keeps assigned bars full above the 30 percent zoom threshold', () => {
+    expect(getEmbeddedVideoPromptBarSizeMode(0.7, 500)).toBe('full');
+  });
+
+  it('keeps assigned bars full exactly at the 30 percent zoom threshold', () => {
+    expect(getEmbeddedVideoPromptBarSizeMode(0.3, 1200)).toBe('full');
+  });
+
+  it('switches assigned bars into mini mode once the canvas is below the 30 percent zoom threshold', () => {
+    expect(getEmbeddedVideoPromptBarSizeMode(0.29, 1200)).toBe('mini');
+  });
+
+  it('keeps mini bar widths tied to the visible area before scaling', () => {
+    expect(getEmbeddedVideoPromptBarRenderWidth('mini', 240)).toBeCloseTo((240 - 24) / 0.8, 5);
+    expect(getEmbeddedVideoPromptBarRenderWidth('mini', 1400)).toBe(MINI_VIDEO_PROMPT_BAR_SIZE.width);
   });
 
   it('snaps embedded prompt bars to the bottom center of the area', () => {

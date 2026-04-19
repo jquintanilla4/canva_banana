@@ -565,7 +565,7 @@ describe('Canvas video prompt area tool', () => {
   });
 
   it('renders embedded bars without a negative prompt field and with a delete button', () => {
-    render(
+    const { container } = render(
       <Canvas
         images={[]}
         onImagesChange={vi.fn()}
@@ -683,5 +683,20 @@ describe('Canvas video prompt area tool', () => {
 
     expect(screen.getByRole('button', { name: 'Delete Video prompt area 01' })).toBeTruthy();
     expect(screen.queryByLabelText('Negative prompt input')).toBeNull();
+
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+    const modelBadgeButton = screen.getByRole('button', { name: 'Seedance 2' });
+    const embeddedPromptShell = modelBadgeButton.closest('[data-embedded-prompt-size-mode]') as HTMLElement;
+
+    expect(embeddedPromptShell.dataset.embeddedPromptSizeMode).toBe('full');
+    expect(screen.getByLabelText('Select video model')).toBeTruthy();
+
+    for (let iteration = 0; iteration < 14; iteration += 1) {
+      fireEvent.wheel(root, { deltaY: 100, clientX: 400, clientY: 300 });
+    }
+
+    expect(embeddedPromptShell.dataset.embeddedPromptSizeMode).toBe('mini');
+    expect(screen.queryByLabelText('Select video model')).toBeNull();
+    expect(embeddedPromptShell.style.transform).toBe('scale(0.8)');
   });
 });

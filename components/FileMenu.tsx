@@ -10,6 +10,8 @@ type FileMenuProps = {
   onOpenBackups: () => void;
   autosaveEnabled: boolean;
   onToggleAutosave: () => void;
+  showZoomLevelBadge: boolean;
+  onToggleZoomLevelBadge: () => void;
   onOpenDebugLog: () => void;
 };
 
@@ -22,6 +24,8 @@ export const FileMenu: React.FC<FileMenuProps> = ({
   onOpenBackups,
   autosaveEnabled,
   onToggleAutosave,
+  showZoomLevelBadge,
+  onToggleZoomLevelBadge,
   onOpenDebugLog,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -104,6 +108,16 @@ export const FileMenu: React.FC<FileMenuProps> = ({
             {/* Toggle to opt out of autosave (default is enabled). */}
             <span>Autosave</span>
             <span className="text-xs uppercase text-gray-400">{autosaveEnabled ? 'On' : 'Off'}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={showZoomLevelBadge}
+            onClick={onToggleZoomLevelBadge}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors flex items-center justify-between gap-2"
+          >
+            <span>{showZoomLevelBadge ? 'Hide Zoom Level' : 'Display Zoom Level'}</span>
+            <span className="text-xs uppercase text-gray-400">{showZoomLevelBadge ? 'On' : 'Off'}</span>
           </button>
           <button
             type="button"

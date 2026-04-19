@@ -12,13 +12,17 @@ import {
 } from './seedanceReferences';
 
 type CanvasPoint = { x: number; y: number };
+export type EmbeddedVideoPromptBarSizeMode = 'full' | 'mini';
 
 export const DEFAULT_VIDEO_PROMPT_BAR_SIZE = { width: 920, height: 190 } as const; // Embedded prompt bars keep the same visual weight as the global bar.
+export const MINI_VIDEO_PROMPT_BAR_SIZE = { width: 420, height: 84 } as const; // Compact mode keeps the embedded shell readable when the full bar would dominate the area.
 export const DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT = 30; // Assigned bars reserve space for the draggable model badge above the prompt shell.
 export const DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET = -46; // The rendered Seedance shell is shorter than its logical rect, so this keeps the visible bar aligned to the area bottom.
 export const MIN_VIDEO_PROMPT_AREA_WIDTH = 280; // Areas need enough width to fit one prompt bar comfortably.
 export const MIN_VIDEO_PROMPT_AREA_HEIGHT = 220; // Areas need height for the prompt bar plus media staging room.
-export const MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE = 0.5; // Embedded bars should stay legible even when the canvas is heavily zoomed out.
+export const MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE = 0.8; // Embedded bars should stay readable instead of collapsing at far zoom levels.
+export const MINI_VIDEO_PROMPT_BAR_SCALE_THRESHOLD = 0.3; // Mini mode should only kick in once the canvas is below 30% zoom.
+export const MINI_VIDEO_PROMPT_BAR_MIN_WIDTH = 140; // Compact mode can squeeze further, but this keeps the shell usable.
 
 export const SEEDANCE_2_VIDEO_PROMPT_PROFILE: VideoModelCapabilityProfile = {
   id: 'seedance-2-reference',
@@ -65,9 +69,35 @@ export const getVideoPromptBarVisualScale = (
   if (!areaScreenWidth) {
     return minimumScale;
   }
-  const maxScaleThatFitsArea = Math.max(0.28, (areaScreenWidth - 48) / promptBarWidth);
+  const maxScaleThatFitsArea = (areaScreenWidth - 48) / promptBarWidth;
+  if (maxScaleThatFitsArea < MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE) {
+    return MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE;
+  }
   return Math.min(minimumScale, maxScaleThatFitsArea);
-}; // Keeps prompt bars readable while respecting the visible width of their owning area.
+}; // Keeps prompt bars readable first and only uses the area fit when it still clears the floor.
+
+export const getEmbeddedVideoPromptBarSizeMode = (
+  canvasScale: number,
+  _areaScreenWidth?: number,
+): EmbeddedVideoPromptBarSizeMode => {
+  if (canvasScale < MINI_VIDEO_PROMPT_BAR_SCALE_THRESHOLD) {
+    return 'mini';
+  }
+  return 'full';
+}; // Keep the full shell until the user zooms below the 30% threshold.
+
+export const getEmbeddedVideoPromptBarRenderWidth = (
+  sizeMode: EmbeddedVideoPromptBarSizeMode,
+  areaScreenWidth?: number,
+): number => {
+  if (sizeMode === 'full' || typeof areaScreenWidth !== 'number') {
+    return sizeMode === 'full' ? DEFAULT_VIDEO_PROMPT_BAR_SIZE.width : MINI_VIDEO_PROMPT_BAR_SIZE.width;
+  }
+  return Math.min(
+    MINI_VIDEO_PROMPT_BAR_SIZE.width,
+    Math.max(MINI_VIDEO_PROMPT_BAR_MIN_WIDTH, (areaScreenWidth - 24) / MIN_VIDEO_PROMPT_BAR_VISUAL_SCALE),
+  );
+}; // Compact bars size themselves against the visible area before the floor scale is applied.
 
 export const buildVideoPromptAreaMembership = (
   area: CanvasVideoPromptArea,

@@ -29,7 +29,17 @@ import { getNoteTextColor } from './canvas/noteColors';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, NOTE_COLOR_OPTIONS, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
 import { PromptBar, type PromptBarControlConfig } from './PromptBar';
-import { DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET, DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT, getAreaPromptBarRect, getMentionOptionsFromMembership, getVideoPromptBarVisualScale, syncVideoPromptAreaMembership } from '../utils/videoPromptAreas';
+import {
+  DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET,
+  DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT,
+  getAreaPromptBarRect,
+  getEmbeddedVideoPromptBarRenderWidth,
+  getEmbeddedVideoPromptBarSizeMode,
+  getMentionOptionsFromMembership,
+  getVideoPromptBarVisualScale,
+  MINI_VIDEO_PROMPT_BAR_SIZE,
+  syncVideoPromptAreaMembership,
+} from '../utils/videoPromptAreas';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -111,6 +121,7 @@ interface CanvasProps {
   onVideoPromptBarSubmit: (barId: string) => void;
   buildVideoPromptBarControls: (bar: CanvasVideoPromptBar) => ReadonlyArray<PromptBarControlConfig>;
   embeddedVideoPromptBarModelOptions: ReadonlyArray<{ value: string; label: string }>;
+  onScaleChange?: (scale: number) => void;
 }
 
 const ActionButton: React.FC<{
@@ -209,6 +220,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onVideoPromptBarSubmit,
   buildVideoPromptBarControls,
   embeddedVideoPromptBarModelOptions,
+  onScaleChange,
 }) => {
   type VideoPromptAreaDragMode = 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br'; // Area resizing should track which corner the user grabbed.
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -544,7 +556,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   useEffect(() => {
     scaleRef.current = scale;
-  }, [scale]);
+    onScaleChange?.(scale);
+  }, [onScaleChange, scale]);
 
   useEffect(() => {
     panRef.current = pan;
@@ -1298,14 +1311,19 @@ export const Canvas: React.FC<CanvasProps> = ({
         const barMembership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : null;
         const isAssigned = Boolean(assignedArea);
         const assignedAreaScreenWidth = assignedArea ? assignedArea.width * scale : undefined;
-        const barVisualScale = getVideoPromptBarVisualScale(scale, bar.width, assignedAreaScreenWidth);
+        const embeddedPromptBarSizeMode = isAssigned ? getEmbeddedVideoPromptBarSizeMode(scale, assignedAreaScreenWidth) : 'full';
+        const renderedBarWidth = isAssigned
+          ? getEmbeddedVideoPromptBarRenderWidth(embeddedPromptBarSizeMode, assignedAreaScreenWidth)
+          : bar.width;
+        const renderedBarHeight = embeddedPromptBarSizeMode === 'mini' ? MINI_VIDEO_PROMPT_BAR_SIZE.height : bar.height;
+        const barVisualScale = getVideoPromptBarVisualScale(scale, renderedBarWidth, assignedAreaScreenWidth);
         const dragHandleHeight = isAssigned ? DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT : 0;
         const screenRect = isAssigned && assignedArea
           ? {
-            left: assignedArea.x * scale + pan.x + (assignedArea.width * scale - bar.width * barVisualScale) / 2,
-            top: assignedArea.y * scale + pan.y + (assignedArea.height - DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET) * scale - (bar.height + dragHandleHeight) * barVisualScale,
-            width: bar.width,
-            height: bar.height,
+            left: assignedArea.x * scale + pan.x + (assignedArea.width * scale - renderedBarWidth * barVisualScale) / 2,
+            top: assignedArea.y * scale + pan.y + (assignedArea.height - DEFAULT_VIDEO_PROMPT_BAR_BOTTOM_INSET) * scale - (renderedBarHeight + dragHandleHeight) * barVisualScale,
+            width: renderedBarWidth,
+            height: renderedBarHeight,
           }
           : {
             left: bar.x * scale + pan.x,
@@ -1346,6 +1364,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           <div
             key={bar.id}
             className="absolute"
+            data-embedded-prompt-size-mode={embeddedPromptBarSizeMode}
             style={{
               left: `${screenRect.left}px`,
               top: `${screenRect.top}px`,
@@ -1375,6 +1394,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               <div style={{ paddingTop: `${dragHandleHeight}px` }}>
                 <PromptBar
                   layout="inline"
+                  sizeMode={embeddedPromptBarSizeMode}
                   prompt={bar.prompt}
                   onPromptChange={(nextPrompt) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, prompt: nextPrompt }))}
                   onSubmit={() => onVideoPromptBarSubmit(bar.id)}

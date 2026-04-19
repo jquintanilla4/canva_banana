@@ -107,6 +107,13 @@ const AVAILABLE_PROVIDERS = PROVIDER_ORDER.filter(provider => providerAvailabili
 const PROVIDER_LABELS: Record<ApiProvider, string> = { google: 'Google', fal: 'FAL' }; // Mapping of provider IDs to display names
 const DEFAULT_API_PROVIDER: ApiProvider = AVAILABLE_PROVIDERS[0] ?? 'google'; // Default provider (first available or fallback)
 const clampStrokeSize = (value: number) => Math.min(MAX_STROKE_SIZE, Math.max(MIN_STROKE_SIZE, value));
+const formatZoomPercentage = (scale: number): string => {
+  const percentage = scale * 100;
+  if (percentage < 10) {
+    return `${percentage.toFixed(1).replace(/\.0$/, '')}%`;
+  }
+  return `${Math.round(percentage)}%`;
+}; // Lower zoom levels keep one decimal so tiny changes stay legible in the badge.
 
 // Root component wires up canvas state, generation controls, and provider-specific settings.
 export default function App() {
@@ -169,6 +176,8 @@ export default function App() {
   const [zoomToSelectionTrigger, setZoomToSelectionTrigger] = useState(0);
   const [zoomInTrigger, setZoomInTrigger] = useState(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
+  const [canvasScale, setCanvasScale] = useState(1);
+  const [showZoomLevelBadge, setShowZoomLevelBadge] = useState(true);
 
   // State for transient toast message notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -760,6 +769,10 @@ export default function App() {
   // Toggle autosave setting from the hamburger menu.
   const handleToggleAutosave = useCallback(() => {
     setAutosaveEnabled(prev => !prev);
+  }, []);
+
+  const handleToggleZoomLevelBadge = useCallback(() => {
+    setShowZoomLevelBadge(prev => !prev);
   }, []);
 
   const handleGenerationComplete = useCallback(() => {
@@ -1490,6 +1503,8 @@ export default function App() {
         onOpenBackups={openBackupsModal}
         autosaveEnabled={autosaveEnabled}
         onToggleAutosave={handleToggleAutosave}
+        showZoomLevelBadge={showZoomLevelBadge}
+        onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
         onOpenDebugLog={openDebugLogPanel}
       />
 
@@ -1536,6 +1551,14 @@ export default function App() {
 
       {/* Main drawing area */}
       <main className="relative z-0 flex-1 min-h-0">
+        {showZoomLevelBadge && (
+          <div
+            className="pointer-events-none absolute right-4 top-4 z-40 rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
+            aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}`}
+          >
+            Zoom {formatZoomPercentage(canvasScale)}
+          </div>
+        )}
         <Canvas
           images={displayedImages}
           onImagesChange={setLiveImages}
@@ -1583,6 +1606,7 @@ export default function App() {
           zoomToSelectionTrigger={zoomToSelectionTrigger}
           zoomInTrigger={zoomInTrigger}
           zoomOutTrigger={zoomOutTrigger}
+          onScaleChange={setCanvasScale}
           editingNoteId={editingNoteId}
           onNoteDoubleClick={setEditingNoteId}
           onNoteTextChange={handleNoteTextChange}
