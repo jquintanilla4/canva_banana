@@ -24,7 +24,6 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   const metadataButtonClasses = metadataVisible
     ? 'bg-blue-500 hover:bg-blue-400'
     : 'bg-gray-700 hover:bg-gray-600';
-
   const blindTestActive = blindTestEnabled || openSourceAliasEnabled;
   const blindTestButtonClasses = blindTestActive
     ? 'bg-blue-500 hover:bg-blue-400'

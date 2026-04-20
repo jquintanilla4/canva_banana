@@ -1,9 +1,31 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Tool, AppMode } from '../types';
-import { SelectionIcon, PanIcon, ClearIcon, UndoIcon, RedoIcon, DownloadIcon, DeleteIcon, FreeSelectionIcon, NoteIcon, EraseIcon, BrushIcon, RemoveBackgroundIcon, UploadIcon, ResizeIcon, MicrophoneIcon, StopIcon, CameraSettingsIcon, CrosshairIcon } from './Icons';
-import { MAX_STROKE_SIZE, MIN_STROKE_SIZE } from './canvas/constants';
-import { CameraSettingsPopover } from './CameraSettingsPopover';
-import { hasCameraSettings, type CameraSettingsSelection } from '../utils/cameraSettings';
+import React, { useEffect, useRef, useState } from "react";
+import { Tool, AppMode } from "../types";
+import {
+  SelectionIcon,
+  PanIcon,
+  ClearIcon,
+  UndoIcon,
+  RedoIcon,
+  DownloadIcon,
+  DeleteIcon,
+  FreeSelectionIcon,
+  NoteIcon,
+  EraseIcon,
+  BrushIcon,
+  RemoveBackgroundIcon,
+  UploadIcon,
+  ResizeIcon,
+  MicrophoneIcon,
+  StopIcon,
+  CameraSettingsIcon,
+  VideoPromptAreaIcon,
+} from "./Icons";
+import { MAX_STROKE_SIZE, MIN_STROKE_SIZE } from "./canvas/constants";
+import { CameraSettingsPopover } from "./CameraSettingsPopover";
+import {
+  hasCameraSettings,
+  type CameraSettingsSelection,
+} from "../utils/cameraSettings";
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -52,7 +74,9 @@ const ToolButton: React.FC<{
   <button
     onClick={onClick}
     className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
-      isActive ? (activeClassName ?? 'bg-blue-600 text-white') : 'bg-gray-700 hover:bg-gray-600'
+      isActive
+        ? (activeClassName ?? "bg-blue-600 text-white")
+        : "bg-gray-700 hover:bg-gray-600"
     } disabled:opacity-50 disabled:cursor-not-allowed`}
     title={label}
     aria-label={label}
@@ -69,11 +93,18 @@ const ModeButton: React.FC<{
   children: React.ReactNode;
   disabled?: boolean;
   showHintLine?: boolean;
-}> = ({ label, isActive, onClick, children, disabled, showHintLine = false }) => (
+}> = ({
+  label,
+  isActive,
+  onClick,
+  children,
+  disabled,
+  showHintLine = false,
+}) => (
   <button
     onClick={onClick}
     className={`relative flex h-8 items-center px-3 text-sm font-semibold rounded-md transition-colors duration-200 ${
-      isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'
+      isActive ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600"
     } disabled:opacity-50 disabled:cursor-not-allowed`}
     title={label}
     disabled={disabled}
@@ -125,7 +156,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const closeTimeoutRef = useRef<number | null>(null);
   const isBrushToolActive = activeTool === Tool.BRUSH;
   const isEraserToolActive = activeTool === Tool.ERASE;
-  const isCanvasMode = appMode === 'CANVAS';
+  const isCanvasMode = appMode === "CANVAS";
   const strokeSize = isEraserToolActive ? eraserSize : brushSize;
   const handleStrokeSizeChange = (value: number) => {
     if (isEraserToolActive) {
@@ -134,18 +165,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       onBrushSizeChange(value);
     }
   };
-  const inactiveMode = isCanvasMode ? 'ANNOTATE' : 'CANVAS';
-  const inactiveModeLabel = isCanvasMode ? 'Annotate' : 'Canvas';
-  const inactiveModeTitle = isCanvasMode ? 'Annotate Mode' : 'Canvas Mode';
+  const inactiveMode = isCanvasMode ? "ANNOTATE" : "CANVAS";
+  const inactiveModeLabel = isCanvasMode ? "Annotate" : "Canvas";
+  const inactiveModeTitle = isCanvasMode ? "Annotate Mode" : "Canvas Mode";
   const isInactiveModeDisabled = isCanvasMode ? isAnnotateModeDisabled : false;
-  const activeModeLabel = isCanvasMode ? 'Canvas' : 'Annotate';
-  const activeModeTitle = isCanvasMode ? 'Canvas Mode' : 'Annotate Mode';
+  const activeModeLabel = isCanvasMode ? "Canvas" : "Annotate";
+  const activeModeTitle = isCanvasMode ? "Canvas Mode" : "Annotate Mode";
   const videoPromptAreaToolLabel = isVideoPromptAreaToolEnabled
-    ? 'Video Prompt Area (G)'
-    : 'Video Prompt Area (G) • Switch to a video model to create video prompt areas';
+    ? "Video Prompt Area (G)"
+    : "Video Prompt Area (G) • Switch to a video model to create video prompt areas";
   const modeMenuVisibility = isModeMenuOpen
-    ? 'opacity-100 pointer-events-auto'
-    : 'opacity-0 pointer-events-none';
+    ? "opacity-100 pointer-events-auto"
+    : "opacity-0 pointer-events-none";
   const clearCloseTimeout = () => {
     if (closeTimeoutRef.current !== null) {
       window.clearTimeout(closeTimeoutRef.current);
@@ -173,23 +204,26 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     }
 
     const handleMouseDown = (event: MouseEvent) => {
-      if (cameraPanelRef.current && !cameraPanelRef.current.contains(event.target as Node)) {
+      if (
+        cameraPanelRef.current &&
+        !cameraPanelRef.current.contains(event.target as Node)
+      ) {
         setIsCameraPanelOpen(false);
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         setIsCameraPanelOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('keydown', handleEscape);
+    document.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("keydown", handleEscape);
 
     return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('keydown', handleEscape);
+      document.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("keydown", handleEscape);
     };
   }, [isCameraPanelOpen]);
 
@@ -242,42 +276,71 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
-        <ToolButton label="Select (V)" isActive={activeTool === Tool.SELECTION} onClick={() => onToolChange(Tool.SELECTION)}>
+        <ToolButton
+          label="Select (V)"
+          isActive={activeTool === Tool.SELECTION}
+          onClick={() => onToolChange(Tool.SELECTION)}
+        >
           <SelectionIcon className="w-4 h-4" />
         </ToolButton>
+        <ToolButton
+          label="Free Select (F)"
+          isActive={activeTool === Tool.FREE_SELECTION}
+          onClick={() => onToolChange(Tool.FREE_SELECTION)}
+        >
+          <FreeSelectionIcon className="w-4 h-4" />
+        </ToolButton>
+        <ToolButton
+          label="Pan (H)"
+          isActive={activeTool === Tool.PAN}
+          onClick={() => onToolChange(Tool.PAN)}
+        >
+          <PanIcon className="w-4 h-4" />
+        </ToolButton>
+        <ToolButton
+          label="Note (N)"
+          isActive={activeTool === Tool.NOTE}
+          onClick={() => onToolChange(Tool.NOTE)}
+        >
+          <NoteIcon className="w-4 h-4" />
+        </ToolButton>
+        <button
+          onClick={onRecordToggle}
+          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
+            isRecording
+              ? "bg-red-600 animate-pulse text-white"
+              : "bg-gray-700 hover:bg-gray-600 text-white"
+          }`}
+          title={isRecording ? "Stop Recording" : "Record Audio (M)"}
+        >
+          {isRecording ? (
+            <StopIcon className="w-4 h-4" />
+          ) : (
+            <MicrophoneIcon className="w-4 h-4" />
+          )}
+        </button>
         <ToolButton
           label={videoPromptAreaToolLabel}
           isActive={activeTool === Tool.VIDEO_PROMPT_AREA}
           onClick={() => onToolChange(Tool.VIDEO_PROMPT_AREA)}
           disabled={!isVideoPromptAreaToolEnabled}
         >
-          <CrosshairIcon className="w-4 h-4" />
+          <VideoPromptAreaIcon className="w-5 h-5" />
         </ToolButton>
-        <ToolButton label="Free Select (F)" isActive={activeTool === Tool.FREE_SELECTION} onClick={() => onToolChange(Tool.FREE_SELECTION)}>
-          <FreeSelectionIcon className="w-4 h-4" />
-        </ToolButton>
-        <ToolButton label="Pan (H)" isActive={activeTool === Tool.PAN} onClick={() => onToolChange(Tool.PAN)}>
-          <PanIcon className="w-4 h-4" />
-        </ToolButton>
-         <ToolButton label="Note (N)" isActive={activeTool === Tool.NOTE} onClick={() => onToolChange(Tool.NOTE)}>
-          <NoteIcon className="w-4 h-4" />
-        </ToolButton>
-        <button
-          onClick={onRecordToggle}
-          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
-            isRecording ? 'bg-red-600 animate-pulse text-white' : 'bg-gray-700 hover:bg-gray-600 text-white'
-          }`}
-          title={isRecording ? 'Stop Recording' : 'Record Audio (M)'}
-        >
-          {isRecording ? <StopIcon className="w-4 h-4" /> : <MicrophoneIcon className="w-4 h-4" />}
-        </button>
         <div ref={cameraPanelRef} className="flex h-full items-center">
           <ToolButton
             label="Camera Settings"
-            onClick={() => setIsCameraPanelOpen(prev => !prev)}
-            isActive={cameraSettingsEnabled && (isCameraPanelOpen || isCameraSettingsActive)}
+            onClick={() => setIsCameraPanelOpen((prev) => !prev)}
+            isActive={
+              cameraSettingsEnabled &&
+              (isCameraPanelOpen || isCameraSettingsActive)
+            }
             disabled={!cameraSettingsEnabled}
-            activeClassName={isCameraPanelOpen ? 'bg-amber-500 text-black' : 'bg-amber-500 text-white'}
+            activeClassName={
+              isCameraPanelOpen
+                ? "bg-amber-500 text-black"
+                : "bg-amber-500 text-white"
+            }
           >
             <span className="relative flex items-center justify-center">
               <CameraSettingsIcon className="h-5 w-5" />
@@ -290,14 +353,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             onClose={() => setIsCameraPanelOpen(false)}
           />
         </div>
-        <ToolButton label="Brush (B)" isActive={activeTool === Tool.BRUSH} onClick={() => onToolChange(Tool.BRUSH)} disabled={appMode === 'CANVAS'}>
+        <ToolButton
+          label="Brush (B)"
+          isActive={activeTool === Tool.BRUSH}
+          onClick={() => onToolChange(Tool.BRUSH)}
+          disabled={appMode === "CANVAS"}
+        >
           <BrushIcon className="w-4 h-4" />
         </ToolButton>
         <ToolButton
-          label={appMode === 'CANVAS' ? 'Erase (E) • Only available in Annotate mode' : 'Erase (E)'}
+          label={
+            appMode === "CANVAS"
+              ? "Erase (E) • Only available in Annotate mode"
+              : "Erase (E)"
+          }
           isActive={activeTool === Tool.ERASE}
           onClick={() => onToolChange(Tool.ERASE)}
-          disabled={appMode === 'CANVAS'}
+          disabled={appMode === "CANVAS"}
         >
           <EraseIcon className="w-4 h-4" />
         </ToolButton>
@@ -306,8 +378,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           disabled={!hasClearablePaths}
           className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
             hasClearablePaths
-              ? 'bg-[#E1B927] hover:bg-[#d4a51f] text-black'
-              : 'bg-[#222937] text-white'
+              ? "bg-[#E1B927] hover:bg-[#d4a51f] text-black"
+              : "bg-[#222937] text-white"
           } disabled:cursor-not-allowed`}
           title="Nuke markings"
         >
@@ -316,18 +388,30 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
-          <ToolButton label="Undo" onClick={onUndo} disabled={!canUndo} isActive={false}>
-              <UndoIcon className="w-4 h-4" />
-          </ToolButton>
-          <ToolButton label="Redo" onClick={onRedo} disabled={!canRedo} isActive={false}>
-              <RedoIcon className="w-4 h-4" />
-          </ToolButton>
+        <ToolButton
+          label="Undo"
+          onClick={onUndo}
+          disabled={!canUndo}
+          isActive={false}
+        >
+          <UndoIcon className="w-4 h-4" />
+        </ToolButton>
+        <ToolButton
+          label="Redo"
+          onClick={onRedo}
+          disabled={!canRedo}
+          isActive={false}
+        >
+          <RedoIcon className="w-4 h-4" />
+        </ToolButton>
       </div>
 
       {(isBrushToolActive || isEraserToolActive) && (
         <div className="flex h-full items-center space-x-4 border-r border-gray-600 pr-4">
           <div className="flex h-full items-center space-x-2">
-            <label htmlFor="brushSize" className="text-xs text-gray-300">Size</label>
+            <label htmlFor="brushSize" className="text-xs text-gray-300">
+              Size
+            </label>
             <input
               id="brushSize"
               type="range"
@@ -338,9 +422,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               className="w-24 h-2 accent-blue-500"
             />
           </div>
-          {isBrushToolActive && appMode === 'ANNOTATE' && (
+          {isBrushToolActive && appMode === "ANNOTATE" && (
             <div className="flex h-full items-center space-x-2">
-              <label htmlFor="brushColor" className="text-xs text-gray-300">Color</label>
+              <label htmlFor="brushColor" className="text-xs text-gray-300">
+                Color
+              </label>
               <input
                 id="brushColor"
                 type="color"
@@ -352,7 +438,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )}
         </div>
       )}
-      
+
       <div className="flex h-full items-center space-x-2">
         <button
           onClick={onResize}
@@ -371,9 +457,25 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           aria-label="Remove Background"
         >
           {isBackgroundRemovalLoading ? (
-            <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            <svg
+              className="h-4 w-4 animate-spin"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
             </svg>
           ) : (
             <RemoveBackgroundIcon className="w-4 h-4" />
@@ -387,7 +489,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <UploadIcon className="w-4 h-4" />
         </button>
-        <ToolButton label="Download Selected Image" onClick={onDownload} disabled={!isImageSelected} isActive={false}>
+        <ToolButton
+          label="Download Selected Image"
+          onClick={onDownload}
+          disabled={!isImageSelected}
+          isActive={false}
+        >
           <DownloadIcon className="w-4 h-4" />
         </ToolButton>
         <button
