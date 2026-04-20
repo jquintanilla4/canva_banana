@@ -211,6 +211,7 @@ describe('PromptBar layout', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.useRealTimers();
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: ORIGINAL_INNER_WIDTH });
     document.documentElement.style.fontSize = ORIGINAL_DOCUMENT_FONT_SIZE;
@@ -296,6 +297,91 @@ describe('PromptBar layout', () => {
     expect(parseFloat(inline.style.maxWidth)).toBe(540);
     expect(controlsViewport.className).toContain('overflow-x-auto');
     expect(controlsStrip.className).toContain('flex-nowrap');
+  });
+
+  it('remeasures dropdown widths after returning from mini mode', async () => {
+    const expectedResolutionWidthPx = `${('1080p (TBR)'.length * 7) + 12}px`;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      font: '',
+      measureText: (text: string) => ({ width: text.length * 7 }),
+    } as unknown as CanvasRenderingContext2D);
+
+    const { rerender } = render(
+      <PromptBar
+        prompt="Animate the subject"
+        onPromptChange={vi.fn()}
+        onSubmit={vi.fn()}
+        isLoading={false}
+        inputDisabled={false}
+        submitDisabled={false}
+        modelOptions={[
+          { value: 'seedance-2', label: 'Seedance 2' },
+        ]}
+        selectedModel="seedance-2"
+        onModelChange={vi.fn()}
+        modelSelectDisabled={false}
+        modelMode="video"
+        onModelModeChange={vi.fn()}
+        modelControls={modelControls}
+        sizeMode="full"
+      />
+    );
+
+    await flushPromptBarLayout();
+
+    const initialResolutionSelect = screen.getByLabelText('Select Seedance 2 resolution') as HTMLSelectElement;
+    expect(initialResolutionSelect.style.width).toBe(expectedResolutionWidthPx);
+
+    rerender(
+      <PromptBar
+        prompt="Animate the subject"
+        onPromptChange={vi.fn()}
+        onSubmit={vi.fn()}
+        isLoading={false}
+        inputDisabled={false}
+        submitDisabled={false}
+        modelOptions={[
+          { value: 'seedance-2', label: 'Seedance 2' },
+        ]}
+        selectedModel="seedance-2"
+        onModelChange={vi.fn()}
+        modelSelectDisabled={false}
+        modelMode="video"
+        onModelModeChange={vi.fn()}
+        modelControls={modelControls}
+        sizeMode="mini"
+      />
+    );
+
+    await flushPromptBarLayout();
+
+    expect(screen.queryByLabelText('Select Seedance 2 resolution')).toBeNull();
+
+    rerender(
+      <PromptBar
+        prompt="Animate the subject"
+        onPromptChange={vi.fn()}
+        onSubmit={vi.fn()}
+        isLoading={false}
+        inputDisabled={false}
+        submitDisabled={false}
+        modelOptions={[
+          { value: 'seedance-2', label: 'Seedance 2' },
+        ]}
+        selectedModel="seedance-2"
+        onModelChange={vi.fn()}
+        modelSelectDisabled={false}
+        modelMode="video"
+        onModelModeChange={vi.fn()}
+        modelControls={modelControls}
+        sizeMode="full"
+      />
+    );
+
+    await flushPromptBarLayout();
+
+    const remountedResolutionSelect = screen.getByLabelText('Select Seedance 2 resolution') as HTMLSelectElement;
+    expect(remountedResolutionSelect.style.width).toBe(expectedResolutionWidthPx);
   });
 
   it('keeps mention suggestions open while typing a second seedance reference token', async () => {

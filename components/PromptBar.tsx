@@ -318,6 +318,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       resizeSelectToContent(selectEl);
     });
   }, [
+    resolvedSizeMode,
     selectedModel,
     modelControls
       ?.map(control => `${control.id}-${control.value}-${control.options.map(option => option.label).join('~')}`)

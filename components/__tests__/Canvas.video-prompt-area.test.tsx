@@ -1,7 +1,8 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { Canvas } from '../Canvas';
+import { buildSeedance2PromptBarControls } from '../../services/promptBarConfig';
 import { Tool, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
 import { EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING } from '../../utils/videoPromptAreas';
 
@@ -719,6 +720,183 @@ describe('Canvas video prompt area tool', () => {
     expect(embeddedPromptShell.dataset.embeddedPromptSizeMode).toBe('mini');
     expect(screen.queryByLabelText('Select video model')).toBeNull();
     expect(embeddedPromptScaleShell.style.transform).toBe('scale(0.8)');
+  });
+
+  it('shows the shared Seedance 2 labels and updates embedded audio and camera toggles', () => {
+    const Harness = () => {
+      const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        prompt: '',
+        negativePrompt: '',
+        seedance2Variant: 'reference',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }]);
+
+      const handleVideoPromptBarUpdate = (barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => {
+        setBars(currentBars => currentBars.map(bar => (
+          bar.id === barId ? updater(bar) : bar
+        )));
+      };
+
+      return (
+        <>
+          <output data-testid="seedance2-audio-state">{bars[0]?.seedance2GenerateAudio ? 'true' : 'false'}</output>
+          <output data-testid="seedance2-camera-state">{bars[0]?.seedance2CameraFixed ? 'true' : 'false'}</output>
+          <Canvas
+            images={[]}
+            onImagesChange={vi.fn()}
+            notes={[]}
+            onNotesChange={vi.fn()}
+            videoPromptAreas={[{
+              id: 'area-1',
+              sequence: 1,
+              label: 'Video prompt area 01',
+              x: 40,
+              y: 60,
+              width: 2600,
+              height: 900,
+              promptBarId: 'bar-1',
+              orderedMediaIds: ['image-1'],
+            }]}
+            onVideoPromptAreasChange={vi.fn()}
+            videoPromptBars={bars}
+            onVideoPromptBarsChange={setBars}
+            selectedVideoPromptAreaId={null}
+            onVideoPromptAreaSelect={vi.fn()}
+            videoPromptAreaMemberships={{
+              'area-1': {
+                orderedMediaIds: ['image-1'],
+                acceptedImageIds: ['image-1'],
+                acceptedVideoIds: [],
+                acceptedAudioIds: [],
+                ignoredMediaIds: [],
+                orderLabels: { 'image-1': '@Image1' },
+              },
+            }}
+            tool={Tool.SELECTION}
+            appMode="CANVAS"
+            paths={[]}
+            onPathsChange={vi.fn()}
+            brushSize={10}
+            eraserSize={10}
+            brushColor="#000000"
+            selectedImageIds={[]}
+            selectedNoteIds={[]}
+            referenceImageIds={[]}
+            referenceVideoIds={[]}
+            referenceAudioIds={[]}
+            referenceImageOrderLabels={null}
+            disabledMediaIds={[]}
+            elementImageIds={[]}
+            elementImageOrderLabels={null}
+            videoLastFrameImageId={null}
+            sourceVideoId={null}
+            tailSelectionEnabled={false}
+            isKlingO1VideoInputMode={false}
+            isKlingO1FflfMode={false}
+            isSeedance15FflfMode={false}
+            isKling26ControlVideoInputMode={false}
+            isVeo31ExtendMode={false}
+            isWanAnimateVideoInputMode={false}
+            isWan26I2VMode={false}
+            onError={vi.fn()}
+            onImageSelect={vi.fn()}
+            onNoteSelect={vi.fn()}
+            zoomToFitTrigger={0}
+            zoomToSelectionTrigger={0}
+            zoomInTrigger={0}
+            zoomOutTrigger={0}
+            onFilesDrop={vi.fn()}
+            editingNoteId={null}
+            onNoteDoubleClick={vi.fn()}
+            onNoteTextChange={vi.fn()}
+            onNoteEditEnd={vi.fn()}
+            onImageOrderChange={vi.fn()}
+            isImageOverlapping={false}
+            canMoveUp={false}
+            canMoveDown={false}
+            cropMode={null}
+            onCropRectChange={vi.fn()}
+            onStartCrop={vi.fn()}
+            onConfirmCrop={vi.fn()}
+            onCancelCrop={vi.fn()}
+            onNoteCopy={vi.fn()}
+            onNoteDuplicate={vi.fn()}
+            onNoteFontSizeChange={vi.fn()}
+            onNoteColorChange={vi.fn()}
+            onImagePromptCopy={vi.fn()}
+            onImageDuplicate={vi.fn()}
+            onRerunGeneration={vi.fn()}
+            showMetadataOverlay={false}
+            transformMode={null}
+            onStartTransform={vi.fn()}
+            onExitTransform={vi.fn()}
+            isLoading={false}
+            onVideoPromptBarFocus={vi.fn()}
+            onVideoPromptBarBlur={vi.fn()}
+            onVideoPromptBarUpdate={handleVideoPromptBarUpdate}
+            onVideoPromptBarSubmit={vi.fn()}
+            buildVideoPromptBarControls={(bar) => buildSeedance2PromptBarControls({
+              idPrefix: bar.id,
+              seedance2Variant: bar.seedance2Variant,
+              seedance2AspectRatio: bar.seedance2AspectRatio,
+              seedance2Resolution: bar.seedance2Resolution,
+              seedance2Duration: bar.seedance2Duration,
+              seedance2GenerateAudio: bar.seedance2GenerateAudio,
+              seedance2CameraFixed: bar.seedance2CameraFixed,
+              isLoading: false,
+              onSeedance2VariantChange: value => handleVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, seedance2Variant: value })),
+              onSeedance2AspectRatioChange: value => handleVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, seedance2AspectRatio: value })),
+              onSeedance2ResolutionChange: value => handleVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, seedance2Resolution: value })),
+              onSeedance2DurationChange: value => handleVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, seedance2Duration: value })),
+              onSeedance2GenerateAudioChange: value => handleVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, seedance2GenerateAudio: value })),
+              onSeedance2CameraFixedChange: value => handleVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, seedance2CameraFixed: value })),
+            })}
+            embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
+            onCommit={vi.fn()}
+          />
+        </>
+      );
+    };
+
+    render(<Harness />);
+
+    const promptBar = within(screen.getByTestId('prompt-bar-inline'));
+    expect(promptBar.getByText('AR')).toBeTruthy();
+    expect(promptBar.getByText('Resolution')).toBeTruthy();
+    expect(promptBar.getByText('Camera')).toBeTruthy();
+    expect(promptBar.getByText('Audio')).toBeTruthy();
+
+    const audioSelect = promptBar.getByLabelText('Toggle Seedance 2 audio generation') as HTMLSelectElement;
+    expect(audioSelect.value).toBe('false');
+    expect(audioSelect.selectedOptions[0]?.textContent).toBe('Off');
+
+    fireEvent.change(audioSelect, { target: { value: 'true' } });
+
+    const updatedAudioSelect = promptBar.getByLabelText('Toggle Seedance 2 audio generation') as HTMLSelectElement;
+    expect(updatedAudioSelect.value).toBe('true');
+    expect(updatedAudioSelect.selectedOptions[0]?.textContent).toBe('On');
+    expect(screen.getByTestId('seedance2-audio-state').textContent).toBe('true');
+
+    const cameraSelect = promptBar.getByLabelText('Toggle Seedance 2 camera fixed') as HTMLSelectElement;
+    expect(cameraSelect.value).toBe('false');
+    expect(cameraSelect.selectedOptions[0]?.textContent).toBe('Free');
+
+    fireEvent.change(cameraSelect, { target: { value: 'true' } });
+
+    const updatedCameraSelect = promptBar.getByLabelText('Toggle Seedance 2 camera fixed') as HTMLSelectElement;
+    expect(updatedCameraSelect.value).toBe('true');
+    expect(updatedCameraSelect.selectedOptions[0]?.textContent).toBe('Fixed');
+    expect(screen.getByTestId('seedance2-camera-state').textContent).toBe('true');
   });
 
   it('keeps the full shell at the legacy readable width in narrow areas', () => {

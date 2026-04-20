@@ -26,12 +26,6 @@ import {
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
-  SEEDANCE2_ASPECT_RATIO_OPTIONS,
-  SEEDANCE2_AUDIO_OPTIONS,
-  SEEDANCE2_CAMERA_FIXED_OPTIONS,
-  SEEDANCE2_DURATION_OPTIONS,
-  SEEDANCE2_RESOLUTION_OPTIONS,
-  SEEDANCE2_VARIANT_OPTIONS,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
@@ -40,6 +34,7 @@ import {
   isSeedreamModelId,
 } from './services/modelConfig';
 import {
+  buildSeedance2PromptBarControls,
   buildPromptBarModelControls,
   getPromptBarModelOptions,
 } from './services/promptBarConfig';
@@ -1196,74 +1191,40 @@ export default function App() {
   const embeddedVideoPromptBarModelOptions = useMemo(() => ([
     { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
   ]), []);
-  const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => ([
-    {
-      id: `${bar.id}-seedance-variant`,
-      ariaLabel: 'Seedance 2 variant',
-      options: SEEDANCE2_VARIANT_OPTIONS,
-      value: bar.seedance2Variant,
-      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2Variant: value === 'smart' ? 'smart' : 'reference',
-      })),
-      disabled: isLoading,
-    },
-    {
-      id: `${bar.id}-seedance-aspect-ratio`,
-      ariaLabel: 'Seedance 2 aspect ratio',
-      options: SEEDANCE2_ASPECT_RATIO_OPTIONS,
-      value: bar.seedance2AspectRatio ?? '16:9',
-      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2AspectRatio: value as CanvasVideoPromptBar['seedance2AspectRatio'],
-      })),
-      disabled: isLoading,
-    },
-    {
-      id: `${bar.id}-seedance-resolution`,
-      ariaLabel: 'Seedance 2 resolution',
-      options: SEEDANCE2_RESOLUTION_OPTIONS,
-      value: bar.seedance2Resolution ?? '720p',
-      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2Resolution: value as CanvasVideoPromptBar['seedance2Resolution'],
-      })),
-      disabled: isLoading,
-    },
-    {
-      id: `${bar.id}-seedance-duration`,
-      ariaLabel: 'Seedance 2 duration',
-      options: SEEDANCE2_DURATION_OPTIONS,
-      value: bar.seedance2Duration ?? '5',
-      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2Duration: value as CanvasVideoPromptBar['seedance2Duration'],
-      })),
-      disabled: isLoading,
-    },
-    {
-      id: `${bar.id}-seedance-audio`,
-      ariaLabel: 'Seedance 2 audio',
-      options: SEEDANCE2_AUDIO_OPTIONS,
-      value: bar.seedance2GenerateAudio ? 'on' : 'off',
-      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2GenerateAudio: value === 'on',
-      })),
-      disabled: isLoading,
-    },
-    {
-      id: `${bar.id}-seedance-camera-fixed`,
-      ariaLabel: 'Seedance 2 camera lock',
-      options: SEEDANCE2_CAMERA_FIXED_OPTIONS,
-      value: bar.seedance2CameraFixed ? 'on' : 'off',
-      onChange: (value: string) => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2CameraFixed: value === 'on',
-      })),
-      disabled: isLoading,
-    },
-  ]), [handleEmbeddedPromptBarUpdate, isLoading]);
+  const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => buildSeedance2PromptBarControls({
+    idPrefix: bar.id,
+    seedance2Variant: bar.seedance2Variant,
+    seedance2AspectRatio: bar.seedance2AspectRatio ?? '16:9',
+    seedance2Resolution: bar.seedance2Resolution ?? '720p',
+    seedance2Duration: bar.seedance2Duration ?? '5',
+    seedance2GenerateAudio: bar.seedance2GenerateAudio,
+    seedance2CameraFixed: bar.seedance2CameraFixed,
+    isLoading,
+    onSeedance2VariantChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+      ...currentBar,
+      seedance2Variant: value,
+    })),
+    onSeedance2AspectRatioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+      ...currentBar,
+      seedance2AspectRatio: value,
+    })),
+    onSeedance2ResolutionChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+      ...currentBar,
+      seedance2Resolution: value,
+    })),
+    onSeedance2DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+      ...currentBar,
+      seedance2Duration: value,
+    })),
+    onSeedance2GenerateAudioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+      ...currentBar,
+      seedance2GenerateAudio: value,
+    })),
+    onSeedance2CameraFixedChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+      ...currentBar,
+      seedance2CameraFixed: value,
+    })),
+  }), [handleEmbeddedPromptBarUpdate, isLoading]);
 
   // Validation layer for prompt submission that enforces provider/model-specific rules.
   const {
