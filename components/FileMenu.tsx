@@ -72,13 +72,13 @@ export const FileMenu: React.FC<FileMenuProps> = ({
       {isOpen && (
         <div
           role="menu"
-          className="mt-2 w-44 rounded-md border border-gray-700 bg-gray-900/95 shadow-lg overflow-hidden"
+          className="mt-2 inline-flex max-w-[calc(100vw-2rem)] flex-col items-stretch rounded-md border border-gray-700 bg-gray-900/95 shadow-lg overflow-hidden"
         >
           <button
             type="button"
             role="menuitem"
             onClick={onImportSnapshot}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
           >
             Import Snapshot
           </button>
@@ -86,7 +86,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
             type="button"
             role="menuitem"
             onClick={onExportSnapshot}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
           >
             Export Snapshot
           </button>
@@ -94,7 +94,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
             type="button"
             role="menuitem"
             onClick={onOpenBackups}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
           >
             Backups...
           </button>
@@ -103,27 +103,27 @@ export const FileMenu: React.FC<FileMenuProps> = ({
             role="menuitemcheckbox"
             aria-checked={autosaveEnabled}
             onClick={onToggleAutosave}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors flex items-center justify-between gap-2"
+            className="flex items-center justify-between gap-[18px] px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
           >
             {/* Toggle to opt out of autosave (default is enabled). */}
             <span>Autosave</span>
-            <span className="text-xs uppercase text-gray-400">{autosaveEnabled ? 'On' : 'Off'}</span>
+            <span className="shrink-0 text-xs uppercase text-gray-400">{autosaveEnabled ? 'On' : 'Off'}</span>
           </button>
           <button
             type="button"
             role="menuitemcheckbox"
             aria-checked={showZoomLevelBadge}
             onClick={onToggleZoomLevelBadge}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors flex items-center justify-between gap-2"
+            className="flex items-center justify-between gap-[18px] px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
           >
             <span>{showZoomLevelBadge ? 'Hide Zoom Level' : 'Display Zoom Level'}</span>
-            <span className="text-xs uppercase text-gray-400">{showZoomLevelBadge ? 'On' : 'Off'}</span>
+            <span className="shrink-0 text-xs uppercase text-gray-400">{showZoomLevelBadge ? 'On' : 'Off'}</span>
           </button>
           <button
             type="button"
             role="menuitem"
             onClick={onOpenDebugLog}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
           >
             Debug Log
           </button>

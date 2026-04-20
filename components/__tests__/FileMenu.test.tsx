@@ -1,8 +1,42 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileMenu } from '../FileMenu';
 
 describe('FileMenu', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('sizes the menu to its content instead of keeping a width floor', () => {
+    render(
+      <FileMenu
+        isOpen
+        onToggle={vi.fn()}
+        onClose={vi.fn()}
+        onImportSnapshot={vi.fn()}
+        onExportSnapshot={vi.fn()}
+        onOpenBackups={vi.fn()}
+        autosaveEnabled
+        onToggleAutosave={vi.fn()}
+        showZoomLevelBadge
+        onToggleZoomLevelBadge={vi.fn()}
+        onOpenDebugLog={vi.fn()}
+      />
+    );
+
+    const menu = screen.getByRole('menu');
+    const zoomToggle = screen.getByRole('menuitemcheckbox', { name: /hide zoom level/i });
+
+    expect(menu.classList.contains('inline-flex')).toBe(true);
+    expect(menu.classList.contains('flex-col')).toBe(true);
+    expect(menu.classList.contains('max-w-[calc(100vw-2rem)]')).toBe(true);
+    expect(menu.classList.contains('min-w-44')).toBe(false);
+    expect(menu.classList.contains('w-44')).toBe(false);
+    expect(menu.classList.contains('w-fit')).toBe(false);
+    expect(menu.classList.contains('w-max')).toBe(false);
+    expect(zoomToggle.classList.contains('w-full')).toBe(false);
+  });
+
   it('shows the zoom level toggle with the active label', () => {
     render(
       <FileMenu
