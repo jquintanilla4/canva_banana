@@ -207,6 +207,59 @@ describe('useGeneration (seedance 2)', () => {
     expect(result.current.isSeedanceSubmitLocked).toBe(false);
   });
 
+  it('forwards Smart override first and last frame ids into the Volcengine request files', async () => {
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const image2 = buildCanvasMedia('image-2', 'image');
+
+    vi.mocked(generateSeedanceVideo).mockImplementation(() => new Promise(() => {})); // Keep the request pending so the test can inspect the submit payload without fetch side effects.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal: createFalStub(),
+      selection: createSelectionStub(),
+      images: [image1, image2],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'video',
+        prompt: 'Turn this into a cinematic shot',
+        provider: 'volcengine',
+        modelId: SEEDANCE_2_VIDEO_MODEL_ID,
+        modelMode: 'video',
+        primaryImageId: image1.id,
+        videoLastFrameImageId: image2.id,
+        volcengineOptions: {
+          seedance2Variant: 'smart',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    const [submittedPrompt, submittedOptions] = vi.mocked(generateSeedanceVideo).mock.calls[0] ?? [];
+
+    expect(submittedPrompt).toBe('Turn this into a cinematic shot');
+    expect(submittedOptions).toBeTruthy();
+    expect(submittedOptions?.variant).toBe('smart');
+    expect(submittedOptions?.primaryImageFile).toBeInstanceOf(File);
+    expect(submittedOptions?.lastFrameImageFile).toBeInstanceOf(File);
+    expect(submittedOptions?.referenceImageFiles).toBeUndefined();
+    expect(submittedOptions?.referenceVideoFiles).toBeUndefined();
+    expect(submittedOptions?.referenceAudioFiles).toBeUndefined();
+  });
+
   it('blocks Seedance reference submissions when reference videos total more than 15 seconds', async () => {
     const fal = createFalStub();
     fal.seedance2Variant = 'reference';

@@ -2,7 +2,23 @@ import type { ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { Tool } from './types';
+import { Tool, type CanvasImage } from './types';
+
+const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType']): CanvasImage => ({
+  id,
+  element: document.createElement(mediaType === 'video' ? 'video' : 'img'),
+  mediaType,
+  x: 0,
+  y: 0,
+  width: 320,
+  height: 180,
+  rotation: 0,
+  naturalWidth: 320,
+  naturalHeight: 180,
+  file: new File(['test'], `${id}.${mediaType === 'audio' ? 'mp3' : mediaType === 'video' ? 'mp4' : 'png'}`, {
+    type: mediaType === 'audio' ? 'audio/mpeg' : mediaType === 'video' ? 'video/mp4' : 'image/png',
+  }),
+}); // The embedded prompt tests only need media ids/types, so minimal canvas items keep setup lean.
 
 const mockState = vi.hoisted(() => {
   const handleGenerate = vi.fn();
@@ -197,6 +213,9 @@ const mockState = vi.hoisted(() => {
     handleGenerate,
     setReferenceImageIds,
     falState,
+    images: [] as CanvasImage[],
+    displayedImages: [] as CanvasImage[],
+    lastCanvasProps: null as Record<string, unknown> | null,
     baseVideoPromptArea,
     baseVideoPromptBar,
     videoPromptAreas: [{ ...baseVideoPromptArea }],
@@ -230,11 +249,14 @@ vi.mock('./components/PromptBar', () => ({
 }));
 
 vi.mock('./components/Canvas', () => ({
-  Canvas: ({ onVideoPromptBarSubmit }: { onVideoPromptBarSubmit: (barId: string) => void }) => (
-    <button type="button" onClick={() => onVideoPromptBarSubmit('bar-1')}>
-      Submit Embedded Prompt
-    </button>
-  ),
+  Canvas: (props: { onVideoPromptBarSubmit: (barId: string) => void } & Record<string, unknown>) => {
+    mockState.lastCanvasProps = props;
+    return (
+      <button type="button" onClick={() => props.onVideoPromptBarSubmit('bar-1')}>
+        Submit Embedded Prompt
+      </button>
+    );
+  },
 }));
 
 vi.mock('./components/RecordingOverlay', () => ({ RecordingOverlay: () => null }));
@@ -249,12 +271,12 @@ vi.mock('./components/ImageResizeToast', () => ({ ImageResizeToast: () => null }
 
 vi.mock('./hooks/useCanvasHistory', () => ({
   useCanvasHistory: () => ({
-    images: [],
+    images: mockState.images,
     paths: [],
     notes: [],
     videoPromptAreas: mockState.videoPromptAreas,
     videoPromptBars: mockState.videoPromptBars,
-    displayedImages: [],
+    displayedImages: mockState.displayedImages,
     displayedPaths: [],
     displayedNotes: [],
     displayedVideoPromptAreas: mockState.displayedVideoPromptAreas,
@@ -450,6 +472,9 @@ afterEach(() => {
   cleanup();
   mockState.handleGenerate.mockClear();
   mockState.setReferenceImageIds.mockClear();
+  mockState.images = [];
+  mockState.displayedImages = [];
+  mockState.lastCanvasProps = null;
   mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
   mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar }];
   mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
@@ -520,9 +545,178 @@ describe('App video prompt area gating', () => {
       provider: 'volcengine',
       modelId: 'volcengine/seedance-2',
       modelMode: 'video',
+      primaryImageId: undefined,
+      videoLastFrameImageId: undefined,
       referenceImageIds: [],
       referenceVideoIds: [],
       referenceAudioIds: [],
+    }));
+  });
+
+  it('maps the first area image into Seedance Smart primaryImageId without canvas selection', () => {
+    const image1 = buildCanvasMedia('image-1', 'image');
+    mockState.images = [image1];
+    mockState.displayedImages = [image1];
+    mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [image1.id] }];
+    mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [image1.id] }];
+    mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+    mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      primaryImageId: image1.id,
+      videoLastFrameImageId: undefined,
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+    }));
+  });
+
+  it('maps the first two area images into Seedance Smart first and last frames', () => {
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const image2 = buildCanvasMedia('image-2', 'image');
+    mockState.images = [image1, image2];
+    mockState.displayedImages = [image1, image2];
+    mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [image1.id, image2.id] }];
+    mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [image1.id, image2.id] }];
+    mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+    mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      primaryImageId: image1.id,
+      videoLastFrameImageId: image2.id,
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+    }));
+  });
+
+  it('ignores extra images and non-image assets in Seedance Smart area submissions', () => {
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const video1 = buildCanvasMedia('video-1', 'video');
+    const image2 = buildCanvasMedia('image-2', 'image');
+    const audio1 = buildCanvasMedia('audio-1', 'audio');
+    const image3 = buildCanvasMedia('image-3', 'image');
+    mockState.images = [image1, video1, image2, audio1, image3];
+    mockState.displayedImages = [image1, video1, image2, audio1, image3];
+    mockState.videoPromptAreas = [{
+      ...mockState.baseVideoPromptArea,
+      orderedMediaIds: [image1.id, video1.id, image2.id, audio1.id, image3.id],
+    }];
+    mockState.displayedVideoPromptAreas = [{
+      ...mockState.baseVideoPromptArea,
+      orderedMediaIds: [image1.id, video1.id, image2.id, audio1.id, image3.id],
+    }];
+    mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+    mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      primaryImageId: image1.id,
+      videoLastFrameImageId: image2.id,
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+    }));
+  });
+
+  it('limits Smart embedded canvas labels and tagged refs to the first two still images', () => {
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const video1 = buildCanvasMedia('video-1', 'video');
+    const image2 = buildCanvasMedia('image-2', 'image');
+    const audio1 = buildCanvasMedia('audio-1', 'audio');
+    const image3 = buildCanvasMedia('image-3', 'image');
+    mockState.images = [image1, video1, image2, audio1, image3];
+    mockState.displayedImages = [image1, video1, image2, audio1, image3];
+    mockState.videoPromptAreas = [{
+      ...mockState.baseVideoPromptArea,
+      orderedMediaIds: [image1.id, video1.id, image2.id, audio1.id, image3.id],
+    }];
+    mockState.displayedVideoPromptAreas = [{
+      ...mockState.baseVideoPromptArea,
+      orderedMediaIds: [image1.id, video1.id, image2.id, audio1.id, image3.id],
+    }];
+    mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+    mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+
+    render(<App />);
+
+    expect(mockState.lastCanvasProps).toEqual(expect.objectContaining({
+      referenceImageIds: [image1.id, image2.id],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+      referenceImageOrderLabels: {
+        [image1.id]: '@Image1',
+        [image2.id]: '@Image2',
+      },
+      disabledMediaIds: [video1.id, audio1.id, image3.id],
+      videoPromptAreaMemberships: {
+        'area-1': expect.objectContaining({
+          acceptedImageIds: [image1.id, image2.id],
+          acceptedVideoIds: [],
+          acceptedAudioIds: [],
+          ignoredMediaIds: [video1.id, audio1.id, image3.id],
+          orderLabels: {
+            [image1.id]: '@Image1',
+            [image2.id]: '@Image2',
+          },
+        }),
+      },
+    }));
+  });
+
+  it('allows Seedance Smart embedded submissions with no usable area images as text-to-video', () => {
+    const video1 = buildCanvasMedia('video-1', 'video');
+    const audio1 = buildCanvasMedia('audio-1', 'audio');
+    mockState.images = [video1, audio1];
+    mockState.displayedImages = [video1, audio1];
+    mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [video1.id, audio1.id] }];
+    mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [video1.id, audio1.id] }];
+    mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+    mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar, seedance2Variant: 'smart' }];
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      primaryImageId: undefined,
+      videoLastFrameImageId: undefined,
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+    }));
+  });
+
+  it('uses area assets as the full Seedance Reference payload without active selection', () => {
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const video1 = buildCanvasMedia('video-1', 'video');
+    const audio1 = buildCanvasMedia('audio-1', 'audio');
+    mockState.images = [image1, video1, audio1];
+    mockState.displayedImages = [image1, video1, audio1];
+    mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [image1.id, video1.id, audio1.id] }];
+    mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [image1.id, video1.id, audio1.id] }];
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      primaryImageId: undefined,
+      videoLastFrameImageId: undefined,
+      referenceImageIds: [image1.id],
+      referenceVideoIds: [video1.id],
+      referenceAudioIds: [audio1.id],
     }));
   });
 });

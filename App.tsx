@@ -71,6 +71,8 @@ import {
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from './utils/seedanceReferences';
 import {
+  buildEmbeddedSeedanceAreaMembership,
+  buildEmbeddedSeedanceGenerationOverrides,
   buildVideoPromptAreaMembership,
   getAreaPromptBarRect,
   SEEDANCE_2_VIDEO_PROMPT_PROFILE,
@@ -1076,12 +1078,21 @@ export default function App() {
     includeTailFrame: isKlingO1FflfMode,
     tailImageId: videoLastFrameImageId,
   });
-  const videoPromptAreaMemberships = useMemo(() => (
-    displayedVideoPromptAreas.reduce<Record<string, VideoPromptAreaMembership>>((acc, area) => {
-      acc[area.id] = buildVideoPromptAreaMembership(area, displayedImages, SEEDANCE_2_VIDEO_PROMPT_PROFILE);
+  const videoPromptAreaVariantById = useMemo(() => (
+    displayedVideoPromptBars.reduce<Record<string, CanvasVideoPromptBar['seedance2Variant']>>((acc, bar) => {
+      if (bar.assignedAreaId) {
+        acc[bar.assignedAreaId] = bar.seedance2Variant; // Each area inherits the active variant from its attached prompt bar.
+      }
       return acc;
     }, {})
-  ), [displayedImages, displayedVideoPromptAreas]);
+  ), [displayedVideoPromptBars]);
+  const videoPromptAreaMemberships = useMemo(() => (
+    displayedVideoPromptAreas.reduce<Record<string, VideoPromptAreaMembership>>((acc, area) => {
+      const baseMembership = buildVideoPromptAreaMembership(area, displayedImages, SEEDANCE_2_VIDEO_PROMPT_PROFILE);
+      acc[area.id] = buildEmbeddedSeedanceAreaMembership(baseMembership, videoPromptAreaVariantById[area.id] ?? 'reference'); // Smart areas only surface the media they can actually submit.
+      return acc;
+    }, {})
+  ), [displayedImages, displayedVideoPromptAreas, videoPromptAreaVariantById]);
   const videoPromptAreaMembershipList = useMemo(() => (
     Object.values(videoPromptAreaMemberships) as VideoPromptAreaMembership[]
   ), [videoPromptAreaMemberships]);
@@ -1128,15 +1139,14 @@ export default function App() {
     if (!membership) {
       return;
     }
+    const generationOverrides = buildEmbeddedSeedanceGenerationOverrides(membership, targetBar.seedance2Variant);
     void handleGenerate({
       kind: 'video',
       prompt: targetBar.prompt,
       provider: 'volcengine',
       modelId: SEEDANCE_2_VIDEO_MODEL_ID,
       modelMode: 'video',
-      referenceImageIds: membership.acceptedImageIds,
-      referenceVideoIds: membership.acceptedVideoIds,
-      referenceAudioIds: membership.acceptedAudioIds,
+      ...generationOverrides,
       volcengineOptions: {
         seedance2Variant: targetBar.seedance2Variant,
         seedance2AspectRatio: targetBar.seedance2AspectRatio,

@@ -1000,6 +1000,132 @@ describe('Canvas video prompt area tool', () => {
     expect(screen.getByTestId('seedance2-camera-state').textContent).toBe('true');
   });
 
+  it('keeps Smart embedded submits enabled with no accepted area media but blocks empty Reference submits', () => {
+    const buildCanvas = (seedance2Variant: 'smart' | 'reference') => (
+      <Canvas
+        images={[]}
+        onImagesChange={vi.fn()}
+        notes={[]}
+        onNotesChange={vi.fn()}
+        videoPromptAreas={[{
+          id: 'area-1',
+          sequence: 1,
+          label: 'Video prompt area 01',
+          x: 40,
+          y: 60,
+          width: 900,
+          height: 520,
+          promptBarId: 'bar-1',
+          orderedMediaIds: [],
+        }]}
+        onVideoPromptAreasChange={vi.fn()}
+        videoPromptBars={[{
+          id: 'bar-1',
+          assignedAreaId: 'area-1',
+          prompt: 'Area prompt',
+          negativePrompt: '',
+          seedance2Variant,
+          seedance2AspectRatio: '16:9',
+          seedance2Resolution: '720p',
+          seedance2Duration: '5',
+          seedance2GenerateAudio: false,
+          seedance2CameraFixed: false,
+          x: 180,
+          y: 600,
+          width: 920,
+          height: 190,
+        }]}
+        onVideoPromptBarsChange={vi.fn()}
+        selectedVideoPromptAreaId={null}
+        onVideoPromptAreaSelect={vi.fn()}
+        videoPromptAreaMemberships={{
+          'area-1': {
+            orderedMediaIds: [],
+            acceptedImageIds: [],
+            acceptedVideoIds: [],
+            acceptedAudioIds: [],
+            ignoredMediaIds: [],
+            orderLabels: {},
+          },
+        }}
+        tool={Tool.SELECTION}
+        appMode="CANVAS"
+        paths={[]}
+        onPathsChange={vi.fn()}
+        brushSize={10}
+        eraserSize={10}
+        brushColor="#000000"
+        selectedImageIds={[]}
+        selectedNoteIds={[]}
+        referenceImageIds={[]}
+        referenceVideoIds={[]}
+        referenceAudioIds={[]}
+        referenceImageOrderLabels={null}
+        disabledMediaIds={[]}
+        elementImageIds={[]}
+        elementImageOrderLabels={null}
+        videoLastFrameImageId={null}
+        sourceVideoId={null}
+        tailSelectionEnabled={false}
+        isKlingO1VideoInputMode={false}
+        isKlingO1FflfMode={false}
+        isSeedance15FflfMode={false}
+        isKling26ControlVideoInputMode={false}
+        isVeo31ExtendMode={false}
+        isWanAnimateVideoInputMode={false}
+        isWan26I2VMode={false}
+        onError={vi.fn()}
+        onImageSelect={vi.fn()}
+        onNoteSelect={vi.fn()}
+        zoomToFitTrigger={0}
+        zoomToSelectionTrigger={0}
+        zoomInTrigger={0}
+        zoomOutTrigger={0}
+        onFilesDrop={vi.fn()}
+        editingNoteId={null}
+        onNoteDoubleClick={vi.fn()}
+        onNoteTextChange={vi.fn()}
+        onNoteEditEnd={vi.fn()}
+        onImageOrderChange={vi.fn()}
+        isImageOverlapping={false}
+        canMoveUp={false}
+        canMoveDown={false}
+        cropMode={null}
+        onCropRectChange={vi.fn()}
+        onStartCrop={vi.fn()}
+        onConfirmCrop={vi.fn()}
+        onCancelCrop={vi.fn()}
+        onNoteCopy={vi.fn()}
+        onNoteDuplicate={vi.fn()}
+        onNoteFontSizeChange={vi.fn()}
+        onNoteColorChange={vi.fn()}
+        onImagePromptCopy={vi.fn()}
+        onImageDuplicate={vi.fn()}
+        onRerunGeneration={vi.fn()}
+        showMetadataOverlay={false}
+        transformMode={null}
+        onStartTransform={vi.fn()}
+        onExitTransform={vi.fn()}
+        isLoading={false}
+        onVideoPromptBarFocus={vi.fn()}
+        onVideoPromptBarBlur={vi.fn()}
+        onVideoPromptBarUpdate={vi.fn()}
+        onVideoPromptBarSubmit={vi.fn()}
+        buildVideoPromptBarControls={() => []}
+        embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
+        onCommit={vi.fn()}
+      />
+    );
+
+    const { rerender } = render(buildCanvas('smart'));
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(false);
+
+    rerender(buildCanvas('reference'));
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
+  });
+
   it('keeps the full shell at the legacy readable width in narrow areas', () => {
     const { container } = render(
       <Canvas

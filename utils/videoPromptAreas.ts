@@ -2,6 +2,8 @@ import type {
   CanvasImage,
   CanvasRect,
   CanvasVideoPromptArea,
+  GenerationInputs,
+  Seedance2Variant,
   VideoModelCapabilityProfile,
   VideoPromptAreaMembership,
 } from '../types';
@@ -125,6 +127,24 @@ export const getEmbeddedVideoPromptBarRenderWidth = (
   );
 }; // Compact bars size themselves against the visible area before the floor scale is applied.
 
+const buildMembershipOrderLabels = (
+  acceptedImageIds: string[],
+  acceptedVideoIds: string[],
+  acceptedAudioIds: string[],
+): Record<string, string> => {
+  const orderLabels: Record<string, string> = {};
+  acceptedImageIds.forEach((id, index) => {
+    orderLabels[id] = `@Image${index + 1}`;
+  });
+  acceptedVideoIds.forEach((id, index) => {
+    orderLabels[id] = `@Video${index + 1}`;
+  });
+  acceptedAudioIds.forEach((id, index) => {
+    orderLabels[id] = `@Audio${index + 1}`;
+  });
+  return orderLabels; // Keep prompt mentions aligned with the accepted assets.
+};
+
 export const buildVideoPromptAreaMembership = (
   area: CanvasVideoPromptArea,
   images: CanvasImage[],
@@ -170,24 +190,13 @@ export const buildVideoPromptAreaMembership = (
     }
   });
 
-  const orderLabels: Record<string, string> = {};
-  acceptedImageIds.forEach((id, index) => {
-    orderLabels[id] = `@Image${index + 1}`;
-  });
-  acceptedVideoIds.forEach((id, index) => {
-    orderLabels[id] = `@Video${index + 1}`;
-  });
-  acceptedAudioIds.forEach((id, index) => {
-    orderLabels[id] = `@Audio${index + 1}`;
-  });
-
   return {
     orderedMediaIds: area.orderedMediaIds.filter(mediaId => mediaById.has(mediaId)),
     acceptedImageIds,
     acceptedVideoIds,
     acceptedAudioIds,
     ignoredMediaIds,
-    orderLabels,
+    orderLabels: buildMembershipOrderLabels(acceptedImageIds, acceptedVideoIds, acceptedAudioIds),
   };
 };
 
@@ -258,4 +267,56 @@ export const getMentionOptionsFromMembership = (membership: VideoPromptAreaMembe
     .map(mediaId => membership.orderLabels[mediaId])
     .filter((label): label is string => typeof label === 'string' && label.length > 0);
   return Array.from(new Set(orderedOptions)); // Preserve order while de-duping defensive duplicates.
+};
+
+export const buildEmbeddedSeedanceAreaMembership = (
+  membership: VideoPromptAreaMembership,
+  variant: Seedance2Variant,
+): VideoPromptAreaMembership => {
+  if (variant !== 'smart') {
+    return membership; // Reference mode keeps the full multimodal membership visible.
+  }
+
+  const acceptedImageIds = membership.acceptedImageIds.slice(0, 2); // Smart only exposes the first and last still frames.
+  const ignoredMediaIdSet = new Set([
+    ...membership.ignoredMediaIds,
+    ...membership.acceptedImageIds.slice(2),
+    ...membership.acceptedVideoIds,
+    ...membership.acceptedAudioIds,
+  ]); // Smart treats every extra still and every non-image asset as ignored.
+
+  return {
+    orderedMediaIds: membership.orderedMediaIds,
+    acceptedImageIds,
+    acceptedVideoIds: [],
+    acceptedAudioIds: [],
+    ignoredMediaIds: membership.orderedMediaIds.filter(mediaId => ignoredMediaIdSet.has(mediaId)),
+    orderLabels: buildMembershipOrderLabels(acceptedImageIds, [], []),
+  };
+};
+
+export const buildEmbeddedSeedanceGenerationOverrides = (
+  membership: VideoPromptAreaMembership,
+  variant: Seedance2Variant,
+): Pick<GenerationInputs, 'primaryImageId' | 'videoLastFrameImageId' | 'referenceImageIds' | 'referenceVideoIds' | 'referenceAudioIds'> => {
+  const effectiveMembership = buildEmbeddedSeedanceAreaMembership(membership, variant); // Keep submit payloads aligned with the visible embedded-area assets.
+
+  if (variant === 'smart') {
+    const [primaryImageId, videoLastFrameImageId] = effectiveMembership.acceptedImageIds; // Smart uses the first two stills in area order as first/last frames.
+    return {
+      primaryImageId,
+      videoLastFrameImageId,
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+    };
+  }
+
+  return {
+    primaryImageId: undefined,
+    videoLastFrameImageId: undefined,
+    referenceImageIds: effectiveMembership.acceptedImageIds,
+    referenceVideoIds: effectiveMembership.acceptedVideoIds,
+    referenceAudioIds: effectiveMembership.acceptedAudioIds,
+  };
 };

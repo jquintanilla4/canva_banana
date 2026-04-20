@@ -1413,7 +1413,10 @@ export const Canvas: React.FC<CanvasProps> = ({
                   onSubmit={() => onVideoPromptBarSubmit(bar.id)}
                   isLoading={isLoading}
                   inputDisabled={false}
-                  submitDisabled={!barMembership || (barMembership.acceptedImageIds.length + barMembership.acceptedVideoIds.length + barMembership.acceptedAudioIds.length) === 0}
+                  submitDisabled={!barMembership || (
+                    bar.seedance2Variant === 'reference'
+                      && (barMembership.acceptedImageIds.length + barMembership.acceptedVideoIds.length + barMembership.acceptedAudioIds.length) === 0
+                  )}
                   modelOptions={embeddedVideoPromptBarModelOptions}
                   selectedModel={embeddedVideoPromptBarModelOptions[0]?.value ?? 'volcengine/seedance-2'}
                   onModelChange={() => {}}

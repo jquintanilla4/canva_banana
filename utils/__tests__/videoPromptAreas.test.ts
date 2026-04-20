@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CanvasImage, CanvasVideoPromptArea } from '../../types';
 import {
+  buildEmbeddedSeedanceAreaMembership,
   buildVideoPromptAreaMembership,
   FULL_VIDEO_PROMPT_BAR_SCALE_THRESHOLD,
   getAreaPromptBarRect,
@@ -61,6 +62,32 @@ describe('video prompt area helpers', () => {
       'video-2': '@Video2',
       'video-3': '@Video3',
       'audio-1': '@Audio1',
+    });
+  });
+
+  it('limits Smart embedded memberships to the first two still images', () => {
+    const filteredMembership = buildEmbeddedSeedanceAreaMembership({
+      orderedMediaIds: ['image-1', 'video-1', 'image-2', 'audio-1', 'image-3'],
+      acceptedImageIds: ['image-1', 'image-2', 'image-3'],
+      acceptedVideoIds: ['video-1'],
+      acceptedAudioIds: ['audio-1'],
+      ignoredMediaIds: [],
+      orderLabels: {
+        'image-1': '@Image1',
+        'video-1': '@Video1',
+        'image-2': '@Image2',
+        'audio-1': '@Audio1',
+        'image-3': '@Image3',
+      },
+    }, 'smart');
+
+    expect(filteredMembership.acceptedImageIds).toEqual(['image-1', 'image-2']);
+    expect(filteredMembership.acceptedVideoIds).toEqual([]);
+    expect(filteredMembership.acceptedAudioIds).toEqual([]);
+    expect(filteredMembership.ignoredMediaIds).toEqual(['video-1', 'audio-1', 'image-3']);
+    expect(filteredMembership.orderLabels).toEqual({
+      'image-1': '@Image1',
+      'image-2': '@Image2',
     });
   });
 
