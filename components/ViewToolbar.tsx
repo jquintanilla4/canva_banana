@@ -1,5 +1,6 @@
 import React from 'react';
 import { MetadataIcon, ZoomToFitIcon, BlindTestIcon } from './Icons';
+import { FLOATING_EDGE_CONTROL_BOTTOM_OFFSET, FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
 
 interface ViewToolbarProps {
   onZoomToFit: () => void;
@@ -35,7 +36,11 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
       : 'Enable Blind Test Mode (Option/Alt + click for aliases)';
 
   return (
-    <div className="absolute bottom-4 right-4 z-40 flex items-center space-x-2">
+    <div
+      className="absolute z-40 flex items-center space-x-2"
+      style={{ bottom: FLOATING_EDGE_CONTROL_BOTTOM_OFFSET, right: FLOATING_EDGE_CONTROL_SIDE_OFFSET }}
+      data-testid="view-toolbar-root"
+    >
       <button
         type="button"
         onClick={onToggleBlindTest}

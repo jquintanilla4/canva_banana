@@ -240,7 +240,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   useEffect(() => () => clearCloseTimeout(), []);
 
   return (
-    <header className="absolute top-0 left-1/2 -translate-x-1/2 z-50 mt-4 px-3 py-2 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-xl flex h-12 items-center space-x-4">
+    <header className="pointer-events-auto flex h-12 items-center space-x-4 rounded-lg bg-gray-900/70 px-3 py-2 shadow-xl backdrop-blur-sm">
       <div className="flex h-full items-center border-r border-gray-600 pr-4">
         <div
           className="relative flex h-full items-center"

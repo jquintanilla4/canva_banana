@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { PromptBar } from '../PromptBar';
+import { PROMPT_BAR_FOOTER_MARGIN_BOTTOM, PROMPT_BAR_FOOTER_PADDING } from '../../utils/promptBarFooterLayout';
 import { DEFAULT_ROOT_FONT_SIZE_PX, DEFAULT_UI_SCALE } from '../../utils/uiScale';
 
 const BASE_PROMPT_BAR_MAX_WIDTH_PX = 69.1 * DEFAULT_ROOT_FONT_SIZE_PX; // Matches the desktop baseline width in PromptBar.
@@ -257,6 +258,17 @@ describe('PromptBar layout', () => {
     expect(parseFloat(footer.style.maxWidth)).toBeLessThan(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320);
     expect(controlsViewport.className).toContain('overflow-x-auto');
     expect(controlsStrip.className).toContain('flex-nowrap');
+  });
+
+  it('uses the shared footer spacing values for the visible prompt shell baseline', async () => {
+    installControlWidthMocks({ viewportWidth: 620, stripWidth: 940 });
+    renderPromptBar();
+    await flushPromptBarLayout();
+
+    const footer = screen.getByTestId('prompt-bar-footer');
+
+    expect(footer.style.marginBottom).toBe(PROMPT_BAR_FOOTER_MARGIN_BOTTOM);
+    expect(footer.style.padding).toBe(PROMPT_BAR_FOOTER_PADDING);
   });
 
   it('recomputes width from the current root font size before applying the viewport clamp', async () => {

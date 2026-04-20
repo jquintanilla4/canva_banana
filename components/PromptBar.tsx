@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useLayoutEffect } from 'react';
 import { ChevronDownIcon, LayerUpIcon } from './Icons';
 import { getRootFontSizePx } from '../utils/uiScale';
+import { PROMPT_BAR_FOOTER_MARGIN_BOTTOM, PROMPT_BAR_FOOTER_PADDING } from '../utils/promptBarFooterLayout';
 
 const PROMPT_BAR_BASE_MAX_WIDTH_REM = 69.1; // Keeps the existing desktop prompt bar width as the baseline.
 const PROMPT_BAR_MINI_MAX_WIDTH_REM = 31.5; // Mini mode mirrors the compact bar from the design reference.
@@ -774,8 +775,14 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
   return (
     <footer
-      className={`absolute bottom-0 left-1/2 -translate-x-1/2 z-10 mb-[1.02rem] p-[0.61rem] transition-all duration-300 ease-out ${outerClassName ?? ''}`}
-      style={{ width: `calc(100% - ${PROMPT_BAR_HORIZONTAL_GUTTER_REM}rem)`, maxWidth: `${promptBarMaxWidthPx}px`, ...outerStyle }}
+      className={`absolute bottom-0 left-1/2 -translate-x-1/2 z-10 transition-all duration-300 ease-out ${outerClassName ?? ''}`}
+      style={{
+        width: `calc(100% - ${PROMPT_BAR_HORIZONTAL_GUTTER_REM}rem)`,
+        maxWidth: `${promptBarMaxWidthPx}px`,
+        marginBottom: PROMPT_BAR_FOOTER_MARGIN_BOTTOM,
+        padding: PROMPT_BAR_FOOTER_PADDING,
+        ...outerStyle,
+      }}
       data-testid="prompt-bar-footer"
     >
       {content}

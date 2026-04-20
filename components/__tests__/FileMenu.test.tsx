@@ -28,6 +28,7 @@ describe('FileMenu', () => {
     const zoomToggle = screen.getByRole('menuitemcheckbox', { name: /hide zoom level/i });
 
     expect(menu.classList.contains('inline-flex')).toBe(true);
+    expect(menu.classList.contains('absolute')).toBe(true);
     expect(menu.classList.contains('flex-col')).toBe(true);
     expect(menu.classList.contains('max-w-[calc(100vw-2rem)]')).toBe(true);
     expect(menu.classList.contains('min-w-44')).toBe(false);

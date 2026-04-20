@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { Tool, type CanvasImage } from './types';
+import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
 
 const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType']): CanvasImage => ({
   id,
@@ -263,7 +264,13 @@ vi.mock('./components/RecordingOverlay', () => ({ RecordingOverlay: () => null }
 vi.mock('./components/BackupsModal', () => ({ BackupsModal: () => null }));
 vi.mock('./components/FalQueuePanel', () => ({ FalQueuePanel: () => null }));
 vi.mock('./components/DebugLogPanel', () => ({ DebugLogPanel: () => null }));
-vi.mock('./components/FileMenu', () => ({ FileMenu: () => null }));
+vi.mock('./components/FileMenu', () => ({
+  FileMenu: () => (
+    <button type="button" aria-label="Snapshot menu">
+      Menu
+    </button>
+  ),
+}));
 vi.mock('./components/ViewToolbar', () => ({ ViewToolbar: () => null }));
 vi.mock('./components/ProviderSwitcher', () => ({ ProviderSwitcher: () => null }));
 vi.mock('./components/StatusBanner', () => ({ StatusBanner: () => null }));
@@ -490,6 +497,20 @@ afterEach(() => {
 });
 
 describe('App video prompt area gating', () => {
+  it('renders the top control rail that centers the menu button and zoom badge with the toolbar row', () => {
+    render(<App />);
+
+    const rail = screen.getByTestId('top-control-rail');
+
+    expect(rail.classList.contains('top-4')).toBe(true);
+    expect(rail.classList.contains('z-30')).toBe(true);
+    expect(rail.classList.contains('h-12')).toBe(true);
+    expect(rail.classList.contains('items-center')).toBe(true);
+    expect(rail.style.paddingInline).toBe(FLOATING_EDGE_CONTROL_SIDE_OFFSET);
+    expect(screen.getByLabelText('Snapshot menu').closest('[data-testid="top-control-rail"]')).toBe(rail);
+    expect(screen.getByLabelText('Canvas zoom 100%').closest('[data-testid="top-control-rail"]')).toBe(rail);
+  });
+
   it('hides the footer add button when video mode has no video prompt areas', () => {
     mockState.videoPromptAreas = [];
     mockState.videoPromptBars = [];

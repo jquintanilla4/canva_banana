@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApiProviderId } from '../types';
+import { FLOATING_EDGE_CONTROL_BOTTOM_OFFSET, FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
 
 type ProviderSwitcherProps = {
   providers: ApiProviderId[];
@@ -51,7 +52,11 @@ export const ProviderSwitcher: React.FC<ProviderSwitcherProps> = ({
   };
 
   return (
-    <div className="absolute bottom-4 left-4 z-20">
+    <div
+      className="absolute z-20"
+      style={{ bottom: FLOATING_EDGE_CONTROL_BOTTOM_OFFSET, left: FLOATING_EDGE_CONTROL_SIDE_OFFSET }}
+      data-testid="provider-switcher-root"
+    >
       <div className="relative flex items-center">
         {/* Cloud label stays fixed while provider details appear in the temporary popout */}
         <button

@@ -58,7 +58,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
   }, [isOpen, onClose]);
 
   return (
-    <div ref={menuRef} className="absolute top-4 left-4 z-30">
+    <div ref={menuRef} className="relative z-30 pointer-events-auto">
       <button
         type="button"
         onClick={onToggle}
@@ -72,7 +72,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
       {isOpen && (
         <div
           role="menu"
-          className="mt-2 inline-flex max-w-[calc(100vw-2rem)] flex-col items-stretch rounded-md border border-gray-700 bg-gray-900/95 shadow-lg overflow-hidden"
+          className="absolute left-0 top-full mt-2 inline-flex max-w-[calc(100vw-2rem)] flex-col items-stretch overflow-hidden rounded-md border border-gray-700 bg-gray-900/95 shadow-lg"
         >
           <button
             type="button"

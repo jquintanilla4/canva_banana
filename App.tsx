@@ -77,6 +77,7 @@ import {
   getAreaPromptBarRect,
   SEEDANCE_2_VIDEO_PROMPT_PROFILE,
 } from './utils/videoPromptAreas';
+import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
 import { PlusIcon } from './components/Icons';
 import {
   EMPTY_CAMERA_SELECTION,
@@ -1475,73 +1476,83 @@ export default function App() {
         accept=".bcsnap,application/octet-stream,application/json,.json"
         className="hidden"
       />
-      {/* File menu button and dropdown */}
-      <FileMenu
-        isOpen={isFileMenuOpen}
-        onToggle={toggleFileMenu}
-        onClose={closeFileMenu}
-        onImportSnapshot={handleImportSnapshot}
-        onExportSnapshot={handleExportSnapshot}
-        onOpenBackups={openBackupsModal}
-        autosaveEnabled={autosaveEnabled}
-        onToggleAutosave={handleToggleAutosave}
-        showZoomLevelBadge={showZoomLevelBadge}
-        onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
-        onOpenDebugLog={openDebugLogPanel}
-      />
-
-      {/* Main toolbar, hidden during crop/transform */}
-      {!cropMode && !transformMode && (
-        <Toolbar
-          activeTool={tool}
-          onToolChange={handleToolChange}
-          isVideoPromptAreaToolEnabled={canCreateVideoPromptAreas}
-          appMode={appMode}
-          onModeChange={handleModeChange}
-          brushSize={brushSize}
-          eraserSize={eraserSize}
-          onBrushSizeChange={setBrushSize}
-          onEraserSizeChange={setEraserSize}
-          brushColor={brushColor}
-          onBrushColorChange={setBrushColor}
-          onClear={handleClear}
-          hasClearablePaths={hasClearablePaths}
-          onUploadClick={handleUploadClick}
-          onUndo={undo}
-          onRedo={redo}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onDownload={handleDownload}
-          isImageSelected={hasSingleImageSelected}
-          isObjectSelected={selectedImageIds.length > 0 || selectedNoteIds.length > 0}
-          onDelete={handleDelete}
-          onResize={openResizeToast}
-          isResizeDisabled={!canResize || isRemovingBackground || isResizing || isLoading}
-          onRemoveBackground={handleBackgroundRemoval}
-          isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
-          isBackgroundRemovalLoading={isRemovingBackground}
-          isAnnotateModeDisabled={isAnnotateModeDisabled}
-          isRecording={isRecording}
-          onRecordToggle={handleRecordToggle}
-          cameraSettings={cameraSettings}
-          onCameraSettingsChange={setCameraSettings}
-          cameraSettingsEnabled={isCameraSettingsEnabled}
-        />
-      )}
+      <div
+        data-testid="top-control-rail"
+        className="pointer-events-none absolute inset-x-0 top-4 z-30 grid h-12 grid-cols-[1fr_auto_1fr] items-center"
+        style={{ paddingInline: FLOATING_EDGE_CONTROL_SIDE_OFFSET }}
+      >
+        <div className="flex items-center justify-start">
+          <FileMenu
+            isOpen={isFileMenuOpen}
+            onToggle={toggleFileMenu}
+            onClose={closeFileMenu}
+            onImportSnapshot={handleImportSnapshot}
+            onExportSnapshot={handleExportSnapshot}
+            onOpenBackups={openBackupsModal}
+            autosaveEnabled={autosaveEnabled}
+            onToggleAutosave={handleToggleAutosave}
+            showZoomLevelBadge={showZoomLevelBadge}
+            onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
+            onOpenDebugLog={openDebugLogPanel}
+          />
+        </div>
+        <div className="flex items-center justify-center">
+          {/* Main toolbar, hidden during crop/transform */}
+          {!cropMode && !transformMode && (
+            <Toolbar
+              activeTool={tool}
+              onToolChange={handleToolChange}
+              isVideoPromptAreaToolEnabled={canCreateVideoPromptAreas}
+              appMode={appMode}
+              onModeChange={handleModeChange}
+              brushSize={brushSize}
+              eraserSize={eraserSize}
+              onBrushSizeChange={setBrushSize}
+              onEraserSizeChange={setEraserSize}
+              brushColor={brushColor}
+              onBrushColorChange={setBrushColor}
+              onClear={handleClear}
+              hasClearablePaths={hasClearablePaths}
+              onUploadClick={handleUploadClick}
+              onUndo={undo}
+              onRedo={redo}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onDownload={handleDownload}
+              isImageSelected={hasSingleImageSelected}
+              isObjectSelected={selectedImageIds.length > 0 || selectedNoteIds.length > 0}
+              onDelete={handleDelete}
+              onResize={openResizeToast}
+              isResizeDisabled={!canResize || isRemovingBackground || isResizing || isLoading}
+              onRemoveBackground={handleBackgroundRemoval}
+              isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
+              isBackgroundRemovalLoading={isRemovingBackground}
+              isAnnotateModeDisabled={isAnnotateModeDisabled}
+              isRecording={isRecording}
+              onRecordToggle={handleRecordToggle}
+              cameraSettings={cameraSettings}
+              onCameraSettingsChange={setCameraSettings}
+              cameraSettingsEnabled={isCameraSettingsEnabled}
+            />
+          )}
+        </div>
+        <div className="flex items-center justify-end">
+          {showZoomLevelBadge && (
+            <div
+              className="pointer-events-none shrink-0 rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
+              aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}`}
+            >
+              Zoom {formatZoomPercentage(canvasScale)}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Recording overlay */}
       <RecordingOverlay duration={recordingDuration} visible={isRecording} />
 
       {/* Main drawing area */}
       <main className="relative z-0 flex-1 min-h-0">
-        {showZoomLevelBadge && (
-          <div
-            className="pointer-events-none absolute right-4 top-4 z-40 rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
-            aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}`}
-          >
-            Zoom {formatZoomPercentage(canvasScale)}
-          </div>
-        )}
         <Canvas
           images={displayedImages}
           onImagesChange={setLiveImages}
