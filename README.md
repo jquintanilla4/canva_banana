@@ -27,7 +27,7 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js/npm, `uv`, and `make`
 
 ### Setup Steps
 
@@ -45,12 +45,25 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
    
    If `FAL_API_KEY` is not set, the Cloud switcher only shows Google and Fal-specific controls stay disabled. If both providers are configured, use the Cloud switcher to pick a provider per request.
 
-3. **Run the app:**
+3. **Sync the Seedance backend dependencies:**
    ```bash
-   npm run dev
+   uv sync --project backend
    ```
 
-   The Vite dev server runs on `http://localhost:3000`.
+4. **Start both services:**
+   ```bash
+   make dev
+   ```
+
+   This starts:
+   - The Vite dev server on `http://localhost:3000`
+   - The Seedance backend on `http://localhost:8000`
+
+   If you only need one side of the app, these fallback commands still work:
+   ```bash
+   make frontend-dev
+   make backend-dev
+   ```
 
 ### Seedance 2 Backend
 
