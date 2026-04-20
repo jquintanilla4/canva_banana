@@ -55,6 +55,7 @@ interface CanvasProps {
   onVideoPromptAreaSelect: (id: string | null) => void;
   videoPromptAreaMemberships: Record<string, VideoPromptAreaMembership>;
   tool: Tool;
+  canCreateVideoPromptAreas?: boolean;
   appMode: AppMode;
   paths: Path[];
   onPathsChange: (paths: Path[]) => void;
@@ -153,6 +154,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onVideoPromptAreaSelect,
   videoPromptAreaMemberships,
   tool,
+  canCreateVideoPromptAreas = true,
   appMode,
   paths,
   onPathsChange,
@@ -339,6 +341,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvasRef,
     containerRef,
     tool,
+    canCreateVideoPromptAreas,
     appMode,
     images,
     notes,

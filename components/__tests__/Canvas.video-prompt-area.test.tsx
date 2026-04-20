@@ -121,6 +121,107 @@ describe('Canvas video prompt area tool', () => {
     expect(await screen.findByRole('button', { name: 'Video prompt area 01' })).toBeTruthy();
   });
 
+  it('does not create a video prompt area when creation is gated off', async () => {
+    const onVideoPromptAreasChange = vi.fn();
+    const onCommit = vi.fn();
+
+    render(
+      <Canvas
+        images={[]}
+        onImagesChange={vi.fn()}
+        notes={[]}
+        onNotesChange={vi.fn()}
+        videoPromptAreas={[]}
+        onVideoPromptAreasChange={onVideoPromptAreasChange}
+        videoPromptBars={[]}
+        onVideoPromptBarsChange={vi.fn()}
+        selectedVideoPromptAreaId={null}
+        onVideoPromptAreaSelect={vi.fn()}
+        videoPromptAreaMemberships={{}}
+        tool={Tool.VIDEO_PROMPT_AREA}
+        canCreateVideoPromptAreas={false}
+        appMode="CANVAS"
+        paths={[]}
+        onPathsChange={vi.fn()}
+        brushSize={10}
+        eraserSize={10}
+        brushColor="#000000"
+        selectedImageIds={[]}
+        selectedNoteIds={[]}
+        referenceImageIds={[]}
+        referenceVideoIds={[]}
+        referenceAudioIds={[]}
+        referenceImageOrderLabels={null}
+        disabledMediaIds={[]}
+        elementImageIds={[]}
+        elementImageOrderLabels={null}
+        videoLastFrameImageId={null}
+        sourceVideoId={null}
+        tailSelectionEnabled={false}
+        isKlingO1VideoInputMode={false}
+        isKlingO1FflfMode={false}
+        isSeedance15FflfMode={false}
+        isKling26ControlVideoInputMode={false}
+        isVeo31ExtendMode={false}
+        isWanAnimateVideoInputMode={false}
+        isWan26I2VMode={false}
+        onError={vi.fn()}
+        onImageSelect={vi.fn()}
+        onNoteSelect={vi.fn()}
+        zoomToFitTrigger={0}
+        zoomToSelectionTrigger={0}
+        zoomInTrigger={0}
+        zoomOutTrigger={0}
+        onFilesDrop={vi.fn()}
+        editingNoteId={null}
+        onNoteDoubleClick={vi.fn()}
+        onNoteTextChange={vi.fn()}
+        onNoteEditEnd={vi.fn()}
+        onImageOrderChange={vi.fn()}
+        isImageOverlapping={false}
+        canMoveUp={false}
+        canMoveDown={false}
+        cropMode={null}
+        onCropRectChange={vi.fn()}
+        onStartCrop={vi.fn()}
+        onConfirmCrop={vi.fn()}
+        onCancelCrop={vi.fn()}
+        onNoteCopy={vi.fn()}
+        onNoteDuplicate={vi.fn()}
+        onNoteFontSizeChange={vi.fn()}
+        onNoteColorChange={vi.fn()}
+        onImagePromptCopy={vi.fn()}
+        onImageDuplicate={vi.fn()}
+        onRerunGeneration={vi.fn()}
+        showMetadataOverlay={false}
+        transformMode={null}
+        onStartTransform={vi.fn()}
+        onExitTransform={vi.fn()}
+        isLoading={false}
+        onVideoPromptBarFocus={vi.fn()}
+        onVideoPromptBarBlur={vi.fn()}
+        onVideoPromptBarUpdate={vi.fn()}
+        onVideoPromptBarSubmit={vi.fn()}
+        buildVideoPromptBarControls={() => []}
+        embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
+        onCommit={onCommit}
+      />,
+    );
+
+    const root = document.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    await act(async () => {
+      fireEvent.mouseDown(root, { clientX: 40, clientY: 60 });
+      fireEvent.mouseMove(root, { clientX: 420, clientY: 280 });
+      fireEvent.mouseUp(root, { clientX: 420, clientY: 280 });
+      await Promise.resolve();
+    });
+
+    expect(onVideoPromptAreasChange).not.toHaveBeenCalled();
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Video prompt area 01' })).toBeNull();
+  });
+
   it('shows resize handles only after the area is selected in selection mode', async () => {
     const Harness = () => {
       const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);

@@ -4,7 +4,7 @@ import { AppMode, Tool } from '../types';
 type KeyboardShortcutsArgs = {
   onGenerate: () => void;
   appMode: AppMode;
-  setTool: (tool: Tool) => void;
+  onToolChange: (tool: Tool) => void;
   requestZoomIn: () => void;
   requestZoomOut: () => void;
   onZoomToFit?: () => void;
@@ -19,7 +19,7 @@ type KeyboardShortcutsArgs = {
 export function useKeyboardShortcuts({
   onGenerate,
   appMode,
-  setTool,
+  onToolChange,
   requestZoomIn,
   requestZoomOut,
   onZoomToFit,
@@ -84,34 +84,34 @@ export function useKeyboardShortcuts({
         return;
       }
       if (key === 'v') {
-        setTool(Tool.SELECTION);
+        onToolChange(Tool.SELECTION);
         return;
       }
       if (key === 'f') {
-        setTool(Tool.FREE_SELECTION);
+        onToolChange(Tool.FREE_SELECTION);
         return;
       }
       if (key === 'h') {
-        setTool(Tool.PAN);
+        onToolChange(Tool.PAN);
         return;
       }
       if (key === 'n') {
-        setTool(Tool.NOTE);
+        onToolChange(Tool.NOTE);
         return;
       }
       if (key === 'g') {
-        setTool(Tool.VIDEO_PROMPT_AREA);
+        onToolChange(Tool.VIDEO_PROMPT_AREA);
         return;
       }
       if (key === 'b') {
         if (appMode !== 'CANVAS') {
-          setTool(Tool.BRUSH);
+          onToolChange(Tool.BRUSH);
         }
         return;
       }
       if (key === 'e') {
         if (appMode !== 'CANVAS') {
-          setTool(Tool.ERASE);
+          onToolChange(Tool.ERASE);
         }
         return;
       }
@@ -152,5 +152,5 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [appMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onRedo, onUndo, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut, setTool]);
+  }, [appMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onRedo, onToolChange, onUndo, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut]);
 }

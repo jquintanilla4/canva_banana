@@ -23,6 +23,7 @@ type UseCanvasInteractionsArgs = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   containerRef: RefObject<HTMLDivElement | null>;
   tool: Tool;
+  canCreateVideoPromptAreas: boolean;
   appMode: AppMode;
   images: CanvasImage[];
   notes: CanvasNote[];
@@ -79,6 +80,7 @@ export function useCanvasInteractions({
   canvasRef,
   containerRef,
   tool,
+  canCreateVideoPromptAreas,
   appMode,
   images,
   notes,
@@ -165,6 +167,13 @@ export function useCanvasInteractions({
       setBrushPreviewPosition(null);
     }
   }, [currentTool]);
+
+  useEffect(() => {
+    if (!canCreateVideoPromptAreas) {
+      setVideoPromptAreaStart(null);
+      setVideoPromptAreaCurrent(null);
+    }
+  }, [canCreateVideoPromptAreas]);
 
   const marqueeRect = useMemo(() => {
     if ((!isMarqueeSelecting && !marqueeStart) || !marqueeStart || !marqueeCurrent) return null;
@@ -278,6 +287,9 @@ export function useCanvasInteractions({
     }
 
     if (activeTool === Tool.VIDEO_PROMPT_AREA) {
+      if (!canCreateVideoPromptAreas) {
+        return;
+      }
       onVideoPromptAreaSelect(null);
       setVideoPromptAreaStart(point);
       setVideoPromptAreaCurrent(point);
@@ -861,6 +873,11 @@ export function useCanvasInteractions({
     }
 
     if (videoPromptAreaStart && videoPromptAreaCurrent) {
+      if (!canCreateVideoPromptAreas) {
+        setVideoPromptAreaStart(null);
+        setVideoPromptAreaCurrent(null);
+        return;
+      }
       const pixelWidth = Math.abs(videoPromptAreaCurrent.x - videoPromptAreaStart.x) * scale;
       const pixelHeight = Math.abs(videoPromptAreaCurrent.y - videoPromptAreaStart.y) * scale;
       if (Math.max(pixelWidth, pixelHeight) <= MIN_DRAG_PREVIEW_PX) {

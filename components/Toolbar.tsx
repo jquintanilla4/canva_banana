@@ -8,6 +8,7 @@ import { hasCameraSettings, type CameraSettingsSelection } from '../utils/camera
 interface ToolbarProps {
   activeTool: Tool;
   onToolChange: (tool: Tool) => void;
+  isVideoPromptAreaToolEnabled: boolean;
   appMode: AppMode;
   onModeChange: (mode: AppMode) => void;
   brushSize: number;
@@ -87,6 +88,7 @@ const ModeButton: React.FC<{
 export const Toolbar: React.FC<ToolbarProps> = ({
   activeTool,
   onToolChange,
+  isVideoPromptAreaToolEnabled,
   appMode,
   onModeChange,
   brushSize,
@@ -138,6 +140,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const isInactiveModeDisabled = isCanvasMode ? isAnnotateModeDisabled : false;
   const activeModeLabel = isCanvasMode ? 'Canvas' : 'Annotate';
   const activeModeTitle = isCanvasMode ? 'Canvas Mode' : 'Annotate Mode';
+  const videoPromptAreaToolLabel = isVideoPromptAreaToolEnabled
+    ? 'Video Prompt Area (G)'
+    : 'Video Prompt Area (G) • Switch to a video model to create video prompt areas';
   const modeMenuVisibility = isModeMenuOpen
     ? 'opacity-100 pointer-events-auto'
     : 'opacity-0 pointer-events-none';
@@ -240,7 +245,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <ToolButton label="Select (V)" isActive={activeTool === Tool.SELECTION} onClick={() => onToolChange(Tool.SELECTION)}>
           <SelectionIcon className="w-4 h-4" />
         </ToolButton>
-        <ToolButton label="Video Prompt Area (G)" isActive={activeTool === Tool.VIDEO_PROMPT_AREA} onClick={() => onToolChange(Tool.VIDEO_PROMPT_AREA)}>
+        <ToolButton
+          label={videoPromptAreaToolLabel}
+          isActive={activeTool === Tool.VIDEO_PROMPT_AREA}
+          onClick={() => onToolChange(Tool.VIDEO_PROMPT_AREA)}
+          disabled={!isVideoPromptAreaToolEnabled}
+        >
           <CrosshairIcon className="w-4 h-4" />
         </ToolButton>
         <ToolButton label="Free Select (F)" isActive={activeTool === Tool.FREE_SELECTION} onClick={() => onToolChange(Tool.FREE_SELECTION)}>

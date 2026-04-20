@@ -551,6 +551,7 @@ export default function App() {
     // Model mode changes can invalidate reference selections, so reset them.
     setReferenceImageIds([]);
   }, [fal.handleModelModeChange, setReferenceImageIds]);
+  const canCreateVideoPromptAreas = fal.isVideoMode;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const snapshotInputRef = useRef<HTMLInputElement>(null);
@@ -831,6 +832,9 @@ export default function App() {
   }, [cancelResizeToast, cropMode, isResizeToastOpen, transformMode]);
 
   const handleToolChange = useCallback((newTool: Tool) => {
+    if (newTool === Tool.VIDEO_PROMPT_AREA && !canCreateVideoPromptAreas) {
+      return;
+    }
     // Changing tools finalizes any in-progress note edits or crop sessions to keep state consistent.
     setTool(newTool);
     if (editingNoteId) {
@@ -840,7 +844,13 @@ export default function App() {
     if (cropMode) {
       handleCancelCrop();
     }
-  }, [editingNoteId, handleCommit, cropMode, handleCancelCrop]);
+  }, [canCreateVideoPromptAreas, editingNoteId, handleCommit, cropMode, handleCancelCrop]);
+
+  useEffect(() => {
+    if (!canCreateVideoPromptAreas && tool === Tool.VIDEO_PROMPT_AREA) {
+      handleToolChange(Tool.SELECTION);
+    }
+  }, [canCreateVideoPromptAreas, handleToolChange, tool]);
 
   const isCameraSettingsEnabled = !fal.isVideoMode && (
     isSeedreamModelId(fal.falModelId)
@@ -909,7 +919,7 @@ export default function App() {
   useKeyboardShortcuts({
     onGenerate: handleGenerate,
     appMode,
-    setTool,
+    onToolChange: handleToolChange,
     requestZoomIn,
     requestZoomOut,
     onZoomToFit: handleZoomToFit,
@@ -1474,6 +1484,7 @@ export default function App() {
         <Toolbar
           activeTool={tool}
           onToolChange={handleToolChange}
+          isVideoPromptAreaToolEnabled={canCreateVideoPromptAreas}
           appMode={appMode}
           onModeChange={handleModeChange}
           brushSize={brushSize}
@@ -1533,6 +1544,7 @@ export default function App() {
           onVideoPromptAreaSelect={setSelectedVideoPromptAreaId}
           videoPromptAreaMemberships={videoPromptAreaMemberships}
           tool={tool}
+          canCreateVideoPromptAreas={canCreateVideoPromptAreas}
           appMode={appMode}
           paths={displayedPaths}
           onPathsChange={setLivePaths}
