@@ -552,6 +552,7 @@ export default function App() {
     setReferenceImageIds([]);
   }, [fal.handleModelModeChange, setReferenceImageIds]);
   const canCreateVideoPromptAreas = fal.isVideoMode;
+  const shouldShowVideoPromptBarAccessory = fal.isVideoMode && displayedVideoPromptAreas.length > 0;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const snapshotInputRef = useRef<HTMLInputElement>(null);
@@ -1723,18 +1724,18 @@ export default function App() {
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
           sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}
-          leadingAccessory={(
+          leadingAccessory={shouldShowVideoPromptBarAccessory ? (
             <button
               type="button"
               onClick={handleCreateVideoPromptBar}
-              disabled={displayedVideoPromptAreas.length === 0 || isLoading}
+              disabled={isLoading}
               className={`flex shrink-0 self-start items-center justify-center rounded-2xl bg-gray-900/70 text-white shadow-xl transition-all duration-300 ease-out hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-45 ${isEmbeddedPromptBarActive ? 'h-[2.28rem] w-[2.28rem]' : 'h-[3.2rem] w-[3.2rem]'}`}
               aria-label="Create video prompt bar"
-              title={displayedVideoPromptAreas.length === 0 ? 'Create a video prompt area first' : 'Create video prompt bar'}
+              title="Create video prompt bar"
             >
               <PlusIcon className="h-4 w-4" />
             </button>
-          )}
+          ) : undefined}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { Tool } from './types';
@@ -7,6 +7,33 @@ import { Tool } from './types';
 const mockState = vi.hoisted(() => {
   const handleGenerate = vi.fn();
   const setReferenceImageIds = vi.fn();
+  const baseVideoPromptArea = {
+    id: 'area-1',
+    sequence: 1,
+    label: 'Video prompt area 01',
+    x: 0,
+    y: 0,
+    width: 320,
+    height: 180,
+    promptBarId: 'bar-1',
+    orderedMediaIds: [],
+  };
+  const baseVideoPromptBar = {
+    id: 'bar-1',
+    assignedAreaId: 'area-1',
+    x: 0,
+    y: 0,
+    width: 320,
+    height: 72,
+    prompt: 'Existing area prompt',
+    negativePrompt: '',
+    seedance2Variant: 'reference',
+    seedance2AspectRatio: '16:9',
+    seedance2Resolution: '720p',
+    seedance2Duration: '5',
+    seedance2GenerateAudio: false,
+    seedance2CameraFixed: false,
+  };
   const falState: any = {
     falModelMode: 'video',
     falModelId: 'volcengine/seedance-2',
@@ -170,6 +197,12 @@ const mockState = vi.hoisted(() => {
     handleGenerate,
     setReferenceImageIds,
     falState,
+    baseVideoPromptArea,
+    baseVideoPromptBar,
+    videoPromptAreas: [{ ...baseVideoPromptArea }],
+    videoPromptBars: [{ ...baseVideoPromptBar }],
+    displayedVideoPromptAreas: [{ ...baseVideoPromptArea }],
+    displayedVideoPromptBars: [{ ...baseVideoPromptBar }],
   };
 });
 
@@ -219,63 +252,13 @@ vi.mock('./hooks/useCanvasHistory', () => ({
     images: [],
     paths: [],
     notes: [],
-    videoPromptAreas: [{
-      id: 'area-1',
-      sequence: 1,
-      label: 'Video prompt area 01',
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 180,
-      promptBarId: 'bar-1',
-      orderedMediaIds: [],
-    }],
-    videoPromptBars: [{
-      id: 'bar-1',
-      assignedAreaId: 'area-1',
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 72,
-      prompt: 'Existing area prompt',
-      negativePrompt: '',
-      seedance2Variant: 'reference',
-      seedance2AspectRatio: '16:9',
-      seedance2Resolution: '720p',
-      seedance2Duration: '5',
-      seedance2GenerateAudio: false,
-      seedance2CameraFixed: false,
-    }],
+    videoPromptAreas: mockState.videoPromptAreas,
+    videoPromptBars: mockState.videoPromptBars,
     displayedImages: [],
     displayedPaths: [],
     displayedNotes: [],
-    displayedVideoPromptAreas: [{
-      id: 'area-1',
-      sequence: 1,
-      label: 'Video prompt area 01',
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 180,
-      promptBarId: 'bar-1',
-      orderedMediaIds: [],
-    }],
-    displayedVideoPromptBars: [{
-      id: 'bar-1',
-      assignedAreaId: 'area-1',
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 72,
-      prompt: 'Existing area prompt',
-      negativePrompt: '',
-      seedance2Variant: 'reference',
-      seedance2AspectRatio: '16:9',
-      seedance2Resolution: '720p',
-      seedance2Duration: '5',
-      seedance2GenerateAudio: false,
-      seedance2CameraFixed: false,
-    }],
+    displayedVideoPromptAreas: mockState.displayedVideoPromptAreas,
+    displayedVideoPromptBars: mockState.displayedVideoPromptBars,
     setState: vi.fn(),
     setLiveImages: vi.fn(),
     setLivePaths: vi.fn(),
@@ -464,8 +447,13 @@ vi.mock('./services/debugLog', () => ({
 }));
 
 afterEach(() => {
+  cleanup();
   mockState.handleGenerate.mockClear();
   mockState.setReferenceImageIds.mockClear();
+  mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
+  mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar }];
+  mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
+  mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar }];
   Object.assign(mockState.falState, {
     falModelMode: 'video',
     falModelId: 'volcengine/seedance-2',
@@ -477,6 +465,36 @@ afterEach(() => {
 });
 
 describe('App video prompt area gating', () => {
+  it('hides the footer add button when video mode has no video prompt areas', () => {
+    mockState.videoPromptAreas = [];
+    mockState.videoPromptBars = [];
+    mockState.displayedVideoPromptAreas = [];
+    mockState.displayedVideoPromptBars = [];
+
+    render(<App />);
+
+    expect(screen.queryByRole('button', { name: 'Create video prompt bar' })).toBeNull();
+  });
+
+  it('shows the footer add button when video mode has at least one video prompt area', () => {
+    render(<App />);
+
+    expect(screen.getByRole('button', { name: 'Create video prompt bar' })).toBeTruthy();
+  });
+
+  it('hides the footer add button after switching away from video mode even when areas still exist', async () => {
+    const { rerender } = render(<App />);
+
+    expect(screen.getByRole('button', { name: 'Create video prompt bar' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch To Image' }));
+    rerender(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Create video prompt bar' })).toBeNull();
+    });
+  });
+
   it('falls back to selection after switching to image mode and still submits existing embedded video prompt bars', async () => {
     const { rerender } = render(<App />);
 
