@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type React from 'react';
 import { type AppMode, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type Path, type Point, Tool } from '../../../types';
 import { MIN_NOTE_HEIGHT, MIN_NOTE_WIDTH, RESIZE_HANDLE_SIZE } from '../constants';
@@ -117,7 +117,9 @@ export function useCanvasInteractions({
   const isPanningRef = useRef(false);
   const panStartRef = useRef<Point>({ x: 0, y: 0 });
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [temporaryTool, setTemporaryTool] = useState<Tool | null>(null);
+  const [pointerTemporaryTool, setPointerTemporaryTool] = useState<Tool | null>(null);
+  const [keyboardTemporaryTool, setKeyboardTemporaryTool] = useState<Tool | null>(null);
+  const keyboardTemporaryToolRef = useRef<Tool | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -150,7 +152,24 @@ export function useCanvasInteractions({
   } | null>(null);
   const [hoveredVideoId, setHoveredVideoId] = useState<string | null>(null);
 
-  const currentTool = temporaryTool || tool;
+  const setKeyboardTemporaryToolOverride = useCallback((nextTool: Tool | null) => {
+    keyboardTemporaryToolRef.current = nextTool; // Keep blur and keyup cleanup in sync.
+    setKeyboardTemporaryTool(nextTool);
+  }, []);
+
+  const clearKeyboardTemporaryToolOverride = useCallback(() => {
+    if (keyboardTemporaryToolRef.current === null) {
+      return;
+    }
+    keyboardTemporaryToolRef.current = null; // Drop the keyboard override before the next pointer event.
+    setKeyboardTemporaryTool(null);
+    if (!pointerTemporaryTool && tool !== Tool.PAN && isPanningRef.current) {
+      isPanningRef.current = false; // Releasing space should stop temporary pan immediately.
+      setIsPanning(false);
+    }
+  }, [pointerTemporaryTool, tool]);
+
+  const currentTool = pointerTemporaryTool ?? keyboardTemporaryTool ?? tool;
 
   const getTransformedPoint = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
@@ -167,6 +186,53 @@ export function useCanvasInteractions({
       setBrushPreviewPosition(null);
     }
   }, [currentTool]);
+
+  useEffect(() => {
+    if (tool === Tool.SELECTION) {
+      return;
+    }
+    clearKeyboardTemporaryToolOverride(); // Non-selection tools should never keep the spacebar pan override.
+  }, [clearKeyboardTemporaryToolOverride, tool]);
+
+  useEffect(() => {
+    const isSpaceKey = (event: KeyboardEvent): boolean => event.code === 'Space' || event.key === ' '; // Match both browser key shapes.
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isSpaceKey(event) || event.repeat) {
+        return;
+      }
+      if (tool !== Tool.SELECTION) {
+        return;
+      }
+      if (document.activeElement !== containerRef.current) {
+        return;
+      }
+      event.preventDefault();
+      setKeyboardTemporaryToolOverride(Tool.PAN);
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!isSpaceKey(event) || keyboardTemporaryToolRef.current !== Tool.PAN) {
+        return;
+      }
+      event.preventDefault();
+      clearKeyboardTemporaryToolOverride();
+    };
+
+    const handleWindowBlur = () => {
+      clearKeyboardTemporaryToolOverride(); // Browser focus changes can swallow keyup events.
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [clearKeyboardTemporaryToolOverride, containerRef, setKeyboardTemporaryToolOverride, tool]);
 
   useEffect(() => {
     if (!canCreateVideoPromptAreas) {
@@ -255,11 +321,11 @@ export function useCanvasInteractions({
     if ((e.target as HTMLElement).closest('button')) return;
     if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
-    let activeTool = tool;
+    let activeTool = currentTool; // Mouse handling should respect the active temporary override.
     if (e.button === 1) {
       e.preventDefault();
       activeTool = Tool.FREE_SELECTION;
-      setTemporaryTool(Tool.FREE_SELECTION);
+      setPointerTemporaryTool(Tool.FREE_SELECTION);
     }
 
     const point = getTransformedPoint(e.clientX, e.clientY);
@@ -920,8 +986,8 @@ export function useCanvasInteractions({
     }
 
     if (e.button === 1) {
-      if (temporaryTool) {
-        setTemporaryTool(null);
+      if (pointerTemporaryTool) {
+        setPointerTemporaryTool(null);
       }
       if (isPanning) {
         isPanningRef.current = false;
@@ -939,8 +1005,8 @@ export function useCanvasInteractions({
       return;
     }
 
-    if (temporaryTool && e.type === 'mouseleave') {
-      setTemporaryTool(null);
+    if (pointerTemporaryTool && e.type === 'mouseleave') {
+      setPointerTemporaryTool(null);
     }
 
     const wasActive = isDrawing || isDragging || isResizing;

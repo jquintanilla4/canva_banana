@@ -110,6 +110,7 @@ npm run test -- --run
 - `F` - Free selection tool
 - `H` - Hand/Pan tool
 - `N` - Note tool
+- Hold `Space` - Temporarily pan while the canvas is focused and the selection tool is active
 
 #### Size Adjustment
 - `[` - Decrease brush/eraser size
