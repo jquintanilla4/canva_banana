@@ -229,6 +229,21 @@ describe('PromptBar layout', () => {
     window.cancelAnimationFrame = ORIGINAL_CANCEL_ANIMATION_FRAME;
   });
 
+  it('mounts overflowing footer controls at the final measured width before animation frames run', () => {
+    installControlWidthMocks({ viewportWidth: 620, stripWidth: 940 });
+    renderPromptBar();
+
+    const footer = screen.getByTestId('prompt-bar-footer');
+    const textarea = screen.getByLabelText('Prompt input') as HTMLTextAreaElement;
+
+    expect(parseFloat(footer.style.maxWidth)).toBeCloseTo(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320, 1);
+    expect(parseFloat(footer.style.maxWidth)).toBeGreaterThan(BASE_PROMPT_BAR_MAX_WIDTH_PX);
+    expect(footer.className).not.toContain('transition-all');
+    expect(footer.className).not.toContain('transition-[width,max-width]');
+    expect(textarea.className).not.toContain('transition-all');
+    expect(textarea.style.backgroundColor).toBe('transparent');
+  });
+
   it('expands beyond the desktop baseline when model controls overflow', async () => {
     installControlWidthMocks({ viewportWidth: 620, stripWidth: 940 });
     renderPromptBar();
@@ -242,6 +257,82 @@ describe('PromptBar layout', () => {
     expect(parseFloat(footer.style.maxWidth)).toBeGreaterThan(BASE_PROMPT_BAR_MAX_WIDTH_PX);
     expect(controlsViewport.className).toContain('overflow-x-auto');
     expect(controlsStrip.className).toContain('flex-nowrap');
+  });
+
+  it('keeps measuring control overflow from the baseline width after expansion', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() {
+        if (this.getAttribute?.('data-testid') === 'prompt-bar-control-viewport') {
+          const footer = this.closest('[data-testid="prompt-bar-footer"]') as HTMLElement | null;
+          const measuredMaxWidthPx = Number.parseFloat(footer?.style.maxWidth ?? '');
+
+          return measuredMaxWidthPx > BASE_PROMPT_BAR_MAX_WIDTH_PX ? 940 : 620; // Expanded shells can hide baseline overflow.
+        }
+
+        return ORIGINAL_CLIENT_WIDTH?.get ? ORIGINAL_CLIENT_WIDTH.get.call(this) : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        if (this.getAttribute?.('data-testid') === 'prompt-bar-control-strip') {
+          return 940;
+        }
+
+        return ORIGINAL_SCROLL_WIDTH?.get ? ORIGINAL_SCROLL_WIDTH.get.call(this) : 0;
+      },
+    });
+
+    const { rerender } = render(
+      <PromptBar
+        prompt="Animate the subject"
+        onPromptChange={vi.fn()}
+        onSubmit={vi.fn()}
+        isLoading={false}
+        inputDisabled={false}
+        submitDisabled={false}
+        modelOptions={[
+          { value: 'seedance-2', label: 'Seedance 2' },
+          { value: 'wan-2.6', label: 'Wan 2.6' },
+        ]}
+        selectedModel="seedance-2"
+        onModelChange={vi.fn()}
+        modelSelectDisabled={false}
+        modelMode="video"
+        onModelModeChange={vi.fn()}
+        modelControls={modelControls}
+      />
+    );
+    await flushPromptBarLayout();
+
+    const footer = screen.getByTestId('prompt-bar-footer');
+
+    expect(parseFloat(footer.style.maxWidth)).toBeCloseTo(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320, 1);
+
+    rerender(
+      <PromptBar
+        prompt="Animate the subject"
+        onPromptChange={vi.fn()}
+        onSubmit={vi.fn()}
+        isLoading={false}
+        inputDisabled={false}
+        submitDisabled={false}
+        modelOptions={[
+          { value: 'seedance-2', label: 'Seedance 2' },
+          { value: 'wan-2.6', label: 'Wan 2.6' },
+        ]}
+        selectedModel="wan-2.6"
+        onModelChange={vi.fn()}
+        modelSelectDisabled={false}
+        modelMode="video"
+        onModelModeChange={vi.fn()}
+        modelControls={modelControls}
+      />
+    );
+    await flushPromptBarLayout();
+
+    expect(parseFloat(footer.style.maxWidth)).toBeCloseTo(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320, 1);
   });
 
   it('clamps the widened prompt bar to the viewport and keeps the controls scrollable', async () => {

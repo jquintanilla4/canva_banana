@@ -226,7 +226,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
   const controlsViewportRef = useRef<HTMLDivElement>(null);
   const controlsStripRef = useRef<HTMLDivElement>(null);
-  const widthMeasureFrameRef = useRef<number | null>(null);
+  const promptBarOuterRef = useRef<HTMLElement | null>(null);
   const [showKlingSuggestions, setShowKlingSuggestions] = React.useState(false);
   const [suggestionPosition, setSuggestionPosition] = React.useState<{ left: number; top: number } | null>(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(0);
@@ -266,29 +266,38 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
     const baseWidthPx = getPromptBarBaseMaxWidthPx(resolvedSizeMode);
     const viewportClampPx = getPromptBarViewportClampPx(resolvedSizeMode);
-    setPromptBarMaxWidthPx(Math.min(baseWidthPx, viewportClampPx));
+    const promptBarOuter = promptBarOuterRef.current;
+    const controlsViewport = controlsViewportRef.current;
+    const controlsStrip = controlsStripRef.current;
+    const baselineControlsViewportWidthPx = promptBarOuter && controlsViewport
+      ? (() => {
+          const previousWidth = promptBarOuter.style.width;
+          const previousMaxWidth = promptBarOuter.style.maxWidth;
+          const baselineWidthPx = Math.min(baseWidthPx, viewportClampPx); // Measure from the unexpanded shell width.
 
-    if (widthMeasureFrameRef.current !== null) {
-      window.cancelAnimationFrame(widthMeasureFrameRef.current);
-    }
+          if (layout === 'inline') {
+            promptBarOuter.style.width = `${baselineWidthPx}px`;
+          }
+          promptBarOuter.style.maxWidth = `${baselineWidthPx}px`;
 
-    widthMeasureFrameRef.current = window.requestAnimationFrame(() => {
-      const controlsViewport = controlsViewportRef.current;
-      const controlsStrip = controlsStripRef.current;
-      const overflowWidthPx = controlsViewport && controlsStrip
-        ? Math.max(0, controlsStrip.scrollWidth - controlsViewport.clientWidth)
-        : 0;
-      const desiredWidthPx = baseWidthPx + overflowWidthPx;
-      setPromptBarMaxWidthPx(Math.min(desiredWidthPx, viewportClampPx));
-      widthMeasureFrameRef.current = null;
-    });
-  }, [resolvedSizeMode]);
+          const measuredWidthPx = controlsViewport.clientWidth;
 
-  useEffect(() => {
+          promptBarOuter.style.width = previousWidth;
+          promptBarOuter.style.maxWidth = previousMaxWidth;
+
+          return measuredWidthPx;
+        })()
+      : controlsViewport?.clientWidth ?? 0;
+    const overflowWidthPx = controlsViewport && controlsStrip
+      ? Math.max(0, controlsStrip.scrollWidth - baselineControlsViewportWidthPx)
+      : 0; // Treat missing controls as no overflow.
+    const desiredWidthPx = baseWidthPx + overflowWidthPx; // Expand the shell only enough to reveal overflowing controls.
+    setPromptBarMaxWidthPx(Math.min(desiredWidthPx, viewportClampPx));
+  }, [layout, resolvedSizeMode]);
+
+  useLayoutEffect(() => {
     if (textareaRef.current) {
-      // Reset height to allow shrinking
       textareaRef.current.style.height = 'auto';
-      // Set height to scroll height to fit content
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [prompt]);
@@ -303,7 +312,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     wasLoading.current = isLoading;
   }, [isLoading, inputDisabled]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!showNegativePrompt) {
       return;
     }
@@ -350,14 +359,6 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       window.removeEventListener('resize', handleResize);
     };
   }, [updatePromptBarWidth]);
-
-  useEffect(() => {
-    return () => {
-      if (widthMeasureFrameRef.current !== null && typeof window !== 'undefined') {
-        window.cancelAnimationFrame(widthMeasureFrameRef.current);
-      }
-    };
-  }, []);
 
   const klingOptions = React.useMemo(() => {
     if (!klingSuggestionsEnabled) return [];
@@ -511,7 +512,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const activeModeClassName = cameraThemeActive ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white';
   const submitButtonAccentClassName = cameraThemeActive ? 'bg-amber-500 hover:bg-amber-400' : 'bg-green-600 hover:bg-green-500';
   const isMiniMode = resolvedSizeMode === 'mini';
-  const promptTextareaClassName = `flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed ${
+  const textareaPaintStyle: React.CSSProperties = { backgroundColor: 'transparent', colorScheme: 'dark' }; // Keep native textarea paint dark before CSS settles.
+  const promptTextareaClassName = `flex-1 appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed ${
     cameraThemeActive ? 'caret-amber-400' : ''
   }`;
 
@@ -552,8 +554,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 placeholder={resolvedNegativePromptPlaceholder}
                 disabled={isLoading || !onNegativePromptChange}
                 rows={3}
-                className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
-                style={{ minHeight: `${PROMPT_TEXTAREA_MIN_HEIGHT_REM}rem`, maxHeight: `${PROMPT_TEXTAREA_MAX_HEIGHT_REM}rem` }}
+                className="flex-1 appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+                style={{ minHeight: `${PROMPT_TEXTAREA_MIN_HEIGHT_REM}rem`, maxHeight: `${PROMPT_TEXTAREA_MAX_HEIGHT_REM}rem`, ...textareaPaintStyle }}
                 aria-label="Negative prompt input"
               />
             </div>
@@ -571,8 +573,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               placeholder={resolvedPlaceholder}
               disabled={inputDisabled || isLoading}
               rows={isMiniMode ? 1 : 3}
-              className={`${promptTextareaClassName} transition-all duration-300 ease-out ${isMiniMode ? 'pt-[0.22rem] text-[0.98rem]' : ''}`}
-              style={{ minHeight: `${textareaMinHeightRem}rem`, maxHeight: `${textareaMaxHeightRem}rem` }}
+              className={`${promptTextareaClassName} transition-[min-height,max-height,padding-top,font-size] duration-300 ease-out ${isMiniMode ? 'pt-[0.22rem] text-[0.98rem]' : ''}`}
+              style={{ minHeight: `${textareaMinHeightRem}rem`, maxHeight: `${textareaMaxHeightRem}rem`, ...textareaPaintStyle }}
               aria-label="Prompt input"
             />
             {showKlingSuggestions && filteredKlingOptions.length > 0 && suggestionPosition && (
@@ -764,6 +766,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   if (layout === 'inline') {
     return (
       <div
+        ref={(node) => {
+          promptBarOuterRef.current = node;
+        }}
         className={`transition-[width,max-width] duration-200 ease-out ${outerClassName ?? ''}`.trim()}
         style={{ width: `${resolvedInlineWidthPx}px`, maxWidth: `${resolvedInlineWidthPx}px`, ...outerStyle }}
         data-testid="prompt-bar-inline"
@@ -775,7 +780,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
   return (
     <footer
-      className={`absolute bottom-0 left-1/2 -translate-x-1/2 z-10 transition-all duration-300 ease-out ${outerClassName ?? ''}`}
+      ref={(node) => {
+        promptBarOuterRef.current = node;
+      }}
+      className={`absolute bottom-0 left-1/2 -translate-x-1/2 z-10 ${outerClassName ?? ''}`}
       style={{
         width: `calc(100% - ${PROMPT_BAR_HORIZONTAL_GUTTER_REM}rem)`,
         maxWidth: `${promptBarMaxWidthPx}px`,
