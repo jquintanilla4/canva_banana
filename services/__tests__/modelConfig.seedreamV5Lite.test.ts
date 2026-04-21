@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FAL_IMAGE_MODEL_OPTIONS,
   getFalNumImageMaxForModel,
   getFalNumImageOptionsForModel,
   getSeedreamImageSizeOptions,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  isFalModelId,
   normalizeFalModelId,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
@@ -37,5 +39,12 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
 
   it('maps legacy Sora 2 Pro video snapshots to the default video model', () => {
     expect(normalizeFalModelId('fal-ai/sora-2/image-to-video/pro')).toBe(HAILUO_IMAGE_TO_VIDEO_MODEL_ID);
+  });
+
+  it('does not expose removed Reve image models', () => {
+    const imageModelLabels = FAL_IMAGE_MODEL_OPTIONS.map(option => option.label as string);
+    expect(imageModelLabels).not.toContain('Reve Image');
+    expect(isFalModelId('fal-ai/reve/text-to-image')).toBe(false);
+    expect(normalizeFalModelId('fal-ai/reve/text-to-image')).toBeUndefined();
   });
 });

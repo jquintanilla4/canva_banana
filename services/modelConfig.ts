@@ -17,9 +17,6 @@ export const SEEDREAM_V5_LITE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/edit
 export const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 export const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
 export const SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/text-to-image' as const;
-export const REVE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/reve/text-to-image' as const;
-export const REVE_EDIT_MODEL_ID = 'fal-ai/reve/edit' as const;
-export const REVE_REMIX_MODEL_ID = 'fal-ai/reve/remix' as const;
 export const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1' as const;
 export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
 export const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit' as const;
@@ -107,7 +104,6 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine' }, // Grok model option.
   { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
-  { value: REVE_TEXT_TO_IMAGE_MODEL_ID, label: 'Reve Image' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream 4' },
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream 4.5' },
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
@@ -767,18 +763,6 @@ export const FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAsp
   { value: '9:16', label: '9:16' },
 ] as const;
 
-export const FAL_REVE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
-  { value: 'placeholder', label: 'Aspect Ratio' },
-  { value: 'default', label: 'Default (3:2)' },
-  { value: '16:9', label: '16:9' },
-  { value: '9:16', label: '9:16' },
-  { value: '3:2', label: '3:2' },
-  { value: '2:3', label: '2:3' },
-  { value: '4:3', label: '4:3' },
-  { value: '3:4', label: '3:4' },
-  { value: '1:1', label: '1:1' },
-] as const;
-
 export const FAL_KLING_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
   { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Auto (default)' },
@@ -818,7 +802,6 @@ export const getSeedreamAspectRatioOptions = (_modelId: string | undefined) => F
 
 export const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS.map(option => option.value),
-  ...FAL_REVE_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_KLING_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_GROK_ASPECT_RATIO_OPTIONS.map(option => option.value), // Grok ratio values.
   ...FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.map(option => option.value),
@@ -838,7 +821,6 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SEEDREAM_V45_MODEL_ID]: 10,
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.
   [KLING_IMAGE_MODEL_ID]: 10,
-  [REVE_TEXT_TO_IMAGE_MODEL_ID]: 5, // Reve remix supports up to 6 total images (1 primary + 5 references)
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
   [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
   [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,

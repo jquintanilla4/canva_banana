@@ -54,7 +54,6 @@ import {
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_KLING_ASPECT_RATIO_OPTIONS,
   FAL_KLING_RESOLUTION_OPTIONS,
-  FAL_REVE_ASPECT_RATIO_OPTIONS,
   FAL_RESOLUTION_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
@@ -84,7 +83,6 @@ import {
   INFINITALK_DURATION_OPTIONS,
   INFINITALK_RESOLUTION_OPTIONS,
   INFINITALK_SEED_OPTIONS,
-  REVE_TEXT_TO_IMAGE_MODEL_ID,
   VEO31_ASPECT_RATIO_OPTIONS,
   VEO31_AUDIO_OPTIONS,
   VEO31_DURATION_OPTIONS,
@@ -241,7 +239,6 @@ export type PromptBarControlsInput = {
   usingFal: boolean;
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
-  isReveModel: boolean;
   isKlingModel: boolean;
   isFlux2MaxModel: boolean;
   isWan26ImageModel: boolean;
@@ -390,7 +387,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     usingFal,
     isSeedreamModel,
     isNanoBananaModel,
-    isReveModel,
     isKlingModel,
     isFlux2MaxModel,
     isWan26ImageModel,
@@ -1158,21 +1154,18 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }
 
   const supportsAspectRatioControl = isNanoBananaModel
-    || isReveModel
     || isKlingModel
     || isGrokImagineModel // Grok aspect ratio support.
     || (isSeedreamModel && !shouldShowSeedreamImageSizeControl); // Include Grok for AR control.
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || !isVideoMode);
   if (shouldShowAspectRatioControl) {
-    const aspectRatioOptions = isReveModel
-      ? FAL_REVE_ASPECT_RATIO_OPTIONS
-      : isNanoBananaModel
-        ? FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS
-        : isGrokImagineModel // Grok aspect ratio branch.
-          ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratio options.
-          : isSeedreamModel
-            ? getSeedreamAspectRatioOptions(falModelId)
-            : FAL_KLING_ASPECT_RATIO_OPTIONS;
+    const aspectRatioOptions = isNanoBananaModel
+      ? FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS
+      : isGrokImagineModel // Grok aspect ratio branch.
+        ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratio options.
+        : isSeedreamModel
+          ? getSeedreamAspectRatioOptions(falModelId)
+          : FAL_KLING_ASPECT_RATIO_OPTIONS;
     controls.push({
       id: 'fal-aspect-ratio-select',
       prefixLabel: isGrokImagineModel ? 'AR' : undefined, // Grok uses short label.
@@ -1200,7 +1193,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel || isGrokImagineModel); // Include Grok for Num control.
+    && (isSeedreamModel || isNanoBananaModel || isKlingModel || isGrokImagineModel); // Include Grok for Num control.
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
@@ -1223,4 +1216,4 @@ export const getPromptBarModelOptions = (mode: FalModelMode): ReadonlyArray<FalM
   mode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
 
 export const shouldShowKlingNegativePrompt = (falModelId: FalVideoModelId | string): boolean =>
-  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_26_VIDEO_MODEL_ID || falModelId === KLING_IMAGE_MODEL_ID || falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID || falModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_26_VIDEO_MODEL_ID || falModelId === KLING_IMAGE_MODEL_ID || falModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;

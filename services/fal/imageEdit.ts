@@ -10,7 +10,7 @@ import {
   uploadCanvasToFal,
   uploadImageElementToFal,
 } from './media'; // Media upload helpers.
-import { convertReveImageMentionsToXml, convertWan26ImageMentions } from './prompts'; // Prompt conversion helpers.
+import { convertWan26ImageMentions } from './prompts'; // Prompt conversion helpers.
 import { extractInlineData } from './responses'; // Response parsing helper.
 import {
   FAL_MODEL_ID,
@@ -26,9 +26,6 @@ import {
   getFalNumImageMaxForModel,
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
-  REVE_EDIT_MODEL_ID,
-  REVE_REMIX_MODEL_ID,
-  REVE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
@@ -155,198 +152,6 @@ export const generateImageEdit = async (
   if (referenceImages && referenceImages.length > 0) {
     const referenceUrls = await collectReferenceUploadUrls(referenceImages);
     imageUrls.push(...referenceUrls);
-  }
-
-  const isReveModel = modelId === REVE_TEXT_TO_IMAGE_MODEL_ID; // Reve edit/remix routing.
-  if (isReveModel) {
-    const hasReferenceImages = referenceImages && referenceImages.length > 0;
-    const numImagesOption = options.numImages;
-    const aspectRatioOption: FalAspectRatioOption = options.aspectRatio ?? 'default';
-    let latestRequestId: string | undefined;
-
-    if (hasReferenceImages) { // Remix mode with base + references.
-      const allImageUrls = [baseImageUrl]; // Base image first, then references.
-      const referenceUrls = await collectReferenceUploadUrls(referenceImages);
-      allImageUrls.push(...referenceUrls);
-
-      if (allImageUrls.length > 6) { // Limit to 6 images per API.
-        throw new Error('Reve remix supports up to 6 images. Please reduce the number of selected images.');
-      }
-
-      const convertedPrompt = convertReveImageMentionsToXml(prompt); // Convert @ImageN mentions.
-
-      const remixBody: {
-        prompt: string;
-        image_urls: string[];
-        aspect_ratio?: '16:9' | '9:16' | '3:2' | '2:3' | '4:3' | '3:4' | '1:1';
-        num_images?: number;
-        output_format?: 'png' | 'jpeg' | 'webp';
-        sync_mode?: boolean;
-      } = {
-        prompt: convertedPrompt,
-        image_urls: allImageUrls,
-        output_format: 'png',
-        sync_mode: false,
-      };
-
-      const validReveRemixAspectRatios = ['16:9', '9:16', '3:2', '2:3', '4:3', '3:4', '1:1'] as const;
-      if (aspectRatioOption !== 'default' && validReveRemixAspectRatios.includes(aspectRatioOption as typeof validReveRemixAspectRatios[number])) { // Only set valid remix aspect ratios.
-        remixBody.aspect_ratio = aspectRatioOption as typeof validReveRemixAspectRatios[number];
-      }
-
-      if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
-        const normalized = Math.min(4, Math.max(1, Math.floor(numImagesOption)));
-        if (normalized >= 1) {
-          remixBody.num_images = normalized;
-        }
-      }
-
-      logFalEvent('outbound', REVE_REMIX_MODEL_ID, 'Outbound request (fal.subscribe)', { input: remixBody });
-
-      let result: Awaited<ReturnType<typeof fal.subscribe>>;
-      try {
-        result = await fal.subscribe(REVE_REMIX_MODEL_ID, {
-          input: remixBody,
-          logs: true,
-          onQueueUpdate: update => {
-            const queueUpdate = update as unknown as FalQueueUpdate;
-            const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-            const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-            if (resolvedRequestId) {
-              latestRequestId = resolvedRequestId;
-            }
-            logFalEvent('inbound', REVE_REMIX_MODEL_ID, 'Queue update', {
-              status: queueUpdate.status,
-              position: queueUpdate.position,
-              eta: queueUpdate.eta,
-              requestId: resolvedRequestId,
-              logs: normalizedLogs.map(log => log?.message ?? ''),
-            });
-            options.onQueueUpdate?.({
-              ...queueUpdate,
-              requestId: resolvedRequestId || '',
-              logs: normalizedLogs,
-            });
-          },
-        });
-      } catch (error) {
-        logFalEvent('error', REVE_REMIX_MODEL_ID, 'Request failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
-
-      logFalEvent('inbound', REVE_REMIX_MODEL_ID, 'Result received', {
-        requestId: result?.requestId || latestRequestId,
-        data: (result?.data as Record<string, unknown>) ?? undefined,
-      });
-
-      const data = result?.data as { images?: Array<{ url: string }> } | undefined;
-      const images = data?.images;
-      if (!images || images.length === 0) {
-        throw new Error('Fal.ai Reve remix API did not return an image.');
-      }
-
-      const inlineDataList = await Promise.all(images.map(img => extractInlineData(img.url)));
-      const base64List = inlineDataList.map(dataUrl => {
-        const base64 = dataUrl.split(',')[1];
-        if (!base64) {
-          throw new Error('Failed to extract image data from Fal.ai Reve remix response.');
-        }
-        return base64;
-      });
-
-      const [primaryBase64] = base64List;
-      if (!primaryBase64) {
-        throw new Error('Failed to extract image data from Fal.ai Reve remix response.');
-      }
-
-      const requestId = result?.requestId || latestRequestId;
-      return { imageBase64: primaryBase64, imagesBase64: base64List, text: '', requestId };
-    }
-
-    const reveBody: {
-      prompt: string;
-      image_url: string;
-      num_images?: number;
-      output_format?: 'png' | 'jpeg' | 'webp';
-      sync_mode?: boolean;
-    } = { // Edit mode uses a single base image.
-      prompt,
-      image_url: baseImageUrl,
-      output_format: 'png',
-      sync_mode: false,
-    };
-
-    if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
-      const normalized = Math.min(4, Math.max(1, Math.floor(numImagesOption)));
-      if (normalized >= 1) {
-        reveBody.num_images = normalized;
-      }
-    }
-
-    logFalEvent('outbound', REVE_EDIT_MODEL_ID, 'Outbound request (fal.subscribe)', { input: reveBody });
-
-    let result: Awaited<ReturnType<typeof fal.subscribe>>;
-    try {
-      result = await fal.subscribe(REVE_EDIT_MODEL_ID, {
-        input: reveBody,
-        logs: true,
-        onQueueUpdate: update => {
-          const queueUpdate = update as unknown as FalQueueUpdate;
-          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-          if (resolvedRequestId) {
-            latestRequestId = resolvedRequestId;
-          }
-          logFalEvent('inbound', REVE_EDIT_MODEL_ID, 'Queue update', {
-            status: queueUpdate.status,
-            position: queueUpdate.position,
-            eta: queueUpdate.eta,
-            requestId: resolvedRequestId,
-            logs: normalizedLogs.map(log => log?.message ?? ''),
-          });
-          options.onQueueUpdate?.({
-            ...queueUpdate,
-            requestId: resolvedRequestId || '',
-            logs: normalizedLogs,
-          });
-        },
-      });
-    } catch (error) {
-      logFalEvent('error', REVE_EDIT_MODEL_ID, 'Request failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-
-    logFalEvent('inbound', REVE_EDIT_MODEL_ID, 'Result received', {
-      requestId: result?.requestId || latestRequestId,
-      data: (result?.data as Record<string, unknown>) ?? undefined,
-    });
-
-    const data = result?.data as { images?: Array<{ url: string }> } | undefined;
-    const images = data?.images;
-    if (!images || images.length === 0) {
-      throw new Error('Fal.ai Reve edit API did not return an image.');
-    }
-
-    const inlineDataList = await Promise.all(images.map(img => extractInlineData(img.url)));
-    const base64List = inlineDataList.map(dataUrl => {
-      const base64 = dataUrl.split(',')[1];
-      if (!base64) {
-        throw new Error('Failed to extract image data from Fal.ai Reve edit response.');
-      }
-      return base64;
-    });
-
-    const [primaryBase64] = base64List;
-    if (!primaryBase64) {
-      throw new Error('Failed to extract image data from Fal.ai Reve edit response.');
-    }
-
-    const requestId = result?.requestId || latestRequestId;
-    return { imageBase64: primaryBase64, imagesBase64: base64List, text: '', requestId };
   }
 
   const isFlux2MaxModel = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID; // Flux2 Max edit routing.

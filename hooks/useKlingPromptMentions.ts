@@ -7,7 +7,6 @@ type UseKlingPromptMentionsArgs = {
   isKlingO1EditMode: boolean;
   isKlingO1RefV2VMode?: boolean;
   isSeedance2ReferenceMode?: boolean; // Reuses the Kling mention UX for Seedance reference prompts.
-  isReveModel?: boolean;
   isFlux2MaxModel?: boolean;
   isWan26ImageModel?: boolean;
   referenceOrderLabels: Record<string, string> | null;
@@ -28,7 +27,6 @@ export const useKlingPromptMentions = ({
   isKlingO1EditMode,
   isKlingO1RefV2VMode = false,
   isSeedance2ReferenceMode = false,
-  isReveModel = false,
   isFlux2MaxModel = false,
   isWan26ImageModel = false,
   referenceOrderLabels,
@@ -39,7 +37,7 @@ export const useKlingPromptMentions = ({
 }: UseKlingPromptMentionsArgs): UseKlingPromptMentionsResult => {
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode; // Both Kling O1 video-input variants share the same "Video" mention behavior.
   return useMemo(() => {
-    if (!isKlingModel && !isKlingO1VideoModel && !isSeedance2ReferenceMode && !isReveModel && !isFlux2MaxModel && !isWan26ImageModel) {
+    if (!isKlingModel && !isKlingO1VideoModel && !isSeedance2ReferenceMode && !isFlux2MaxModel && !isWan26ImageModel) {
       return { klingPromptMentions: [], klingReferenceCount: 0 };
     }
 
@@ -84,7 +82,6 @@ export const useKlingPromptMentions = ({
     isKlingO1VideoModel,
     isKlingO1VideoInputMode,
     isSeedance2ReferenceMode,
-    isReveModel,
     isFlux2MaxModel,
     isWan26ImageModel,
     referenceImageIds.length,

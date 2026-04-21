@@ -23,7 +23,6 @@ import {
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
-  REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
@@ -297,11 +296,6 @@ export default function App() {
     if (fal.falModelId === SEEDREAM_V45_MODEL_ID && maxReferenceImages >= 10) {
       setToastMessage('Seedream 4.5 only accepts up to 10 reference images.');
       setTimeout(() => setToastMessage(null), 2000);
-      return;
-    }
-    if (fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID) {
-      setToastMessage('Reve remix supports up to 6 images total (1 primary + 5 references). Use @Image1, @Image2, etc. in your prompt to reference them.');
-      setTimeout(() => setToastMessage(null), 4000);
       return;
     }
     if (fal.falModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
@@ -1038,8 +1032,7 @@ export default function App() {
   const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
   const isNanoBananaModel = !fal.isVideoMode && fal.falModelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
   const isGrokModel = !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
-  const isReveModel = !fal.isVideoMode && fal.falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID;
-  const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || isReveModel || fal.isFlux2MaxModel || fal.isUpscaleModel;
+  const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || fal.isFlux2MaxModel || fal.isUpscaleModel;
 
   useEffect(() => {
     if (appMode === 'ANNOTATE' && isAnnotateModeDisabled) {
@@ -1065,7 +1058,7 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel,
+    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan26ImageModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
     includePrimaryImageAsReference: !isSeedance2ReferenceMode, // Seedance reference mode should not auto-label the current primary pick.
@@ -1201,7 +1194,6 @@ export default function App() {
     isKlingO1EditMode: fal.isKlingO1EditMode,
     isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
     isSeedance2ReferenceMode,
-    isReveModel,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isWan26ImageModel: fal.isWan26ImageModel,
     referenceOrderLabels: klingReferenceOrderLabels,
@@ -1269,7 +1261,6 @@ export default function App() {
     isUpscaleModel: fal.isUpscaleModel,
     isSeedreamModel,
     isNanoBananaModel,
-    isReveModel,
     isKlingModel,
     isGrokModel, // Grok validation flag.
     isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
@@ -1298,7 +1289,6 @@ export default function App() {
     usingFal,
     isSeedreamModel,
     isNanoBananaModel,
-    isReveModel,
     isKlingModel,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isUpscaleModel: fal.isUpscaleModel,
@@ -1734,7 +1724,7 @@ export default function App() {
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
           cameraThemeActive={isCameraPromptAccentActive}
-          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isReveModel || fal.isFlux2MaxModel || fal.isWan26ImageModel}
+          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan26ImageModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
           sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}

@@ -14,7 +14,6 @@ import {
   getFalNumImageMaxForModel,
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
-  REVE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
 
@@ -32,7 +31,6 @@ export const generateImage = async (
   const isWan26ImageTextToImage = modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
   const supportsAspectRatio = isNanoBananaTextToImage
-    || modelId === REVE_TEXT_TO_IMAGE_MODEL_ID
     || isKlingTextToImage
     || isGrokImagineModel; // Enable Grok aspect ratios.
   const supportsResolution = isNanoBananaTextToImage || isKlingTextToImage;

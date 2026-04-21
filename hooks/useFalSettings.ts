@@ -7,7 +7,6 @@ import {
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   FAL_KLING_ASPECT_RATIO_OPTIONS,
-  FAL_REVE_ASPECT_RATIO_OPTIONS,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
@@ -29,7 +28,6 @@ import {
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
   getFalNumImageMaxForModel,
   isFlux2MaxImageSizeSelectionValue,
@@ -520,10 +518,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (falModelMode === 'video') {
       return;
     }
-    const aspectRatioOptions = falModelId === REVE_TEXT_TO_IMAGE_MODEL_ID
-      ? FAL_REVE_ASPECT_RATIO_OPTIONS
-      : falModelId === GROK_IMAGINE_IMAGE_MODEL_ID // Grok model branch.
-        ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratios.
+    const aspectRatioOptions = falModelId === GROK_IMAGINE_IMAGE_MODEL_ID // Grok model branch.
+      ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratios.
       : falModelId === KLING_IMAGE_MODEL_ID
         ? FAL_KLING_ASPECT_RATIO_OPTIONS
         : isSeedreamModel

@@ -31,7 +31,6 @@ type Args = {
   isUpscaleModel: boolean;
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
-  isReveModel: boolean;
   isKlingModel: boolean;
   isGrokModel: boolean; // Grok text-to-image flag.
   isGrokImagineVideoModel: boolean;
@@ -74,7 +73,6 @@ export function useGenerationGuards({
   isUpscaleModel,
   isSeedreamModel,
   isNanoBananaModel,
-  isReveModel,
   isKlingModel,
   isGrokModel, // Grok text-to-image flag.
   isGrokImagineVideoModel,
@@ -136,7 +134,7 @@ export function useGenerationGuards({
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
-      && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel || isGrokModel); // Include Grok validation.
+      && (isSeedreamModel || isNanoBananaModel || isKlingModel || isGrokModel); // Include Grok validation.
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
@@ -306,7 +304,6 @@ export function useGenerationGuards({
     isOneToAllAnimateVideoModel,
     isWan26I2VVideoModel,
     isVeo31ExtendMode,
-    isReveModel,
     isSeedreamModel,
     isUpscaleModel,
     isVideoMode,

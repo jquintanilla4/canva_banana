@@ -15,7 +15,6 @@ import {
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
-  REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   VEO_31_EXTEND_VIDEO_MODEL_ID,
@@ -600,7 +599,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : falImageSizeSelectionForRun; // Seedream 5 Lite defaults to auto_2K instead of source-matching.
     const isNanoBananaProModel = !isVideoMode && falModelIdForRun === NANO_BANANA_PRO_EDIT_MODEL_ID;
     const isNanoBananaModel = isNanoBananaProModel;
-    const isReveModel = !isVideoMode && falModelIdForRun === REVE_TEXT_TO_IMAGE_MODEL_ID;
     const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
     const isGrokImagineModel = !isVideoMode && falModelIdForRun === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
     const grokAspectRatioForRun = (isGrokImagineModel && falAspectRatioSelectionForRun === 'default')
@@ -1634,7 +1632,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
     const shouldValidateFalOptions = usingFal
-      && (isSeedreamModel || isNanoBananaModel || isReveModel || isKlingModel || isGrokImagineModel); // Include Grok validation.
+      && (isSeedreamModel || isNanoBananaModel || isKlingModel || isGrokImagineModel); // Include Grok validation.
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImagesForRun) ||
@@ -1747,10 +1745,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
           const textToImageModelId = isSeedreamModel
             ? getSeedreamTextToImageModelId(falModelIdForRun)
-            : isReveModel
-              ? REVE_TEXT_TO_IMAGE_MODEL_ID
-              : isGrokImagineModel
-                ? GROK_IMAGINE_IMAGE_MODEL_ID // Grok text-to-image endpoint.
+            : isGrokImagineModel
+              ? GROK_IMAGINE_IMAGE_MODEL_ID // Grok text-to-image endpoint.
               : isKlingModel
                 ? KLING_IMAGE_MODEL_ID
                 : isFlux2MaxModelForRun
@@ -1808,7 +1804,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isNanoBananaModel || isReveModel || isKlingModel || isSeedreamModel || isGrokImagineModel)
+            aspectRatio: (isNanoBananaModel || isKlingModel || isSeedreamModel || isGrokImagineModel)
               ? (isGrokImagineModel ? grokAspectRatioForRun : falAspectRatioSelectionForRun)
               : 'default', // Include Grok aspect ratios.
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
@@ -1915,7 +1911,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
           } else {
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel || isReveModel || isFlux2MaxModelForRun || isWan26ImageModelForRun;
+            const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel || isFlux2MaxModelForRun || isWan26ImageModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
               const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
