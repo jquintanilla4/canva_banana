@@ -171,6 +171,8 @@ type Seedance2PromptBarControlsInput = {
   seedance2Duration: Seedance2DurationSelectionValue;
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
+  showCameraFixed?: boolean;
+  allowFullResolution?: boolean;
   isLoading: boolean;
   onSeedance2VariantChange: (value: Seedance2Variant) => void;
   onSeedance2AspectRatioChange: (value: Seedance2AspectRatioSelectionValue) => void;
@@ -195,6 +197,8 @@ export const buildSeedance2PromptBarControls = ({
   seedance2Duration,
   seedance2GenerateAudio,
   seedance2CameraFixed,
+  showCameraFixed = true,
+  allowFullResolution = false,
   isLoading,
   onSeedance2VariantChange,
   onSeedance2AspectRatioChange,
@@ -202,8 +206,13 @@ export const buildSeedance2PromptBarControls = ({
   onSeedance2DurationChange,
   onSeedance2GenerateAudioChange,
   onSeedance2CameraFixedChange,
-}: Seedance2PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => [
-  {
+}: Seedance2PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => {
+  const resolutionOptions = SEEDANCE2_RESOLUTION_OPTIONS.map(option => ({
+    value: option.value,
+    label: allowFullResolution && option.value === '1080p' ? '1080p' : option.label,
+    disabled: allowFullResolution ? false : option.disabled,
+  })); // Fal supports 1080p, while Volcengine keeps the provisional disabled state.
+  const controls: PromptBarModelControl[] = [{
     id: buildSeedance2ControlId('variant', idPrefix),
     ariaLabel: 'Select Seedance 2 variant',
     options: SEEDANCE2_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
@@ -232,21 +241,25 @@ export const buildSeedance2PromptBarControls = ({
     id: buildSeedance2ControlId('resolution', idPrefix),
     prefixLabel: 'Resolution',
     ariaLabel: 'Select Seedance 2 resolution',
-    options: SEEDANCE2_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label, disabled: option.disabled })),
+    options: resolutionOptions,
     value: seedance2Resolution,
     onChange: (value: string) => onSeedance2ResolutionChange(value as Seedance2ResolutionSelectionValue),
     disabled: isLoading,
-  },
-  {
-    id: buildSeedance2ControlId('camera-fixed', idPrefix),
-    prefixLabel: 'Camera',
-    ariaLabel: 'Toggle Seedance 2 camera fixed',
-    options: SEEDANCE2_CAMERA_FIXED_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-    value: getSeedance2BooleanSelectionValue(seedance2CameraFixed),
-    onChange: (value: string) => onSeedance2CameraFixedChange(value === 'true'),
-    disabled: isLoading,
-  },
-  {
+  }];
+
+  if (showCameraFixed) {
+    controls.push({
+      id: buildSeedance2ControlId('camera-fixed', idPrefix),
+      prefixLabel: 'Camera',
+      ariaLabel: 'Toggle Seedance 2 camera fixed',
+      options: SEEDANCE2_CAMERA_FIXED_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: getSeedance2BooleanSelectionValue(seedance2CameraFixed),
+      onChange: (value: string) => onSeedance2CameraFixedChange(value === 'true'),
+      disabled: isLoading,
+    });
+  }
+
+  controls.push({
     id: buildSeedance2ControlId('audio', idPrefix),
     prefixLabel: 'Audio',
     ariaLabel: 'Toggle Seedance 2 audio generation',
@@ -254,8 +267,10 @@ export const buildSeedance2PromptBarControls = ({
     value: getSeedance2BooleanSelectionValue(seedance2GenerateAudio),
     onChange: (value: string) => onSeedance2GenerateAudioChange(value === 'true'),
     disabled: isLoading,
-  },
-];
+  });
+
+  return controls;
+};
 
 export type PromptBarControlsInput = {
   apiProvider: 'google' | 'fal';
@@ -282,6 +297,7 @@ export type PromptBarControlsInput = {
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
+  isFalSeedance2VideoModel: boolean;
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
@@ -434,6 +450,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
+    isFalSeedance2VideoModel,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
@@ -1049,6 +1066,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       seedance2Duration,
       seedance2GenerateAudio,
       seedance2CameraFixed,
+      showCameraFixed: !isFalSeedance2VideoModel,
+      allowFullResolution: isFalSeedance2VideoModel,
       isLoading,
       onSeedance2VariantChange: value => onSeedance2VariantChange(value),
       onSeedance2AspectRatioChange: value => onSeedance2AspectRatioChange(value),

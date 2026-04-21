@@ -58,6 +58,10 @@ export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as c
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
 export const SEEDANCE_2_VIDEO_MODEL_ID = 'volcengine/seedance-2' as const;
+export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0' as const; // Selector id for the Fal Seedance 2 family.
+export const FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/text-to-video' as const; // Fal t2v endpoint.
+export const FAL_SEEDANCE_2_IMAGE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/image-to-video' as const; // Fal i2v endpoint.
+export const FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/reference-to-video' as const; // Fal reference endpoint.
 export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as const;
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video' as const;
@@ -130,6 +134,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
   { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
+  { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' }, // Fal-backed Seedance 2.
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync 3 Lipsync' },
   { value: VEO_31_IMAGE_TO_VIDEO_MODEL_ID, label: 'Veo 3.1' },
   { value: WAN_26_I2V_MODEL_ID, label: 'Wan 2.6' },
@@ -504,8 +509,14 @@ export const isSeedance15ResolutionSelectionValue = (value: unknown): value is S
 export const isSeedance15DurationSelectionValue = (value: unknown): value is Seedance15DurationSelectionValue =>
   value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12';
 
-export const isSeedance2VideoModel = (modelId: string | undefined): boolean =>
+export const isVolcengineSeedance2VideoModel = (modelId: string | undefined): boolean =>
   modelId === SEEDANCE_2_VIDEO_MODEL_ID;
+
+export const isFalSeedance2VideoModel = (modelId: string | undefined): boolean =>
+  modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID; // Fal selector guard.
+
+export const isSeedance2VideoModel = (modelId: string | undefined): boolean =>
+  isVolcengineSeedance2VideoModel(modelId) || isFalSeedance2VideoModel(modelId); // Shared Seedance 2 UI guard.
 
 export const isSeedance2Variant = (value: unknown): value is Seedance2Variant =>
   value === 'smart' || value === 'reference';
@@ -918,6 +929,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [WAN_26_I2V_MODEL_ID]: 0,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Seedance 2 reference mode supports up to 9 image refs.
+  [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Fal Seedance 2 reference mode supports up to 9 image refs.
   [SCAIL_VIDEO_MODEL_ID]: 0,
 };
 

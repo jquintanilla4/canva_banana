@@ -25,8 +25,8 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_26_I2V_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
-  SEEDANCE_2_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
   getFalNumImageMaxForModel,
@@ -51,6 +51,8 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isSeedance2VideoModel as isSeedance2VideoModelId,
+  isVolcengineSeedance2VideoModel,
   isRecraftV4ProImageSizeSelectionValue,
   isWan27ImageAspectRatioSelectionValue,
   isWan27ImageMaxImagesSelectionValue,
@@ -128,6 +130,8 @@ type FalDerivedState = {
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
+  isFalSeedance2VideoModel: boolean;
+  isVolcengineSeedance2VideoModel: boolean;
   isVeo31VideoModel: boolean;
   isFlux2MaxModel: boolean;
   isWan27ImageModel: boolean;
@@ -412,7 +416,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isGrokImagineVideoModel = isVideoMode && falVideoModelId === GROK_IMAGINE_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
-  const isSeedance2VideoModel = isVideoMode && falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID;
+  const isSeedance2VideoModel = isVideoMode && isSeedance2VideoModelId(falVideoModelId);
+  const isFalSeedance2VideoModel = isVideoMode && falVideoModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+  const isVolcengineSeedance2VideoModelSelection = isVideoMode && isVolcengineSeedance2VideoModel(falVideoModelId);
   const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan27ImageModel = !isVideoMode && falImageModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
@@ -1025,6 +1031,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
+    isFalSeedance2VideoModel,
+    isVolcengineSeedance2VideoModel: isVolcengineSeedance2VideoModelSelection,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO1EditMode,

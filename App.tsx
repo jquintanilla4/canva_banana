@@ -25,6 +25,7 @@ import {
   SCAIL_VIDEO_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
@@ -393,6 +394,7 @@ export default function App() {
       assignedAreaId: targetArea.id,
       prompt: '',
       negativePrompt: '',
+      modelId: fal.isSeedance2VideoModel ? fal.falVideoModelId : SEEDANCE_2_VIDEO_MODEL_ID,
       seedance2Variant: 'reference',
       seedance2AspectRatio: '16:9',
       seedance2Resolution: '720p',
@@ -408,7 +410,7 @@ export default function App() {
       )),
       videoPromptBars: [...prevState.videoPromptBars, newBar],
     }));
-  }, [displayedVideoPromptAreas, selectedVideoPromptAreaId, setError, setState]);
+  }, [displayedVideoPromptAreas, fal.falVideoModelId, fal.isSeedance2VideoModel, selectedVideoPromptAreaId, setError, setState]);
 
   const handleEmbeddedPromptBarUpdate = useCallback((barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => {
     setLiveVideoPromptBars(displayedVideoPromptBars.map(bar => (
@@ -863,7 +865,6 @@ export default function App() {
   // Centralized generation handler that calls provider APIs and writes results back to canvas state.
   const {
     handleGenerate,
-    isSeedanceSubmitLocked,
   } = useGeneration({
     appMode,
     tool,
@@ -1134,22 +1135,25 @@ export default function App() {
     if (!membership) {
       return;
     }
+    const targetModelId = targetBar.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? FAL_SEEDANCE_2_VIDEO_MODEL_ID : SEEDANCE_2_VIDEO_MODEL_ID; // Missing ids are legacy Volcengine bars.
     const generationOverrides = buildEmbeddedSeedanceGenerationOverrides(membership, targetBar.seedance2Variant);
+    const seedanceOptions = {
+      seedance2Variant: targetBar.seedance2Variant,
+      seedance2AspectRatio: targetBar.seedance2AspectRatio,
+      seedance2Resolution: targetBar.seedance2Resolution,
+      seedance2Duration: targetBar.seedance2Duration,
+      seedance2GenerateAudio: targetBar.seedance2GenerateAudio,
+    };
     void handleGenerate({
       kind: 'video',
       prompt: targetBar.prompt,
-      provider: 'volcengine',
-      modelId: SEEDANCE_2_VIDEO_MODEL_ID,
+      provider: targetModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? 'fal' : 'volcengine',
+      modelId: targetModelId,
       modelMode: 'video',
       ...generationOverrides,
-      volcengineOptions: {
-        seedance2Variant: targetBar.seedance2Variant,
-        seedance2AspectRatio: targetBar.seedance2AspectRatio,
-        seedance2Resolution: targetBar.seedance2Resolution,
-        seedance2Duration: targetBar.seedance2Duration,
-        seedance2GenerateAudio: targetBar.seedance2GenerateAudio,
-        seedance2CameraFixed: targetBar.seedance2CameraFixed,
-      },
+      ...(targetModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID
+        ? { falOptions: seedanceOptions }
+        : { volcengineOptions: { ...seedanceOptions, seedance2CameraFixed: targetBar.seedance2CameraFixed } }),
     });
   }, [displayedVideoPromptBars, handleGenerate, videoPromptAreaMemberships]);
 
@@ -1173,6 +1177,7 @@ export default function App() {
   });
   const embeddedVideoPromptBarModelOptions = useMemo(() => ([
     { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
+    { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' },
   ]), []);
   const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => buildSeedance2PromptBarControls({
     idPrefix: bar.id,
@@ -1182,6 +1187,8 @@ export default function App() {
     seedance2Duration: bar.seedance2Duration ?? '5',
     seedance2GenerateAudio: bar.seedance2GenerateAudio,
     seedance2CameraFixed: bar.seedance2CameraFixed,
+    showCameraFixed: bar.modelId !== FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+    allowFullResolution: bar.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
     isLoading,
     onSeedance2VariantChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
       ...currentBar,
@@ -1274,6 +1281,7 @@ export default function App() {
     isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
     isSeedance15VideoModel: fal.isSeedance15VideoModel,
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
+    isFalSeedance2VideoModel: fal.isFalSeedance2VideoModel,
     hailuoVariant: fal.hailuoVariant,
     falVideoDuration: fal.falVideoDuration,
     klingVariant: fal.klingVariant,
@@ -1407,8 +1415,8 @@ export default function App() {
   );
   const providerLabels = useMemo<Record<ApiProviderId, string>>(() => ({
     google: PROVIDER_LABELS.google,
-    fal: fal.isSeedance2VideoModel ? 'VOLCENGINE' : PROVIDER_LABELS.fal,
-  }), [fal.isSeedance2VideoModel]);
+    fal: fal.isVolcengineSeedance2VideoModel ? 'VOLCENGINE' : PROVIDER_LABELS.fal,
+  }), [fal.isVolcengineSeedance2VideoModel]);
   const shouldShowNegativePrompt = shouldShowVideoNegativePrompt || fal.isWan27ImageModel;
   const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);
   const promptOutlineColor = isCameraPromptAccentActive
@@ -1670,7 +1678,7 @@ export default function App() {
           onSubmit={handleGenerate}
           isLoading={isLoading}
           inputDisabled={disablePromptInput || isEmbeddedPromptBarActive}
-          submitDisabled={submitDisabled || isSeedanceSubmitLocked || isEmbeddedPromptBarActive}
+          submitDisabled={submitDisabled || isEmbeddedPromptBarActive}
           modelOptions={promptBarModelOptions}
           selectedModel={fal.falModelId}
           onModelChange={fal.handleFalModelChange}

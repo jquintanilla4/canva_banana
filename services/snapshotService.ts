@@ -39,6 +39,8 @@ import {
   normalizeRecraftRgbColor,
   RECRAFT_V4_PRO_MAX_COLORS,
   isGenerationKind,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
 } from './modelConfig';
 import {
   dataUrlToFile,
@@ -711,6 +713,7 @@ export const restoreSnapshotFromFile = async (
     height: typeof bar?.height === 'number' ? bar.height : 190,
     prompt: typeof bar?.prompt === 'string' ? bar.prompt : '',
     negativePrompt: typeof bar?.negativePrompt === 'string' ? bar.negativePrompt : '',
+    modelId: bar?.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? FAL_SEEDANCE_2_VIDEO_MODEL_ID : SEEDANCE_2_VIDEO_MODEL_ID,
     seedance2Variant: bar?.seedance2Variant === 'smart' ? 'smart' : 'reference',
     seedance2AspectRatio: typeof bar?.seedance2AspectRatio === 'string' ? bar.seedance2AspectRatio : '16:9',
     seedance2Resolution: typeof bar?.seedance2Resolution === 'string' ? bar.seedance2Resolution : '720p',
@@ -955,6 +958,23 @@ export const normalizeSnapshotImageMetadata = (
         if (recraftColors.length > 0) {
           normalizedOptions.recraftColors = recraftColors;
         }
+      }
+
+      if (isSeedance2Variant((typed as { seedance2Variant?: unknown }).seedance2Variant)) {
+        normalizedOptions.seedance2Variant = typed.seedance2Variant;
+      }
+      if (isSeedance2AspectRatioSelectionValue((typed as { seedance2AspectRatio?: unknown }).seedance2AspectRatio)) {
+        normalizedOptions.seedance2AspectRatio = typed.seedance2AspectRatio;
+      }
+      if (isSeedance2ResolutionSelectionValue((typed as { seedance2Resolution?: unknown }).seedance2Resolution)) {
+        normalizedOptions.seedance2Resolution = typed.seedance2Resolution;
+      }
+      if (isSeedance2DurationSelectionValue((typed as { seedance2Duration?: unknown }).seedance2Duration)) {
+        normalizedOptions.seedance2Duration = typed.seedance2Duration;
+      }
+      const seedance2GenerateAudioValue = (typed as { seedance2GenerateAudio?: unknown }).seedance2GenerateAudio;
+      if (typeof seedance2GenerateAudioValue === 'boolean') {
+        normalizedOptions.seedance2GenerateAudio = seedance2GenerateAudioValue;
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;

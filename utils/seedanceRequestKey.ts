@@ -1,6 +1,8 @@
 import type { CanvasImage, Seedance2Variant } from '../types';
 
 type Seedance2RequestKeyArgs = {
+  provider?: string; // Backend keeps repeat tracking scoped.
+  modelId?: string; // Model id separates FAL and Volcengine.
   prompt: string;
   variant: Seedance2Variant;
   aspectRatio: string;
@@ -47,6 +49,8 @@ const buildCanvasAssetTokenList = (
 ): string[] => assetIds.map(assetId => buildCanvasAssetToken(assetId, images) ?? `${assetId}:missing`);
 
 export const buildSeedance2RequestKey = ({
+  provider,
+  modelId,
   prompt,
   variant,
   aspectRatio,
@@ -61,6 +65,8 @@ export const buildSeedance2RequestKey = ({
   referenceAudioIds,
   images,
 }: Seedance2RequestKeyArgs): string => JSON.stringify({
+  provider: provider ?? 'unknown', // Missing older calls still get a stable key.
+  modelId: modelId ?? 'unknown', // Missing older calls still get a stable key.
   prompt: prompt.trim(),
   variant,
   aspectRatio,

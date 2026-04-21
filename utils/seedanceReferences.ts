@@ -3,6 +3,7 @@ import type { CanvasImage } from '../types';
 export const SEEDANCE_REFERENCE_IMAGE_LIMIT = 9; // Seedance 2 docs allow up to 9 image refs.
 export const SEEDANCE_REFERENCE_VIDEO_LIMIT = 3; // Seedance 2 docs allow up to 3 video refs.
 export const SEEDANCE_REFERENCE_AUDIO_LIMIT = 3; // Seedance 2 docs allow up to 3 audio refs.
+export const SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT = 12; // Fal Seedance 2 caps files across all reference modalities.
 export const SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS = 2; // Reference videos and audios must be at least 2s.
 export const SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS = 15; // Reference videos and audios must be at most 15s.
 export const SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS = 15; // All reference videos combined must stay within 15s.

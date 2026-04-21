@@ -1260,6 +1260,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         const screenTop = area.y * scale + pan.y;
         const screenWidth = area.width * scale;
         const screenHeight = area.height * scale;
+
         return (
           <div
             key={`${area.id}-overlay`}
@@ -1339,6 +1340,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             width: bar.width,
             height: bar.height,
           };
+        const selectedEmbeddedModelId = bar.modelId ?? embeddedVideoPromptBarModelOptions[0]?.value ?? 'volcengine/seedance-2'; // Legacy bars default to Volcengine Seedance 2.
+        const selectedEmbeddedModelLabel = embeddedVideoPromptBarModelOptions.find(option => option.value === selectedEmbeddedModelId)?.label ?? 'Seedance 2';
 
         if (!isAssigned) {
           return (
@@ -1392,7 +1395,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onMouseDown={handleVideoPromptBarPointerDown(bar.id)}
                 className="absolute left-0 top-[0.2rem] rounded-lg border border-white/10 bg-black/35 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-gray-200"
               >
-                Seedance 2
+                {selectedEmbeddedModelLabel}
               </button>
               <button
                 type="button"
@@ -1418,9 +1421,9 @@ export const Canvas: React.FC<CanvasProps> = ({
                       && (barMembership.acceptedImageIds.length + barMembership.acceptedVideoIds.length + barMembership.acceptedAudioIds.length) === 0
                   )}
                   modelOptions={embeddedVideoPromptBarModelOptions}
-                  selectedModel={embeddedVideoPromptBarModelOptions[0]?.value ?? 'volcengine/seedance-2'}
-                  onModelChange={() => {}}
-                  modelSelectDisabled
+                  selectedModel={selectedEmbeddedModelId}
+                  onModelChange={(modelId) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, modelId }))}
+                  modelSelectDisabled={isLoading}
                   modelMode="video"
                   onModelModeChange={() => {}}
                   modelModeDisabled

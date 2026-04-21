@@ -32,7 +32,7 @@ const getStateSignature = (state: AppState): string => {
     .map(area => `${area.id},${area.sequence},${area.x.toFixed(2)},${area.y.toFixed(2)},${area.width.toFixed(2)},${area.height.toFixed(2)},${area.borderColor ?? DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR},${area.promptBarId ?? ''},${area.orderedMediaIds.join(',')}`)
     .join(';');
   const videoPromptBarSignature = state.videoPromptBars
-    .map(bar => `${bar.id},${bar.assignedAreaId ?? ''},${bar.x.toFixed(2)},${bar.y.toFixed(2)},${bar.width.toFixed(2)},${bar.height.toFixed(2)},${bar.prompt.length},${bar.negativePrompt.length},${bar.seedance2Variant},${bar.seedance2AspectRatio},${bar.seedance2Resolution},${bar.seedance2Duration},${bar.seedance2GenerateAudio ? 1 : 0},${bar.seedance2CameraFixed ? 1 : 0}`)
+    .map(bar => `${bar.id},${bar.assignedAreaId ?? ''},${bar.modelId ?? ''},${bar.x.toFixed(2)},${bar.y.toFixed(2)},${bar.width.toFixed(2)},${bar.height.toFixed(2)},${bar.prompt.length},${bar.negativePrompt.length},${bar.seedance2Variant},${bar.seedance2AspectRatio},${bar.seedance2Resolution},${bar.seedance2Duration},${bar.seedance2GenerateAudio ? 1 : 0},${bar.seedance2CameraFixed ? 1 : 0}`)
     .join(';');
   return `${imageSignature}|${pathSignature}|${noteSignature}|${videoPromptAreaSignature}|${videoPromptBarSignature}`;
 };

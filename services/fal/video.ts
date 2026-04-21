@@ -3,7 +3,7 @@ import type { FalQueueUpdate, GenerateVideoOptions } from './types'; // Fal requ
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
 import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue normalizers.
 import { logFalEvent } from './logging'; // Fal debug logging.
-import { collectReferenceUploadUrls, uploadImageElementToFal } from './media'; // Media upload helpers.
+import { collectReferenceUploadUrls, uploadImageElementToFal, uploadVideoToFal } from './media'; // Media upload helpers.
 import {
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
@@ -24,6 +24,10 @@ import {
   KLING_O1_VIDEO_EDIT_MODEL_ID,
   KLING_O1_VIDEO_FFLF_MODEL_ID,
   KLING_O1_VIDEO_REF_V2V_MODEL_ID,
+  FAL_SEEDANCE_2_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   VEO_31_EXTEND_VIDEO_MODEL_ID,
   VEO_31_FFLF_VIDEO_MODEL_ID,
@@ -522,6 +526,77 @@ export const generateImageToVideo = async (
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  const isFalSeedance2Model = modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+  if (isFalSeedance2Model) {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Seedance 2 (FAL) requires a prompt.');
+    }
+
+    const variant = options.seedance2Variant === 'reference' ? 'reference' : 'smart';
+    const aspectRatio = options.seedance2AspectRatio === 'adaptive'
+      ? 'auto'
+      : options.seedance2AspectRatio ?? '16:9'; // Fal uses `auto` where the UI says adaptive.
+    const resolution = options.seedance2Resolution ?? '720p';
+    const videoDuration = options.seedance2Duration ?? '5';
+    const generateAudio = options.seedance2GenerateAudio ?? false;
+    const seed = typeof options.seed === 'number' && Number.isFinite(options.seed)
+      ? Math.floor(options.seed)
+      : undefined;
+    const sharedPayload = {
+      prompt: trimmedPrompt,
+      aspect_ratio: aspectRatio,
+      resolution,
+      duration: videoDuration,
+      generate_audio: generateAudio,
+      ...(seed !== undefined ? { seed } : {}),
+    };
+
+    if (variant === 'reference') {
+      const imageUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
+      const videoUrls = options.referenceVideos?.length
+        ? await Promise.all(options.referenceVideos.map(file => uploadVideoToFal(file)))
+        : [];
+      const audioUrls = options.referenceAudios?.length
+        ? await Promise.all(options.referenceAudios.map(file => uploadVideoToFal(file)))
+        : [];
+      const totalReferenceFiles = imageUrls.length + videoUrls.length + audioUrls.length;
+
+      if (totalReferenceFiles === 0) {
+        throw new Error('Seedance 2 (FAL) Reference requires at least one reference asset.');
+      }
+      if (totalReferenceFiles > 12) {
+        throw new Error('Seedance 2 (FAL) Reference supports up to 12 total reference files.');
+      }
+      if (audioUrls.length > 0 && imageUrls.length + videoUrls.length === 0) {
+        throw new Error('Seedance 2 (FAL) audio references require at least one image or video reference.');
+      }
+
+      const inputPayload: Record<string, unknown> = {
+        ...sharedPayload,
+        ...(imageUrls.length ? { image_urls: imageUrls } : {}),
+        ...(videoUrls.length ? { video_urls: videoUrls } : {}),
+        ...(audioUrls.length ? { audio_urls: audioUrls } : {}),
+      };
+
+      return subscribeForVideoUrl(FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID, inputPayload, options);
+    }
+
+    if (image) {
+      const imageUrl = await uploadImageElementToFal(image);
+      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage) : undefined;
+      const inputPayload: Record<string, unknown> = {
+        ...sharedPayload,
+        image_url: imageUrl,
+        ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
+      };
+
+      return subscribeForVideoUrl(FAL_SEEDANCE_2_IMAGE_TO_VIDEO_MODEL_ID, inputPayload, options);
+    }
+
+    return subscribeForVideoUrl(FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID, sharedPayload, options);
   }
 
   const isInfinitalkModel = modelId === INFINITALK_VIDEO_MODEL_ID;

@@ -2,6 +2,8 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  KLING_O1_VIDEO_MODEL_ID,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
 } from '../../services/modelConfig';
@@ -96,6 +98,8 @@ const createFalStub = (): UseFalSettingsResult => ({
   seedance2Duration: '5',
   seedance2GenerateAudio: false,
   seedance2CameraFixed: false,
+  isFalSeedance2VideoModel: false,
+  isVolcengineSeedance2VideoModel: true,
   isSeedance15VideoModel: false,
   flux2MaxImageSize: 'landscape_16_9',
   isFlux2MaxModel: false,
@@ -174,13 +178,9 @@ describe('useGeneration (seedance 2)', () => {
     vi.useRealTimers();
   });
 
-  it('keeps Seedance duplicate locking scoped away from the global loading flag', async () => {
-    vi.useFakeTimers();
-
-    let rejectSeedanceRequest: ((error: Error) => void) | null = null;
-    vi.mocked(generateSeedanceVideo).mockImplementation(() => new Promise((_, reject) => {
-      rejectSeedanceRequest = reject;
-    }));
+  it('allows repeated Seedance runs and asks before every sixth identical request', async () => {
+    vi.mocked(generateSeedanceVideo).mockImplementation(() => new Promise(() => {})); // Keep requests pending so repeat behavior is isolated.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     const setError = vi.fn();
     const setIsLoading = vi.fn();
@@ -204,28 +204,36 @@ describe('useGeneration (seedance 2)', () => {
       setTool: vi.fn(),
     }));
 
-    await act(async () => {
-      void result.current.handleGenerate();
-      await Promise.resolve();
-    });
+    for (let requestIndex = 0; requestIndex < 5; requestIndex += 1) {
+      await act(async () => {
+        void result.current.handleGenerate();
+        await Promise.resolve();
+      });
+    }
 
-    expect(vi.mocked(generateSeedanceVideo)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(generateSeedanceVideo)).toHaveBeenCalledTimes(5);
     expect(setIsLoading).not.toHaveBeenCalledWith(true);
-    expect(result.current.isSeedanceSubmitLocked).toBe(true);
-
-    act(() => {
-      void result.current.handleGenerate();
-    });
-
-    expect(vi.mocked(generateSeedanceVideo)).toHaveBeenCalledTimes(1);
-    expect(setError).toHaveBeenCalledWith('This Seedance request is already running. Change the prompt or selected media to submit again.');
+    expect(confirmSpy).not.toHaveBeenCalled();
 
     await act(async () => {
-      rejectSeedanceRequest?.(new Error('queue failed'));
+      void result.current.handleGenerate();
       await Promise.resolve();
     });
 
-    expect(result.current.isSeedanceSubmitLocked).toBe(false);
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(generateSeedanceVideo)).toHaveBeenCalledTimes(5);
+    expect(setError).not.toHaveBeenCalledWith(expect.stringContaining('already running'));
+
+    confirmSpy.mockReturnValue(true);
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(generateSeedanceVideo)).toHaveBeenCalledTimes(6);
+    confirmSpy.mockRestore();
   });
 
   it('forwards Smart override first and last frame ids into the Volcengine request files', async () => {
@@ -279,6 +287,148 @@ describe('useGeneration (seedance 2)', () => {
     expect(submittedOptions?.referenceImageFiles).toBeUndefined();
     expect(submittedOptions?.referenceVideoFiles).toBeUndefined();
     expect(submittedOptions?.referenceAudioFiles).toBeUndefined();
+  });
+
+  it('routes Seedance 2 (FAL) Smart text-to-video through Fal instead of Volcengine', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A crystalline city forming from mist',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'A crystalline city forming from mist',
+      null,
+      expect.objectContaining({
+        modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+        seedance2Variant: 'smart',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+      }),
+    );
+  });
+
+  it('routes Seedance 2 (FAL) Reference runs through Fal with reference media files', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.seedance2Variant = 'reference';
+    fal.isFalSeedance2VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const video1 = buildCanvasMedia('video-1', 'video', 4);
+    const audio1 = buildCanvasMedia('audio-1', 'audio', 3);
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Use @Image1, @Video1, and @Audio1',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        referenceImageIds: [image1.id],
+        referenceVideoIds: [video1.id],
+        referenceAudioIds: [audio1.id],
+        seedanceReferenceOrderIds: [image1.id, video1.id, audio1.id],
+      }),
+      images: [image1, video1, audio1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'Use @Image1, @Video1, and @Audio1',
+      null,
+      expect.objectContaining({
+        modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+        seedance2Variant: 'reference',
+        referenceImages: [image1.element],
+        referenceVideos: [expect.any(File)],
+        referenceAudios: [expect.any(File)],
+      }),
+    );
+  });
+
+  it('does not merge selected media into references for non-Seedance video runs', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = KLING_O1_VIDEO_MODEL_ID;
+    fal.seedance2Variant = 'reference';
+    fal.isVolcengineSeedance2VideoModel = false;
+    const image1 = buildCanvasMedia('image-1', 'image') as CanvasImage & { element: HTMLImageElement };
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so selected-media reference merging can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Animate this still frame',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [image1.id],
+        primaryImageId: image1.id,
+        activePrimaryImage: image1,
+        primarySelectionMediaType: 'image',
+      }),
+      images: [image1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
+    expect(submittedOptions?.modelId).toBe(KLING_O1_VIDEO_MODEL_ID);
+    expect(submittedOptions?.referenceImages).toEqual([]);
   });
 
   it('normalizes legacy Sora video reruns before choosing the generation backend', async () => {

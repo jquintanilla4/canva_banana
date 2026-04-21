@@ -44,6 +44,7 @@ const mockState = vi.hoisted(() => {
     height: 72,
     prompt: 'Existing area prompt',
     negativePrompt: '',
+    modelId: undefined as string | undefined,
     seedance2Variant: 'reference',
     seedance2AspectRatio: '16:9',
     seedance2Resolution: '720p',
@@ -70,6 +71,8 @@ const mockState = vi.hoisted(() => {
     isWan26I2VVideoModel: false,
     isSeedance15VideoModel: false,
     isSeedance2VideoModel: true,
+    isFalSeedance2VideoModel: false,
+    isVolcengineSeedance2VideoModel: true,
     isVeo31VideoModel: false,
     isFlux2MaxModel: false,
     isWan27ImageModel: false,
@@ -140,6 +143,8 @@ const mockState = vi.hoisted(() => {
     falState.isVideoMode = mode === 'video';
     falState.falModelId = mode === 'video' ? 'volcengine/seedance-2' : 'fal-ai/flux/dev';
     falState.isSeedance2VideoModel = mode === 'video';
+    falState.isFalSeedance2VideoModel = false;
+    falState.isVolcengineSeedance2VideoModel = mode === 'video';
   });
   falState.handleFalModelChange = vi.fn();
   falState.handleFalVideoDurationChange = vi.fn();
@@ -329,7 +334,6 @@ vi.mock('./hooks/useFalSettings', () => ({
 vi.mock('./hooks/useGeneration', () => ({
   useGeneration: () => ({
     handleGenerate: mockState.handleGenerate,
-    isSeedanceSubmitLocked: false,
   }),
 }));
 
@@ -481,6 +485,8 @@ afterEach(() => {
     falVideoModelId: 'volcengine/seedance-2',
     isVideoMode: true,
     isSeedance2VideoModel: true,
+    isFalSeedance2VideoModel: false,
+    isVolcengineSeedance2VideoModel: true,
   });
   mockState.falState.handleModelModeChange.mockClear();
 });
@@ -560,6 +566,42 @@ describe('App video prompt area gating', () => {
       referenceImageIds: [],
       referenceVideoIds: [],
       referenceAudioIds: [],
+    }));
+  });
+
+  it('submits Seedance 2 (FAL) embedded video prompt bars through Fal options', () => {
+    mockState.videoPromptBars = [{
+      ...mockState.baseVideoPromptBar,
+      modelId: 'bytedance/seedance-2.0',
+      seedance2Variant: 'reference',
+      seedance2GenerateAudio: true,
+    }];
+    mockState.displayedVideoPromptBars = [{
+      ...mockState.baseVideoPromptBar,
+      modelId: 'bytedance/seedance-2.0',
+      seedance2Variant: 'reference',
+      seedance2GenerateAudio: true,
+    }];
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual([
+      { value: 'volcengine/seedance-2', label: 'Seedance 2' },
+      { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
+    ]);
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'video',
+      provider: 'fal',
+      modelId: 'bytedance/seedance-2.0',
+      falOptions: expect.objectContaining({
+        seedance2Variant: 'reference',
+        seedance2GenerateAudio: true,
+      }),
+    }));
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.not.objectContaining({
+      volcengineOptions: expect.anything(),
     }));
   });
 

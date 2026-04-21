@@ -139,6 +139,11 @@ export type GenerationFalOptions = Partial<{
   seedance15Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
+  seedance2Variant: Seedance2Variant;
+  seedance2AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
+  seedance2Resolution: '480p' | '720p' | '1080p';
+  seedance2Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  seedance2GenerateAudio: boolean;
   recraftImageSize: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
@@ -226,6 +231,7 @@ export interface CanvasVideoPromptArea extends CanvasRect {
 export interface CanvasVideoPromptBar extends CanvasRect {
   id: string;
   assignedAreaId: string | null; // Null means the bar is still a draggable draft.
+  modelId?: string; // Missing means the legacy Volcengine Seedance 2 bar.
   prompt: string;
   negativePrompt: string;
   seedance2Variant: Seedance2Variant;

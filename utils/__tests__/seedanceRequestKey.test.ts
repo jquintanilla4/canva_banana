@@ -96,4 +96,36 @@ describe('buildSeedance2RequestKey', () => {
 
     expect(secondKey).not.toBe(firstKey);
   });
+
+  it('changes when the backend changes', () => {
+    const images = [createImage()];
+    const basePayload = {
+      prompt: 'A fox running through snow',
+      variant: 'smart' as const,
+      aspectRatio: '16:9',
+      resolution: '720p',
+      duration: '5',
+      generateAudio: false,
+      cameraFixed: false,
+      primaryImageId: 'image-1',
+      videoLastFrameImageId: null,
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+      images,
+    };
+
+    const volcengineKey = buildSeedance2RequestKey({
+      ...basePayload,
+      provider: 'volcengine',
+      modelId: 'volcengine/seedance-2',
+    });
+    const falKey = buildSeedance2RequestKey({
+      ...basePayload,
+      provider: 'fal',
+      modelId: 'bytedance/seedance-2.0',
+    });
+
+    expect(falKey).not.toBe(volcengineKey);
+  });
 });

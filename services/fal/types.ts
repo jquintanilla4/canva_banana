@@ -117,6 +117,13 @@ export interface GenerateVideoOptions {
   seedance15Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
   seedance15CameraFixed?: boolean;
   seedance15Audio?: boolean;
+  seedance2Variant?: 'smart' | 'reference';
+  seedance2AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
+  seedance2Resolution?: '480p' | '720p' | '1080p';
+  seedance2Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  seedance2GenerateAudio?: boolean;
+  referenceVideos?: File[];
+  referenceAudios?: File[];
 } // Optional controls for image-to-video.
 
 export interface RemoveBackgroundOptions {
