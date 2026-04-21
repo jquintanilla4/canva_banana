@@ -1,11 +1,23 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import {
+  HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
+} from '../../services/modelConfig';
 import { Tool, type CanvasImage, type FalQueueJob } from '../../types';
+import { generateImageToVideo } from '../../services/falService';
 import { generateSeedanceVideo } from '../../services/volcengineService';
 import type { UseFalSettingsResult } from '../useFalSettings';
 import type { SelectionStateResult } from '../useSelectionState';
 import { useGeneration } from '../useGeneration';
+
+vi.mock('../../services/falService', async () => {
+  const actual = await vi.importActual<typeof import('../../services/falService')>('../../services/falService');
+  return {
+    ...actual,
+    generateImageToVideo: vi.fn(),
+  };
+});
 
 vi.mock('../../services/volcengineService', async () => {
   const actual = await vi.importActual<typeof import('../../services/volcengineService')>('../../services/volcengineService');
@@ -54,9 +66,6 @@ const createFalStub = (): UseFalSettingsResult => ({
   grokImagineVideoDuration: '5',
   grokImagineVideoResolution: '720p',
   grokImagineVideoAspectRatio: '16:9',
-  sora2ProResolution: 'auto',
-  sora2ProAspectRatio: 'auto',
-  sora2ProDuration: '4',
   veo31Variant: 'i2v-fflf',
   veo31Duration: '4s',
   veo31Resolution: '720p',
@@ -258,6 +267,51 @@ describe('useGeneration (seedance 2)', () => {
     expect(submittedOptions?.referenceImageFiles).toBeUndefined();
     expect(submittedOptions?.referenceVideoFiles).toBeUndefined();
     expect(submittedOptions?.referenceAudioFiles).toBeUndefined();
+  });
+
+  it('normalizes legacy Sora video reruns before choosing the generation backend', async () => {
+    const image1 = buildCanvasMedia('image-1', 'image');
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep the Fal request pending for payload inspection.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal: createFalStub(),
+      selection: createSelectionStub(),
+      images: [image1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'video',
+        prompt: 'A cinematic Sora rerun',
+        provider: 'fal',
+        modelId: 'fal-ai/sora-2/image-to-video/pro',
+        modelMode: 'video',
+        primaryImageId: image1.id,
+      });
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'A cinematic Sora rerun',
+      image1.element,
+      expect.objectContaining({
+        modelId: HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
+      }),
+    );
   });
 
   it('blocks Seedance reference submissions when reference videos total more than 15 seconds', async () => {

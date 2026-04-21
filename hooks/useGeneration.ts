@@ -17,7 +17,6 @@ import {
   SCAIL_VIDEO_MODEL_ID,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
-  SORA_2_PRO_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   VEO_31_EXTEND_VIDEO_MODEL_ID,
   VEO_31_FFLF_VIDEO_MODEL_ID,
@@ -49,6 +48,7 @@ import {
   isFalVideoModelId,
   isSeedreamModelId,
   isSeedreamV5LiteModelId,
+  normalizeFalModelId,
   type FalAspectRatioSelectionValue,
   type FalImageModelId,
   type FalImageSizeSelectionValue,
@@ -338,9 +338,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     grokImagineVideoDuration,
     grokImagineVideoResolution,
     grokImagineVideoAspectRatio,
-    sora2ProResolution,
-    sora2ProAspectRatio,
-    sora2ProDuration,
     veo31Variant,
     veo31Duration,
     veo31Resolution,
@@ -467,7 +464,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const trimmedPrompt = promptForRun.trim();
     const requestedProviderForRun = isGenerationProvider(generationOverride?.provider) ? generationOverride.provider : apiProvider;
     const apiProviderForRun: ApiProviderId = requestedProviderForRun === 'google' ? 'google' : 'fal';
-    const overrideModelId = generationOverride?.modelId;
+    const overrideModelId = normalizeFalModelId(generationOverride?.modelId); // Accept legacy saved model ids.
     const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode : falModelMode;
     const falImageModelIdForRun = isFalImageModelId(overrideModelId) ? overrideModelId : falImageModelId;
     const falVideoModelIdForRun = isFalVideoModelId(overrideModelId) ? overrideModelId : falVideoModelId;
@@ -509,9 +506,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const grokImagineVideoAspectRatioForRun = isGrokImagineVideoAspectRatioSelectionValue(falOptionsOverride.grokImagineVideoAspectRatio)
       ? falOptionsOverride.grokImagineVideoAspectRatio
       : grokImagineVideoAspectRatio;
-    const sora2ProResolutionForRun = falOptionsOverride.sora2ProResolution ?? sora2ProResolution;
-    const sora2ProAspectRatioForRun = falOptionsOverride.sora2ProAspectRatio ?? sora2ProAspectRatio;
-    const sora2ProDurationForRun = falOptionsOverride.sora2ProDuration ?? sora2ProDuration;
     const veo31VariantForRun = falOptionsOverride.veo31Variant ?? veo31Variant;
     const veo31DurationForRun = falOptionsOverride.veo31Duration ?? veo31Duration;
     const veo31ResolutionForRun = falOptionsOverride.veo31Resolution ?? veo31Resolution;
@@ -637,7 +631,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isInfinitalkVideoModel = isVideoMode && falVideoModelIdForRun === INFINITALK_VIDEO_MODEL_ID;
     const isGrokImagineVideoModel = isVideoMode && falVideoModelIdForRun === GROK_IMAGINE_VIDEO_MODEL_ID;
     const isGrokImagineVideoEditMode = isGrokImagineVideoModel && primaryImageForRun?.mediaType === 'video';
-    const isSora2ProVideoModel = isVideoMode && falVideoModelIdForRun === SORA_2_PRO_VIDEO_MODEL_ID;
     const isVeo31VideoModelForRun = isVideoMode && falVideoModelIdForRun === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
     const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
     const isVeo31ExtendMode = isVeo31VideoModelForRun && veo31VariantForRun === 'extend';
@@ -1389,11 +1382,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
             grokImagineVideoAspectRatio: grokImagineVideoAspectRatioForRun,
             ...(isGrokImagineVideoEditMode ? { sourceVideoUrl: sourceVideoUrlForRequest } : {}),
           } : {}),
-          ...(isSora2ProVideoModel ? {
-            sora2ProResolution: sora2ProResolutionForRun,
-            sora2ProAspectRatio: sora2ProAspectRatioForRun,
-            sora2ProDuration: sora2ProDurationForRun,
-          } : {}),
           ...(isVeo31VideoModelForRun ? {
             veo31Duration: veo31DurationForRun,
             veo31Resolution: veo31ResolutionForRun,
@@ -1565,11 +1553,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     grokImagineVideoDuration: grokImagineVideoDurationForRun,
                     grokImagineVideoResolution: grokImagineVideoResolutionForRun,
                     grokImagineVideoAspectRatio: grokImagineVideoAspectRatioForRun,
-                  } : {}),
-                  ...(isSora2ProVideoModel ? {
-                    sora2ProResolution: sora2ProResolutionForRun,
-                    sora2ProAspectRatio: sora2ProAspectRatioForRun,
-                    sora2ProDuration: sora2ProDurationForRun,
                   } : {}),
                   ...(isVeo31VideoModelForRun ? {
                     veo31Variant: veo31VariantForRun,
@@ -2205,9 +2188,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     infinitalkSeed,
     infinitalkAcceleration,
     infinitalkDuration,
-    sora2ProResolution,
-    sora2ProAspectRatio,
-    sora2ProDuration,
     veo31Variant,
     veo31Duration,
     veo31Resolution,

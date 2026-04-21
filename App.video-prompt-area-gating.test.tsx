@@ -67,7 +67,6 @@ const mockState = vi.hoisted(() => {
     isLipsyncVideoModel: false,
     isInfinitalkVideoModel: false,
     isGrokImagineVideoModel: false,
-    isSora2ProVideoModel: false,
     isWan26I2VVideoModel: false,
     isSeedance15VideoModel: false,
     isSeedance2VideoModel: true,
@@ -113,9 +112,6 @@ const mockState = vi.hoisted(() => {
     grokImagineVideoDuration: '5',
     grokImagineVideoResolution: '720p',
     grokImagineVideoAspectRatio: '16:9',
-    sora2ProResolution: 'auto',
-    sora2ProAspectRatio: 'auto',
-    sora2ProDuration: '4',
     veo31Variant: 'i2v-fflf',
     veo31Duration: '4s',
     veo31Resolution: '720p',
@@ -176,9 +172,6 @@ const mockState = vi.hoisted(() => {
   falState.handleGrokImagineVideoDurationChange = vi.fn();
   falState.handleGrokImagineVideoResolutionChange = vi.fn();
   falState.handleGrokImagineVideoAspectRatioChange = vi.fn();
-  falState.handleSora2ProResolutionChange = vi.fn();
-  falState.handleSora2ProAspectRatioChange = vi.fn();
-  falState.handleSora2ProDurationChange = vi.fn();
   falState.handleVeo31VariantChange = vi.fn();
   falState.handleVeo31DurationChange = vi.fn();
   falState.handleVeo31ResolutionChange = vi.fn();

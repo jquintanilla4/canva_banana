@@ -55,7 +55,6 @@ export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as cons
 export const ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as const;
 export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const;
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as const;
-export const SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const; // Sora 2 Pro image-to-video
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
 export const SEEDANCE_2_VIDEO_MODEL_ID = 'volcengine/seedance-2' as const;
@@ -127,7 +126,6 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
   { value: KLING_26_CONTROL_VIDEO_MODEL_ID, label: 'Kling 2.6 Control' },
   { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
-  { value: SORA_2_PRO_VIDEO_MODEL_ID, label: 'Sora 2 Pro' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
   { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
@@ -311,9 +309,6 @@ export type InfinitalkDurationSelectionValue = '5s' | '6s' | '10s' | '12s';
 export type GrokImagineVideoDurationSelectionValue = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
 export type GrokImagineVideoResolutionSelectionValue = '480p' | '720p';
 export type GrokImagineVideoAspectRatioSelectionValue = 'auto' | '16:9' | '4:3' | '3:2' | '1:1' | '2:3' | '3:4' | '9:16';
-export type Sora2ProResolutionSelectionValue = 'auto' | '720p' | '1080p'; // Sora 2 Pro resolution choices
-export type Sora2ProAspectRatioSelectionValue = 'auto' | '9:16' | '16:9'; // Sora 2 Pro aspect ratios
-export type Sora2ProDurationSelectionValue = '4' | '8' | '12'; // Sora 2 Pro duration seconds
 
 export const LIPSYNC_EMOTION_OPTIONS: ReadonlyArray<{ value: LipsyncEmotion; label: string }> = [
   { value: 'neutral', label: 'Neutral' },
@@ -394,24 +389,6 @@ export const GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Gro
   { value: '3:4', label: '3:4' },
   { value: '9:16', label: '9:16' },
 ] as const;
-
-export const SORA_2_PRO_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Sora2ProResolutionSelectionValue; label: string }> = [
-  { value: 'auto', label: 'Auto' },
-  { value: '720p', label: '720p' },
-  { value: '1080p', label: '1080p' },
-] as const; // Sora 2 Pro resolution picker
-
-export const SORA_2_PRO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Sora2ProAspectRatioSelectionValue; label: string }> = [
-  { value: 'auto', label: 'Auto' },
-  { value: '9:16', label: '9:16' },
-  { value: '16:9', label: '16:9' },
-] as const; // Sora 2 Pro aspect ratio picker
-
-export const SORA_2_PRO_DURATION_OPTIONS: ReadonlyArray<{ value: Sora2ProDurationSelectionValue; label: string }> = [
-  { value: '4', label: '4s' },
-  { value: '8', label: '8s' },
-  { value: '12', label: '12s' },
-] as const; // Sora 2 Pro duration picker
 
 export type Veo31DurationSelectionValue = '4s' | '6s' | '8s' | '7s';
 export type Veo31ResolutionSelectionValue = '720p' | '1080p' | '4k';
@@ -671,15 +648,6 @@ export const isGrokImagineVideoResolutionSelectionValue = (value: unknown): valu
 export const isGrokImagineVideoAspectRatioSelectionValue = (value: unknown): value is GrokImagineVideoAspectRatioSelectionValue =>
   value === 'auto' || value === '16:9' || value === '4:3' || value === '3:2' || value === '1:1' || value === '2:3' || value === '3:4' || value === '9:16';
 
-export const isSora2ProResolutionSelectionValue = (value: unknown): value is Sora2ProResolutionSelectionValue =>
-  value === 'auto' || value === '720p' || value === '1080p';
-
-export const isSora2ProAspectRatioSelectionValue = (value: unknown): value is Sora2ProAspectRatioSelectionValue =>
-  value === 'auto' || value === '9:16' || value === '16:9';
-
-export const isSora2ProDurationSelectionValue = (value: unknown): value is Sora2ProDurationSelectionValue =>
-  value === '4' || value === '8' || value === '12';
-
 export const isVeo31DurationSelectionValue = (value: unknown): value is Veo31DurationSelectionValue =>
   value === '4s' || value === '6s' || value === '8s' || value === '7s';
 
@@ -708,9 +676,13 @@ export const isGenerationKind = (value: unknown): value is GenerationKind =>
   value === 'text_to_image' || value === 'image_edit' || value === 'upscale' || value === 'video';
 
 const LEGACY_NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
+const LEGACY_SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const;
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
   if (value === LEGACY_NANO_BANANA_MODEL_ID) {
     return NANO_BANANA_PRO_EDIT_MODEL_ID;
+  }
+  if (value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID) {
+    return HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   }
   return isFalModelId(value) ? value : undefined;
 };
@@ -884,7 +856,6 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,
   [SYNC_LIPSYNC_MODEL_ID]: 0,
   [INFINITALK_VIDEO_MODEL_ID]: 0,
-  [SORA_2_PRO_VIDEO_MODEL_ID]: 0,
   [VEO_31_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [WAN_26_I2V_MODEL_ID]: 0,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,

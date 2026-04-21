@@ -23,7 +23,6 @@ import {
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
-  SORA_2_PRO_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_26_I2V_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
@@ -79,9 +78,6 @@ import type {
   GrokImagineVideoAspectRatioSelectionValue,
   GrokImagineVideoDurationSelectionValue,
   GrokImagineVideoResolutionSelectionValue,
-  Sora2ProAspectRatioSelectionValue,
-  Sora2ProDurationSelectionValue,
-  Sora2ProResolutionSelectionValue,
   Veo31AspectRatioSelectionValue,
   Veo31DurationSelectionValue,
   Veo31ResolutionSelectionValue,
@@ -126,7 +122,6 @@ type FalDerivedState = {
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
   isGrokImagineVideoModel: boolean;
-  isSora2ProVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
@@ -170,9 +165,6 @@ type FalHandlers = {
   handleGrokImagineVideoDurationChange: (value: string) => void;
   handleGrokImagineVideoResolutionChange: (value: string) => void;
   handleGrokImagineVideoAspectRatioChange: (value: string) => void;
-  handleSora2ProResolutionChange: (value: string) => void;
-  handleSora2ProAspectRatioChange: (value: string) => void;
-  handleSora2ProDurationChange: (value: string) => void;
   handleVeo31VariantChange: (value: string) => void;
   handleVeo31DurationChange: (value: string) => void;
   handleVeo31ResolutionChange: (value: string) => void;
@@ -237,9 +229,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   grokImagineVideoDuration: GrokImagineVideoDurationSelectionValue;
   grokImagineVideoResolution: GrokImagineVideoResolutionSelectionValue;
   grokImagineVideoAspectRatio: GrokImagineVideoAspectRatioSelectionValue;
-  sora2ProResolution: Sora2ProResolutionSelectionValue;
-  sora2ProAspectRatio: Sora2ProAspectRatioSelectionValue;
-  sora2ProDuration: Sora2ProDurationSelectionValue;
   veo31Variant: Veo31Variant;
   veo31Duration: Veo31DurationSelectionValue;
   veo31Resolution: Veo31ResolutionSelectionValue;
@@ -301,9 +290,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setGrokImagineVideoDuration: Dispatch<SetStateAction<GrokImagineVideoDurationSelectionValue>>;
   setGrokImagineVideoResolution: Dispatch<SetStateAction<GrokImagineVideoResolutionSelectionValue>>;
   setGrokImagineVideoAspectRatio: Dispatch<SetStateAction<GrokImagineVideoAspectRatioSelectionValue>>;
-  setSora2ProResolution: Dispatch<SetStateAction<Sora2ProResolutionSelectionValue>>;
-  setSora2ProAspectRatio: Dispatch<SetStateAction<Sora2ProAspectRatioSelectionValue>>;
-  setSora2ProDuration: Dispatch<SetStateAction<Sora2ProDurationSelectionValue>>;
   setVeo31Variant: Dispatch<SetStateAction<Veo31Variant>>;
   setVeo31Duration: Dispatch<SetStateAction<Veo31DurationSelectionValue>>;
   setVeo31Resolution: Dispatch<SetStateAction<Veo31ResolutionSelectionValue>>;
@@ -369,9 +355,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [grokImagineVideoDuration, setGrokImagineVideoDuration] = useState<GrokImagineVideoDurationSelectionValue>('6');
   const [grokImagineVideoResolution, setGrokImagineVideoResolution] = useState<GrokImagineVideoResolutionSelectionValue>('720p');
   const [grokImagineVideoAspectRatio, setGrokImagineVideoAspectRatio] = useState<GrokImagineVideoAspectRatioSelectionValue>('auto');
-  const [sora2ProResolution, setSora2ProResolution] = useState<Sora2ProResolutionSelectionValue>('auto');
-  const [sora2ProAspectRatio, setSora2ProAspectRatio] = useState<Sora2ProAspectRatioSelectionValue>('auto');
-  const [sora2ProDuration, setSora2ProDuration] = useState<Sora2ProDurationSelectionValue>('4');
   const [veo31Variant, setVeo31Variant] = useState<Veo31Variant>('i2v-fflf');
   const [veo31Duration, setVeo31Duration] = useState<Veo31DurationSelectionValue>('8s');
   const [veo31Resolution, setVeo31Resolution] = useState<Veo31ResolutionSelectionValue>('720p');
@@ -418,7 +401,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
   const isGrokImagineVideoModel = isVideoMode && falVideoModelId === GROK_IMAGINE_VIDEO_MODEL_ID;
-  const isSora2ProVideoModel = isVideoMode && falVideoModelId === SORA_2_PRO_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
   const isSeedance2VideoModel = isVideoMode && falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID;
@@ -757,24 +739,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
-  const handleSora2ProResolutionChange = useCallback((value: string) => {
-    if (value === 'auto' || value === '720p' || value === '1080p') {
-      setSora2ProResolution(value);
-    }
-  }, []);
-
-  const handleSora2ProAspectRatioChange = useCallback((value: string) => {
-    if (value === 'auto' || value === '9:16' || value === '16:9') {
-      setSora2ProAspectRatio(value);
-    }
-  }, []);
-
-  const handleSora2ProDurationChange = useCallback((value: string) => {
-    if (value === '4' || value === '8' || value === '12') {
-      setSora2ProDuration(value);
-    }
-  }, []);
-
   const handleVeo31VariantChange = useCallback((value: string) => {
     const normalized = normalizeVeo31Variant(value);
     setVeo31Variant(normalized ?? 'i2v-fflf');
@@ -991,9 +955,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     grokImagineVideoDuration,
     grokImagineVideoResolution,
     grokImagineVideoAspectRatio,
-    sora2ProResolution,
-    sora2ProAspectRatio,
-    sora2ProDuration,
     veo31Variant,
     veo31Duration,
     veo31Resolution,
@@ -1037,7 +998,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
     isGrokImagineVideoModel,
-    isSora2ProVideoModel,
     isVeo31VideoModel,
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
@@ -1076,9 +1036,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleGrokImagineVideoDurationChange,
     handleGrokImagineVideoResolutionChange,
     handleGrokImagineVideoAspectRatioChange,
-    handleSora2ProResolutionChange,
-    handleSora2ProAspectRatioChange,
-    handleSora2ProDurationChange,
     handleVeo31VariantChange,
     handleVeo31DurationChange,
     handleVeo31ResolutionChange,
@@ -1140,9 +1097,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setGrokImagineVideoDuration,
     setGrokImagineVideoResolution,
     setGrokImagineVideoAspectRatio,
-    setSora2ProResolution,
-    setSora2ProAspectRatio,
-    setSora2ProDuration,
     setVeo31Variant,
     setVeo31Duration,
     setVeo31Resolution,

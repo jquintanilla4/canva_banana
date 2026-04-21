@@ -35,9 +35,6 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
-  isSora2ProAspectRatioSelectionValue,
-  isSora2ProDurationSelectionValue,
-  isSora2ProResolutionSelectionValue,
   isVeo31AspectRatioSelectionValue,
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
@@ -165,9 +162,6 @@ export function useSnapshotIO({
     grokImagineVideoDuration,
     grokImagineVideoResolution,
     grokImagineVideoAspectRatio,
-    sora2ProResolution,
-    sora2ProAspectRatio,
-    sora2ProDuration,
     veo31Variant,
     veo31Duration,
     veo31Resolution,
@@ -204,9 +198,6 @@ export function useSnapshotIO({
     setGrokImagineVideoDuration,
     setGrokImagineVideoResolution,
     setGrokImagineVideoAspectRatio,
-    setSora2ProResolution,
-    setSora2ProAspectRatio,
-    setSora2ProDuration,
     setVeo31Variant,
     setVeo31Duration,
     setVeo31Resolution,
@@ -278,9 +269,6 @@ export function useSnapshotIO({
       grokImagineVideoDuration,
       grokImagineVideoResolution,
       grokImagineVideoAspectRatio,
-      sora2ProResolution,
-      sora2ProAspectRatio,
-      sora2ProDuration,
       veo31Variant,
       veo31Duration,
       veo31Resolution,
@@ -338,9 +326,6 @@ export function useSnapshotIO({
     grokImagineVideoDuration,
     grokImagineVideoResolution,
     grokImagineVideoAspectRatio,
-    sora2ProResolution,
-    sora2ProAspectRatio,
-    sora2ProDuration,
     veo31Variant,
     veo31Duration,
     veo31Resolution,
@@ -673,15 +658,6 @@ export function useSnapshotIO({
         if (isGrokImagineVideoAspectRatioSelectionValue(meta.grokImagineVideoAspectRatio)) {
           setGrokImagineVideoAspectRatio(meta.grokImagineVideoAspectRatio);
         }
-        if (isSora2ProResolutionSelectionValue(meta.sora2ProResolution)) {
-          setSora2ProResolution(meta.sora2ProResolution);
-        }
-        if (isSora2ProAspectRatioSelectionValue(meta.sora2ProAspectRatio)) {
-          setSora2ProAspectRatio(meta.sora2ProAspectRatio);
-        }
-        if (isSora2ProDurationSelectionValue(meta.sora2ProDuration)) {
-          setSora2ProDuration(meta.sora2ProDuration);
-        }
         const normalizedVeoVariant = normalizeVeo31Variant(meta.veo31Variant);
         if (normalizedVeoVariant) {
           setVeo31Variant(normalizedVeoVariant);
@@ -781,9 +757,6 @@ export function useSnapshotIO({
     setGrokImagineVideoDuration,
     setGrokImagineVideoResolution,
     setGrokImagineVideoAspectRatio,
-    setSora2ProResolution,
-    setSora2ProAspectRatio,
-    setSora2ProDuration,
     setVeo31Variant,
     setVeo31Duration,
     setVeo31Resolution,

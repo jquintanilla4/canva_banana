@@ -3,6 +3,8 @@ import {
   getFalNumImageMaxForModel,
   getFalNumImageOptionsForModel,
   getSeedreamImageSizeOptions,
+  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  normalizeFalModelId,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
@@ -31,5 +33,9 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
       'auto_2K',
       'auto_3K',
     ]);
+  });
+
+  it('maps legacy Sora 2 Pro video snapshots to the default video model', () => {
+    expect(normalizeFalModelId('fal-ai/sora-2/image-to-video/pro')).toBe(HAILUO_IMAGE_TO_VIDEO_MODEL_ID);
   });
 });

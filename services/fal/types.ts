@@ -103,9 +103,6 @@ export interface GenerateVideoOptions {
   grokImagineVideoDuration?: GrokImagineVideoDurationSelectionValue;
   grokImagineVideoResolution?: GrokImagineVideoResolutionSelectionValue;
   grokImagineVideoAspectRatio?: GrokImagineVideoAspectRatioSelectionValue;
-  sora2ProResolution?: 'auto' | '720p' | '1080p';
-  sora2ProAspectRatio?: 'auto' | '9:16' | '16:9';
-  sora2ProDuration?: '4' | '8' | '12';
   veo31Duration?: '4s' | '6s' | '8s' | '7s';
   veo31Resolution?: '720p' | '1080p' | '4k';
   veo31AspectRatio?: 'auto' | '16:9' | '9:16';

@@ -25,7 +25,6 @@ import {
   KLING_O1_VIDEO_FFLF_MODEL_ID,
   KLING_O1_VIDEO_REF_V2V_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
-  SORA_2_PRO_IMAGE_TO_VIDEO_MODEL_ID,
   VEO_31_EXTEND_VIDEO_MODEL_ID,
   VEO_31_FFLF_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
@@ -520,40 +519,6 @@ export const generateImageToVideo = async (
       camera_fixed: cameraFixed,
       generate_audio: generateAudio,
       ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
-    };
-
-    return subscribeForVideoUrl(modelId, inputPayload, options);
-  }
-
-  const isSora2ProModel = modelId === SORA_2_PRO_IMAGE_TO_VIDEO_MODEL_ID;
-  if (isSora2ProModel) {
-    if (!image) {
-      throw new Error('Sora 2 Pro requires an image.');
-    }
-
-    const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) {
-      throw new Error('Sora 2 Pro requires a prompt.');
-    }
-
-    const imageUrl = await uploadImageElementToFal(image);
-    const resolution = options.sora2ProResolution === '720p' || options.sora2ProResolution === '1080p'
-      ? options.sora2ProResolution
-      : 'auto';
-    const aspectRatio = options.sora2ProAspectRatio === '9:16' || options.sora2ProAspectRatio === '16:9'
-      ? options.sora2ProAspectRatio
-      : 'auto';
-    const durationValue = options.sora2ProDuration === '8' || options.sora2ProDuration === '12'
-      ? options.sora2ProDuration
-      : '4';
-
-    const inputPayload: Record<string, unknown> = {
-      prompt: trimmedPrompt,
-      image_url: imageUrl,
-      resolution,
-      aspect_ratio: aspectRatio,
-      duration: Number(durationValue),
-      delete_video: true,
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);

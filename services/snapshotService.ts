@@ -29,9 +29,6 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
-  isSora2ProAspectRatioSelectionValue,
-  isSora2ProDurationSelectionValue,
-  isSora2ProResolutionSelectionValue,
   isVeo31AspectRatioSelectionValue,
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
@@ -106,9 +103,6 @@ export type SnapshotManifestV2 = {
         grokImagineVideoDuration?: string;
         grokImagineVideoResolution?: string;
         grokImagineVideoAspectRatio?: string;
-        sora2ProResolution?: string;
-        sora2ProAspectRatio?: string;
-        sora2ProDuration?: string;
         veo31Variant?: string;
         veo31Duration?: string;
         veo31Resolution?: string;
@@ -197,9 +191,6 @@ export type SnapshotMetaState = {
   grokImagineVideoDuration?: string;
   grokImagineVideoResolution?: string;
   grokImagineVideoAspectRatio?: string;
-  sora2ProResolution?: string;
-  sora2ProAspectRatio?: string;
-  sora2ProDuration?: string;
   veo31Variant?: string;
   veo31Duration?: string;
   veo31Resolution?: string;
@@ -908,21 +899,6 @@ export const normalizeSnapshotImageMetadata = (
       const grokImagineVideoAspectRatioValue = (typed as { grokImagineVideoAspectRatio?: unknown }).grokImagineVideoAspectRatio;
       if (isGrokImagineVideoAspectRatioSelectionValue(grokImagineVideoAspectRatioValue)) {
         normalizedOptions.grokImagineVideoAspectRatio = grokImagineVideoAspectRatioValue;
-      }
-
-      const sora2ProResolutionValue = (typed as { sora2ProResolution?: unknown }).sora2ProResolution;
-      if (isSora2ProResolutionSelectionValue(sora2ProResolutionValue)) {
-        normalizedOptions.sora2ProResolution = sora2ProResolutionValue;
-      }
-
-      const sora2ProAspectRatioValue = (typed as { sora2ProAspectRatio?: unknown }).sora2ProAspectRatio;
-      if (isSora2ProAspectRatioSelectionValue(sora2ProAspectRatioValue)) {
-        normalizedOptions.sora2ProAspectRatio = sora2ProAspectRatioValue;
-      }
-
-      const sora2ProDurationValue = (typed as { sora2ProDuration?: unknown }).sora2ProDuration;
-      if (isSora2ProDurationSelectionValue(sora2ProDurationValue)) {
-        normalizedOptions.sora2ProDuration = sora2ProDurationValue;
       }
 
       const veo31VariantValue = (typed as { veo31Variant?: unknown }).veo31Variant;

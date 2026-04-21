@@ -14,9 +14,6 @@ import type {
   GrokImagineVideoAspectRatioSelectionValue,
   GrokImagineVideoDurationSelectionValue,
   GrokImagineVideoResolutionSelectionValue,
-  Sora2ProAspectRatioSelectionValue,
-  Sora2ProDurationSelectionValue,
-  Sora2ProResolutionSelectionValue,
   Veo31AspectRatioSelectionValue,
   Veo31DurationSelectionValue,
   Veo31ResolutionSelectionValue,
@@ -88,9 +85,6 @@ import {
   INFINITALK_RESOLUTION_OPTIONS,
   INFINITALK_SEED_OPTIONS,
   REVE_TEXT_TO_IMAGE_MODEL_ID,
-  SORA_2_PRO_ASPECT_RATIO_OPTIONS,
-  SORA_2_PRO_DURATION_OPTIONS,
-  SORA_2_PRO_RESOLUTION_OPTIONS,
   VEO31_ASPECT_RATIO_OPTIONS,
   VEO31_AUDIO_OPTIONS,
   VEO31_DURATION_OPTIONS,
@@ -261,7 +255,6 @@ export type PromptBarControlsInput = {
   isLipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
   isGrokImagineVideoModel: boolean;
-  isSora2ProVideoModel: boolean;
   isVeo31VideoModel: boolean;
   isWan26I2VVideoModel: boolean;
   isSeedance15VideoModel: boolean;
@@ -294,9 +287,6 @@ export type PromptBarControlsInput = {
   grokImagineVideoDuration: GrokImagineVideoDurationSelectionValue;
   grokImagineVideoResolution: GrokImagineVideoResolutionSelectionValue;
   grokImagineVideoAspectRatio: GrokImagineVideoAspectRatioSelectionValue;
-  sora2ProResolution: Sora2ProResolutionSelectionValue;
-  sora2ProAspectRatio: Sora2ProAspectRatioSelectionValue;
-  sora2ProDuration: Sora2ProDurationSelectionValue;
   veo31Variant: Veo31Variant;
   veo31Duration: Veo31DurationSelectionValue;
   veo31Resolution: Veo31ResolutionSelectionValue;
@@ -356,9 +346,6 @@ export type PromptBarControlsInput = {
   onGrokImagineVideoDurationChange: (value: string) => void;
   onGrokImagineVideoResolutionChange: (value: string) => void;
   onGrokImagineVideoAspectRatioChange: (value: string) => void;
-  onSora2ProResolutionChange: (value: string) => void;
-  onSora2ProAspectRatioChange: (value: string) => void;
-  onSora2ProDurationChange: (value: string) => void;
   onVeo31VariantChange: (value: string) => void;
   onVeo31DurationChange: (value: string) => void;
   onVeo31ResolutionChange: (value: string) => void;
@@ -417,7 +404,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isLipsyncVideoModel,
     isInfinitalkVideoModel,
     isGrokImagineVideoModel,
-    isSora2ProVideoModel,
     isVeo31VideoModel,
     isWan26I2VVideoModel,
     isSeedance15VideoModel,
@@ -450,9 +436,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     grokImagineVideoDuration,
     grokImagineVideoResolution,
     grokImagineVideoAspectRatio,
-    sora2ProResolution,
-    sora2ProAspectRatio,
-    sora2ProDuration,
     veo31Variant,
     veo31Duration,
     veo31Resolution,
@@ -512,9 +495,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onGrokImagineVideoDurationChange,
     onGrokImagineVideoResolutionChange,
     onGrokImagineVideoAspectRatioChange,
-    onSora2ProResolutionChange,
-    onSora2ProAspectRatioChange,
-    onSora2ProDurationChange,
     onVeo31VariantChange,
     onVeo31DurationChange,
     onVeo31ResolutionChange,
@@ -905,38 +885,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
       value: grokImagineVideoAspectRatio,
       onChange: onGrokImagineVideoAspectRatioChange,
-      disabled: isLoading,
-    });
-  }
-
-  if (isSora2ProVideoModel) {
-    controls.push({
-      id: 'sora2-pro-resolution-select',
-      prefixLabel: 'Resolution',
-      ariaLabel: 'Select Sora 2 Pro resolution',
-      options: SORA_2_PRO_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: sora2ProResolution,
-      onChange: onSora2ProResolutionChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'sora2-pro-aspect-ratio-select',
-      prefixLabel: 'AR',
-      ariaLabel: 'Select Sora 2 Pro aspect ratio',
-      options: SORA_2_PRO_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: sora2ProAspectRatio,
-      onChange: onSora2ProAspectRatioChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'sora2-pro-duration-select',
-      prefixLabel: 'Duration',
-      ariaLabel: 'Select Sora 2 Pro duration',
-      options: SORA_2_PRO_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: sora2ProDuration,
-      onChange: onSora2ProDurationChange,
       disabled: isLoading,
     });
   }

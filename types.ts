@@ -123,9 +123,6 @@ export type GenerationFalOptions = Partial<{
   grokImagineVideoDuration: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   grokImagineVideoResolution: '480p' | '720p';
   grokImagineVideoAspectRatio: 'auto' | '16:9' | '4:3' | '3:2' | '1:1' | '2:3' | '3:4' | '9:16';
-  sora2ProResolution: 'auto' | '720p' | '1080p';
-  sora2ProAspectRatio: 'auto' | '9:16' | '16:9';
-  sora2ProDuration: '4' | '8' | '12';
   veo31Variant: 'i2v-fflf' | 'extend';
   veo31Duration: '4s' | '6s' | '8s' | '7s';
   veo31Resolution: '720p' | '1080p' | '4k';
