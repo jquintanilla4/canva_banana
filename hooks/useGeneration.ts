@@ -39,6 +39,7 @@ import {
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
   isKlingO1VideoModelId,
+  isLipsyncSyncMode,
   isNanoBananaEditModelId,
   isRecraftV4ProModel,
   isRecraftV4ProImageSizeSelectionValue,
@@ -65,9 +66,6 @@ import {
   type Kling26AudioSelectionValue,
   type KlingO1Variant,
   type KlingVariant,
-  type LipsyncAudioMode,
-  type LipsyncEmotion,
-  type LipsyncModelMode,
   type WanAnimateQualitySelectionValue,
   type WanAnimateResolutionSelectionValue,
   type WanAnimateShiftSelectionValue,
@@ -380,9 +378,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
-    lipsyncEmotion,
-    lipsyncModelMode,
-    lipsyncAudioMode,
+    lipsyncSyncMode,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -548,6 +544,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const wanAnimateQualityForRun = falOptionsOverride.wanAnimateQuality ?? wanAnimateQuality;
     const wanAnimateUseTurboForRun = falOptionsOverride.wanAnimateUseTurbo ?? wanAnimateUseTurbo;
     const oneToAllAnimateResolutionForRun = falOptionsOverride.oneToAllAnimateResolution ?? oneToAllAnimateResolution;
+    const lipsyncSyncModeForRun = isLipsyncSyncMode(falOptionsOverride.lipsyncSyncMode)
+      ? falOptionsOverride.lipsyncSyncMode
+      : lipsyncSyncMode; // Reruns can override current UI.
     const infinitalkResolutionForRun = falOptionsOverride.infinitalkResolution ?? infinitalkResolution;
     const infinitalkSeedForRun = falOptionsOverride.infinitalkSeed ?? infinitalkSeed;
     const infinitalkAccelerationForRun = falOptionsOverride.infinitalkAcceleration ?? infinitalkAcceleration;
@@ -1242,13 +1241,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
                         ? 'Select a video on the canvas to edit.'
                         : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
           }
-          if (isLipsyncVideoModel) {
-            const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
-            if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 15) {
-              setError('Lip Sync requires videos 15 seconds or shorter.');
-              return;
-            }
-          }
           if (isWanVisionEnhancerVideoModel) {
             const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
             if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 16) {
@@ -1279,11 +1271,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
             throw new Error(isInfinitalkVideoModel
               ? 'Select an audio clip on the canvas for Infinitalk.'
               : 'Select an audio clip on the canvas for lip sync.');
-          }
-          const audioDurationSeconds = sourceAudio.audioDuration ?? sourceAudio.audioElement?.duration;
-          if (isLipsyncVideoModel && typeof audioDurationSeconds === 'number' && Number.isFinite(audioDurationSeconds) && audioDurationSeconds > 15) {
-            setError('Lip Sync requires audio 15 seconds or shorter.');
-            return;
           }
           if (!sourceAudio.file) {
             throw new Error('The selected audio does not have a file to upload.');
@@ -1425,9 +1412,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ...(isLipsyncVideoModel ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
             sourceAudioUrl: sourceAudioUrlForRequest,
-            lipsyncEmotion: lipsyncEmotion,
-            lipsyncModelMode: lipsyncModelMode,
-            lipsyncAudioMode: lipsyncAudioMode,
+            lipsyncSyncMode: lipsyncSyncModeForRun,
           } : {}),
           ...(isInfinitalkVideoModel ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
@@ -1600,9 +1585,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
                   } : {}),
                   ...(isLipsyncVideoModel ? {
-                    lipsyncEmotion: lipsyncEmotion,
-                    lipsyncModelMode: lipsyncModelMode,
-                    lipsyncAudioMode: lipsyncAudioMode,
+                    lipsyncSyncMode: lipsyncSyncModeForRun,
                   } : {}),
                   ...(isInfinitalkVideoModel ? {
                     infinitalkResolution: infinitalkResolutionForRun,
@@ -2250,9 +2233,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     videoNegativePrompt,
     wanTargetResolution,
     wanCreativity,
-    lipsyncEmotion,
-    lipsyncModelMode,
-    lipsyncAudioMode,
+    lipsyncSyncMode,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,

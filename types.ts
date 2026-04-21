@@ -113,6 +113,7 @@ export type GenerationFalOptions = Partial<{
   wanAnimateShift: '5.0' | '6.0' | '7.0' | '8.0' | '9.0' | '10.0';
   wanAnimateQuality: 'high' | 'maximum';
   wanAnimateUseTurbo: boolean;
+  lipsyncSyncMode: 'cut_off' | 'loop' | 'bounce' | 'silence' | 'remap'; // Sync v3 duration behavior.
   kling26Audio: boolean;
   kling26ControlVariant: 'standard' | 'pro';
   kling26ControlKeepSound: boolean;

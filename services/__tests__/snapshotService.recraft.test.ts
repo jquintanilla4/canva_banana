@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeSnapshotImageMetadata } from '../snapshotService';
+import type { CanvasImageMetadata } from '../../types';
 
 describe('snapshotService (Recraft metadata)', () => {
   it('normalizes Recraft color options from snapshots', () => {
@@ -34,5 +35,25 @@ describe('snapshotService (Recraft metadata)', () => {
       { r: 10, g: 11, b: 12 },
       { r: 13, g: 14, b: 15 },
     ]);
+  });
+});
+
+describe('snapshotService (Sync v3 metadata)', () => {
+  it('normalizes legacy lip sync audio mode snapshots into sync mode', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: '',
+        provider: 'fal',
+        modelId: 'fal-ai/sync-lipsync/react-1',
+        modelMode: 'video',
+        falOptions: {
+          lipsyncAudioMode: 'remap',
+        },
+      },
+    } as unknown as CanvasImageMetadata);
+
+    expect(metadata?.generation?.falOptions?.lipsyncSyncMode).toBe('remap');
   });
 });

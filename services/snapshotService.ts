@@ -25,6 +25,7 @@ import {
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isLipsyncSyncMode,
   isRecraftV4ProImageSizeSelectionValue,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
@@ -872,6 +873,17 @@ export const normalizeSnapshotImageMetadata = (
       const wanAnimateUseTurboValue = (typed as { wanAnimateUseTurbo?: unknown }).wanAnimateUseTurbo;
       if (typeof wanAnimateUseTurboValue === 'boolean') {
         normalizedOptions.wanAnimateUseTurbo = wanAnimateUseTurboValue;
+      }
+
+      const lipsyncSyncModeValue = (typed as { lipsyncSyncMode?: unknown }).lipsyncSyncMode;
+      const legacyLipsyncAudioModeValue = (typed as { lipsyncAudioMode?: unknown }).lipsyncAudioMode; // React-1 snapshot field.
+      const normalizedLipsyncSyncMode = isLipsyncSyncMode(lipsyncSyncModeValue)
+        ? lipsyncSyncModeValue
+        : isLipsyncSyncMode(legacyLipsyncAudioModeValue)
+          ? legacyLipsyncAudioModeValue
+          : undefined;
+      if (normalizedLipsyncSyncMode) {
+        normalizedOptions.lipsyncSyncMode = normalizedLipsyncSyncMode;
       }
 
       const infinitalkResolutionValue = (typed as { infinitalkResolution?: unknown }).infinitalkResolution;

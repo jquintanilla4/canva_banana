@@ -53,7 +53,7 @@ export const WAN_ANIMATE_MOVE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/move' as c
 export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as const;
 export const ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as const;
-export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const;
+export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/v3' as const; // Sync v3 endpoint id.
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as const;
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
@@ -130,7 +130,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
   { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
-  { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync React-1' },
+  { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync 3 Lipsync' },
   { value: VEO_31_IMAGE_TO_VIDEO_MODEL_ID, label: 'Veo 3.1' },
   { value: WAN_26_I2V_MODEL_ID, label: 'Wan 2.6' },
   { value: WAN_ANIMATE_MODEL_ID, label: 'Wan Animate' },
@@ -300,9 +300,7 @@ export const getWanAnimateVideoEndpoint = (variant: WanAnimateVariant): string =
   return WAN_ANIMATE_REPLACE_MODEL_ID;
 };
 
-export type LipsyncEmotion = 'happy' | 'angry' | 'sad' | 'neutral' | 'disgusted' | 'surprised';
-export type LipsyncModelMode = 'lips' | 'face' | 'head';
-export type LipsyncAudioMode = 'cut_off' | 'loop' | 'bounce' | 'silence' | 'remap';
+export type LipsyncSyncMode = 'cut_off' | 'loop' | 'bounce' | 'silence' | 'remap'; // Valid v3 duration modes.
 export type InfinitalkResolutionSelectionValue = '480p' | '720p';
 export type InfinitalkSeedSelectionValue = '42' | 'random';
 export type InfinitalkAccelerationSelectionValue = 'none' | 'regular' | 'high';
@@ -311,28 +309,13 @@ export type GrokImagineVideoDurationSelectionValue = '1' | '2' | '3' | '4' | '5'
 export type GrokImagineVideoResolutionSelectionValue = '480p' | '720p';
 export type GrokImagineVideoAspectRatioSelectionValue = 'auto' | '16:9' | '4:3' | '3:2' | '1:1' | '2:3' | '3:4' | '9:16';
 
-export const LIPSYNC_EMOTION_OPTIONS: ReadonlyArray<{ value: LipsyncEmotion; label: string }> = [
-  { value: 'neutral', label: 'Neutral' },
-  { value: 'happy', label: 'Happy' },
-  { value: 'angry', label: 'Angry' },
-  { value: 'sad', label: 'Sad' },
-  { value: 'disgusted', label: 'Disgusted' },
-  { value: 'surprised', label: 'Surprised' },
-] as const;
-
-export const LIPSYNC_MODEL_MODE_OPTIONS: ReadonlyArray<{ value: LipsyncModelMode; label: string }> = [
-  { value: 'face', label: 'Face' },
-  { value: 'lips', label: 'Lips' },
-  { value: 'head', label: 'Head' },
-] as const;
-
-export const LIPSYNC_AUDIO_MODE_OPTIONS: ReadonlyArray<{ value: LipsyncAudioMode; label: string }> = [
-  { value: 'bounce', label: 'Bounce' },
+export const LIPSYNC_SYNC_MODE_OPTIONS: ReadonlyArray<{ value: LipsyncSyncMode; label: string }> = [
   { value: 'cut_off', label: 'Cut off' },
+  { value: 'bounce', label: 'Bounce' },
   { value: 'loop', label: 'Loop' },
   { value: 'silence', label: 'Silence' },
   { value: 'remap', label: 'Remap' },
-] as const;
+] as const; // Prompt bar sync choices.
 
 export const INFINITALK_RESOLUTION_OPTIONS: ReadonlyArray<{ value: InfinitalkResolutionSelectionValue; label: string }> = [
   { value: '480p', label: '480p' },
@@ -715,6 +698,9 @@ export const isInfinitalkAccelerationSelectionValue = (value: unknown): value is
 export const isInfinitalkDurationSelectionValue = (value: unknown): value is InfinitalkDurationSelectionValue =>
   value === '5s' || value === '6s' || value === '10s' || value === '12s';
 
+export const isLipsyncSyncMode = (value: unknown): value is LipsyncSyncMode =>
+  value === 'cut_off' || value === 'loop' || value === 'bounce' || value === 'silence' || value === 'remap'; // Runtime guard for saved values.
+
 export const isGrokImagineVideoDurationSelectionValue = (value: unknown): value is GrokImagineVideoDurationSelectionValue =>
   value === '1' || value === '2' || value === '3' || value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
 
@@ -755,9 +741,13 @@ const LEGACY_NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 const LEGACY_SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const;
 const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
 const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
+export const LEGACY_SYNC_LIPSYNC_REACT_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const; // Old Sync React-1 id.
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
   if (value === LEGACY_NANO_BANANA_MODEL_ID) {
     return NANO_BANANA_PRO_EDIT_MODEL_ID;
+  }
+  if (value === LEGACY_SYNC_LIPSYNC_REACT_MODEL_ID) {
+    return SYNC_LIPSYNC_MODEL_ID;
   }
   if (value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID) {
     return HAILUO_IMAGE_TO_VIDEO_MODEL_ID;

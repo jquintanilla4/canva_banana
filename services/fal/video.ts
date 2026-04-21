@@ -633,16 +633,12 @@ export const generateImageToVideo = async (
       throw new Error('Lip Sync requires a source audio.');
     }
 
-    const emotion = options.lipsyncEmotion || 'neutral';
-    const modelMode = options.lipsyncModelMode || 'face';
-    const lipsyncMode = options.lipsyncAudioMode || 'bounce';
+    const syncMode = options.lipsyncSyncMode || 'cut_off'; // Match Sync v3 default.
 
     const inputPayload: Record<string, unknown> = {
       video_url: options.sourceVideoUrl,
       audio_url: options.sourceAudioUrl,
-      emotion,
-      model_mode: modelMode,
-      lipsync_mode: lipsyncMode,
+      sync_mode: syncMode, // Fal v3 field name.
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);

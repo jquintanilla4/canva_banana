@@ -12,9 +12,7 @@ import type {
   GrokImagineVideoDurationSelectionValue,
   GrokImagineVideoResolutionSelectionValue,
   InfinitalkDurationSelectionValue,
-  LipsyncAudioMode,
-  LipsyncEmotion,
-  LipsyncModelMode,
+  LipsyncSyncMode,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
 } from '../modelConfig'; // Model-specific option types.
@@ -101,9 +99,7 @@ export interface GenerateVideoOptions {
   keepOriginalSound?: boolean;
   characterOrientation?: 'image' | 'video';
   aspectRatio?: FalAspectRatioOption;
-  lipsyncEmotion?: LipsyncEmotion;
-  lipsyncModelMode?: LipsyncModelMode;
-  lipsyncAudioMode?: LipsyncAudioMode;
+  lipsyncSyncMode?: LipsyncSyncMode; // Sync v3 duration behavior.
   infinitalkDuration?: InfinitalkDurationSelectionValue;
   grokImagineVideoDuration?: GrokImagineVideoDurationSelectionValue;
   grokImagineVideoResolution?: GrokImagineVideoResolutionSelectionValue;

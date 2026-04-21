@@ -102,9 +102,7 @@ const mockState = vi.hoisted(() => {
     wanAnimateShift: '5.0',
     wanAnimateQuality: 'high',
     wanAnimateUseTurbo: false,
-    lipsyncEmotion: 'auto',
-    lipsyncModelMode: 'fast',
-    lipsyncAudioMode: 'generated',
+    lipsyncSyncMode: 'cut_off',
     infinitalkResolution: '480p',
     infinitalkSeed: '42',
     infinitalkAcceleration: 'none',
@@ -162,9 +160,7 @@ const mockState = vi.hoisted(() => {
   falState.handleWanAnimateShiftChange = vi.fn();
   falState.handleWanAnimateQualityChange = vi.fn();
   falState.handleWanAnimateTurboChange = vi.fn();
-  falState.handleLipsyncEmotionChange = vi.fn();
-  falState.handleLipsyncModelModeChange = vi.fn();
-  falState.handleLipsyncAudioModeChange = vi.fn();
+  falState.handleLipsyncSyncModeChange = vi.fn();
   falState.handleInfinitalkResolutionChange = vi.fn();
   falState.handleInfinitalkSeedChange = vi.fn();
   falState.handleInfinitalkAccelerationChange = vi.fn();

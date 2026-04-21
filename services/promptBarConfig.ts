@@ -23,9 +23,7 @@ import type {
   Kling26ControlVariant,
   KlingO1Variant,
   KlingVariant,
-  LipsyncAudioMode,
-  LipsyncEmotion,
-  LipsyncModelMode,
+  LipsyncSyncMode,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
   Seedance15AspectRatioSelectionValue,
@@ -78,9 +76,7 @@ import {
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  LIPSYNC_AUDIO_MODE_OPTIONS,
-  LIPSYNC_EMOTION_OPTIONS,
-  LIPSYNC_MODEL_MODE_OPTIONS,
+  LIPSYNC_SYNC_MODE_OPTIONS,
   INFINITALK_ACCELERATION_OPTIONS,
   INFINITALK_DURATION_OPTIONS,
   INFINITALK_RESOLUTION_OPTIONS,
@@ -304,9 +300,7 @@ export type PromptBarControlsInput = {
   wanAnimateShift: WanAnimateShiftSelectionValue;
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
-  lipsyncEmotion: LipsyncEmotion;
-  lipsyncModelMode: LipsyncModelMode;
-  lipsyncAudioMode: LipsyncAudioMode;
+  lipsyncSyncMode: LipsyncSyncMode;
   infinitalkResolution: InfinitalkResolutionSelectionValue;
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
@@ -366,9 +360,7 @@ export type PromptBarControlsInput = {
   onWanAnimateShiftChange: (value: string) => void;
   onWanAnimateQualityChange: (value: string) => void;
   onWanAnimateTurboChange: (value: boolean) => void;
-  onLipsyncEmotionChange: (value: string) => void;
-  onLipsyncModelModeChange: (value: string) => void;
-  onLipsyncAudioModeChange: (value: string) => void;
+  onLipsyncSyncModeChange: (value: string) => void;
   onInfinitalkResolutionChange: (value: string) => void;
   onInfinitalkSeedChange: (value: string) => void;
   onInfinitalkAccelerationChange: (value: string) => void;
@@ -460,9 +452,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
-    lipsyncEmotion,
-    lipsyncModelMode,
-    lipsyncAudioMode,
+    lipsyncSyncMode,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -522,9 +512,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onWanAnimateShiftChange,
     onWanAnimateQualityChange,
     onWanAnimateTurboChange,
-    onLipsyncEmotionChange,
-    onLipsyncModelModeChange,
-    onLipsyncAudioModeChange,
+    onLipsyncSyncModeChange,
     onInfinitalkResolutionChange,
     onInfinitalkSeedChange,
     onInfinitalkAccelerationChange,
@@ -825,35 +813,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   if (isLipsyncVideoModel) {
     controls.push({
-      id: 'lipsync-emotion-select',
-      prefixLabel: 'Emotion',
-      hideSelectedValue: true,
-      ariaLabel: 'Select lip sync emotion',
-      options: LIPSYNC_EMOTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: lipsyncEmotion,
-      onChange: onLipsyncEmotionChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'lipsync-mode-select',
-      prefixLabel: 'Mode',
+      id: 'lipsync-sync-mode-select',
+      prefixLabel: 'Sync',
       hideSelectedValue: true,
       ariaLabel: 'Select lip sync mode',
-      options: LIPSYNC_MODEL_MODE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: lipsyncModelMode,
-      onChange: onLipsyncModelModeChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'lipsync-audio-select',
-      prefixLabel: 'Audio',
-      hideSelectedValue: true,
-      ariaLabel: 'Select lip sync audio mode',
-      options: LIPSYNC_AUDIO_MODE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: lipsyncAudioMode,
-      onChange: onLipsyncAudioModeChange,
+      options: LIPSYNC_SYNC_MODE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: lipsyncSyncMode,
+      onChange: onLipsyncSyncModeChange,
       disabled: isLoading,
     });
   }

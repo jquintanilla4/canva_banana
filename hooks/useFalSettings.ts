@@ -85,9 +85,7 @@ import type {
   Veo31DurationSelectionValue,
   Veo31ResolutionSelectionValue,
   Veo31Variant,
-  LipsyncAudioMode,
-  LipsyncEmotion,
-  LipsyncModelMode,
+  LipsyncSyncMode,
   Seedance15AspectRatioSelectionValue,
   Seedance15ResolutionSelectionValue,
   Seedance15DurationSelectionValue,
@@ -160,9 +158,7 @@ type FalHandlers = {
   handleWanAnimateShiftChange: (value: string) => void;
   handleWanAnimateQualityChange: (value: string) => void;
   handleWanAnimateTurboChange: (value: boolean) => void;
-  handleLipsyncEmotionChange: (value: string) => void;
-  handleLipsyncModelModeChange: (value: string) => void;
-  handleLipsyncAudioModeChange: (value: string) => void;
+  handleLipsyncSyncModeChange: (value: string) => void;
   handleInfinitalkResolutionChange: (value: string) => void;
   handleInfinitalkSeedChange: (value: string) => void;
   handleInfinitalkAccelerationChange: (value: string) => void;
@@ -229,9 +225,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wanAnimateShift: WanAnimateShiftSelectionValue;
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
-  lipsyncEmotion: LipsyncEmotion;
-  lipsyncModelMode: LipsyncModelMode;
-  lipsyncAudioMode: LipsyncAudioMode;
+  lipsyncSyncMode: LipsyncSyncMode;
   infinitalkResolution: InfinitalkResolutionSelectionValue;
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
@@ -293,9 +287,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWanAnimateShift: Dispatch<SetStateAction<WanAnimateShiftSelectionValue>>;
   setWanAnimateQuality: Dispatch<SetStateAction<WanAnimateQualitySelectionValue>>;
   setWanAnimateUseTurbo: Dispatch<SetStateAction<boolean>>;
-  setLipsyncEmotion: Dispatch<SetStateAction<LipsyncEmotion>>;
-  setLipsyncModelMode: Dispatch<SetStateAction<LipsyncModelMode>>;
-  setLipsyncAudioMode: Dispatch<SetStateAction<LipsyncAudioMode>>;
+  setLipsyncSyncMode: Dispatch<SetStateAction<LipsyncSyncMode>>;
   setInfinitalkResolution: Dispatch<SetStateAction<InfinitalkResolutionSelectionValue>>;
   setInfinitalkSeed: Dispatch<SetStateAction<InfinitalkSeedSelectionValue>>;
   setInfinitalkAcceleration: Dispatch<SetStateAction<InfinitalkAccelerationSelectionValue>>;
@@ -361,9 +353,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wanAnimateShift, setWanAnimateShift] = useState<WanAnimateShiftSelectionValue>('5.0');
   const [wanAnimateQuality, setWanAnimateQuality] = useState<WanAnimateQualitySelectionValue>('high');
   const [wanAnimateUseTurbo, setWanAnimateUseTurbo] = useState<boolean>(false);
-  const [lipsyncEmotion, setLipsyncEmotion] = useState<LipsyncEmotion>('neutral');
-  const [lipsyncModelMode, setLipsyncModelMode] = useState<LipsyncModelMode>('face');
-  const [lipsyncAudioMode, setLipsyncAudioMode] = useState<LipsyncAudioMode>('bounce');
+  const [lipsyncSyncMode, setLipsyncSyncMode] = useState<LipsyncSyncMode>('cut_off'); // Sync v3 default.
   const [infinitalkResolution, setInfinitalkResolution] = useState<InfinitalkResolutionSelectionValue>('480p');
   const [infinitalkSeed, setInfinitalkSeed] = useState<InfinitalkSeedSelectionValue>('42');
   const [infinitalkAcceleration, setInfinitalkAcceleration] = useState<InfinitalkAccelerationSelectionValue>('regular');
@@ -693,24 +683,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWanAnimateUseTurbo(Boolean(value));
   }, []);
 
-  const handleLipsyncEmotionChange = useCallback((value: string) => {
-    const valid = ['happy', 'angry', 'sad', 'neutral', 'disgusted', 'surprised'] as const;
-    if (valid.includes(value as LipsyncEmotion)) {
-      setLipsyncEmotion(value as LipsyncEmotion);
-    }
-  }, []);
-
-  const handleLipsyncModelModeChange = useCallback((value: string) => {
-    const valid = ['lips', 'face', 'head'] as const;
-    if (valid.includes(value as LipsyncModelMode)) {
-      setLipsyncModelMode(value as LipsyncModelMode);
-    }
-  }, []);
-
-  const handleLipsyncAudioModeChange = useCallback((value: string) => {
-    const valid = ['cut_off', 'loop', 'bounce', 'silence', 'remap'] as const;
-    if (valid.includes(value as LipsyncAudioMode)) {
-      setLipsyncAudioMode(value as LipsyncAudioMode);
+  const handleLipsyncSyncModeChange = useCallback((value: string) => {
+    const valid = ['cut_off', 'loop', 'bounce', 'silence', 'remap'] as const; // Allowed Sync v3 modes.
+    if (valid.includes(value as LipsyncSyncMode)) {
+      setLipsyncSyncMode(value as LipsyncSyncMode);
     }
   }, []);
 
@@ -991,9 +967,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
-    lipsyncEmotion,
-    lipsyncModelMode,
-    lipsyncAudioMode,
+    lipsyncSyncMode,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -1075,9 +1049,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWanAnimateShiftChange,
     handleWanAnimateQualityChange,
     handleWanAnimateTurboChange,
-    handleLipsyncEmotionChange,
-    handleLipsyncModelModeChange,
-    handleLipsyncAudioModeChange,
+    handleLipsyncSyncModeChange,
     handleInfinitalkResolutionChange,
     handleInfinitalkSeedChange,
     handleInfinitalkAccelerationChange,
@@ -1141,9 +1113,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWanAnimateShift,
     setWanAnimateQuality,
     setWanAnimateUseTurbo,
-    setLipsyncEmotion,
-    setLipsyncModelMode,
-    setLipsyncAudioMode,
+    setLipsyncSyncMode,
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,

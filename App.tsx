@@ -1156,38 +1156,6 @@ export default function App() {
   const hasSourceVideoSelected = Boolean(sourceVideoId);
   const hasSourceAudioSelected = Boolean(sourceAudioId);
 
-  // Show warning when video or audio exceeds 15 seconds in lip sync mode
-  useEffect(() => {
-    if (!fal.isLipsyncVideoModel) {
-      return;
-    }
-
-    // Check video duration
-    if (sourceVideoId) {
-      const sourceVideo = images.find(img => img.id === sourceVideoId);
-      if (sourceVideo?.mediaType === 'video') {
-        const videoElement = sourceVideo.element as HTMLVideoElement | undefined;
-        const durationSeconds = videoElement?.duration;
-        if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 15) {
-          setToastMessage('Lip Sync requires videos 15 seconds or shorter');
-          setTimeout(() => setToastMessage(null), 4000);
-        }
-      }
-    }
-
-    // Check audio duration
-    if (sourceAudioId) {
-      const sourceAudio = images.find(img => img.id === sourceAudioId);
-      if (sourceAudio?.mediaType === 'audio') {
-        const audioDuration = sourceAudio.audioDuration;
-        if (typeof audioDuration === 'number' && Number.isFinite(audioDuration) && audioDuration > 15) {
-          setToastMessage('Lip Sync requires audio 15 seconds or shorter');
-          setTimeout(() => setToastMessage(null), 4000);
-        }
-      }
-    }
-  }, [fal.isLipsyncVideoModel, sourceVideoId, sourceAudioId, images]);
-
   // Build prompt mention suggestions for Kling/Wan based on current reference/element selections.
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
     isKlingModel,
@@ -1324,9 +1292,7 @@ export default function App() {
     wanAnimateShift: fal.wanAnimateShift,
     wanAnimateQuality: fal.wanAnimateQuality,
     wanAnimateUseTurbo: fal.wanAnimateUseTurbo,
-    lipsyncEmotion: fal.lipsyncEmotion,
-    lipsyncModelMode: fal.lipsyncModelMode,
-    lipsyncAudioMode: fal.lipsyncAudioMode,
+    lipsyncSyncMode: fal.lipsyncSyncMode,
     infinitalkResolution: fal.infinitalkResolution,
     infinitalkSeed: fal.infinitalkSeed,
     infinitalkAcceleration: fal.infinitalkAcceleration,
@@ -1387,9 +1353,7 @@ export default function App() {
     onWanAnimateShiftChange: fal.handleWanAnimateShiftChange,
     onWanAnimateQualityChange: fal.handleWanAnimateQualityChange,
     onWanAnimateTurboChange: fal.handleWanAnimateTurboChange,
-    onLipsyncEmotionChange: fal.handleLipsyncEmotionChange,
-    onLipsyncModelModeChange: fal.handleLipsyncModelModeChange,
-    onLipsyncAudioModeChange: fal.handleLipsyncAudioModeChange,
+    onLipsyncSyncModeChange: fal.handleLipsyncSyncModeChange,
     onInfinitalkResolutionChange: fal.handleInfinitalkResolutionChange,
     onInfinitalkSeedChange: fal.handleInfinitalkSeedChange,
     onInfinitalkAccelerationChange: fal.handleInfinitalkAccelerationChange,
