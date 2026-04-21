@@ -12,6 +12,7 @@ import {
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
+  isNanoBananaTextToImageModelId,
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
@@ -25,7 +26,7 @@ export const generateImage = async (
 
   const modelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
-  const isNanoBananaTextToImage = modelId === NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+  const isNanoBananaTextToImage = isNanoBananaTextToImageModelId(modelId);
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan26ImageTextToImage = modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;

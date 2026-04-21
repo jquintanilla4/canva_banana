@@ -11,6 +11,8 @@ import type {
 // Central registry of supported model IDs plus helpers for validation/labeling in the UI.
 export const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit' as const;
 export const NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-pro' as const;
+export const NANO_BANANA_2_EDIT_MODEL_ID = 'fal-ai/nano-banana-2/edit' as const; // Nano Banana 2 edit endpoint.
+export const NANO_BANANA_2_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-2' as const; // Nano Banana 2 t2i endpoint.
 export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
 export const SEEDREAM_V5_LITE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/edit' as const;
@@ -103,6 +105,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux2 Max' },
   { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine' }, // Grok model option.
   { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
+  { value: NANO_BANANA_2_EDIT_MODEL_ID, label: 'NanoBanana 2' }, // Selector uses edit id.
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: SEEDREAM_MODEL_ID, label: 'Seedream 4' },
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream 4.5' },
@@ -592,6 +595,22 @@ export const isSeedreamV45ModelId = (value: string | undefined): boolean =>
   value === SEEDREAM_V45_MODEL_ID || value === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID;
 export const isSeedreamV5LiteModelId = (value: string | undefined): boolean =>
   value === SEEDREAM_V5_LITE_MODEL_ID || value === SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID; // Match both edit and t2i IDs.
+export const NANO_BANANA_EDIT_MODEL_IDS = [NANO_BANANA_PRO_EDIT_MODEL_ID, NANO_BANANA_2_EDIT_MODEL_ID] as const; // Edit ids shown in selector.
+export type NanoBananaEditModelId = typeof NANO_BANANA_EDIT_MODEL_IDS[number]; // Nano Banana edit id union.
+export const NANO_BANANA_TEXT_TO_IMAGE_MAP: Record<NanoBananaEditModelId, string> = {
+  [NANO_BANANA_PRO_EDIT_MODEL_ID]: NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID, // Pro edit to t2i.
+  [NANO_BANANA_2_EDIT_MODEL_ID]: NANO_BANANA_2_TEXT_TO_IMAGE_MODEL_ID, // V2 edit to t2i.
+};
+export const NANO_BANANA_TEXT_TO_IMAGE_MODEL_IDS = [
+  NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID, // Pro t2i id.
+  NANO_BANANA_2_TEXT_TO_IMAGE_MODEL_ID, // V2 t2i id.
+] as const; // T2I ids accepted by Fal generation.
+export const isNanoBananaEditModelId = (value: string | undefined): value is NanoBananaEditModelId =>
+  !!value && (NANO_BANANA_EDIT_MODEL_IDS as readonly string[]).includes(value); // Match Nano Banana edit endpoints.
+export const isNanoBananaTextToImageModelId = (value: string | undefined): boolean =>
+  !!value && (NANO_BANANA_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(value); // Match Nano Banana t2i endpoints.
+export const getNanoBananaTextToImageModelId = (modelId: NanoBananaEditModelId): string =>
+  NANO_BANANA_TEXT_TO_IMAGE_MAP[modelId]; // Resolve matching Nano Banana t2i endpoint.
 
 export type FalModelMode = 'image' | 'video';
 export type FalImageSizeSelectionValue = 'placeholder' | 'default' | FalImageSizePreset;
@@ -817,6 +836,7 @@ export const FAL_IMAGE_SIZE_DEFAULT_OPTION = 'default';
 export const DEFAULT_MAX_REFERENCE_IMAGES = 13;
 export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KLING_O1_VIDEO_EDIT_MODEL_ID | typeof KLING_O1_VIDEO_REF_V2V_MODEL_ID | typeof KLING_O1_VIDEO_FFLF_MODEL_ID | typeof SEEDANCE_15_VIDEO_MODEL_ID, number>> = {
   [NANO_BANANA_PRO_EDIT_MODEL_ID]: 14,
+  [NANO_BANANA_2_EDIT_MODEL_ID]: 14, // Same reference cap as Pro.
   [SEEDREAM_MODEL_ID]: 7,
   [SEEDREAM_V45_MODEL_ID]: 10,
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.

@@ -24,8 +24,8 @@ import {
   GROK_IMAGINE_IMAGE_EDIT_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
+  isNanoBananaEditModelId,
   KLING_IMAGE_MODEL_ID,
-  NANO_BANANA_PRO_EDIT_MODEL_ID,
   WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
@@ -380,7 +380,7 @@ export const generateImageEdit = async (
   const numImagesOption = options.numImages;
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
   const isKlingModel = modelId === KLING_IMAGE_MODEL_ID;
-  const isNanoBananaProModel = modelId === NANO_BANANA_PRO_EDIT_MODEL_ID;
+  const isNanoBananaModel = isNanoBananaEditModelId(modelId);
   const normalizedResolutionOption: FalResolutionOption = isKlingModel && resolutionOption === '4K' ? '2K' : resolutionOption;
 
   const body: {
@@ -395,7 +395,7 @@ export const generateImageEdit = async (
   } = {
     prompt,
     image_urls: imageUrls,
-    sync_mode: !isSeedreamModel && !isNanoBananaProModel, // Keep Nano Banana history visible.
+    sync_mode: !isSeedreamModel && !isNanoBananaModel, // Keep Nano Banana history visible.
   };
 
   if (!isSeedreamModel) {
@@ -415,7 +415,7 @@ export const generateImageEdit = async (
     } else {
       body.image_size = imageSizeOption;
     }
-  } else if (isNanoBananaProModel || isKlingModel) {
+  } else if (isNanoBananaModel || isKlingModel) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }

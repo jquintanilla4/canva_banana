@@ -10,7 +10,6 @@ import {
   KLING_26_CONTROL_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
-  NANO_BANANA_PRO_EDIT_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
@@ -30,6 +29,7 @@ import {
   getKlingActualModelId,
   getKling26ControlModelId,
   getKlingO1VideoEndpoint,
+  getNanoBananaTextToImageModelId,
   getWanAnimateVideoEndpoint,
   getMaxReferenceImages,
   isGenerationProvider,
@@ -37,6 +37,7 @@ import {
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
   isKlingO1VideoModelId,
+  isNanoBananaEditModelId,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
@@ -597,8 +598,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const normalizedFalImageSizeSelectionForRun = isSeedreamV5LiteModelId(falModelIdForRun) && falImageSizeSelectionForRun === 'default'
       ? 'auto_2K'
       : falImageSizeSelectionForRun; // Seedream 5 Lite defaults to auto_2K instead of source-matching.
-    const isNanoBananaProModel = !isVideoMode && falModelIdForRun === NANO_BANANA_PRO_EDIT_MODEL_ID;
-    const isNanoBananaModel = isNanoBananaProModel;
+    const isNanoBananaModel = !isVideoMode && isNanoBananaEditModelId(falModelIdForRun);
     const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
     const isGrokImagineModel = !isVideoMode && falModelIdForRun === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
     const grokAspectRatioForRun = (isGrokImagineModel && falAspectRatioSelectionForRun === 'default')
@@ -1753,8 +1753,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
                   : isWan26ImageModelForRun
                     ? WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID
-                    : isNanoBananaProModel
-                      ? NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID
+                    : isNanoBananaModel
+                      ? getNanoBananaTextToImageModelId(falModelIdForRun)
                       : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
 
           let klingReferenceImages: HTMLImageElement[] | undefined;
@@ -1911,7 +1911,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
           } else {
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isKlingModel || isNanoBananaProModel || isSeedreamModel || isFlux2MaxModelForRun || isWan26ImageModelForRun;
+            const supportsEditReferenceImages = isKlingModel || isNanoBananaModel || isSeedreamModel || isFlux2MaxModelForRun || isWan26ImageModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
               const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
