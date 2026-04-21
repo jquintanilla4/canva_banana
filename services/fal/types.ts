@@ -47,8 +47,8 @@ export interface GenerateImageEditOptions {
   aspectRatio?: FalAspectRatioOption;
   numImages?: number;
   resolution?: FalResolutionOption;
-  wan26ImageSize?: string;
-  wan26ImageMaxImages?: string;
+  wan27ImageSize?: string;
+  wan27ImageMaxImages?: string;
   negativePrompt?: string;
 } // Optional controls for image edits.
 
@@ -62,8 +62,8 @@ export interface GenerateImageOptions {
   resolution?: FalResolutionOption;
   referenceImages?: HTMLImageElement[];
   flux2MaxImageSize?: string;
-  wan26ImageSize?: string;
-  wan26ImageMaxImages?: string;
+  wan27ImageSize?: string;
+  wan27ImageMaxImages?: string;
   negativePrompt?: string;
   recraftImageSize?: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor?: RecraftRgbColor;

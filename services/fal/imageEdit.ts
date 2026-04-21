@@ -10,7 +10,7 @@ import {
   uploadCanvasToFal,
   uploadImageElementToFal,
 } from './media'; // Media upload helpers.
-import { convertWan26ImageMentions } from './prompts'; // Prompt conversion helpers.
+import { convertWan27ImageMentions } from './prompts'; // Prompt conversion helpers.
 import { extractInlineData } from './responses'; // Response parsing helper.
 import {
   FAL_MODEL_ID,
@@ -26,8 +26,8 @@ import {
   getFalNumImageMaxForModel,
   isNanoBananaEditModelId,
   KLING_IMAGE_MODEL_ID,
-  WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
-  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
 
 export const generateImageEdit = async (
@@ -49,6 +49,7 @@ export const generateImageEdit = async (
   let annotationImageUrl: string | undefined;
 
   const baseImageUrl = await uploadImageElementToFal(image);
+  const isWan27ImageModel = modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID || modelId === WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID; // Wan 2.7 Pro image edit routing.
 
   if (modelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
     const numImagesOption = options.numImages; // Grok supports 1-4 outputs per request.
@@ -149,7 +150,7 @@ export const generateImageEdit = async (
     imageUrls.push(annotationImageUrl);
   }
 
-  if (referenceImages && referenceImages.length > 0) {
+  if (!isWan27ImageModel && referenceImages && referenceImages.length > 0) {
     const referenceUrls = await collectReferenceUploadUrls(referenceImages);
     imageUrls.push(...referenceUrls);
   }
@@ -252,10 +253,13 @@ export const generateImageEdit = async (
     return { imageBase64: primaryBase64, imagesBase64: base64List, text: '', requestId };
   }
 
-  const isWan26ImageModel = modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID; // Wan 2.6 image edit routing.
-  if (isWan26ImageModel) {
+  if (isWan27ImageModel) {
     const hasReferenceImages = referenceImages && referenceImages.length > 0;
     let latestRequestId: string | undefined;
+
+    if ((referenceImages?.length ?? 0) > 3) { // Fal edit endpoint accepts 1 base image plus 3 references.
+      throw new Error('Wan 2.7 Pro Image supports up to 4 images total. Please reduce the number of selected images.');
+    }
 
     const allImageUrls = [baseImageUrl]; // Base image first, then references.
     if (hasReferenceImages) {
@@ -263,13 +267,13 @@ export const generateImageEdit = async (
       allImageUrls.push(...referenceUrls);
     }
 
-    if (allImageUrls.length > 3) { // Limit to 3 images per I2I API.
-      throw new Error('Wan 2.6 Image supports up to 3 images total. Please reduce the number of selected images.');
+    if (allImageUrls.length > 4) { // Fal edit endpoint accepts 1 base image plus 3 references.
+      throw new Error('Wan 2.7 Pro Image supports up to 4 images total. Please reduce the number of selected images.');
     }
 
-    const convertedPrompt = convertWan26ImageMentions(prompt); // Convert @ImageN mentions.
+    const convertedPrompt = convertWan27ImageMentions(prompt); // Convert @ImageN mentions.
 
-    const wan26Body: {
+    const wan27Body: {
       prompt: string;
       image_urls: string[];
       image_size?: string;
@@ -280,24 +284,25 @@ export const generateImageEdit = async (
     } = {
       prompt: convertedPrompt,
       image_urls: allImageUrls,
-      image_size: options.wan26ImageSize ?? 'landscape_16_9',
+      image_size: options.wan27ImageSize ?? 'landscape_16_9',
+      enable_prompt_expansion: true,
       enable_safety_checker: true,
     };
 
-    const numImages = parseInt(options.wan26ImageMaxImages ?? '1', 10);
-    wan26Body.num_images = Math.min(4, Math.max(1, numImages)); // I2I num_images cap.
+    const numImages = parseInt(options.wan27ImageMaxImages ?? '1', 10);
+    wan27Body.num_images = Math.min(4, Math.max(1, numImages)); // Edit endpoint num_images cap.
 
     if (options.negativePrompt) {
-      wan26Body.negative_prompt = options.negativePrompt;
+      wan27Body.negative_prompt = options.negativePrompt;
     }
 
-    const i2iModelId = WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID;
-    logFalEvent('outbound', i2iModelId, 'Outbound request (fal.subscribe)', { input: wan26Body });
+    const i2iModelId = WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID;
+    logFalEvent('outbound', i2iModelId, 'Outbound request (fal.subscribe)', { input: wan27Body });
 
     let result: Awaited<ReturnType<typeof fal.subscribe>>;
     try {
       result = await fal.subscribe(i2iModelId, {
-        input: wan26Body,
+        input: wan27Body,
         logs: true,
         onQueueUpdate: update => {
           const queueUpdate = update as unknown as FalQueueUpdate;
@@ -335,21 +340,21 @@ export const generateImageEdit = async (
     const data = result?.data as { images?: Array<{ url: string }> } | undefined;
     const images = data?.images;
     if (!images || images.length === 0) {
-      throw new Error('Fal.ai Wan 2.6 Image I2I API did not return an image.');
+      throw new Error('Fal.ai Wan 2.7 Pro Image Edit API did not return an image.');
     }
 
     const inlineDataList = await Promise.all(images.map(img => extractInlineData(img.url)));
     const base64List = inlineDataList.map(dataUrl => {
       const base64 = dataUrl.split(',')[1];
       if (!base64) {
-        throw new Error('Failed to extract image data from Fal.ai Wan 2.6 Image I2I response.');
+        throw new Error('Failed to extract image data from Fal.ai Wan 2.7 Pro Image Edit response.');
       }
       return base64;
     });
 
     const [primaryBase64] = base64List;
     if (!primaryBase64) {
-      throw new Error('Failed to extract image data from Fal.ai Wan 2.6 Image I2I response.');
+      throw new Error('Failed to extract image data from Fal.ai Wan 2.7 Pro Image Edit response.');
     }
 
     const requestId = result?.requestId || latestRequestId;

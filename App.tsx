@@ -25,8 +25,8 @@ import {
   SCAIL_VIDEO_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
-  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
-  WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
   getMaxReferenceImages,
   isKlingO1VideoModelId,
@@ -203,8 +203,9 @@ export default function App() {
     shouldShowVideoNegativePrompt,
   } = useVideoNegativePrompt({ isVideoMode: fal.isVideoMode, falVideoModelId: fal.falVideoModelId });
 
-  // Negative prompt state for Wan 2.6 Image model
-  const [wan26ImageNegativePrompt, setWan26ImageNegativePrompt] = useState<string>(WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT);
+  // Negative prompt state for Wan 2.7 Pro Image model
+  const [wan27ImageNegativePrompt, setWan27ImageNegativePrompt] = useState<string>(WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT);
+  const generationNegativePrompt = fal.isWan27ImageModel ? wan27ImageNegativePrompt : videoNegativePrompt; // Route active negative prompt into generation.
 
   // Toggles display of metadata overlays on canvas images
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
@@ -298,8 +299,8 @@ export default function App() {
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
-    if (fal.falModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
-      setToastMessage('Wan 2.6 Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.');
+    if (fal.falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
+      setToastMessage('Wan 2.7 Pro Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.');
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
@@ -873,7 +874,7 @@ export default function App() {
     selection,
     images,
     paths,
-    videoNegativePrompt,
+    videoNegativePrompt: generationNegativePrompt,
     setError,
     setIsLoading,
     setFalJobs,
@@ -1058,7 +1059,7 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan26ImageModel,
+    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
     includePrimaryImageAsReference: !isSeedance2ReferenceMode, // Seedance reference mode should not auto-label the current primary pick.
@@ -1195,7 +1196,7 @@ export default function App() {
     isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
     isSeedance2ReferenceMode,
     isFlux2MaxModel: fal.isFlux2MaxModel,
-    isWan26ImageModel: fal.isWan26ImageModel,
+    isWan27ImageModel: fal.isWan27ImageModel,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds: effectiveSeedanceReferenceImageIds,
@@ -1354,9 +1355,9 @@ export default function App() {
     seedance2GenerateAudio: fal.seedance2GenerateAudio,
     seedance2CameraFixed: fal.seedance2CameraFixed,
     flux2MaxImageSize: fal.flux2MaxImageSize,
-    isWan26ImageModel: fal.isWan26ImageModel,
-    wan26ImageAspectRatio: fal.wan26ImageAspectRatio,
-    wan26ImageMaxImages: fal.wan26ImageMaxImages,
+    isWan27ImageModel: fal.isWan27ImageModel,
+    wan27ImageAspectRatio: fal.wan27ImageAspectRatio,
+    wan27ImageMaxImages: fal.wan27ImageMaxImages,
     recraftImageSize: fal.recraftImageSize,
     recraftBackgroundColor: fal.recraftBackgroundColor,
     recraftColors: fal.recraftColors,
@@ -1417,8 +1418,8 @@ export default function App() {
     onSeedance2GenerateAudioChange: fal.handleSeedance2GenerateAudioChange,
     onSeedance2CameraFixedChange: fal.handleSeedance2CameraFixedChange,
     onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
-    onWan26ImageAspectRatioChange: fal.handleWan26ImageAspectRatioChange,
-    onWan26ImageMaxImagesChange: fal.handleWan26ImageMaxImagesChange,
+    onWan27ImageAspectRatioChange: fal.handleWan27ImageAspectRatioChange,
+    onWan27ImageMaxImagesChange: fal.handleWan27ImageMaxImagesChange,
     onRecraftImageSizeChange: fal.handleRecraftImageSizeChange,
     onRecraftBackgroundColorChange: fal.handleRecraftBackgroundColorChange,
     onRecraftColorChange: fal.handleRecraftColorChange,
@@ -1444,14 +1445,14 @@ export default function App() {
     google: PROVIDER_LABELS.google,
     fal: fal.isSeedance2VideoModel ? 'VOLCENGINE' : PROVIDER_LABELS.fal,
   }), [fal.isSeedance2VideoModel]);
-  const shouldShowNegativePrompt = shouldShowVideoNegativePrompt || fal.isWan26ImageModel;
+  const shouldShowNegativePrompt = shouldShowVideoNegativePrompt || fal.isWan27ImageModel;
   const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);
   const promptOutlineColor = isCameraPromptAccentActive
     ? '#f59e0b'
     : shouldShowNegativePrompt ? '#34d399' : undefined;
   const negativePromptOutlineColor = shouldShowNegativePrompt ? '#f87171' : undefined;
-  const activeNegativePrompt = fal.isWan26ImageModel ? wan26ImageNegativePrompt : videoNegativePrompt;
-  const activeNegativePromptSetter = fal.isWan26ImageModel ? setWan26ImageNegativePrompt : setVideoNegativePrompt;
+  const activeNegativePrompt = generationNegativePrompt;
+  const activeNegativePromptSetter = fal.isWan27ImageModel ? setWan27ImageNegativePrompt : setVideoNegativePrompt;
 
 
   // TSX (React with Tailwind CSS utility classes)
@@ -1719,7 +1720,7 @@ export default function App() {
               ? (fal.seedance2Variant === 'reference'
                 ? `Seedance 2 Reference: select or shift-click up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... (Cmd/Ctrl + Enter to generate)`
                 : 'Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... (Cmd/Ctrl + Enter to generate)')
-              : fal.isWan26ImageModel
+              : fal.isWan27ImageModel
               ? 'Describe your generation, or your edit, or use @ to reference images (4 images in total)... (Cmd/Ctrl + Enter to generate)'
               : isKlingModel || fal.isKlingO1VideoModel || fal.isFlux2MaxModel
                 ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
@@ -1728,11 +1729,11 @@ export default function App() {
           showNegativePrompt={shouldShowNegativePrompt}
           negativePrompt={activeNegativePrompt}
           onNegativePromptChange={activeNegativePromptSetter}
-          negativePromptPlaceholder={fal.isWan26ImageModel ? 'Describe what the image should avoid... (optional)' : 'Describe what the video should avoid... (optional)'}
+          negativePromptPlaceholder={fal.isWan27ImageModel ? 'Describe what the image should avoid... (optional)' : 'Describe what the video should avoid... (optional)'}
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
           cameraThemeActive={isCameraPromptAccentActive}
-          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan26ImageModel}
+          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
           sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}

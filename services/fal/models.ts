@@ -8,10 +8,14 @@ import {
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
 
 const LEGACY_NANO_BANANA_EDIT_MODEL_ID = 'fal-ai/nano-banana/edit'; // Legacy edit id.
 const LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana'; // Legacy t2i id.
+const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image'; // Legacy Wan image t2i id.
+const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image'; // Legacy Wan image edit id.
 
 export const normalizeModelId = (modelId: string | undefined): string | undefined => { // Normalize legacy ids.
   if (modelId === LEGACY_NANO_BANANA_EDIT_MODEL_ID) {
@@ -19,6 +23,12 @@ export const normalizeModelId = (modelId: string | undefined): string | undefine
   }
   if (modelId === LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID) {
     return NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+  }
+  if (modelId === LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
+    return WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  }
+  if (modelId === LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID) {
+    return WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID;
   }
   return modelId;
 };

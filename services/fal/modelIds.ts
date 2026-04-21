@@ -17,8 +17,8 @@ import {
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID as MODEL_VEO_31_I2V,
   VEO_31_FFLF_VIDEO_MODEL_ID as MODEL_VEO_31_FFLF,
   VEO_31_EXTEND_VIDEO_MODEL_ID as MODEL_VEO_31_EXTEND,
-  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID as MODEL_WAN_26_T2I,
-  WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID as MODEL_WAN_26_I2I,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID as MODEL_WAN_27_T2I,
+  WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID as MODEL_WAN_27_I2I,
   SEEDANCE_15_VIDEO_MODEL_ID as MODEL_SEEDANCE_15,
 } from '../modelConfig'; // Canonical model IDs.
 
@@ -44,6 +44,6 @@ export const WAN_26_I2V_MODEL_ID = MODEL_WAN_26_I2V; // Wan 2.6 image-to-video e
 export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = MODEL_VEO_31_I2V; // Veo 3.1 image-to-video endpoint.
 export const VEO_31_FFLF_VIDEO_MODEL_ID = MODEL_VEO_31_FFLF; // Veo 3.1 fflf endpoint.
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = MODEL_VEO_31_EXTEND; // Veo 3.1 extend endpoint.
-export const WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = MODEL_WAN_26_T2I; // Wan 2.6 text-to-image endpoint.
-export const WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = MODEL_WAN_26_I2I; // Wan 2.6 image-to-image endpoint.
+export const WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID = MODEL_WAN_27_T2I; // Wan 2.7 Pro text-to-image endpoint.
+export const WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = MODEL_WAN_27_I2I; // Wan 2.7 Pro edit endpoint.
 export const SEEDANCE_15_VIDEO_MODEL_ID = MODEL_SEEDANCE_15; // Seedance 1.5 endpoint.

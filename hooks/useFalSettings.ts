@@ -24,7 +24,7 @@ import {
   INFINITALK_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_26_I2V_MODEL_ID,
-  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
@@ -52,8 +52,8 @@ import {
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
   isRecraftV4ProImageSizeSelectionValue,
-  isWan26ImageAspectRatioSelectionValue,
-  isWan26ImageMaxImagesSelectionValue,
+  isWan27ImageAspectRatioSelectionValue,
+  isWan27ImageMaxImagesSelectionValue,
   RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   RECRAFT_V4_PRO_MAX_COLORS,
@@ -99,8 +99,8 @@ import type {
   RecraftV4ProImageSizeSelectionValue,
   Wan26DurationSelectionValue,
   Wan26ResolutionSelectionValue,
-  Wan26ImageAspectRatioSelectionValue,
-  Wan26ImageMaxImagesSelectionValue,
+  Wan27ImageAspectRatioSelectionValue,
+  Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -132,7 +132,7 @@ type FalDerivedState = {
   isSeedance2VideoModel: boolean;
   isVeo31VideoModel: boolean;
   isFlux2MaxModel: boolean;
-  isWan26ImageModel: boolean;
+  isWan27ImageModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO1EditMode: boolean;
@@ -191,8 +191,8 @@ type FalHandlers = {
   handleSeedance2GenerateAudioChange: (value: boolean) => void;
   handleSeedance2CameraFixedChange: (value: boolean) => void;
   handleFlux2MaxImageSizeChange: (value: string) => void;
-  handleWan26ImageAspectRatioChange: (value: string) => void;
-  handleWan26ImageMaxImagesChange: (value: string) => void;
+  handleWan27ImageAspectRatioChange: (value: string) => void;
+  handleWan27ImageMaxImagesChange: (value: string) => void;
   handleRecraftImageSizeChange: (value: string) => void;
   handleRecraftBackgroundColorChange: (value: string) => void;
   handleRecraftColorChange: (index: number, value: string) => void;
@@ -260,8 +260,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
-  wan26ImageAspectRatio: Wan26ImageAspectRatioSelectionValue;
-  wan26ImageMaxImages: Wan26ImageMaxImagesSelectionValue;
+  wan27ImageAspectRatio: Wan27ImageAspectRatioSelectionValue;
+  wan27ImageMaxImages: Wan27ImageMaxImagesSelectionValue;
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
@@ -324,8 +324,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setSeedance2GenerateAudio: Dispatch<SetStateAction<boolean>>;
   setSeedance2CameraFixed: Dispatch<SetStateAction<boolean>>;
   setFlux2MaxImageSize: Dispatch<SetStateAction<Flux2MaxImageSizeSelectionValue>>;
-  setWan26ImageAspectRatio: Dispatch<SetStateAction<Wan26ImageAspectRatioSelectionValue>>;
-  setWan26ImageMaxImages: Dispatch<SetStateAction<Wan26ImageMaxImagesSelectionValue>>;
+  setWan27ImageAspectRatio: Dispatch<SetStateAction<Wan27ImageAspectRatioSelectionValue>>;
+  setWan27ImageMaxImages: Dispatch<SetStateAction<Wan27ImageMaxImagesSelectionValue>>;
   setRecraftImageSize: Dispatch<SetStateAction<RecraftV4ProImageSizeSelectionValue>>;
   setRecraftBackgroundColor: Dispatch<SetStateAction<RecraftRgbColor>>;
   setRecraftColors: Dispatch<SetStateAction<RecraftRgbColor[]>>;
@@ -392,8 +392,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [seedance2GenerateAudio, setSeedance2GenerateAudio] = useState<boolean>(false);
   const [seedance2CameraFixed, setSeedance2CameraFixed] = useState<boolean>(false);
   const [flux2MaxImageSize, setFlux2MaxImageSize] = useState<Flux2MaxImageSizeSelectionValue>('landscape_4_3');
-  const [wan26ImageAspectRatio, setWan26ImageAspectRatio] = useState<Wan26ImageAspectRatioSelectionValue>('landscape_16_9');
-  const [wan26ImageMaxImages, setWan26ImageMaxImages] = useState<Wan26ImageMaxImagesSelectionValue>('1');
+  const [wan27ImageAspectRatio, setWan27ImageAspectRatio] = useState<Wan27ImageAspectRatioSelectionValue>('landscape_16_9');
+  const [wan27ImageMaxImages, setWan27ImageMaxImages] = useState<Wan27ImageMaxImagesSelectionValue>('1');
   const [recraftImageSize, setRecraftImageSize] = useState<RecraftV4ProImageSizeSelectionValue>(RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE);
   const [recraftBackgroundColor, setRecraftBackgroundColor] = useState<RecraftRgbColor>(RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR);
   const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
@@ -425,7 +425,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isSeedance2VideoModel = isVideoMode && falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID;
   const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
-  const isWan26ImageModel = !isVideoMode && falImageModelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  const isWan27ImageModel = !isVideoMode && falImageModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO1EditMode = isKlingO1VideoModel && klingO1Variant === 'edit';
@@ -872,15 +872,15 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
-  const handleWan26ImageAspectRatioChange = useCallback((value: string) => {
-    if (isWan26ImageAspectRatioSelectionValue(value)) {
-      setWan26ImageAspectRatio(value);
+  const handleWan27ImageAspectRatioChange = useCallback((value: string) => {
+    if (isWan27ImageAspectRatioSelectionValue(value)) {
+      setWan27ImageAspectRatio(value);
     }
   }, []);
 
-  const handleWan26ImageMaxImagesChange = useCallback((value: string) => {
-    if (isWan26ImageMaxImagesSelectionValue(value)) {
-      setWan26ImageMaxImages(value);
+  const handleWan27ImageMaxImagesChange = useCallback((value: string) => {
+    if (isWan27ImageMaxImagesSelectionValue(value)) {
+      setWan27ImageMaxImages(value);
     }
   }, []);
 
@@ -1022,13 +1022,13 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     seedance2GenerateAudio,
     seedance2CameraFixed,
     flux2MaxImageSize,
-    wan26ImageAspectRatio,
-    wan26ImageMaxImages,
+    wan27ImageAspectRatio,
+    wan27ImageMaxImages,
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
     isFlux2MaxModel,
-    isWan26ImageModel,
+    isWan27ImageModel,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -1106,8 +1106,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSeedance2GenerateAudioChange,
     handleSeedance2CameraFixedChange,
     handleFlux2MaxImageSizeChange,
-    handleWan26ImageAspectRatioChange,
-    handleWan26ImageMaxImagesChange,
+    handleWan27ImageAspectRatioChange,
+    handleWan27ImageMaxImagesChange,
     handleRecraftImageSizeChange,
     handleRecraftBackgroundColorChange,
     handleRecraftColorChange,
@@ -1172,8 +1172,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
     setFlux2MaxImageSize,
-    setWan26ImageAspectRatio,
-    setWan26ImageMaxImages,
+    setWan27ImageAspectRatio,
+    setWan27ImageMaxImages,
     setRecraftImageSize,
     setRecraftBackgroundColor,
     setRecraftColors,

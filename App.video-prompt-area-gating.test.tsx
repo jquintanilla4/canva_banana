@@ -72,7 +72,7 @@ const mockState = vi.hoisted(() => {
     isSeedance2VideoModel: true,
     isVeo31VideoModel: false,
     isFlux2MaxModel: false,
-    isWan26ImageModel: false,
+    isWan27ImageModel: false,
     isUpscaleModel: false,
     isKlingProVideoSelection: false,
     isKlingO1EditMode: false,
@@ -133,8 +133,8 @@ const mockState = vi.hoisted(() => {
     seedance2GenerateAudio: false,
     seedance2CameraFixed: false,
     flux2MaxImageSize: 'landscape_16_9',
-    wan26ImageAspectRatio: '16:9',
-    wan26ImageMaxImages: 1,
+    wan27ImageAspectRatio: 'landscape_16_9',
+    wan27ImageMaxImages: '1',
   };
 
   falState.handleModelModeChange = vi.fn((mode: 'image' | 'video') => {
@@ -193,8 +193,8 @@ const mockState = vi.hoisted(() => {
   falState.handleSeedance2GenerateAudioChange = vi.fn();
   falState.handleSeedance2CameraFixedChange = vi.fn();
   falState.handleFlux2MaxImageSizeChange = vi.fn();
-  falState.handleWan26ImageAspectRatioChange = vi.fn();
-  falState.handleWan26ImageMaxImagesChange = vi.fn();
+  falState.handleWan27ImageAspectRatioChange = vi.fn();
+  falState.handleWan27ImageMaxImagesChange = vi.fn();
   falState.handleFalImageSizeChange = vi.fn();
   falState.handleFalAspectRatioChange = vi.fn();
   falState.handleFalResolutionChange = vi.fn();

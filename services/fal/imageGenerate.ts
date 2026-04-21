@@ -20,7 +20,7 @@ import {
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   RECRAFT_V4_PRO_MAX_COLORS,
   normalizeRecraftRgbColor,
-  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
 
 export const generateImage = async (
@@ -34,7 +34,7 @@ export const generateImage = async (
   const isNanoBananaTextToImage = isNanoBananaTextToImageModelId(modelId);
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
-  const isWan26ImageTextToImage = modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  const isWan27ImageTextToImage = modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isRecraftV4ProTextToImage = isRecraftV4ProModel(modelId);
   const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
   const supportsAspectRatio = isNanoBananaTextToImage
@@ -92,20 +92,20 @@ export const generateImage = async (
     body.image_size = flux2ImageSize;
   }
 
-  if (isWan26ImageTextToImage) { // Wan 2.6 Image T2I specific settings.
-    const wan26Body = body as Record<string, unknown>;
-    wan26Body.image_size = options.wan26ImageSize ?? 'landscape_16_9';
-    const maxImages = parseInt(options.wan26ImageMaxImages ?? '1', 10);
-    wan26Body.max_images = Math.min(5, Math.max(1, maxImages));
+  if (isWan27ImageTextToImage) { // Wan 2.7 Pro Image T2I specific settings.
+    const wan27Body = body as Record<string, unknown>;
+    wan27Body.image_size = options.wan27ImageSize ?? 'landscape_16_9';
+    const maxImages = parseInt(options.wan27ImageMaxImages ?? '1', 10);
+    wan27Body.max_images = Math.min(5, Math.max(1, maxImages));
     if (options.negativePrompt) {
-      wan26Body.negative_prompt = options.negativePrompt;
+      wan27Body.negative_prompt = options.negativePrompt;
     }
-    wan26Body.enable_safety_checker = true;
-    delete wan26Body.output_format;
-    delete wan26Body.sync_mode;
+    wan27Body.enable_safety_checker = true;
+    delete wan27Body.output_format;
+    delete wan27Body.sync_mode;
   }
 
-  if (!isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {
@@ -185,7 +185,7 @@ export const generateImage = async (
     data: (result?.data as Record<string, unknown>) ?? undefined,
   });
 
-  const data = result?.data as { images?: Array<{ url: string }>; description?: string } | undefined;
+  const data = result?.data as { images?: Array<{ url: string }>; description?: string; generated_text?: string | null } | undefined;
   const images = data?.images;
   if (!images || images.length === 0) {
     throw new Error('Fal.ai API did not return an image.');
@@ -205,7 +205,9 @@ export const generateImage = async (
     throw new Error('Failed to extract image data from Fal.ai response.');
   }
 
-  const description: string = typeof data?.description === 'string' ? data.description : '';
+  const description: string = typeof data?.description === 'string'
+    ? data.description
+    : typeof data?.generated_text === 'string' ? data.generated_text : '';
 
   const requestId = result?.requestId || latestRequestId;
 

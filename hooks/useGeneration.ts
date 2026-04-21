@@ -24,7 +24,7 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
-  WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   getFalModelLabel,
   getFalNumImageMaxForModel,
   getHailuoActualModelId,
@@ -414,9 +414,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     isSeedance15VideoModel,
     flux2MaxImageSize,
     isFlux2MaxModel,
-    wan26ImageAspectRatio,
-    wan26ImageMaxImages,
-    isWan26ImageModel,
+    wan27ImageAspectRatio,
+    wan27ImageMaxImages,
+    isWan27ImageModel,
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
@@ -667,7 +667,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ? '1:1'
       : falAspectRatioSelectionForRun; // Grok falls back to 1:1.
     const isFlux2MaxModelForRun = !isVideoMode && falModelIdForRun === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
-    const isWan26ImageModelForRun = !isVideoMode && falModelIdForRun === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+    const isWan27ImageModelForRun = !isVideoMode && falModelIdForRun === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
     const isRecraftV4ProModelForRun = usingFal && !isVideoMode && isRecraftV4ProModel(falModelIdForRun);
     const normalizedFalResolutionSelectionForRun =
       isKlingModel && falResolutionSelectionForRun === '4K' ? '2K' : falResolutionSelectionForRun;
@@ -1814,8 +1814,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 ? KLING_IMAGE_MODEL_ID
                 : isFlux2MaxModelForRun
                   ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
-                  : isWan26ImageModelForRun
-                    ? WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID
+                  : isWan27ImageModelForRun
+                    ? WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID
                     : isRecraftV4ProModelForRun
                       ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
                       : isNanoBananaModel
@@ -1876,9 +1876,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(isKlingModel ? { resolution: normalizedFalResolutionSelectionForRun } : {}),
             ...(isSeedreamModel ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
             ...(isFlux2MaxModelForRun ? { flux2MaxImageSize } : {}),
-            ...(isWan26ImageModelForRun ? {
-              wan26ImageSize: wan26ImageAspectRatio,
-              wan26ImageMaxImages: wan26ImageMaxImages,
+            ...(isWan27ImageModelForRun ? {
+              wan27ImageSize: wan27ImageAspectRatio,
+              wan27ImageMaxImages: wan27ImageMaxImages,
               negativePrompt: videoNegativePrompt.trim() || undefined,
             } : {}),
             ...(isRecraftV4ProModelForRun ? {
@@ -1981,7 +1981,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
           } else {
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isKlingModel || isNanoBananaModel || isSeedreamModel || isFlux2MaxModelForRun || isWan26ImageModelForRun;
+            const supportsEditReferenceImages = isKlingModel || isNanoBananaModel || isSeedreamModel || isFlux2MaxModelForRun || isWan27ImageModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
               const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
@@ -2017,9 +2017,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
               ...(normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
               ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
-              ...(isWan26ImageModelForRun ? {
-                wan26ImageSize: wan26ImageAspectRatio,
-                wan26ImageMaxImages: wan26ImageMaxImages,
+              ...(isWan27ImageModelForRun ? {
+                wan27ImageSize: wan27ImageAspectRatio,
+                wan27ImageMaxImages: wan27ImageMaxImages,
                 negativePrompt: videoNegativePrompt.trim() || undefined,
               } : {}),
               numImages: normalizedFalNumImages,
@@ -2279,9 +2279,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance2GenerateAudio,
     seedance2CameraFixed,
     isSeedance15VideoModel,
-    wan26ImageAspectRatio,
-    wan26ImageMaxImages,
-    isWan26ImageModel,
+    wan27ImageAspectRatio,
+    wan27ImageMaxImages,
+    isWan27ImageModel,
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,

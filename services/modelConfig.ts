@@ -62,8 +62,8 @@ export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as 
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video' as const;
 export const SCAIL_VIDEO_MODEL_ID = 'fal-ai/scail' as const;
-export const WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
-export const WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
+export const WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/wan/v2.7/pro/text-to-image' as const;
+export const WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'fal-ai/wan/v2.7/pro/edit' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 export type HailuoVariant = 'standard' | 'pro';
@@ -79,7 +79,7 @@ export const WAN_DEFAULT_NEGATIVE_PROMPT =
   'oversaturated, overexposed, static, blurry details, subtitles, stylized, artwork, painting, still frame, overall gray, worst quality, low quality, JPEG artifacts, ugly, mutated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, static motion, cluttered background, three legs, crowded background, walking backwards';
 export const ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT =
   'black background, Aerial view, aerial view, overexposed, low quality, deformation, a poor composition, bad hands, bad teeth, bad eyes, bad limbs, distortion';
-export const WAN_26_IMAGE_DEFAULT_NEGATIVE_PROMPT = 'low resolution, error, worst quality, low quality, deformed, extra fingers';
+export const WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT = 'low resolution, error, worst quality, low quality, deformed, extra fingers';
 
 export type WanTargetResolution = '720p' | '1080p';
 export type WanCreativity = 0 | 1 | 2 | 3 | 4;
@@ -113,7 +113,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream 4.5' },
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
-  { value: WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Wan 2.6 Image' },
+  { value: WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Wan 2.7 Pro Image' },
  ] as const;
 
 export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_OPTIONS_BASE);
@@ -554,9 +554,9 @@ export const isFlux2MaxImageSizeSelectionValue = (value: unknown): value is Flux
 export const isFlux2MaxModel = (modelId: string | undefined): boolean =>
   modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
 
-// Wan 2.6 Image options
-export type Wan26ImageAspectRatioSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-export type Wan26ImageMaxImagesSelectionValue = '1' | '2' | '3' | '4' | '5';
+// Wan 2.7 Pro Image options
+export type Wan27ImageAspectRatioSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
+export type Wan27ImageMaxImagesSelectionValue = '1' | '2' | '3' | '4' | '5';
 export type RecraftV4ProImageSizeSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
 export type RecraftRgbColor = { r: number; g: number; b: number };
 
@@ -564,7 +564,7 @@ export const RECRAFT_V4_PRO_MAX_COLORS = 5; // UI cap for preferred colors.
 export const RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE: RecraftV4ProImageSizeSelectionValue = 'square_hd'; // Fal default.
 export const RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR: RecraftRgbColor = { r: 255, g: 255, b: 255 }; // Neutral background color.
 
-export const WAN_26_IMAGE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan26ImageAspectRatioSelectionValue; label: string }> = [
+export const WAN_27_IMAGE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan27ImageAspectRatioSelectionValue; label: string }> = [
   { value: 'landscape_16_9', label: 'Landscape 16:9' },
   { value: 'landscape_4_3', label: 'Landscape 4:3' },
   { value: 'portrait_16_9', label: 'Portrait 16:9' },
@@ -573,7 +573,7 @@ export const WAN_26_IMAGE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan26Imag
   { value: 'square', label: 'Square' },
 ] as const;
 
-export const WAN_26_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan26ImageMaxImagesSelectionValue; label: string }> = [
+export const WAN_27_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan27ImageMaxImagesSelectionValue; label: string }> = [
   { value: '1', label: '1' },
   { value: '2', label: '2' },
   { value: '3', label: '3' },
@@ -590,16 +590,16 @@ export const RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: RecraftV4
   { value: 'landscape_16_9', label: 'Landscape 16:9' },
 ] as const;
 
-export const isWan26ImageModel = (modelId: string | undefined): boolean =>
-  modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+export const isWan27ImageModel = (modelId: string | undefined): boolean =>
+  modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
 
 export const isRecraftV4ProModel = (modelId: string | undefined): boolean =>
   modelId === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID;
 
-export const isWan26ImageAspectRatioSelectionValue = (value: unknown): value is Wan26ImageAspectRatioSelectionValue =>
+export const isWan27ImageAspectRatioSelectionValue = (value: unknown): value is Wan27ImageAspectRatioSelectionValue =>
   value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
 
-export const isWan26ImageMaxImagesSelectionValue = (value: unknown): value is Wan26ImageMaxImagesSelectionValue =>
+export const isWan27ImageMaxImagesSelectionValue = (value: unknown): value is Wan27ImageMaxImagesSelectionValue =>
   value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
 
 export const isRecraftV4ProImageSizeSelectionValue = (value: unknown): value is RecraftV4ProImageSizeSelectionValue =>
@@ -753,12 +753,17 @@ export const isGenerationKind = (value: unknown): value is GenerationKind =>
 
 const LEGACY_NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 const LEGACY_SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const;
+const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
+const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
   if (value === LEGACY_NANO_BANANA_MODEL_ID) {
     return NANO_BANANA_PRO_EDIT_MODEL_ID;
   }
   if (value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID) {
     return HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+  }
+  if (value === LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID || value === LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID) {
+    return WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   }
   return isFalModelId(value) ? value : undefined;
 };
@@ -905,7 +910,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
   [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
   [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,
-  [WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID]: 3, // Wan 2.6 Image supports up to 4 total images (1 primary + 3 references)
+  [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID]: 3, // Wan 2.7 Pro Image supports up to 4 total images (1 primary + 3 references)
   [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [KLING_O1_VIDEO_MODEL_ID]: 6,
   [KLING_O1_VIDEO_EDIT_MODEL_ID]: 4,
