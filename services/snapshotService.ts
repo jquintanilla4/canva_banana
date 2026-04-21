@@ -25,6 +25,7 @@ import {
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isRecraftV4ProImageSizeSelectionValue,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
@@ -34,6 +35,8 @@ import {
   isVeo31ResolutionSelectionValue,
   isVeo31Variant,
   normalizeVeo31Variant,
+  normalizeRecraftRgbColor,
+  RECRAFT_V4_PRO_MAX_COLORS,
   isGenerationKind,
 } from './modelConfig';
 import {
@@ -921,6 +924,25 @@ export const normalizeSnapshotImageMetadata = (
       const veo31GenerateAudioValue = (typed as { veo31GenerateAudio?: unknown }).veo31GenerateAudio;
       if (typeof veo31GenerateAudioValue === 'boolean') {
         normalizedOptions.veo31GenerateAudio = veo31GenerateAudioValue;
+      }
+
+      const recraftImageSizeValue = (typed as { recraftImageSize?: unknown }).recraftImageSize;
+      if (isRecraftV4ProImageSizeSelectionValue(recraftImageSizeValue)) {
+        normalizedOptions.recraftImageSize = recraftImageSizeValue;
+      }
+      const recraftBackgroundColor = normalizeRecraftRgbColor((typed as { recraftBackgroundColor?: unknown }).recraftBackgroundColor);
+      if (recraftBackgroundColor) {
+        normalizedOptions.recraftBackgroundColor = recraftBackgroundColor;
+      }
+      const recraftColorsRaw = (typed as { recraftColors?: unknown }).recraftColors;
+      if (Array.isArray(recraftColorsRaw)) {
+        const recraftColors = recraftColorsRaw
+          .map(normalizeRecraftRgbColor)
+          .filter((color): color is NonNullable<typeof color> => Boolean(color))
+          .slice(0, RECRAFT_V4_PRO_MAX_COLORS);
+        if (recraftColors.length > 0) {
+          normalizedOptions.recraftColors = recraftColors;
+        }
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;

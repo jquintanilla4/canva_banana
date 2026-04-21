@@ -22,6 +22,7 @@ export const SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedrea
 export const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1' as const;
 export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
 export const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit' as const;
+export const RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/recraft/v4/pro/text-to-image' as const; // Recraft v4 Pro t2i endpoint.
 export const GROK_IMAGINE_IMAGE_MODEL_ID = 'xai/grok-imagine-image' as const; // Grok Imagine image model id.
 export const GROK_IMAGINE_IMAGE_EDIT_MODEL_ID = 'xai/grok-imagine-image/edit' as const; // Grok Imagine edit endpoint id.
 export const GROK_IMAGINE_VIDEO_MODEL_ID = 'xai/grok-imagine-video/image-to-video' as const; // Grok Imagine image-to-video endpoint id.
@@ -107,6 +108,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
   { value: NANO_BANANA_2_EDIT_MODEL_ID, label: 'NanoBanana 2' }, // Selector uses edit id.
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
+  { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4 Pro' }, // Direct text-to-image endpoint.
   { value: SEEDREAM_MODEL_ID, label: 'Seedream 4' },
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream 4.5' },
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
@@ -555,6 +557,12 @@ export const isFlux2MaxModel = (modelId: string | undefined): boolean =>
 // Wan 2.6 Image options
 export type Wan26ImageAspectRatioSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
 export type Wan26ImageMaxImagesSelectionValue = '1' | '2' | '3' | '4' | '5';
+export type RecraftV4ProImageSizeSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
+export type RecraftRgbColor = { r: number; g: number; b: number };
+
+export const RECRAFT_V4_PRO_MAX_COLORS = 5; // UI cap for preferred colors.
+export const RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE: RecraftV4ProImageSizeSelectionValue = 'square_hd'; // Fal default.
+export const RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR: RecraftRgbColor = { r: 255, g: 255, b: 255 }; // Neutral background color.
 
 export const WAN_26_IMAGE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan26ImageAspectRatioSelectionValue; label: string }> = [
   { value: 'landscape_16_9', label: 'Landscape 16:9' },
@@ -573,14 +581,67 @@ export const WAN_26_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan26ImageM
   { value: '5', label: '5' },
 ] as const;
 
+export const RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: RecraftV4ProImageSizeSelectionValue; label: string }> = [
+  { value: 'square_hd', label: 'Square HD' },
+  { value: 'square', label: 'Square' },
+  { value: 'portrait_4_3', label: 'Portrait 3:4' },
+  { value: 'portrait_16_9', label: 'Portrait 9:16' },
+  { value: 'landscape_4_3', label: 'Landscape 4:3' },
+  { value: 'landscape_16_9', label: 'Landscape 16:9' },
+] as const;
+
 export const isWan26ImageModel = (modelId: string | undefined): boolean =>
   modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+
+export const isRecraftV4ProModel = (modelId: string | undefined): boolean =>
+  modelId === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID;
 
 export const isWan26ImageAspectRatioSelectionValue = (value: unknown): value is Wan26ImageAspectRatioSelectionValue =>
   value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
 
 export const isWan26ImageMaxImagesSelectionValue = (value: unknown): value is Wan26ImageMaxImagesSelectionValue =>
   value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
+
+export const isRecraftV4ProImageSizeSelectionValue = (value: unknown): value is RecraftV4ProImageSizeSelectionValue =>
+  value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
+
+export const clampRecraftRgbChannel = (value: unknown): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.min(255, Math.max(0, Math.round(parsed)));
+};
+
+export const normalizeRecraftRgbColor = (value: unknown): RecraftRgbColor | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const color = value as Partial<RecraftRgbColor>;
+  return {
+    r: clampRecraftRgbChannel(color.r),
+    g: clampRecraftRgbChannel(color.g),
+    b: clampRecraftRgbChannel(color.b),
+  };
+};
+
+const toHexPair = (value: number): string => value.toString(16).padStart(2, '0');
+
+export const recraftRgbToHex = (color: RecraftRgbColor): string =>
+  `#${toHexPair(clampRecraftRgbChannel(color.r))}${toHexPair(clampRecraftRgbChannel(color.g))}${toHexPair(clampRecraftRgbChannel(color.b))}`;
+
+export const recraftHexToRgb = (value: string): RecraftRgbColor | undefined => {
+  const match = /^#?([0-9a-f]{6})$/i.exec(value.trim());
+  if (!match) {
+    return undefined;
+  }
+  const hex = match[1];
+  return {
+    r: Number.parseInt(hex.slice(0, 2), 16),
+    g: Number.parseInt(hex.slice(2, 4), 16),
+    b: Number.parseInt(hex.slice(4, 6), 16),
+  };
+};
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS_BASE, ...FAL_VIDEO_MODEL_OPTIONS_BASE] as const;
 export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];

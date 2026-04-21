@@ -433,6 +433,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 value={brushColor}
                 onChange={(e) => onBrushColorChange(e.target.value)}
                 className="w-8 h-8 p-0 border-none rounded-md bg-transparent cursor-pointer"
+                style={{ colorScheme: 'light dark' }}
               />
             </div>
           )}

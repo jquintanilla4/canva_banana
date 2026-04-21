@@ -195,6 +195,79 @@ const PromptBarAutocompleteHarness = () => {
   );
 };
 
+const RecraftPromptBarHarness = ({ isLoading = false }: { isLoading?: boolean }) => {
+  const [backgroundColor, setBackgroundColor] = React.useState('#0c2238');
+  const [colors, setColors] = React.useState<string[]>([]);
+  const recraftControls = [
+    {
+      id: 'recraft-image-size-select',
+      prefixLabel: 'Image Size',
+      ariaLabel: 'Select Recraft image size',
+      options: [
+        { value: 'square_hd', label: 'Square HD' },
+        { value: 'landscape_16_9', label: 'Landscape 16:9' },
+      ],
+      value: 'square_hd',
+      onChange: vi.fn(),
+      disabled: isLoading,
+    },
+    {
+      kind: 'color' as const,
+      id: 'recraft-background-color-picker',
+      prefixLabel: 'BG',
+      ariaLabel: 'Select Recraft background color',
+      value: backgroundColor,
+      onChange: setBackgroundColor,
+      disabled: isLoading,
+    },
+    ...colors.map((color, index) => ({
+      kind: 'color' as const,
+      id: `recraft-color-${index + 1}-picker`,
+      prefixLabel: `C${index + 1}`,
+      ariaLabel: `Select Recraft preferred color ${index + 1}`,
+      value: color,
+      onChange: (value: string) => setColors(prev => prev.map((existing, colorIndex) => (colorIndex === index ? value : existing))),
+      disabled: isLoading,
+    })),
+    ...(colors.length < 5 ? [{
+      kind: 'action' as const,
+      id: 'recraft-add-color-button',
+      label: '+ Color',
+      ariaLabel: 'Add Recraft preferred color',
+      onClick: () => setColors(prev => (prev.length >= 5 ? prev : [...prev, '#000000'])),
+      disabled: isLoading,
+    }] : []),
+    ...(colors.length > 0 ? [{
+      kind: 'action' as const,
+      id: 'recraft-remove-color-button',
+      label: '- Color',
+      ariaLabel: 'Remove Recraft preferred color',
+      onClick: () => setColors(prev => prev.slice(0, -1)),
+      disabled: isLoading,
+    }] : []),
+  ];
+
+  return (
+    <PromptBar
+      prompt="Design a product shot"
+      onPromptChange={vi.fn()}
+      onSubmit={vi.fn()}
+      isLoading={isLoading}
+      inputDisabled={false}
+      submitDisabled={false}
+      modelOptions={[
+        { value: 'fal-ai/recraft/v4/pro/text-to-image', label: 'Recraft v4 Pro' },
+      ]}
+      selectedModel="fal-ai/recraft/v4/pro/text-to-image"
+      onModelChange={vi.fn()}
+      modelSelectDisabled={false}
+      modelMode="image"
+      onModelModeChange={vi.fn()}
+      modelControls={recraftControls}
+    />
+  );
+};
+
 const flushPromptBarLayout = async () => {
   await act(async () => {
     vi.runAllTimers();
@@ -485,6 +558,52 @@ describe('PromptBar layout', () => {
 
     const remountedResolutionSelect = screen.getByLabelText('Select Seedance 2 resolution') as HTMLSelectElement;
     expect(remountedResolutionSelect.style.width).toBe(expectedResolutionWidthPx);
+  });
+
+  it('renders Recraft size and color controls in the shared control strip', async () => {
+    render(<RecraftPromptBarHarness />);
+    await flushPromptBarLayout();
+
+    const sizeSelect = screen.getByLabelText('Select Recraft image size') as HTMLSelectElement;
+    const backgroundPicker = screen.getByLabelText('Select Recraft background color') as HTMLInputElement;
+
+    expect(sizeSelect.value).toBe('square_hd');
+    expect(backgroundPicker.type).toBe('color');
+    expect(backgroundPicker.value).toBe('#0c2238');
+    expect(backgroundPicker.style.colorScheme).toBe('light dark');
+    expect(screen.getByRole('button', { name: 'Add Recraft preferred color' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Remove Recraft preferred color' })).toBeNull();
+  });
+
+  it('adds and removes up to five Recraft preferred colors', async () => {
+    render(<RecraftPromptBarHarness />);
+    await flushPromptBarLayout();
+
+    const addButton = screen.getByRole('button', { name: 'Add Recraft preferred color' });
+    fireEvent.click(addButton);
+    fireEvent.click(addButton);
+    fireEvent.click(addButton);
+    fireEvent.click(addButton);
+    fireEvent.click(addButton);
+    await flushPromptBarLayout();
+
+    expect(screen.getByLabelText('Select Recraft preferred color 5')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add Recraft preferred color' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Recraft preferred color' }));
+    await flushPromptBarLayout();
+
+    expect(screen.queryByLabelText('Select Recraft preferred color 5')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add Recraft preferred color' })).toBeTruthy();
+  });
+
+  it('disables Recraft controls while loading', async () => {
+    render(<RecraftPromptBarHarness isLoading />);
+    await flushPromptBarLayout();
+
+    expect((screen.getByLabelText('Select Recraft image size') as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Select Recraft background color') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Add Recraft preferred color' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('keeps mention suggestions open while typing a second seedance reference token', async () => {

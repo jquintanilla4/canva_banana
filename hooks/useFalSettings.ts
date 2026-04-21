@@ -51,8 +51,13 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isRecraftV4ProImageSizeSelectionValue,
   isWan26ImageAspectRatioSelectionValue,
   isWan26ImageMaxImagesSelectionValue,
+  RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
+  RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
+  RECRAFT_V4_PRO_MAX_COLORS,
+  recraftHexToRgb,
 } from '../services/modelConfig';
 import type {
   FalAspectRatioSelectionValue,
@@ -90,6 +95,8 @@ import type {
   Seedance2DurationSelectionValue,
   Seedance2ResolutionSelectionValue,
   Seedance2Variant,
+  RecraftRgbColor,
+  RecraftV4ProImageSizeSelectionValue,
   Wan26DurationSelectionValue,
   Wan26ResolutionSelectionValue,
   Wan26ImageAspectRatioSelectionValue,
@@ -186,6 +193,11 @@ type FalHandlers = {
   handleFlux2MaxImageSizeChange: (value: string) => void;
   handleWan26ImageAspectRatioChange: (value: string) => void;
   handleWan26ImageMaxImagesChange: (value: string) => void;
+  handleRecraftImageSizeChange: (value: string) => void;
+  handleRecraftBackgroundColorChange: (value: string) => void;
+  handleRecraftColorChange: (index: number, value: string) => void;
+  handleRecraftAddColor: () => void;
+  handleRecraftRemoveColor: () => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -250,6 +262,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
   wan26ImageAspectRatio: Wan26ImageAspectRatioSelectionValue;
   wan26ImageMaxImages: Wan26ImageMaxImagesSelectionValue;
+  recraftImageSize: RecraftV4ProImageSizeSelectionValue;
+  recraftBackgroundColor: RecraftRgbColor;
+  recraftColors: RecraftRgbColor[];
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -311,6 +326,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setFlux2MaxImageSize: Dispatch<SetStateAction<Flux2MaxImageSizeSelectionValue>>;
   setWan26ImageAspectRatio: Dispatch<SetStateAction<Wan26ImageAspectRatioSelectionValue>>;
   setWan26ImageMaxImages: Dispatch<SetStateAction<Wan26ImageMaxImagesSelectionValue>>;
+  setRecraftImageSize: Dispatch<SetStateAction<RecraftV4ProImageSizeSelectionValue>>;
+  setRecraftBackgroundColor: Dispatch<SetStateAction<RecraftRgbColor>>;
+  setRecraftColors: Dispatch<SetStateAction<RecraftRgbColor[]>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -376,6 +394,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [flux2MaxImageSize, setFlux2MaxImageSize] = useState<Flux2MaxImageSizeSelectionValue>('landscape_4_3');
   const [wan26ImageAspectRatio, setWan26ImageAspectRatio] = useState<Wan26ImageAspectRatioSelectionValue>('landscape_16_9');
   const [wan26ImageMaxImages, setWan26ImageMaxImages] = useState<Wan26ImageMaxImagesSelectionValue>('1');
+  const [recraftImageSize, setRecraftImageSize] = useState<RecraftV4ProImageSizeSelectionValue>(RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE);
+  const [recraftBackgroundColor, setRecraftBackgroundColor] = useState<RecraftRgbColor>(RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR);
+  const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -863,6 +884,35 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleRecraftImageSizeChange = useCallback((value: string) => {
+    if (isRecraftV4ProImageSizeSelectionValue(value)) {
+      setRecraftImageSize(value);
+    }
+  }, []);
+
+  const handleRecraftBackgroundColorChange = useCallback((value: string) => {
+    const nextColor = recraftHexToRgb(value);
+    if (nextColor) {
+      setRecraftBackgroundColor(nextColor);
+    }
+  }, []);
+
+  const handleRecraftColorChange = useCallback((index: number, value: string) => {
+    const nextColor = recraftHexToRgb(value);
+    if (!nextColor) {
+      return;
+    }
+    setRecraftColors(prev => prev.map((color, colorIndex) => (colorIndex === index ? nextColor : color)).slice(0, RECRAFT_V4_PRO_MAX_COLORS));
+  }, []);
+
+  const handleRecraftAddColor = useCallback(() => {
+    setRecraftColors(prev => (prev.length >= RECRAFT_V4_PRO_MAX_COLORS ? prev : [...prev, { r: 0, g: 0, b: 0 }]));
+  }, []);
+
+  const handleRecraftRemoveColor = useCallback(() => {
+    setRecraftColors(prev => prev.slice(0, Math.max(0, prev.length - 1)));
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -974,6 +1024,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     flux2MaxImageSize,
     wan26ImageAspectRatio,
     wan26ImageMaxImages,
+    recraftImageSize,
+    recraftBackgroundColor,
+    recraftColors,
     isFlux2MaxModel,
     isWan26ImageModel,
     falImageSizeSelection,
@@ -1055,6 +1108,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleFlux2MaxImageSizeChange,
     handleWan26ImageAspectRatioChange,
     handleWan26ImageMaxImagesChange,
+    handleRecraftImageSizeChange,
+    handleRecraftBackgroundColorChange,
+    handleRecraftColorChange,
+    handleRecraftAddColor,
+    handleRecraftRemoveColor,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -1116,6 +1174,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setFlux2MaxImageSize,
     setWan26ImageAspectRatio,
     setWan26ImageMaxImages,
+    setRecraftImageSize,
+    setRecraftBackgroundColor,
+    setRecraftColors,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

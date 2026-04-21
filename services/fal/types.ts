@@ -15,6 +15,8 @@ import type {
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
+  RecraftRgbColor,
+  RecraftV4ProImageSizeSelectionValue,
 } from '../modelConfig'; // Model-specific option types.
 
 export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED'; // Fal queue status enum.
@@ -63,6 +65,9 @@ export interface GenerateImageOptions {
   wan26ImageSize?: string;
   wan26ImageMaxImages?: string;
   negativePrompt?: string;
+  recraftImageSize?: RecraftV4ProImageSizeSelectionValue;
+  recraftBackgroundColor?: RecraftRgbColor;
+  recraftColors?: RecraftRgbColor[];
 } // Optional controls for text-to-image.
 
 export interface UpscaleImageOptions {

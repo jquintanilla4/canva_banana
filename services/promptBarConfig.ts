@@ -26,6 +26,8 @@ import type {
   LipsyncAudioMode,
   LipsyncEmotion,
   LipsyncModelMode,
+  RecraftRgbColor,
+  RecraftV4ProImageSizeSelectionValue,
   Seedance15AspectRatioSelectionValue,
   Seedance15ResolutionSelectionValue,
   Seedance15DurationSelectionValue,
@@ -91,6 +93,10 @@ import {
   VEO31_EXTEND_RESOLUTION_OPTIONS,
   VEO31_VARIANT_OPTIONS,
   isSeedreamV5LiteModelId,
+  isRecraftV4ProModel,
+  RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS,
+  RECRAFT_V4_PRO_MAX_COLORS,
+  recraftRgbToHex,
   SYNC_LIPSYNC_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -125,7 +131,8 @@ import {
   ONE_TO_ALL_ANIMATE_MODEL_ID,
 } from './modelConfig';
 
-export type PromptBarModelControl = {
+type PromptBarSelectControl = {
+  kind?: 'select';
   id: string;
   prefixLabel?: string;
   hideSelectedValue?: boolean;
@@ -136,6 +143,29 @@ export type PromptBarModelControl = {
   disabled: boolean;
   errorMessage?: string;
 };
+
+type PromptBarColorControl = {
+  kind: 'color';
+  id: string;
+  prefixLabel: string;
+  ariaLabel: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  errorMessage?: string;
+};
+
+type PromptBarActionControl = {
+  kind: 'action';
+  id: string;
+  label: string;
+  ariaLabel: string;
+  onClick: () => void;
+  disabled: boolean;
+  errorMessage?: string;
+};
+
+export type PromptBarModelControl = PromptBarSelectControl | PromptBarColorControl | PromptBarActionControl;
 
 type Seedance2PromptBarControlsInput = {
   idPrefix?: string;
@@ -307,6 +337,9 @@ export type PromptBarControlsInput = {
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
   wan26ImageAspectRatio: Wan26ImageAspectRatioSelectionValue;
   wan26ImageMaxImages: Wan26ImageMaxImagesSelectionValue;
+  recraftImageSize: RecraftV4ProImageSizeSelectionValue;
+  recraftBackgroundColor: RecraftRgbColor;
+  recraftColors: RecraftRgbColor[];
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -366,6 +399,11 @@ export type PromptBarControlsInput = {
   onFlux2MaxImageSizeChange: (value: string) => void;
   onWan26ImageAspectRatioChange: (value: string) => void;
   onWan26ImageMaxImagesChange: (value: string) => void;
+  onRecraftImageSizeChange: (value: string) => void;
+  onRecraftBackgroundColorChange: (value: string) => void;
+  onRecraftColorChange: (index: number, value: string) => void;
+  onRecraftAddColor: () => void;
+  onRecraftRemoveColor: () => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -455,6 +493,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     flux2MaxImageSize,
     wan26ImageAspectRatio,
     wan26ImageMaxImages,
+    recraftImageSize,
+    recraftBackgroundColor,
+    recraftColors,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -514,6 +555,11 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onFlux2MaxImageSizeChange,
     onWan26ImageAspectRatioChange,
     onWan26ImageMaxImagesChange,
+    onRecraftImageSizeChange,
+    onRecraftBackgroundColorChange,
+    onRecraftColorChange,
+    onRecraftAddColor,
+    onRecraftRemoveColor,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -1112,6 +1158,62 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       onChange: onFlux2MaxImageSizeChange,
       disabled: isLoading,
     });
+  }
+
+  if (!isVideoMode && usingFal && isRecraftV4ProModel(falModelId)) {
+    controls.push({
+      id: 'recraft-image-size-select',
+      prefixLabel: 'Image Size',
+      ariaLabel: 'Select Recraft image size',
+      options: RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: recraftImageSize,
+      onChange: onRecraftImageSizeChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      kind: 'color',
+      id: 'recraft-background-color-picker',
+      prefixLabel: 'BG',
+      ariaLabel: 'Select Recraft background color',
+      value: recraftRgbToHex(recraftBackgroundColor),
+      onChange: onRecraftBackgroundColorChange,
+      disabled: isLoading,
+    });
+
+    recraftColors.slice(0, RECRAFT_V4_PRO_MAX_COLORS).forEach((color, index) => {
+      controls.push({
+        kind: 'color',
+        id: `recraft-color-${index + 1}-picker`,
+        prefixLabel: `C${index + 1}`,
+        ariaLabel: `Select Recraft preferred color ${index + 1}`,
+        value: recraftRgbToHex(color),
+        onChange: (value: string) => onRecraftColorChange(index, value),
+        disabled: isLoading,
+      });
+    });
+
+    if (recraftColors.length < RECRAFT_V4_PRO_MAX_COLORS) {
+      controls.push({
+        kind: 'action',
+        id: 'recraft-add-color-button',
+        label: '+ Color',
+        ariaLabel: 'Add Recraft preferred color',
+        onClick: onRecraftAddColor,
+        disabled: isLoading,
+      });
+    }
+
+    if (recraftColors.length > 0) {
+      controls.push({
+        kind: 'action',
+        id: 'recraft-remove-color-button',
+        label: '- Color',
+        ariaLabel: 'Remove Recraft preferred color',
+        onClick: onRecraftRemoveColor,
+        disabled: isLoading,
+      });
+    }
   }
 
   // Wan 2.6 Image controls

@@ -4,6 +4,7 @@ import {
   getFalModelLabel,
   getFalNumImageMaxForModel,
   INFINITALK_VIDEO_MODEL_ID,
+  isRecraftV4ProModel,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
@@ -128,7 +129,8 @@ export function useGenerationGuards({
       : hasPrimaryImage;
     const hasScailStillImage = isScailVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const hasKling26ControlStillImage = isKling26ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
-    const isTextToImage = !hasPrimaryImage && !(isVideoMode && (
+    const isRecraftTextToImage = usingFal && !isVideoMode && isRecraftV4ProModel(falModelId); // Recraft t2i is Fal-only.
+    const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage) && !(isVideoMode && (
       (isVideoInputMode && hasSourceVideo) || isGrokImagineVideoEditMode
     ));
     const promptEmpty = prompt.trim().length === 0;

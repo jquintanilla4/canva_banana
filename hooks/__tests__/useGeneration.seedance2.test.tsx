@@ -2,10 +2,12 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
+  RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
 } from '../../services/modelConfig';
 import { Tool, type CanvasImage, type FalQueueJob } from '../../types';
 import { generateImageToVideo } from '../../services/falService';
+import { generateImage as generateGoogleImage, generateImageEdit as generateGoogleImageEdit } from '../../services/geminiService';
 import { generateSeedanceVideo } from '../../services/volcengineService';
 import type { UseFalSettingsResult } from '../useFalSettings';
 import type { SelectionStateResult } from '../useSelectionState';
@@ -24,6 +26,15 @@ vi.mock('../../services/volcengineService', async () => {
   return {
     ...actual,
     generateSeedanceVideo: vi.fn(),
+  };
+});
+
+vi.mock('../../services/geminiService', async () => {
+  const actual = await vi.importActual<typeof import('../../services/geminiService')>('../../services/geminiService');
+  return {
+    ...actual,
+    generateImage: vi.fn(),
+    generateImageEdit: vi.fn(),
   };
 });
 
@@ -93,6 +104,9 @@ const createFalStub = (): UseFalSettingsResult => ({
   wan26ImageAspectRatio: '16:9',
   wan26ImageMaxImages: 1,
   isWan26ImageModel: false,
+  recraftImageSize: 'square_hd',
+  recraftBackgroundColor: { r: 255, g: 255, b: 255 },
+  recraftColors: [],
   setFalImageSizeSelection: vi.fn(),
   setFalAspectRatioSelection: vi.fn(),
 } as unknown as UseFalSettingsResult);
@@ -217,7 +231,7 @@ describe('useGeneration (seedance 2)', () => {
   });
 
   it('forwards Smart override first and last frame ids into the Volcengine request files', async () => {
-    const image1 = buildCanvasMedia('image-1', 'image');
+    const image1 = buildCanvasMedia('image-1', 'image') as CanvasImage & { element: HTMLImageElement };
     const image2 = buildCanvasMedia('image-2', 'image');
 
     vi.mocked(generateSeedanceVideo).mockImplementation(() => new Promise(() => {})); // Keep the request pending so the test can inspect the submit payload without fetch side effects.
@@ -270,7 +284,7 @@ describe('useGeneration (seedance 2)', () => {
   });
 
   it('normalizes legacy Sora video reruns before choosing the generation backend', async () => {
-    const image1 = buildCanvasMedia('image-1', 'image');
+    const image1 = buildCanvasMedia('image-1', 'image') as CanvasImage & { element: HTMLImageElement };
     vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep the Fal request pending for payload inspection.
 
     const { result } = renderHook(() => useGeneration({
@@ -312,6 +326,50 @@ describe('useGeneration (seedance 2)', () => {
         modelId: HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
       }),
     );
+  });
+
+  it('routes Google edits to Gemini edit even when the stored Fal model is Recraft', async () => {
+    const image1 = buildCanvasMedia('image-1', 'image') as CanvasImage & { element: HTMLImageElement };
+    const fal = createFalStub();
+    fal.falModelMode = 'image';
+    fal.falImageModelId = RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID;
+    vi.mocked(generateGoogleImageEdit).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected before image hydration.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Retouch this product poster',
+      promptPrefix: '',
+      apiProvider: 'google',
+      fal,
+      selection: createSelectionStub({
+        primaryImageId: image1.id,
+        activePrimaryImage: image1,
+        primarySelectionMediaType: 'image',
+        selectedImageIds: [image1.id],
+      }),
+      images: [image1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateGoogleImageEdit)).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Retouch this product poster',
+      image: image1.element,
+      tool: Tool.FREE_SELECTION,
+    }));
+    expect(vi.mocked(generateGoogleImage)).not.toHaveBeenCalled();
   });
 
   it('blocks Seedance reference submissions when reference videos total more than 15 seconds', async () => {

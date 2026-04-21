@@ -30,6 +30,16 @@ const getPromptBarViewportClampPx = (sizeMode: 'full' | 'mini'): number => {
   return Math.max(320, window.innerWidth - getPromptBarHorizontalGutterPx());
 };
 
+const getControlSignature = (control: FalModelControlConfig): string => {
+  if (control.kind === 'action') {
+    return `${control.id}-${control.disabled}-${control.label}`;
+  }
+  if (control.kind === 'color') {
+    return `${control.id}-${control.value}-${control.disabled}`;
+  }
+  return `${control.id}-${control.value}-${control.options.map(option => option.label).join('~')}`;
+};
+
 type ActiveKlingMention = {
   startIndex: number;
   query: string;
@@ -130,7 +140,8 @@ interface ModelOption {
   highlightColor?: string;
 }
 
-interface FalModelControlConfig {
+interface FalModelSelectControlConfig {
+  kind?: 'select';
   id: string;
   prefixLabel?: string;
   hideSelectedValue?: boolean;
@@ -141,6 +152,29 @@ interface FalModelControlConfig {
   disabled: boolean;
   errorMessage?: string;
 }
+
+interface FalModelColorControlConfig {
+  kind: 'color';
+  id: string;
+  prefixLabel: string;
+  ariaLabel: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  errorMessage?: string;
+}
+
+interface FalModelActionControlConfig {
+  kind: 'action';
+  id: string;
+  label: string;
+  ariaLabel: string;
+  onClick: () => void;
+  disabled: boolean;
+  errorMessage?: string;
+}
+
+type FalModelControlConfig = FalModelSelectControlConfig | FalModelColorControlConfig | FalModelActionControlConfig;
 
 export type PromptBarControlConfig = FalModelControlConfig;
 
@@ -331,7 +365,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     resolvedSizeMode,
     selectedModel,
     modelControls
-      ?.map(control => `${control.id}-${control.value}-${control.options.map(option => option.label).join('~')}`)
+      ?.map(getControlSignature)
       .join('|') ?? '',
   ]);
 
@@ -340,7 +374,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   }, [
     selectedModel,
     modelControls
-      ?.map(control => `${control.id}-${control.value}-${control.options.map(option => option.label).join('~')}`)
+      ?.map(getControlSignature)
       .join('|') ?? '',
     updatePromptBarWidth,
   ]);
@@ -659,7 +693,45 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                       </select>
                       <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
                     </div>
-                    {modelControls?.map(control => (
+                    {modelControls?.map(control => {
+                      if (control.kind === 'action') {
+                        return (
+                          <button
+                            key={control.id}
+                            id={control.id}
+                            type="button"
+                            onClick={control.onClick}
+                            disabled={control.disabled}
+                            className="text-sm text-white px-[0.4rem] py-[0.34rem] focus:outline-none focus:ring-0 disabled:text-gray-400 disabled:cursor-not-allowed"
+                            aria-label={control.ariaLabel}
+                          >
+                            {control.label}
+                          </button>
+                        );
+                      }
+
+                      if (control.kind === 'color') {
+                        return (
+                          <div className="relative flex items-center gap-2" key={control.id}>
+                            <span className="text-sm text-gray-200">{control.prefixLabel}</span>
+                            <label className="sr-only" htmlFor={control.id}>
+                              {control.ariaLabel}
+                            </label>
+                            <input
+                              id={control.id}
+                              type="color"
+                              value={control.value}
+                              onChange={(e) => control.onChange(e.target.value)}
+                              disabled={control.disabled}
+                              className="h-7 w-7 cursor-pointer appearance-none rounded-md border border-white/20 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-60"
+                              style={{ colorScheme: 'light dark' }}
+                              aria-label={control.ariaLabel}
+                            />
+                          </div>
+                        );
+                      }
+
+                      return (
                       <div className="relative flex items-center gap-1" key={control.id}>
                         {control.hideSelectedValue ? (
                           <div
@@ -731,7 +803,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                           </>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
                 {modelControls?.map(control => control.errorMessage ? (

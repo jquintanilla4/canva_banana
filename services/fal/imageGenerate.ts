@@ -13,15 +13,20 @@ import {
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
   isNanoBananaTextToImageModelId,
+  isRecraftV4ProModel,
   KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
+  RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
+  RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
+  RECRAFT_V4_PRO_MAX_COLORS,
+  normalizeRecraftRgbColor,
   WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
 
 export const generateImage = async (
   prompt: string,
   options: GenerateImageOptions = {},
-): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => { // Generate an image from text.
+): Promise<{ imageBase64: string; imagesBase64: string[]; imageDataUrls?: string[]; text: string; requestId?: string }> => { // Generate an image from text.
   ensureFalClientConfigured();
 
   const modelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
@@ -30,6 +35,7 @@ export const generateImage = async (
   const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan26ImageTextToImage = modelId === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  const isRecraftV4ProTextToImage = isRecraftV4ProModel(modelId);
   const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
   const supportsAspectRatio = isNanoBananaTextToImage
     || isKlingTextToImage
@@ -50,7 +56,7 @@ export const generateImage = async (
 
   const body: {
     prompt: string;
-    sync_mode: boolean;
+    sync_mode?: boolean;
     output_format?: 'png';
     num_images?: number;
     aspect_ratio?: string;
@@ -59,12 +65,23 @@ export const generateImage = async (
     resolution?: FalResolutionOption;
     image_urls?: string[];
     safety_tolerance?: '5';
+    colors?: Array<{ r: number; g: number; b: number }>;
+    background_color?: { r: number; g: number; b: number };
+    enable_safety_checker?: boolean;
   } = {
     prompt,
-    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage, // Keep Nano Banana history visible.
+    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isRecraftV4ProTextToImage, // Keep Nano Banana history visible.
   };
 
-  if (!isSeedreamTextToImage) {
+  if (isRecraftV4ProTextToImage) {
+    body.image_size = options.recraftImageSize ?? RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE;
+    body.background_color = normalizeRecraftRgbColor(options.recraftBackgroundColor) ?? RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR;
+    body.colors = Array.isArray(options.recraftColors)
+      ? options.recraftColors.map(normalizeRecraftRgbColor).filter((color): color is NonNullable<typeof color> => Boolean(color)).slice(0, RECRAFT_V4_PRO_MAX_COLORS)
+      : [];
+    body.enable_safety_checker = true;
+    delete body.sync_mode;
+  } else if (!isSeedreamTextToImage) {
     body.output_format = 'png';
   }
 
@@ -88,7 +105,7 @@ export const generateImage = async (
     delete wan26Body.sync_mode;
   }
 
-  if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {
@@ -192,5 +209,5 @@ export const generateImage = async (
 
   const requestId = result?.requestId || latestRequestId;
 
-  return { imageBase64: primaryBase64, imagesBase64: base64List, text: description, requestId };
+  return { imageBase64: primaryBase64, imagesBase64: base64List, imageDataUrls: inlineDataList, text: description, requestId };
 };

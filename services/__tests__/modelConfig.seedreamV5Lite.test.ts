@@ -6,7 +6,9 @@ import {
   getSeedreamImageSizeOptions,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   isFalModelId,
+  isRecraftV4ProModel,
   normalizeFalModelId,
+  RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
@@ -46,5 +48,13 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(imageModelLabels).not.toContain('Reve Image');
     expect(isFalModelId('fal-ai/reve/text-to-image')).toBe(false);
     expect(normalizeFalModelId('fal-ai/reve/text-to-image')).toBeUndefined();
+  });
+
+  it('exposes Recraft v4 Pro as a Fal image model', () => {
+    const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID);
+
+    expect(option?.label).toBe('Recraft v4 Pro');
+    expect(isFalModelId(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
+    expect(isRecraftV4ProModel(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
   });
 });

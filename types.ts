@@ -88,6 +88,7 @@ export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
 export type Seedance2Variant = 'smart' | 'reference';
+export type RecraftRgbColor = { r: number; g: number; b: number };
 
 export type GenerationFalOptions = Partial<{
   imageSizeSelection: FalImageSizeOption;
@@ -137,6 +138,9 @@ export type GenerationFalOptions = Partial<{
   seedance15Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
+  recraftImageSize: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
+  recraftBackgroundColor: RecraftRgbColor;
+  recraftColors: RecraftRgbColor[];
 }>;
 
 export type GenerationVolcengineOptions = Partial<{

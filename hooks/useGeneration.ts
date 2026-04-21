@@ -13,6 +13,8 @@ import {
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
+  RECRAFT_V4_PRO_MAX_COLORS,
+  RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
@@ -38,6 +40,9 @@ import {
   isGrokImagineVideoResolutionSelectionValue,
   isKlingO1VideoModelId,
   isNanoBananaEditModelId,
+  isRecraftV4ProModel,
+  isRecraftV4ProImageSizeSelectionValue,
+  normalizeRecraftRgbColor,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
@@ -143,8 +148,55 @@ type UseGenerationArgs = {
   onGenerationComplete?: () => void;
 };
 
+const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
+
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
   !!img && img.mediaType === 'image';
+
+const extractDataUrlBase64 = (dataUrl: string): string | null => {
+  const commaIndex = dataUrl.indexOf(',');
+  return commaIndex === -1 ? null : dataUrl.slice(commaIndex + 1); // Keep only payload bytes.
+};
+
+const loadGeneratedImageElement = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => reject(new Error('Failed to load generated image.'));
+  img.src = src;
+});
+
+const normalizeGeneratedImageToPng = async (
+  src: string,
+): Promise<{ image: HTMLImageElement; base64: string }> => {
+  const sourceImage = await loadGeneratedImageElement(src);
+  const sourceBase64 = extractDataUrlBase64(src);
+  if (src.startsWith(PNG_DATA_URL_PREFIX) && sourceBase64) {
+    return { image: sourceImage, base64: sourceBase64 }; // Existing PNG outputs skip canvas work.
+  }
+
+  const width = sourceImage.naturalWidth || sourceImage.width;
+  const height = sourceImage.naturalHeight || sourceImage.height;
+  if (width <= 0 || height <= 0) {
+    throw new Error('Generated image has invalid dimensions.');
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Unable to prepare generated image.');
+  }
+
+  context.drawImage(sourceImage, 0, 0, width, height);
+  const pngDataUrl = canvas.toDataURL('image/png');
+  const pngBase64 = extractDataUrlBase64(pngDataUrl);
+  if (!pngBase64) {
+    throw new Error('Failed to convert generated image to PNG.');
+  }
+
+  return { image: await loadGeneratedImageElement(pngDataUrl), base64: pngBase64 };
+};
 
 const extractFalQueueLogMessages = (logs: FalQueueUpdate['logs']): string[] => {
   if (!logs) {
@@ -365,6 +417,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wan26ImageAspectRatio,
     wan26ImageMaxImages,
     isWan26ImageModel,
+    recraftImageSize,
+    recraftBackgroundColor,
+    recraftColors,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -511,6 +566,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const veo31ResolutionForRun = falOptionsOverride.veo31Resolution ?? veo31Resolution;
     const veo31AspectRatioForRun = falOptionsOverride.veo31AspectRatio ?? veo31AspectRatio;
     const veo31GenerateAudioForRun = falOptionsOverride.veo31GenerateAudio ?? veo31GenerateAudio;
+    const recraftImageSizeForRun = isRecraftV4ProImageSizeSelectionValue(falOptionsOverride.recraftImageSize)
+      ? falOptionsOverride.recraftImageSize
+      : recraftImageSize;
+    const recraftBackgroundColorForRun = normalizeRecraftRgbColor(falOptionsOverride.recraftBackgroundColor) ?? recraftBackgroundColor;
+    const recraftColorsForRun = Array.isArray(falOptionsOverride.recraftColors)
+      ? falOptionsOverride.recraftColors.map(normalizeRecraftRgbColor).filter((color): color is NonNullable<typeof color> => Boolean(color)).slice(0, RECRAFT_V4_PRO_MAX_COLORS)
+      : recraftColors.slice(0, RECRAFT_V4_PRO_MAX_COLORS);
     const kling26AudioOverride = falOptionsOverride.kling26Audio;
     const kling26AudioForRun = kling26AudioOverride !== undefined
       ? kling26AudioOverride
@@ -606,6 +668,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : falAspectRatioSelectionForRun; // Grok falls back to 1:1.
     const isFlux2MaxModelForRun = !isVideoMode && falModelIdForRun === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
     const isWan26ImageModelForRun = !isVideoMode && falModelIdForRun === WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+    const isRecraftV4ProModelForRun = usingFal && !isVideoMode && isRecraftV4ProModel(falModelIdForRun);
     const normalizedFalResolutionSelectionForRun =
       isKlingModel && falResolutionSelectionForRun === '4K' ? '2K' : falResolutionSelectionForRun;
     const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
@@ -657,7 +720,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? videoNegativePromptForRun.trim()
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
-    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary;
+    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun;
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel);
     const isLipsyncPromptOptional = usingFal && isVideoMode && isLipsyncVideoModel;
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
@@ -1715,7 +1778,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     let referenceIdsUsed: string[] = [];
 
     try {
-      let generationResult: { imageBase64: string; imagesBase64: string[]; text: string; requestId?: string };
+      let generationResult: { imageBase64: string; imagesBase64: string[]; imageDataUrls?: string[]; text: string; requestId?: string };
       let placementOrigin = { x: 100, y: 100 };
       let sourceImageForAPI: {
         element: HTMLImageElement;
@@ -1753,9 +1816,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
                   : isWan26ImageModelForRun
                     ? WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID
-                    : isNanoBananaModel
-                      ? getNanoBananaTextToImageModelId(falModelIdForRun)
-                      : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+                    : isRecraftV4ProModelForRun
+                      ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
+                      : isNanoBananaModel
+                        ? getNanoBananaTextToImageModelId(falModelIdForRun)
+                        : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
 
           let klingReferenceImages: HTMLImageElement[] | undefined;
           if (isKlingModel) {
@@ -1815,6 +1880,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
               wan26ImageSize: wan26ImageAspectRatio,
               wan26ImageMaxImages: wan26ImageMaxImages,
               negativePrompt: videoNegativePrompt.trim() || undefined,
+            } : {}),
+            ...(isRecraftV4ProModelForRun ? {
+              recraftImageSize: recraftImageSizeForRun,
+              recraftBackgroundColor: recraftBackgroundColorForRun,
+              recraftColors: recraftColorsForRun,
             } : {}),
             ...(klingReferenceImages ? { referenceImages: klingReferenceImages } : {}),
             numImages: normalizedFalNumImages,
@@ -2015,17 +2085,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
       const imagesBase64 = generationResult.imagesBase64 || [];
       const generatedImages = imagesBase64.length > 0 ? imagesBase64 : [generationResult.imageBase64];
-      // Hydrate base64 outputs back into canvas images and annotate them with generation metadata.
+      const generatedImageSources = generationResult.imageDataUrls?.length
+        ? generationResult.imageDataUrls
+        : generatedImages.map(base64 => `${PNG_DATA_URL_PREFIX}${base64}`); // Legacy providers still return raw PNG base64.
+      // Hydrate generated outputs back into PNG canvas images with generation metadata.
       const addGeneratedImages = async () => {
         const newImages: CanvasImage[] = [];
         let lastBounds = images.length > 0 ? getImageBounds(images[images.length - 1]) : null;
-        for (const base64 of generatedImages) {
-          const img = new Image();
-          img.src = `data:image/png;base64,${base64}`;
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve();
-            img.onerror = () => reject(new Error('Failed to load generated image.'));
-          });
+        for (const source of generatedImageSources) {
+          const { image: img, base64 } = await normalizeGeneratedImageToPng(source);
 
           const { naturalWidth, naturalHeight } = getNaturalSize(img);
           const displayWidth = naturalWidth || 512;
@@ -2077,6 +2145,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...(generationKind === 'upscale' ? { scaleFactor: falScaleFactorForRun } : {}),
                   ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
                   ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
+                  ...(isRecraftV4ProModelForRun ? {
+                    recraftImageSize: recraftImageSizeForRun,
+                    recraftBackgroundColor: recraftBackgroundColorForRun,
+                    recraftColors: recraftColorsForRun,
+                  } : {}),
                   ...(generationKind === 'video' ? { videoDuration: videoDurationForRun } : {}),
                   ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
                   ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
@@ -2209,6 +2282,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wan26ImageAspectRatio,
     wan26ImageMaxImages,
     isWan26ImageModel,
+    recraftImageSize,
+    recraftBackgroundColor,
+    recraftColors,
     images,
     paths,
     referenceImageIds,
