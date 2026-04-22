@@ -566,6 +566,21 @@ describe('App video prompt area gating', () => {
     expect(mockState.lastCanvasProps?.tailSelectionEnabled).toBe(true);
   });
 
+  it('disables tail-frame selection for Wan 2.7 Edit mode', () => {
+    Object.assign(mockState.falState, {
+      falModelId: 'fal-ai/wan/v2.7',
+      falVideoModelId: 'fal-ai/wan/v2.7',
+      isSeedance2VideoModel: false,
+      isVolcengineSeedance2VideoModel: false,
+      isWan27VideoModel: true,
+      wan27VideoVariant: 'edit',
+    });
+
+    render(<App />);
+
+    expect(mockState.lastCanvasProps?.tailSelectionEnabled).toBe(false);
+  });
+
   it('hides the footer add button after switching away from video mode even when areas still exist', async () => {
     const { rerender } = render(<App />);
 

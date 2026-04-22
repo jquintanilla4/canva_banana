@@ -17,6 +17,7 @@ import {
   WAN_27_TEXT_TO_VIDEO_MODEL_ID as MODEL_WAN_27_T2V,
   WAN_27_IMAGE_TO_VIDEO_MODEL_ID as MODEL_WAN_27_I2V,
   WAN_27_REFERENCE_TO_VIDEO_MODEL_ID as MODEL_WAN_27_REF,
+  WAN_27_EDIT_VIDEO_MODEL_ID as MODEL_WAN_27_EDIT,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID as MODEL_VEO_31_I2V,
   VEO_31_FFLF_VIDEO_MODEL_ID as MODEL_VEO_31_FFLF,
   VEO_31_EXTEND_VIDEO_MODEL_ID as MODEL_VEO_31_EXTEND,
@@ -52,6 +53,7 @@ export const WAN_27_VIDEO_MODEL_ID = MODEL_WAN_27_VIDEO; // Wan 2.7 smart video 
 export const WAN_27_TEXT_TO_VIDEO_MODEL_ID = MODEL_WAN_27_T2V; // Wan 2.7 text-to-video endpoint.
 export const WAN_27_IMAGE_TO_VIDEO_MODEL_ID = MODEL_WAN_27_I2V; // Wan 2.7 image-to-video endpoint.
 export const WAN_27_REFERENCE_TO_VIDEO_MODEL_ID = MODEL_WAN_27_REF; // Wan 2.7 reference endpoint.
+export const WAN_27_EDIT_VIDEO_MODEL_ID = MODEL_WAN_27_EDIT; // Wan 2.7 edit-video endpoint.
 export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = MODEL_VEO_31_I2V; // Veo 3.1 image-to-video endpoint.
 export const VEO_31_FFLF_VIDEO_MODEL_ID = MODEL_VEO_31_FFLF; // Veo 3.1 fflf endpoint.
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = MODEL_VEO_31_EXTEND; // Veo 3.1 extend endpoint.

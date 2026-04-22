@@ -102,6 +102,7 @@ import type {
   Seedance2Variant,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
+  Wan27VideoAudioSettingSelectionValue,
   Wan27VideoAspectRatioSelectionValue,
   Wan27VideoDurationSelectionValue,
   Wan27VideoResolutionSelectionValue,
@@ -192,6 +193,7 @@ type FalHandlers = {
   handleWan27VideoAspectRatioChange: (value: string) => void;
   handleWan27VideoPromptExpansionChange: (value: boolean) => void;
   handleWan27VideoVariantChange: (value: string) => void;
+  handleWan27VideoAudioSettingChange: (value: string) => void;
   handleSeedance15AspectRatioChange: (value: string) => void;
   handleSeedance15ResolutionChange: (value: string) => void;
   handleSeedance15DurationChange: (value: string) => void;
@@ -264,6 +266,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wan27VideoAspectRatio: Wan27VideoAspectRatioSelectionValue;
   wan27VideoPromptExpansion: boolean;
   wan27VideoVariant: Wan27VideoVariant;
+  wan27VideoAudioSetting: Wan27VideoAudioSettingSelectionValue;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -331,6 +334,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWan27VideoAspectRatio: Dispatch<SetStateAction<Wan27VideoAspectRatioSelectionValue>>;
   setWan27VideoPromptExpansion: Dispatch<SetStateAction<boolean>>;
   setWan27VideoVariant: Dispatch<SetStateAction<Wan27VideoVariant>>;
+  setWan27VideoAudioSetting: Dispatch<SetStateAction<Wan27VideoAudioSettingSelectionValue>>;
   setSeedance15AspectRatio: Dispatch<SetStateAction<Seedance15AspectRatioSelectionValue>>;
   setSeedance15Resolution: Dispatch<SetStateAction<Seedance15ResolutionSelectionValue>>;
   setSeedance15Duration: Dispatch<SetStateAction<Seedance15DurationSelectionValue>>;
@@ -402,6 +406,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wan27VideoAspectRatio, setWan27VideoAspectRatio] = useState<Wan27VideoAspectRatioSelectionValue>('16:9');
   const [wan27VideoPromptExpansion, setWan27VideoPromptExpansion] = useState<boolean>(true);
   const [wan27VideoVariant, setWan27VideoVariant] = useState<Wan27VideoVariant>('smart');
+  const [wan27VideoAudioSetting, setWan27VideoAudioSetting] = useState<Wan27VideoAudioSettingSelectionValue>('auto');
   const [seedance15AspectRatio, setSeedance15AspectRatio] = useState<Seedance15AspectRatioSelectionValue>('16:9');
   const [seedance15Resolution, setSeedance15Resolution] = useState<Seedance15ResolutionSelectionValue>('720p');
   const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
@@ -489,13 +494,31 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, [falVideoModelId]);
 
   useEffect(() => {
-    if (!isWan27VideoModel || wan27VideoVariant !== 'reference') {
+    if (!isWan27VideoModel) {
       return;
     }
-    if (wan27VideoDuration === '11' || wan27VideoDuration === '12' || wan27VideoDuration === '13' || wan27VideoDuration === '14' || wan27VideoDuration === '15') {
+    if (wan27VideoVariant === 'edit') {
+      if (wan27VideoDuration === '11' || wan27VideoDuration === '12' || wan27VideoDuration === '13' || wan27VideoDuration === '14' || wan27VideoDuration === '15') {
+        setWan27VideoDuration('10');
+      }
+      return;
+    }
+    if (wan27VideoVariant === 'reference' && (wan27VideoDuration === '0' || wan27VideoDuration === '11' || wan27VideoDuration === '12' || wan27VideoDuration === '13' || wan27VideoDuration === '14' || wan27VideoDuration === '15')) {
       setWan27VideoDuration('10');
     }
   }, [isWan27VideoModel, wan27VideoDuration, wan27VideoVariant]);
+
+  useEffect(() => {
+    if (!isWan27VideoModel || wan27VideoVariant === 'edit') {
+      return;
+    }
+    if (wan27VideoDuration === '0') {
+      setWan27VideoDuration('5');
+    }
+    if (wan27VideoAspectRatio === 'source') {
+      setWan27VideoAspectRatio('16:9');
+    }
+  }, [isWan27VideoModel, wan27VideoAspectRatio, wan27VideoDuration, wan27VideoVariant]);
 
   useEffect(() => {
     if (!isVeo31VideoModel) {
@@ -842,7 +865,20 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, []);
 
   const handleWan27VideoVariantChange = useCallback((value: string) => {
-    setWan27VideoVariant(isWan27VideoVariant(value) ? value : 'smart');
+    const nextVariant = isWan27VideoVariant(value) ? value : 'smart';
+    setWan27VideoVariant(nextVariant);
+    if (nextVariant === 'edit') {
+      setWan27VideoDuration('0');
+      setWan27VideoAspectRatio('source');
+      setWan27VideoAudioSetting('auto');
+      return;
+    }
+    setWan27VideoDuration(prev => (prev === '0' ? '5' : prev));
+    setWan27VideoAspectRatio(prev => (prev === 'source' ? '16:9' : prev));
+  }, []);
+
+  const handleWan27VideoAudioSettingChange = useCallback((value: string) => {
+    setWan27VideoAudioSetting(value === 'origin' ? 'origin' : 'auto');
   }, []);
 
   const handleSeedance15AspectRatioChange = useCallback((value: string) => {
@@ -1052,6 +1088,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wan27VideoAspectRatio,
     wan27VideoPromptExpansion,
     wan27VideoVariant,
+    wan27VideoAudioSetting,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -1142,6 +1179,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWan27VideoAspectRatioChange,
     handleWan27VideoPromptExpansionChange,
     handleWan27VideoVariantChange,
+    handleWan27VideoAudioSettingChange,
     handleSeedance15AspectRatioChange,
     handleSeedance15ResolutionChange,
     handleSeedance15DurationChange,
@@ -1211,6 +1249,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWan27VideoAspectRatio,
     setWan27VideoPromptExpansion,
     setWan27VideoVariant,
+    setWan27VideoAudioSetting,
     setSeedance15AspectRatio,
     setSeedance15Resolution,
     setSeedance15Duration,

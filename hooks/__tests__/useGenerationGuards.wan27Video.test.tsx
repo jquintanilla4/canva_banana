@@ -109,6 +109,35 @@ describe('useGenerationGuards (Wan 2.7 Video)', () => {
     expect(result.current.promptPlaceholderText).toContain('Clear the current video selection');
   });
 
+  it('enables edit mode with a selected source video and prompt', () => {
+    const { result } = renderWan27Guard({
+      wan27VideoVariant: 'edit',
+      primarySelectionMediaType: 'video',
+      hasSourceVideo: true,
+    });
+
+    expect(result.current.submitDisabled).toBe(false);
+    expect(result.current.promptPlaceholderText).toContain('Describe how you want to edit this video');
+  });
+
+  it('requires a prompt and source video in edit mode', () => {
+    const missingPrompt = renderWan27Guard({
+      prompt: '',
+      wan27VideoVariant: 'edit',
+      primarySelectionMediaType: 'video',
+      hasSourceVideo: true,
+    });
+    const missingVideo = renderWan27Guard({
+      wan27VideoVariant: 'edit',
+      primarySelectionMediaType: null,
+      hasSourceVideo: false,
+    });
+
+    expect(missingPrompt.result.current.submitDisabled).toBe(true);
+    expect(missingVideo.result.current.submitDisabled).toBe(true);
+    expect(missingVideo.result.current.promptPlaceholderText).toContain('select a video');
+  });
+
   it('requires references in Wan 2.7 reference mode', () => {
     const { result } = renderWan27Guard({
       wan27VideoVariant: 'reference',

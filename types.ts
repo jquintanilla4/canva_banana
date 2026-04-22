@@ -88,7 +88,7 @@ export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
 export type Seedance2Variant = 'smart' | 'reference';
-export type Wan27VideoVariant = 'smart' | 'reference';
+export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
 export type RecraftRgbColor = { r: number; g: number; b: number };
 
 export type GenerationFalOptions = Partial<{
@@ -138,10 +138,11 @@ export type GenerationFalOptions = Partial<{
   veo31AspectRatio: 'auto' | '16:9' | '9:16';
   veo31GenerateAudio: boolean;
   wan27VideoResolution: '720p' | '1080p';
-  wan27VideoDuration: '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
-  wan27VideoAspectRatio: '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
+  wan27VideoDuration: '0' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  wan27VideoAspectRatio: 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
   wan27VideoPromptExpansion: boolean;
   wan27VideoVariant: Wan27VideoVariant;
+  wan27VideoAudioSetting: 'auto' | 'origin';
   seedance15AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
   seedance15Resolution: '480p' | '720p' | '1080p';
   seedance15Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';

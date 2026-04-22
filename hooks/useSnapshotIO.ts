@@ -180,6 +180,7 @@ export function useSnapshotIO({
     wan27VideoAspectRatio,
     wan27VideoPromptExpansion,
     wan27VideoVariant,
+    wan27VideoAudioSetting,
     seedance2Variant,
     seedance2AspectRatio,
     seedance2Resolution,
@@ -225,6 +226,7 @@ export function useSnapshotIO({
     setWan27VideoAspectRatio,
     setWan27VideoPromptExpansion,
     setWan27VideoVariant,
+    setWan27VideoAudioSetting,
     setSeedance2Variant,
     setSeedance2AspectRatio,
     setSeedance2Resolution,
@@ -305,6 +307,7 @@ export function useSnapshotIO({
       wan27VideoAspectRatio,
       wan27VideoPromptExpansion,
       wan27VideoVariant,
+      wan27VideoAudioSetting,
       seedance2Variant,
       seedance2AspectRatio,
       seedance2Resolution,
@@ -371,6 +374,7 @@ export function useSnapshotIO({
     wan27VideoAspectRatio,
     wan27VideoPromptExpansion,
     wan27VideoVariant,
+    wan27VideoAudioSetting,
     seedance2Variant,
     seedance2AspectRatio,
     seedance2Resolution,
@@ -739,6 +743,9 @@ export function useSnapshotIO({
           setWan27VideoPromptExpansion(meta.wan27VideoPromptExpansion);
         }
         setWan27VideoVariant(isWan27VideoVariant(meta.wan27VideoVariant) ? meta.wan27VideoVariant : 'smart');
+        if (meta.wan27VideoAudioSetting === 'auto' || meta.wan27VideoAudioSetting === 'origin') {
+          setWan27VideoAudioSetting(meta.wan27VideoAudioSetting);
+        }
         if (isSeedance2Variant(meta.seedance2Variant)) {
           setSeedance2Variant(meta.seedance2Variant);
         }

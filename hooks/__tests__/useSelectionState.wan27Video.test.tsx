@@ -176,6 +176,82 @@ describe('useSelectionState (Wan 2.7 video)', () => {
     expect(onError).toHaveBeenCalledWith('Wan 2.7 Reference supports image and video references only.');
   });
 
+  it('uses a selected video as the source in Wan 2.7 edit mode', () => {
+    const video = buildCanvasMedia('video-1', 'video');
+    const images = [video];
+    const fal = { ...createWan27FalStub(), wan27VideoVariant: 'edit' as const };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => {
+      result.current.handleImageSelection(video.id);
+    });
+
+    expect(result.current.sourceVideoId).toBe(video.id);
+    expect(result.current.primarySelectionMediaType).toBe('video');
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('allows one still reference image in Wan 2.7 edit mode', () => {
+    const image = buildCanvasMedia('image-1', 'image');
+    const secondImage = buildCanvasMedia('image-2', 'image');
+    const images = [image, secondImage];
+    const fal = { ...createWan27FalStub(), wan27VideoVariant: 'edit' as const };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => {
+      result.current.handleImageSelection(image.id, { reference: true });
+    });
+    act(() => {
+      result.current.handleImageSelection(secondImage.id, { reference: true });
+    });
+
+    expect(result.current.referenceImageIds).toEqual([image.id]);
+    expect(onError).toHaveBeenCalledWith('Wan 2.7 Edit supports one reference image.');
+  });
+
+  it('rejects video and audio references in Wan 2.7 edit mode', () => {
+    const video = buildCanvasMedia('video-1', 'video');
+    const audio = buildCanvasMedia('audio-1', 'audio');
+    const images = [video, audio];
+    const fal = { ...createWan27FalStub(), wan27VideoVariant: 'edit' as const };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => {
+      result.current.handleImageSelection(video.id, { reference: true });
+    });
+    act(() => {
+      result.current.handleImageSelection(audio.id, { reference: true });
+    });
+
+    expect(result.current.referenceVideoIds).toEqual([]);
+    expect(result.current.referenceAudioIds).toEqual([]);
+    expect(onError).toHaveBeenCalledWith('Wan 2.7 Edit supports one still reference image.');
+  });
+
   it('clamps Wan 2.7 video references when switching to Seedance 2 reference mode', async () => {
     const videos = Array.from({ length: 4 }, (_, index) => buildCanvasMedia(`video-${index + 1}`, 'video'));
     const wanFal: TestFalSettings = { ...createWan27FalStub(), wan27VideoVariant: 'reference' as const };

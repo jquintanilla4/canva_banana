@@ -68,4 +68,41 @@ describe('promptBarConfig (Wan 2.7 Video)', () => {
     ]);
     expect(durationControl && 'options' in durationControl ? durationControl.options.map(option => option.value) : []).toEqual(['2', '3', '4', '5', '6', '7', '8', '9', '10']);
   });
+
+  it('shows Wan 2.7 edit controls with source duration and audio handling', () => {
+    const controls = buildPromptBarModelControls({
+      apiProvider: 'fal',
+      falModelId: WAN_27_VIDEO_MODEL_ID,
+      falModelMode: 'video',
+      isVideoMode: true,
+      usingFal: true,
+      isWan27VideoModel: true,
+      wan27VideoResolution: '1080p',
+      wan27VideoDuration: '0',
+      wan27VideoAspectRatio: 'source',
+      wan27VideoPromptExpansion: true,
+      wan27VideoVariant: 'edit',
+      wan27VideoAudioSetting: 'auto',
+      isLoading: false,
+      onWan27VideoResolutionChange: vi.fn(),
+      onWan27VideoDurationChange: vi.fn(),
+      onWan27VideoAspectRatioChange: vi.fn(),
+      onWan27VideoPromptExpansionChange: vi.fn(),
+      onWan27VideoVariantChange: vi.fn(),
+      onWan27VideoAudioSettingChange: vi.fn(),
+    } as unknown as PromptBarControlsInput);
+    const controlIds = controls?.map(control => control.id) ?? [];
+    const aspectControl = controls?.find(control => control.id === 'wan27-video-aspect-ratio-select' && control.kind !== 'action' && control.kind !== 'color');
+    const durationControl = controls?.find(control => control.id === 'wan27-video-duration-select' && control.kind !== 'action' && control.kind !== 'color');
+
+    expect(controlIds).toEqual([
+      'wan27-video-variant-select',
+      'wan27-video-aspect-ratio-select',
+      'wan27-video-resolution-select',
+      'wan27-video-duration-select',
+      'wan27-video-audio-setting-select',
+    ]);
+    expect(aspectControl && 'options' in aspectControl ? aspectControl.options.map(option => option.value) : []).toContain('source');
+    expect(durationControl && 'options' in durationControl ? durationControl.options.map(option => option.value) : []).toEqual(['0', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
+  });
 });

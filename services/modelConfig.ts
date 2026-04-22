@@ -60,6 +60,7 @@ export const WAN_27_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7' as const; // Wan 2.7 smar
 export const WAN_27_TEXT_TO_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/text-to-video' as const; // Wan 2.7 text-to-video endpoint.
 export const WAN_27_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/image-to-video' as const; // Wan 2.7 image-to-video endpoint.
 export const WAN_27_REFERENCE_TO_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/reference-to-video' as const; // Wan 2.7 reference endpoint.
+export const WAN_27_EDIT_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/edit-video' as const; // Wan 2.7 edit-video endpoint.
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
 export const SEEDANCE_2_VIDEO_MODEL_ID = 'volcengine/seedance-2' as const;
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0' as const; // Selector id for the Fal Seedance 2 family.
@@ -81,7 +82,7 @@ export type Kling26ControlVariant = 'standard' | 'pro';
 export type Kling26ControlDriver = 'image' | 'video';
 export type Veo31Variant = 'i2v-fflf' | 'extend';
 export type Seedance2Variant = 'smart' | 'reference';
-export type Wan27VideoVariant = 'smart' | 'reference';
+export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
 export type Kling26ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
@@ -456,9 +457,10 @@ export const INFINITALK_DURATION_TO_NUM_FRAMES: Record<InfinitalkDurationSelecti
 } as const;
 
 export type Wan27VideoResolutionSelectionValue = '720p' | '1080p';
-export type Wan27VideoDurationSelectionValue = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
-export type Wan27VideoAspectRatioSelectionValue = '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
+export type Wan27VideoDurationSelectionValue = '0' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+export type Wan27VideoAspectRatioSelectionValue = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
 export type Wan27VideoPromptExpansionSelectionValue = 'true' | 'false';
+export type Wan27VideoAudioSettingSelectionValue = 'auto' | 'origin';
 
 export const WAN_27_VIDEO_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Wan27VideoResolutionSelectionValue; label: string }> = [
   { value: '720p', label: '720p' },
@@ -494,7 +496,29 @@ export const WAN_27_VIDEO_REFERENCE_DURATION_OPTIONS: ReadonlyArray<{ value: Wan
   { value: '10', label: '10s' },
 ] as const;
 
+export const WAN_27_VIDEO_EDIT_DURATION_OPTIONS: ReadonlyArray<{ value: Wan27VideoDurationSelectionValue; label: string }> = [
+  { value: '0', label: 'Match source' },
+  { value: '2', label: '2s' },
+  { value: '3', label: '3s' },
+  { value: '4', label: '4s' },
+  { value: '5', label: '5s' },
+  { value: '6', label: '6s' },
+  { value: '7', label: '7s' },
+  { value: '8', label: '8s' },
+  { value: '9', label: '9s' },
+  { value: '10', label: '10s' },
+] as const;
+
 export const WAN_27_VIDEO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan27VideoAspectRatioSelectionValue; label: string }> = [
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+  { value: '1:1', label: '1:1' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:4', label: '3:4' },
+] as const;
+
+export const WAN_27_VIDEO_EDIT_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan27VideoAspectRatioSelectionValue; label: string }> = [
+  { value: 'source', label: 'Source' },
   { value: '16:9', label: '16:9' },
   { value: '9:16', label: '9:16' },
   { value: '1:1', label: '1:1' },
@@ -507,9 +531,15 @@ export const WAN_27_VIDEO_PROMPT_EXPANSION_OPTIONS: ReadonlyArray<{ value: Wan27
   { value: 'false', label: 'OFF' },
 ] as const;
 
+export const WAN_27_VIDEO_AUDIO_SETTING_OPTIONS: ReadonlyArray<{ value: Wan27VideoAudioSettingSelectionValue; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'origin', label: 'Original' },
+] as const;
+
 export const WAN_27_VIDEO_VARIANT_OPTIONS: ReadonlyArray<{ value: Wan27VideoVariant; label: string }> = [
   { value: 'smart', label: 'Smart' },
   { value: 'reference', label: 'Reference' },
+  { value: 'edit', label: 'Edit' },
 ] as const;
 
 export type Seedance15AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
@@ -795,14 +825,14 @@ export const isWan27VideoResolutionSelectionValue = (value: unknown): value is W
   value === '720p' || value === '1080p';
 
 export const isWan27VideoDurationSelectionValue = (value: unknown): value is Wan27VideoDurationSelectionValue =>
-  value === '2' || value === '3' || value === '4' || value === '5' || value === '6' || value === '7' || value === '8'
+  value === '0' || value === '2' || value === '3' || value === '4' || value === '5' || value === '6' || value === '7' || value === '8'
   || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
 
 export const isWan27VideoAspectRatioSelectionValue = (value: unknown): value is Wan27VideoAspectRatioSelectionValue =>
-  value === '16:9' || value === '9:16' || value === '1:1' || value === '4:3' || value === '3:4';
+  value === 'source' || value === '16:9' || value === '9:16' || value === '1:1' || value === '4:3' || value === '3:4';
 
 export const isWan27VideoVariant = (value: unknown): value is Wan27VideoVariant =>
-  value === 'smart' || value === 'reference';
+  value === 'smart' || value === 'reference' || value === 'edit';
 
 export const isApiProvider = (value: unknown): value is ApiProviderId =>
   value === 'google' || value === 'fal';
@@ -829,7 +859,7 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   if (value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID) {
     return HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   }
-  if (value === LEGACY_WAN_26_VIDEO_MODEL_ID || value === WAN_27_TEXT_TO_VIDEO_MODEL_ID || value === WAN_27_IMAGE_TO_VIDEO_MODEL_ID || value === WAN_27_REFERENCE_TO_VIDEO_MODEL_ID) {
+  if (value === LEGACY_WAN_26_VIDEO_MODEL_ID || value === WAN_27_TEXT_TO_VIDEO_MODEL_ID || value === WAN_27_IMAGE_TO_VIDEO_MODEL_ID || value === WAN_27_REFERENCE_TO_VIDEO_MODEL_ID || value === WAN_27_EDIT_VIDEO_MODEL_ID) {
     return WAN_27_VIDEO_MODEL_ID;
   }
   if (value === LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID || value === LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID) {

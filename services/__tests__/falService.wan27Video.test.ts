@@ -13,10 +13,12 @@ import {
   FAL_VIDEO_MODEL_OPTIONS,
   isFalModelId,
   normalizeFalModelId,
+  WAN_27_EDIT_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_TEXT_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
+  WAN_ANIMATE_REPLACE_MODEL_ID,
 } from '../modelConfig';
 import { generateImageToVideo } from '../falService';
 
@@ -62,6 +64,7 @@ describe('falService (Wan 2.7 Video)', () => {
     expect(normalizeFalModelId('wan/v2.6/image-to-video')).toBe(WAN_27_VIDEO_MODEL_ID);
     expect(normalizeFalModelId(WAN_27_TEXT_TO_VIDEO_MODEL_ID)).toBe(WAN_27_VIDEO_MODEL_ID);
     expect(normalizeFalModelId(WAN_27_IMAGE_TO_VIDEO_MODEL_ID)).toBe(WAN_27_VIDEO_MODEL_ID);
+    expect(normalizeFalModelId(WAN_27_EDIT_VIDEO_MODEL_ID)).toBe(WAN_27_VIDEO_MODEL_ID);
   });
 
   it('routes no-image smart requests to the Wan 2.7 text-to-video endpoint', async () => {
@@ -241,6 +244,93 @@ describe('falService (Wan 2.7 Video)', () => {
         enable_safety_checker: false,
         reference_image_urls: ['https://example.com/reference.png'],
         reference_video_urls: ['https://example.com/reference.mp4'],
+      }),
+    }));
+  });
+
+  it('routes edit requests to the Wan 2.7 edit-video endpoint with source defaults', async () => {
+    await generateImageToVideo('make it watercolor', null, {
+      modelId: WAN_27_VIDEO_MODEL_ID,
+      wan27VideoVariant: 'edit',
+      wan27VideoResolution: '1080p',
+      wan27VideoDuration: '0',
+      wan27VideoAspectRatio: 'source',
+      wan27VideoAudioSetting: 'origin',
+      sourceVideoUrl: 'https://example.com/source.mp4',
+      seed: 777,
+    });
+    const subscribeInput = vi.mocked(fal.subscribe).mock.calls[0]?.[1]?.input as Record<string, unknown>;
+
+    expect(fal.subscribe).toHaveBeenCalledWith(WAN_27_EDIT_VIDEO_MODEL_ID, expect.objectContaining({
+      input: expect.objectContaining({
+        prompt: 'make it watercolor',
+        video_url: 'https://example.com/source.mp4',
+        resolution: '1080p',
+        duration: 0,
+        audio_setting: 'origin',
+        enable_safety_checker: false,
+        seed: 777,
+      }),
+    }));
+    expect(subscribeInput).not.toHaveProperty('aspect_ratio');
+    expect(subscribeInput).not.toHaveProperty('enable_prompt_expansion');
+  });
+
+  it('sends one optional reference image for Wan 2.7 edit requests', async () => {
+    vi.mocked(fal.storage.upload).mockResolvedValueOnce('https://example.com/reference.png');
+
+    await generateImageToVideo('edit with this style', null, {
+      modelId: WAN_27_VIDEO_MODEL_ID,
+      wan27VideoVariant: 'edit',
+      wan27VideoResolution: '720p',
+      wan27VideoDuration: '6',
+      wan27VideoAspectRatio: '9:16',
+      sourceVideoUrl: 'https://example.com/source.mp4',
+      referenceImages: [createTestImage()],
+    });
+
+    expect(fal.subscribe).toHaveBeenCalledWith(WAN_27_EDIT_VIDEO_MODEL_ID, expect.objectContaining({
+      input: expect.objectContaining({
+        prompt: 'edit with this style',
+        video_url: 'https://example.com/source.mp4',
+        resolution: '720p',
+        duration: 6,
+        aspect_ratio: '9:16',
+        audio_setting: 'auto',
+        reference_image_url: 'https://example.com/reference.png',
+        enable_safety_checker: false,
+      }),
+    }));
+  });
+
+  it('requires a prompt and source video for Wan 2.7 edit requests', async () => {
+    await expect(generateImageToVideo('', null, {
+      modelId: WAN_27_VIDEO_MODEL_ID,
+      wan27VideoVariant: 'edit',
+      sourceVideoUrl: 'https://example.com/source.mp4',
+    })).rejects.toThrow('Wan 2.7 Edit requires a prompt.');
+
+    await expect(generateImageToVideo('edit prompt', null, {
+      modelId: WAN_27_VIDEO_MODEL_ID,
+      wan27VideoVariant: 'edit',
+    })).rejects.toThrow('Wan 2.7 Edit requires a source video.');
+
+    expect(fal.subscribe).not.toHaveBeenCalled();
+  });
+
+  it('disables the safety checker for Wan Animate requests', async () => {
+    vi.mocked(fal.storage.upload).mockResolvedValueOnce('https://example.com/character.png');
+
+    await generateImageToVideo('', createTestImage(), {
+      modelId: WAN_ANIMATE_REPLACE_MODEL_ID,
+      sourceVideoUrl: 'https://example.com/source.mp4',
+    });
+
+    expect(fal.subscribe).toHaveBeenCalledWith(WAN_ANIMATE_REPLACE_MODEL_ID, expect.objectContaining({
+      input: expect.objectContaining({
+        video_url: 'https://example.com/source.mp4',
+        image_url: 'https://example.com/character.png',
+        enable_safety_checker: false,
       }),
     }));
   });

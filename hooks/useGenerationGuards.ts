@@ -44,7 +44,7 @@ type Args = {
   isSeedance2VideoModel: boolean;
   seedance2Variant: 'smart' | 'reference';
   seedance2ReferenceAssetCount: number;
-  wan27VideoVariant?: 'smart' | 'reference';
+  wan27VideoVariant?: 'smart' | 'reference' | 'edit';
   wan27ReferenceAssetCount?: number;
   veo31Variant: 'i2v-fflf' | 'extend';
   falModelId: string;
@@ -107,6 +107,7 @@ export function useGenerationGuards({
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan27VideoModel = isVideoMode && falModelId === WAN_27_VIDEO_MODEL_ID;
   const isWan27ReferenceMode = isWan27VideoModel && wan27VideoVariant === 'reference';
+  const isWan27EditMode = isWan27VideoModel && wan27VideoVariant === 'edit';
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isSeedance2ReferenceMode = isSeedance2VideoModel && seedance2Variant === 'reference';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
@@ -116,7 +117,8 @@ export function useGenerationGuards({
     || isAudioInputMode
     || isKling26ControlVideoModel
     || isVeo31ExtendMode
-    || isScailVideoModel;
+    || isScailVideoModel
+    || isWan27EditMode;
   const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
   const hasPrimaryImage = Boolean(activePrimaryImage);
   const hasSeedance2SmartUnsupportedSelection = apiProvider === 'fal'
@@ -129,6 +131,7 @@ export function useGenerationGuards({
     && isVideoMode
     && isWan27VideoModel
     && !isWan27ReferenceMode
+    && !isWan27EditMode
     && primarySelectionMediaType === 'video'
     && !hasPrimaryImage;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
@@ -156,7 +159,7 @@ export function useGenerationGuards({
       falNumImages < 1 ||
       falNumImages > falNumImageMax;
     const hasWan27ReferenceAssets = wan27ReferenceAssetCount > 0;
-    const isWanPromptOptional = usingFal && (isWanVideoInputMode || (isWan27VideoModel && !isWan27ReferenceMode && hasPrimaryImage));
+    const isWanPromptOptional = usingFal && (isWanVideoInputMode || (isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode && hasPrimaryImage));
     const isLipsyncPromptOptional = usingFal && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
@@ -205,6 +208,11 @@ export function useGenerationGuards({
           return 'Describe the video you want to create, or select an image for image-to-video...';
         }
         if (isWan27VideoModel) {
+          if (isWan27EditMode) {
+            return hasSourceVideo
+              ? 'Describe how you want to edit this video...'
+              : 'Wan 2.7 Edit: select a video, then describe how to edit it...';
+          }
           if (isWan27ReferenceMode) {
             return hasWan27ReferenceAssets
               ? 'Wan 2.7 Reference: shift-click image or video references as @Image1 or @Video1, then describe the scene...'
@@ -341,6 +349,7 @@ export function useGenerationGuards({
     isOneToAllAnimateVideoModel,
     isWan27VideoModel,
     isWan27ReferenceMode,
+    isWan27EditMode,
     isVeo31ExtendMode,
     isSeedreamModel,
     isUpscaleModel,

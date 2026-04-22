@@ -102,6 +102,7 @@ const createFalStub = (): UseFalSettingsResult => ({
   wan27VideoAspectRatio: '16:9',
   wan27VideoPromptExpansion: false,
   wan27VideoVariant: 'smart',
+  wan27VideoAudioSetting: 'auto', // Wan edit audio default.
   isWan27VideoModel: false,
   seedance15AspectRatio: '16:9',
   seedance15Resolution: '720p',
@@ -508,6 +509,55 @@ describe('useGeneration (seedance 2)', () => {
     const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
     expect(uploadVideoToFal).not.toHaveBeenCalled();
     expect(submittedOptions).not.toHaveProperty('sourceAudioUrl');
+  });
+
+  it('preserves explicit Wan 2.7 edit auto audio rerun metadata', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
+    fal.isWan27VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.wan27VideoAudioSetting = 'origin';
+    const video1 = buildCanvasMedia('video-1', 'video', 4);
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so rerun payload can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [video1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'video',
+        prompt: 'Repeat the saved edit',
+        provider: 'fal',
+        modelId: WAN_27_VIDEO_MODEL_ID,
+        modelMode: 'video',
+        sourceVideoId: video1.id,
+        falOptions: {
+          wan27VideoVariant: 'edit',
+          wan27VideoAudioSetting: 'auto',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
+    expect(submittedOptions?.wan27VideoVariant).toBe('edit');
+    expect(submittedOptions?.wan27VideoAudioSetting).toBe('auto');
   });
 
   it('marks Wan 2.7 outputs generated with uploaded audio as audible', async () => {

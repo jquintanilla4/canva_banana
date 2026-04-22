@@ -224,6 +224,7 @@ export type SnapshotMetaState = {
   wan27VideoAspectRatio?: string;
   wan27VideoPromptExpansion?: boolean;
   wan27VideoVariant?: string;
+  wan27VideoAudioSetting?: string;
   seedance2Variant?: string;
   seedance2AspectRatio?: string;
   seedance2Resolution?: string;
@@ -864,7 +865,7 @@ export const normalizeSnapshotImageMetadata = (
       const wan27VideoDurationValue = (typed as { wan27VideoDuration?: unknown; wan26Duration?: unknown }).wan27VideoDuration
         ?? (typed as { wan26Duration?: unknown }).wan26Duration;
       if (
-        wan27VideoDurationValue === '2' || wan27VideoDurationValue === '3' || wan27VideoDurationValue === '4'
+        wan27VideoDurationValue === '0' || wan27VideoDurationValue === '2' || wan27VideoDurationValue === '3' || wan27VideoDurationValue === '4'
         || wan27VideoDurationValue === '5' || wan27VideoDurationValue === '6' || wan27VideoDurationValue === '7'
         || wan27VideoDurationValue === '8' || wan27VideoDurationValue === '9' || wan27VideoDurationValue === '10'
         || wan27VideoDurationValue === '11' || wan27VideoDurationValue === '12' || wan27VideoDurationValue === '13'
@@ -874,7 +875,7 @@ export const normalizeSnapshotImageMetadata = (
       }
 
       const wan27VideoAspectRatioValue = (typed as { wan27VideoAspectRatio?: unknown }).wan27VideoAspectRatio;
-      if (wan27VideoAspectRatioValue === '16:9' || wan27VideoAspectRatioValue === '9:16' || wan27VideoAspectRatioValue === '1:1' || wan27VideoAspectRatioValue === '4:3' || wan27VideoAspectRatioValue === '3:4') {
+      if (wan27VideoAspectRatioValue === 'source' || wan27VideoAspectRatioValue === '16:9' || wan27VideoAspectRatioValue === '9:16' || wan27VideoAspectRatioValue === '1:1' || wan27VideoAspectRatioValue === '4:3' || wan27VideoAspectRatioValue === '3:4') {
         normalizedOptions.wan27VideoAspectRatio = wan27VideoAspectRatioValue;
       }
 
@@ -885,8 +886,13 @@ export const normalizeSnapshotImageMetadata = (
       }
 
       const wan27VideoVariantValue = (typed as { wan27VideoVariant?: unknown }).wan27VideoVariant;
-      if (wan27VideoVariantValue === 'smart' || wan27VideoVariantValue === 'reference') {
+      if (wan27VideoVariantValue === 'smart' || wan27VideoVariantValue === 'reference' || wan27VideoVariantValue === 'edit') {
         normalizedOptions.wan27VideoVariant = wan27VideoVariantValue;
+      }
+
+      const wan27VideoAudioSettingValue = (typed as { wan27VideoAudioSetting?: unknown }).wan27VideoAudioSetting;
+      if (wan27VideoAudioSettingValue === 'auto' || wan27VideoAudioSettingValue === 'origin') {
+        normalizedOptions.wan27VideoAudioSetting = wan27VideoAudioSettingValue;
       }
 
       const wanTargetResolution = (typed as { wanTargetResolution?: unknown }).wanTargetResolution;

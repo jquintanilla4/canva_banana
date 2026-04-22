@@ -34,6 +34,7 @@ import type {
   Seedance2ResolutionSelectionValue,
   Seedance2DurationSelectionValue,
   Seedance2Variant,
+  Wan27VideoAudioSettingSelectionValue,
   Wan27VideoAspectRatioSelectionValue,
   Wan27VideoDurationSelectionValue,
   Wan27VideoResolutionSelectionValue,
@@ -122,8 +123,11 @@ import {
   WAN_CREATIVITY_OPTIONS,
   WAN_TARGET_RESOLUTION_OPTIONS,
   WAN_VISION_ENHANCER_MODEL_ID,
+  WAN_27_VIDEO_AUDIO_SETTING_OPTIONS,
   WAN_27_VIDEO_ASPECT_RATIO_OPTIONS,
   WAN_27_VIDEO_DURATION_OPTIONS,
+  WAN_27_VIDEO_EDIT_ASPECT_RATIO_OPTIONS,
+  WAN_27_VIDEO_EDIT_DURATION_OPTIONS,
   WAN_27_VIDEO_PROMPT_EXPANSION_OPTIONS,
   WAN_27_VIDEO_REFERENCE_DURATION_OPTIONS,
   WAN_27_VIDEO_RESOLUTION_OPTIONS,
@@ -347,6 +351,7 @@ export type PromptBarControlsInput = {
   wan27VideoAspectRatio: Wan27VideoAspectRatioSelectionValue;
   wan27VideoPromptExpansion: boolean;
   wan27VideoVariant: Wan27VideoVariant;
+  wan27VideoAudioSetting: Wan27VideoAudioSettingSelectionValue;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -412,6 +417,7 @@ export type PromptBarControlsInput = {
   onWan27VideoAspectRatioChange: (value: string) => void;
   onWan27VideoPromptExpansionChange: (value: boolean) => void;
   onWan27VideoVariantChange: (value: string) => void;
+  onWan27VideoAudioSettingChange: (value: string) => void;
   onSeedance15AspectRatioChange: (value: string) => void;
   onSeedance15ResolutionChange: (value: string) => void;
   onSeedance15DurationChange: (value: string) => void;
@@ -511,6 +517,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     wan27VideoAspectRatio,
     wan27VideoPromptExpansion,
     wan27VideoVariant,
+    wan27VideoAudioSetting,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -576,6 +583,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onWan27VideoAspectRatioChange,
     onWan27VideoPromptExpansionChange,
     onWan27VideoVariantChange,
+    onWan27VideoAudioSettingChange,
     onSeedance15AspectRatioChange,
     onSeedance15ResolutionChange,
     onSeedance15DurationChange,
@@ -1044,11 +1052,21 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }
 
   if (isWan27VideoModel) {
-    const wan27VariantValue = wan27VideoVariant === 'reference' ? 'reference' : 'smart';
+    const wan27VariantValue = wan27VideoVariant === 'reference'
+      ? 'reference'
+      : wan27VideoVariant === 'edit'
+        ? 'edit'
+        : 'smart';
     const isWan27ReferenceMode = wan27VariantValue === 'reference';
+    const isWan27EditMode = wan27VariantValue === 'edit';
     const wan27DurationOptions = isWan27ReferenceMode
       ? WAN_27_VIDEO_REFERENCE_DURATION_OPTIONS
-      : WAN_27_VIDEO_DURATION_OPTIONS;
+      : isWan27EditMode
+        ? WAN_27_VIDEO_EDIT_DURATION_OPTIONS
+        : WAN_27_VIDEO_DURATION_OPTIONS;
+    const wan27AspectRatioOptions = isWan27EditMode
+      ? WAN_27_VIDEO_EDIT_ASPECT_RATIO_OPTIONS
+      : WAN_27_VIDEO_ASPECT_RATIO_OPTIONS;
 
     controls.push({
       id: 'wan27-video-variant-select',
@@ -1064,7 +1082,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       id: 'wan27-video-aspect-ratio-select',
       prefixLabel: 'AR',
       ariaLabel: 'Select Wan 2.7 aspect ratio',
-      options: WAN_27_VIDEO_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      options: wan27AspectRatioOptions.map(option => ({ value: option.value, label: option.label })),
       value: wan27VideoAspectRatio,
       onChange: onWan27VideoAspectRatioChange,
       disabled: isLoading,
@@ -1088,7 +1106,19 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       disabled: isLoading,
     });
 
-    if (!isWan27ReferenceMode) {
+    if (isWan27EditMode) {
+      controls.push({
+        id: 'wan27-video-audio-setting-select',
+        prefixLabel: 'Audio',
+        ariaLabel: 'Select Wan 2.7 edit audio handling',
+        options: WAN_27_VIDEO_AUDIO_SETTING_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+        value: wan27VideoAudioSetting,
+        onChange: onWan27VideoAudioSettingChange,
+        disabled: isLoading,
+      });
+    }
+
+    if (!isWan27ReferenceMode && !isWan27EditMode) {
       controls.push({
         id: 'wan27-video-prompt-expansion-select',
         prefixLabel: 'Prompt+',

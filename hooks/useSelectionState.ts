@@ -89,6 +89,7 @@ const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasI
 
 const WAN_27_REFERENCE_IMAGE_LIMIT = 20; // Wan reference accepts multiple images.
 const WAN_27_REFERENCE_VIDEO_LIMIT = 20; // Wan reference accepts multiple videos.
+const WAN_27_EDIT_IMAGE_LIMIT = 1; // Wan edit accepts one optional reference image.
 const NO_REFERENCE_LIMIT = 0; // Non-reference modes should not keep video/audio refs.
 
 export const useSelectionState = (options: SelectionOptions): SelectionStateResult => {
@@ -136,7 +137,16 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isWan27VideoModel
     && wan27VideoVariant === 'reference';
-  const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel || (isWan27VideoModel && !isWan27ReferenceMode);
+  const isWan27EditMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isWan27VideoModel
+    && wan27VideoVariant === 'edit';
+  const isWan27SmartMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isWan27VideoModel
+    && !isWan27ReferenceMode
+    && !isWan27EditMode;
+  const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel || isWan27SmartMode;
   const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
   const isSeedance2ReferenceMode = apiProvider === 'fal'
     && falModelMode === 'video'
@@ -147,7 +157,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     || isAudioInputMode
     || isKling26ControlVideoInputMode
     || isVeo31ExtendMode
-    || isScailVideoModel;
+    || isScailVideoModel
+    || isWan27EditMode;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
   const isSeedance15FflfMode = isSeedance15VideoModel;
   const isSeedance2SmartMode = apiProvider === 'fal'
@@ -226,42 +237,40 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         audios: NO_REFERENCE_LIMIT,
       };
     }
+    if (isWan27EditMode) {
+      return {
+        images: WAN_27_EDIT_IMAGE_LIMIT,
+        videos: NO_REFERENCE_LIMIT,
+        audios: NO_REFERENCE_LIMIT,
+      };
+    }
     return {
       images: getMaxReferenceImages(falModelId),
       videos: NO_REFERENCE_LIMIT,
       audios: NO_REFERENCE_LIMIT,
     };
-  }, [falModelId, isSeedance2ReferenceMode, isWan27ReferenceMode]);
+  }, [falModelId, isSeedance2ReferenceMode, isWan27EditMode, isWan27ReferenceMode]);
 
   useEffect(() => {
-    setReferenceVideoIds(prevIds => {
-      if (prevIds.length <= referenceLimits.videos) {
-        return prevIds;
-      }
+    if (referenceVideoIds.length > referenceLimits.videos) {
       if (isSeedance2ReferenceMode) {
         onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
       }
-      return prevIds.slice(0, referenceLimits.videos);
-    });
-    setReferenceAudioIds(prevIds => {
-      if (prevIds.length <= referenceLimits.audios) {
-        return prevIds;
-      }
+      setReferenceVideoIds(prevIds => prevIds.slice(0, referenceLimits.videos));
+    }
+    if (referenceAudioIds.length > referenceLimits.audios) {
       if (isSeedance2ReferenceMode) {
         onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
       }
-      return prevIds.slice(0, referenceLimits.audios);
-    });
+      setReferenceAudioIds(prevIds => prevIds.slice(0, referenceLimits.audios));
+    }
     if (isKlingO1VideoModel) {
       return;
     }
-    setReferenceImageIds(prevIds => {
-      if (prevIds.length <= referenceLimits.images) {
-        return prevIds;
-      }
+    if (referenceImageIds.length > referenceLimits.images) {
       onReferenceLimit(referenceLimits.images);
-      return prevIds.slice(0, referenceLimits.images);
-    });
+      setReferenceImageIds(prevIds => prevIds.slice(0, referenceLimits.images));
+    }
   }, [isKlingO1VideoModel, isSeedance2ReferenceMode, onError, onReferenceLimit, referenceAudioIds.length, referenceImageIds.length, referenceLimits, referenceVideoIds.length]);
 
   useEffect(() => {
@@ -394,6 +403,16 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return;
     }
 
+    if (reference && isWan27EditMode && !imageId) {
+      setReferenceImageIds([]);
+      return;
+    }
+
+    if (reference && isWan27EditMode && targetImage?.mediaType !== 'image') {
+      onError('Wan 2.7 Edit supports one still reference image.');
+      return;
+    }
+
     if (reference && isSeedance2ReferenceMode && targetImage?.mediaType === 'audio') {
       if (!imageId) {
         setReferenceAudioIds([]);
@@ -426,7 +445,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isWan27VideoModel && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -518,6 +537,19 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
             return [...prevIds, imageId];
           }
           onReferenceLimit(WAN_27_REFERENCE_IMAGE_LIMIT);
+          return prevIds;
+        });
+        return;
+      }
+      if (isWan27EditMode) {
+        setReferenceImageIds(prevIds => {
+          if (prevIds.includes(imageId)) {
+            return prevIds.filter(id => id !== imageId);
+          }
+          if (prevIds.length < WAN_27_EDIT_IMAGE_LIMIT) {
+            return [imageId];
+          }
+          onError('Wan 2.7 Edit supports one reference image.');
           return prevIds;
         });
         return;
@@ -677,7 +709,9 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isKlingProVideoSelection,
     isKling26VideoModel,
     isKlingO1FflfMode,
+    isWan27EditMode,
     isWan27VideoModel,
+    isWan27SmartMode,
     isSeedance15FflfMode,
     isSeedance2SmartMode,
     isVeo31TailCapable,

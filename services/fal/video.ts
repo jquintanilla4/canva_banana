@@ -33,6 +33,7 @@ import {
   VEO_31_EXTEND_VIDEO_MODEL_ID,
   VEO_31_FFLF_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_EDIT_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_TEXT_TO_VIDEO_MODEL_ID,
@@ -461,21 +462,35 @@ export const generateImageToVideo = async (
   const isWan27VideoModel = modelId === WAN_27_VIDEO_MODEL_ID;
   if (isWan27VideoModel) {
     const trimmedPrompt = prompt.trim();
-    const wan27Variant = options.wan27VideoVariant === 'reference' ? 'reference' : 'smart';
+    const wan27Variant = options.wan27VideoVariant === 'reference'
+      ? 'reference'
+      : options.wan27VideoVariant === 'edit'
+        ? 'edit'
+        : 'smart';
     const resolution = options.wan27VideoResolution === '720p' || options.wan27VideoResolution === '1080p'
       ? options.wan27VideoResolution
       : '1080p';
-    const durationValue = options.wan27VideoDuration === '2' || options.wan27VideoDuration === '3' || options.wan27VideoDuration === '4'
+    const smartDurationValue = options.wan27VideoDuration === '2' || options.wan27VideoDuration === '3' || options.wan27VideoDuration === '4'
       || options.wan27VideoDuration === '5' || options.wan27VideoDuration === '6' || options.wan27VideoDuration === '7'
       || options.wan27VideoDuration === '8' || options.wan27VideoDuration === '9' || options.wan27VideoDuration === '10'
       || options.wan27VideoDuration === '11' || options.wan27VideoDuration === '12' || options.wan27VideoDuration === '13'
       || options.wan27VideoDuration === '14' || options.wan27VideoDuration === '15'
       ? Number(options.wan27VideoDuration)
       : 5;
+    const editDurationValue = options.wan27VideoDuration === '0' || options.wan27VideoDuration === '2' || options.wan27VideoDuration === '3'
+      || options.wan27VideoDuration === '4' || options.wan27VideoDuration === '5' || options.wan27VideoDuration === '6'
+      || options.wan27VideoDuration === '7' || options.wan27VideoDuration === '8' || options.wan27VideoDuration === '9'
+      || options.wan27VideoDuration === '10'
+      ? Number(options.wan27VideoDuration)
+      : 0;
     const aspectRatio = options.wan27VideoAspectRatio === '16:9' || options.wan27VideoAspectRatio === '9:16'
       || options.wan27VideoAspectRatio === '1:1' || options.wan27VideoAspectRatio === '4:3' || options.wan27VideoAspectRatio === '3:4'
       ? options.wan27VideoAspectRatio
       : '16:9';
+    const editAspectRatio = options.wan27VideoAspectRatio === 'source'
+      ? undefined
+      : aspectRatio;
+    const audioSetting = options.wan27VideoAudioSetting === 'origin' ? 'origin' : 'auto';
     const enablePromptExpansion = typeof options.wan27VideoPromptExpansion === 'boolean'
       ? options.wan27VideoPromptExpansion
       : true;
@@ -485,12 +500,38 @@ export const generateImageToVideo = async (
       : undefined;
     const sharedPayload: Record<string, unknown> = {
       resolution,
-      duration: durationValue,
+      duration: smartDurationValue,
       enable_prompt_expansion: enablePromptExpansion,
       enable_safety_checker: false,
       ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
       ...(seed !== undefined ? { seed } : {}),
     };
+
+    if (wan27Variant === 'edit') {
+      if (!trimmedPrompt) {
+        throw new Error('Wan 2.7 Edit requires a prompt.');
+      }
+      if (!options.sourceVideoUrl) {
+        throw new Error('Wan 2.7 Edit requires a source video.');
+      }
+      if (referenceImages.length > 1) {
+        throw new Error('Wan 2.7 Edit supports one reference image.');
+      }
+      const referenceImageUrl = referenceImages[0] ? await uploadImageElementToFal(referenceImages[0]) : undefined;
+      const inputPayload: Record<string, unknown> = {
+        prompt: trimmedPrompt,
+        video_url: options.sourceVideoUrl,
+        resolution,
+        duration: editDurationValue,
+        audio_setting: audioSetting,
+        enable_safety_checker: false,
+        ...(editAspectRatio ? { aspect_ratio: editAspectRatio } : {}),
+        ...(referenceImageUrl ? { reference_image_url: referenceImageUrl } : {}),
+        ...(seed !== undefined ? { seed } : {}),
+      };
+
+      return subscribeForVideoUrl(WAN_27_EDIT_VIDEO_MODEL_ID, inputPayload, options);
+    }
 
     if (wan27Variant === 'reference') {
       if (!trimmedPrompt) {
@@ -503,7 +544,7 @@ export const generateImageToVideo = async (
       if (imageUrls.length + videoUrls.length === 0) {
         throw new Error('Wan 2.7 Reference requires at least one reference image or video.');
       }
-      const referenceDuration = durationValue > 10 ? 10 : durationValue;
+      const referenceDuration = smartDurationValue > 10 ? 10 : smartDurationValue;
       const inputPayload: Record<string, unknown> = {
         prompt: trimmedPrompt,
         resolution,
@@ -836,6 +877,7 @@ export const generateImageToVideo = async (
     const inputPayload: Record<string, unknown> = {
       video_url: options.sourceVideoUrl,
       image_url: imageUrl,
+      enable_safety_checker: false,
       ...(numInferenceSteps !== undefined ? { num_inference_steps: numInferenceSteps } : {}),
       ...(resolution ? { resolution } : {}),
       ...(shift !== undefined ? { shift } : {}),
