@@ -33,11 +33,9 @@ type Args = {
   isUpscaleModel: boolean;
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
-  isKlingModel: boolean;
   isGrokModel: boolean; // Grok text-to-image flag.
   isGrokImagineVideoModel: boolean;
   isKlingVideoModel: boolean;
-  isKling26VideoModel: boolean;
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isVeo31VideoModel: boolean;
@@ -77,11 +75,9 @@ export function useGenerationGuards({
   isUpscaleModel,
   isSeedreamModel,
   isNanoBananaModel,
-  isKlingModel,
   isGrokModel, // Grok text-to-image flag.
   isGrokImagineVideoModel,
   isKlingVideoModel,
-  isKling26VideoModel,
   isKling26ControlVideoModel,
   isHailuoVideoModel,
   isVeo31VideoModel,
@@ -152,7 +148,7 @@ export function useGenerationGuards({
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
-      && (isSeedreamModel || isNanoBananaModel || isKlingModel || isGrokModel); // Include Grok validation.
+      && (isSeedreamModel || isNanoBananaModel || isGrokModel); // Include Grok validation.
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
@@ -335,9 +331,7 @@ export function useGenerationGuards({
     isHeygenV3LipsyncVideoModel,
     isNanoBananaModel,
     isHailuoVideoModel,
-    isKling26VideoModel,
     isKling26ControlVideoModel,
-    isKlingModel,
     isKlingO1EditMode,
     isKlingO1VideoInputMode,
     isKlingVideoModel,

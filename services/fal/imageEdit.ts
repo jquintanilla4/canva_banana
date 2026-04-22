@@ -25,7 +25,6 @@ import {
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
   isNanoBananaEditModelId,
-  KLING_IMAGE_MODEL_ID,
   WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
@@ -384,9 +383,7 @@ export const generateImageEdit = async (
     : undefined;
   const numImagesOption = options.numImages;
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
-  const isKlingModel = modelId === KLING_IMAGE_MODEL_ID;
   const isNanoBananaModel = isNanoBananaEditModelId(modelId);
-  const normalizedResolutionOption: FalResolutionOption = isKlingModel && resolutionOption === '4K' ? '2K' : resolutionOption;
 
   const body: {
     prompt: string;
@@ -420,11 +417,11 @@ export const generateImageEdit = async (
     } else {
       body.image_size = imageSizeOption;
     }
-  } else if (isNanoBananaModel || isKlingModel) {
+  } else if (isNanoBananaModel) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }
-    body.resolution = isKlingModel ? normalizedResolutionOption : resolutionOption;
+    body.resolution = resolutionOption;
   }
 
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {

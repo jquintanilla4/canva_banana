@@ -20,7 +20,6 @@ type TestFalSettings = Pick<
   | 'isLipsyncVideoModel'
   | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
-  | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
   | 'isWan27VideoModel'
   | 'isSeedance15VideoModel'
@@ -72,7 +71,6 @@ describe('useSelectionState (one-to-all)', () => {
       isLipsyncVideoModel: false,
       isHeygenV3LipsyncVideoModel: false,
       isInfinitalkVideoModel: false,
-      isKling26VideoModel: false,
       isKling26ControlVideoModel: false,
       isWan27VideoModel: false,
       isSeedance15VideoModel: false,

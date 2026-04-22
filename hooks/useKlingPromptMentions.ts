@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import type { CanvasMediaType } from '../types';
 
 type UseKlingPromptMentionsArgs = {
-  isKlingModel: boolean;
   isKlingO1VideoModel: boolean;
   isKlingO1EditMode: boolean;
   isKlingO1RefV2VMode?: boolean;
@@ -22,7 +21,6 @@ type UseKlingPromptMentionsResult = {
 };
 
 export const useKlingPromptMentions = ({
-  isKlingModel,
   isKlingO1VideoModel,
   isKlingO1EditMode,
   isKlingO1RefV2VMode = false,
@@ -37,7 +35,7 @@ export const useKlingPromptMentions = ({
 }: UseKlingPromptMentionsArgs): UseKlingPromptMentionsResult => {
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode; // Both Kling O1 video-input variants share the same "Video" mention behavior.
   return useMemo(() => {
-    if (!isKlingModel && !isKlingO1VideoModel && !isSeedance2ReferenceMode && !isFlux2MaxModel && !isWan27ImageModel) {
+    if (!isKlingO1VideoModel && !isSeedance2ReferenceMode && !isFlux2MaxModel && !isWan27ImageModel) {
       return { klingPromptMentions: [], klingReferenceCount: 0 };
     }
 
@@ -78,7 +76,6 @@ export const useKlingPromptMentions = ({
     elementOrderLabels,
     hasSingleImageSelected,
     primarySelectionMediaType,
-    isKlingModel,
     isKlingO1VideoModel,
     isKlingO1VideoInputMode,
     isSeedance2ReferenceMode,

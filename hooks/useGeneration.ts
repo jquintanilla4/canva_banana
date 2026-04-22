@@ -9,9 +9,7 @@ import {
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
-  KLING_26_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
-  KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
@@ -70,7 +68,6 @@ import {
   type FalResolutionSelectionValue,
   type FalVideoModelId,
   type HailuoVariant,
-  type Kling26AudioSelectionValue,
   type KlingO1Variant,
   type KlingVariant,
   type WanAnimateQualitySelectionValue,
@@ -99,7 +96,7 @@ import {
   type FalQueueUpdate,
 } from '../services/falService';
 import { addDebugLog } from '../services/debugLog';
-import { buildFalDisplayError, FAL_PROVIDER_DOWN_MESSAGE, getFalFileSizeErrorMessage } from '../services/falConstants';
+import { buildFalDisplayError, FAL_PROVIDER_DOWN_MESSAGE } from '../services/falConstants';
 import type {
   ApiProviderId,
   AppMode,
@@ -210,34 +207,6 @@ const normalizeGeneratedImageToPng = async (
   return { image: await loadGeneratedImageElement(pngDataUrl), base64: pngBase64 };
 };
 
-const extractFalQueueLogMessages = (logs: FalQueueUpdate['logs']): string[] => {
-  if (!logs) {
-    return [];
-  }
-  if (typeof logs === 'string') {
-    return [logs];
-  }
-  if (Array.isArray(logs)) {
-    return logs
-      .map(entry => {
-        if (typeof entry === 'string') {
-          return entry;
-        }
-        if (entry && typeof entry === 'object') {
-          const message = (entry as { message?: unknown }).message;
-          return typeof message === 'string' ? message : '';
-        }
-        return '';
-      })
-      .filter(Boolean);
-  }
-  if (typeof logs === 'object') {
-    return Object.values(logs)
-      .flatMap(value => extractFalQueueLogMessages(value as FalQueueUpdate['logs']));
-  }
-  return [];
-};
-
 const resolveSelectedStillImageId = (
   primaryImageId: string | null,
   selectedImageIds: string[],
@@ -337,13 +306,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     onGenerationComplete,
   } = args;
 
-  const showTemporaryError = useCallback((message: string) => {
-    setError(message);
-    window.setTimeout(() => {
-      setError(null);
-    }, 4000);
-  }, [setError]);
-
   const seedanceRepeatStreakRef = useRef<{ requestKey: string | null; count: number }>({ requestKey: null, count: 0 });
 
   const confirmRepeatedSeedanceRequest = useCallback((requestKey: string): boolean => {
@@ -376,7 +338,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     klingVariant,
     klingO1Variant,
     klingO1KeepAudio,
-    kling26AudioSelection,
     kling26ControlVariant,
     kling26ControlKeepSound,
     kling26ControlDriver,
@@ -570,10 +531,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const recraftColorsForRun = Array.isArray(falOptionsOverride.recraftColors)
       ? falOptionsOverride.recraftColors.map(normalizeRecraftRgbColor).filter((color): color is NonNullable<typeof color> => Boolean(color)).slice(0, RECRAFT_V4_PRO_MAX_COLORS)
       : recraftColors.slice(0, RECRAFT_V4_PRO_MAX_COLORS);
-    const kling26AudioOverride = falOptionsOverride.kling26Audio;
-    const kling26AudioForRun = kling26AudioOverride !== undefined
-      ? kling26AudioOverride
-      : kling26AudioSelection === 'on';
     const kling26ControlVariantForRun = falOptionsOverride.kling26ControlVariant === 'pro'
       || falOptionsOverride.kling26ControlVariant === 'standard'
       ? falOptionsOverride.kling26ControlVariant
@@ -664,7 +621,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ? 'auto_2K'
       : falImageSizeSelectionForRun; // Seedream 5 Lite defaults to auto_2K instead of source-matching.
     const isNanoBananaModel = !isVideoMode && isNanoBananaEditModelId(falModelIdForRun);
-    const isKlingModel = !isVideoMode && falModelIdForRun === KLING_IMAGE_MODEL_ID;
     const isGrokImagineModel = !isVideoMode && falModelIdForRun === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
     const grokAspectRatioForRun = (isGrokImagineModel && falAspectRatioSelectionForRun === 'default')
       ? '1:1'
@@ -672,8 +628,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isFlux2MaxModelForRun = !isVideoMode && falModelIdForRun === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
     const isWan27ImageModelForRun = !isVideoMode && falModelIdForRun === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
     const isRecraftV4ProModelForRun = usingFal && !isVideoMode && isRecraftV4ProModel(falModelIdForRun);
-    const normalizedFalResolutionSelectionForRun =
-      isKlingModel && falResolutionSelectionForRun === '4K' ? '2K' : falResolutionSelectionForRun;
     const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
     const isSeedvrUpscaleModel = !isVideoMode && falModelIdForRun === 'fal-ai/seedvr/upscale/image';
     const isUpscaleModel = isCrystalUpscaleModel || isSeedvrUpscaleModel;
@@ -685,7 +639,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isKlingO1EditMode = isKlingO1VideoModel && klingO1VariantForRun === 'edit';
     const isKlingO1RefV2VMode = isKlingO1VideoModel && klingO1VariantForRun === 'refV2V';
     const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
-    const isKling26VideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_VIDEO_MODEL_ID;
     const isKling26ControlVideoModel = isVideoMode && falVideoModelIdForRun === KLING_26_CONTROL_VIDEO_MODEL_ID;
     const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
     const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
@@ -725,11 +678,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const wan27AudioIdForRun = isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun ? sourceAudioIdForRun : null; // Wan 2.7 Smart supports optional audio.
     const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
       ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
-      : (isKlingVideoModel || isKling26VideoModel || isKlingO1VideoModel)
+      : (isKlingVideoModel || isKlingO1VideoModel)
         ? (falVideoDurationForRun === '10' ? '10' : '5')
         : undefined;
     const normalizedVideoNegativePrompt =
-      (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun)
+      (isKlingVideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun)
         ? videoNegativePromptForRun.trim()
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
@@ -809,8 +762,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ? `${baseModelLabel} ${klingO1VariantLabel}`
             : isKling26ControlVideoModel
               ? `${baseModelLabel} ${kling26ControlVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
-            : isKling26VideoModel
-              ? `${baseModelLabel} Pro`
               : isVeo31VideoModelForRun
                 ? `${baseModelLabel} ${veo31VariantLabel}`
                 : isWanAnimateVideoModel
@@ -1548,7 +1499,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKling26VideoModel || isKlingO1FflfMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart'); // Allow end-frame input for tail-capable variants.
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingO1FflfMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart'); // Allow end-frame input for tail-capable variants.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -1583,14 +1534,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ?? falVideoModelIdForRun;
         const shouldSendDuration = isHailuoVideoModel
           ? isHailuoStandardVideoModel
-          : (isKlingVideoModel || isKling26VideoModel || (isKlingO1VideoModel && !isKlingO1EditMode));
+          : (isKlingVideoModel || (isKlingO1VideoModel && !isKlingO1EditMode));
         const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
         const oneToAllNegativePromptForRequest = isOneToAllAnimateVideoModel ? videoNegativePromptForRun.trim() : undefined;
         const negativePromptForRequest =
-          (isKlingVideoModel || isKling26VideoModel || isWanVisionEnhancerVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun) && hasVideoNegativePrompt
+          (isKlingVideoModel || isWanVisionEnhancerVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun) && hasVideoNegativePrompt
             ? normalizedVideoNegativePrompt
             : undefined;
-        const generateAudioForRequest = isKling26VideoModel ? kling26AudioForRun : undefined;
         const keepOriginalSoundForRequest = isKling26ControlVideoModel ? kling26ControlKeepSoundForRun : undefined;
         const characterOrientationForRequest = isKling26ControlVideoModel ? kling26ControlDriverForRun : undefined;
         const videoResult = await generateFalImageToVideo(videoPromptForRequest, videoSourceImage, {
@@ -1608,7 +1558,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
             sourceVideoUrl: sourceVideoUrlForRequest,
           } : {}),
           ...(videoTailImageElement ? { tailImage: videoTailImageElement } : {}),
-          ...(generateAudioForRequest !== undefined ? { generateAudio: generateAudioForRequest } : {}),
           ...(isKling26ControlVideoModel ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
             keepOriginalSound: keepOriginalSoundForRequest,
@@ -1789,7 +1738,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
             (typeof webkitAudioDecodedByteCount === 'number' && webkitAudioDecodedByteCount > 0)
           );
           const hasAudio = hasDetectedAudio
-            || generateAudioForRequest === true
             || (isWan27VideoModelForRun && Boolean(sourceAudioUrlForRequest))
             || (isVeo31VideoModelForRun && veo31GenerateAudioForRun)
             || (isFalSeedance2VideoModelForRun && seedance2GenerateAudioForRun);
@@ -1905,7 +1853,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     seedance2Duration: seedance2DurationForRun,
                     seedance2GenerateAudio: seedance2GenerateAudioForRun,
                   } : {}),
-                  ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                   ...(isKling26ControlVideoModel ? {
                     kling26ControlVariant: kling26ControlVariantForRun,
                     kling26ControlKeepSound: kling26ControlKeepSoundForRun,
@@ -1967,7 +1914,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
     const shouldValidateFalOptions = usingFal
-      && (isSeedreamModel || isNanoBananaModel || isKlingModel || isGrokImagineModel); // Include Grok validation.
+      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel); // Include Grok validation.
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImagesForRun) ||
@@ -2082,57 +2029,18 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ? getSeedreamTextToImageModelId(falModelIdForRun)
             : isGrokImagineModel
               ? GROK_IMAGINE_IMAGE_MODEL_ID // Grok text-to-image endpoint.
-              : isKlingModel
-                ? KLING_IMAGE_MODEL_ID
-                : isFlux2MaxModelForRun
-                  ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
-                  : isWan27ImageModelForRun
-                    ? WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID
-                    : isRecraftV4ProModelForRun
-                      ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
-                      : isNanoBananaModel
-                        ? getNanoBananaTextToImageModelId(falModelIdForRun)
-                        : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
-
-          let klingReferenceImages: HTMLImageElement[] | undefined;
-          if (isKlingModel) {
-            const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
-            const referenceCanvasImages = referenceImageIdsForRun
-              .map(id => images.find(img => img.id === id))
-              .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
-              .slice(0, maxReferenceImages);
-
-            const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
-              if ((img.rotation ?? 0) === 0) {
-                return img.element;
-              }
-              const rasterized = await rasterizeImages([img]);
-              return rasterized.element;
-            };
-
-            if (referenceCanvasImages.length > 0) {
-              klingReferenceImages = await Promise.all(referenceCanvasImages.map(prepareReferenceImage));
-              referenceIdsUsed = referenceCanvasImages.map(img => img.id);
-            }
-          }
+              : isFlux2MaxModelForRun
+                ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
+                : isWan27ImageModelForRun
+                  ? WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID
+                  : isRecraftV4ProModelForRun
+                    ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
+                    : isNanoBananaModel
+                      ? getNanoBananaTextToImageModelId(falModelIdForRun)
+                      : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
 
           const falResult = await generateFalImage(trimmedPrompt, {
             onQueueUpdate: (update) => {
-              if (isKlingModel && update.status === 'FAILED') {
-                const updateMessage = typeof (update as { message?: unknown }).message === 'string'
-                  ? (update as { message?: string }).message
-                  : undefined;
-                const updateError = typeof (update as { error?: unknown }).error === 'string'
-                  ? (update as { error?: string }).error
-                  : undefined;
-                const fileSizeMessage = getFalFileSizeErrorMessage(
-                  updateMessage ?? updateError,
-                  extractFalQueueLogMessages(update.logs),
-                );
-                if (fileSizeMessage) {
-                  showTemporaryError(fileSizeMessage);
-                }
-              }
               setFalJobs(prev => prev.map(job => {
                 if (job.id !== falJobId) {
                   return job;
@@ -2141,11 +2049,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isNanoBananaModel || isKlingModel || isSeedreamModel || isGrokImagineModel)
+            aspectRatio: (isNanoBananaModel || isSeedreamModel || isGrokImagineModel)
               ? (isGrokImagineModel ? grokAspectRatioForRun : falAspectRatioSelectionForRun)
               : 'default', // Include Grok aspect ratios.
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
-            ...(isKlingModel ? { resolution: normalizedFalResolutionSelectionForRun } : {}),
             ...(isSeedreamModel ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
             ...(isFlux2MaxModelForRun ? { flux2MaxImageSize } : {}),
             ...(isWan27ImageModelForRun ? {
@@ -2158,7 +2065,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
               recraftBackgroundColor: recraftBackgroundColorForRun,
               recraftColors: recraftColorsForRun,
             } : {}),
-            ...(klingReferenceImages ? { referenceImages: klingReferenceImages } : {}),
             numImages: normalizedFalNumImages,
           });
 
@@ -2253,7 +2159,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
           } else {
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isKlingModel || isNanoBananaModel || isSeedreamModel || isFlux2MaxModelForRun || isWan27ImageModelForRun;
+            const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isFlux2MaxModelForRun || isWan27ImageModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
               const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
@@ -2296,21 +2202,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
               } : {}),
               numImages: normalizedFalNumImages,
               onQueueUpdate: (update) => {
-                if (isKlingModel && update.status === 'FAILED') {
-                  const updateMessage = typeof (update as { message?: unknown }).message === 'string'
-                    ? (update as { message?: string }).message
-                    : undefined;
-                  const updateError = typeof (update as { error?: unknown }).error === 'string'
-                    ? (update as { error?: string }).error
-                    : undefined;
-                  const fileSizeMessage = getFalFileSizeErrorMessage(
-                    updateMessage ?? updateError,
-                    extractFalQueueLogMessages(update.logs),
-                  );
-                  if (fileSizeMessage) {
-                    showTemporaryError(fileSizeMessage);
-                  }
-                }
                 setFalJobs(prev => prev.map(job => {
                   if (job.id !== falJobId) {
                     return job;
@@ -2441,7 +2332,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...(isOneToAllAnimateVideoModel ? {
                     oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
                   } : {}),
-                  ...(isKling26VideoModel ? { kling26Audio: kling26AudioForRun } : {}),
                   ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
                 },
               },
@@ -2471,9 +2361,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       onGenerationComplete?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An unknown error occurred.';
-      const fileSizeMessage = usingFal && isKlingModel ? getFalFileSizeErrorMessage(message) : undefined;
       const userFacingMessage = usingFal
-        ? fileSizeMessage ?? buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE
+        ? buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE
         : message;
       if (usingFal) {
         setFalJobs(prev => prev.map(job => {
@@ -2485,11 +2374,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       } else if (usesGlobalLoadingLock) {
         setIsLoading(false);
       }
-      if (fileSizeMessage) {
-        showTemporaryError(fileSizeMessage);
-      } else {
-        setError(userFacingMessage);
-      }
+      setError(userFacingMessage);
     } finally {
       if (usesGlobalLoadingLock) {
         setIsLoading(false);
@@ -2515,7 +2400,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     hailuoVariant,
     klingVariant,
     klingO1Variant,
-    kling26AudioSelection,
     kling26ControlVariant,
     kling26ControlKeepSound,
     kling26ControlDriver,
@@ -2575,7 +2459,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     sourceVideoId,
     sourceAudioId,
     setError,
-    showTemporaryError,
     confirmRepeatedSeedanceRequest,
     setIsLoading,
     setFalJobs,

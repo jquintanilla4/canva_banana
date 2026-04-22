@@ -18,7 +18,6 @@ import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
 import { clearDebugLogs } from './services/debugLog';
 import {
-  KLING_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   isNanoBananaEditModelId,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
@@ -310,7 +309,6 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2000);
   }, [fal.falModelId, fal.isKlingO1EditMode, fal.isKlingO1RefV2VMode, isKlingO1VideoInputMode, setToastMessage]);
 
-  const isKlingModel = !fal.isVideoMode && fal.falModelId === KLING_IMAGE_MODEL_ID;
   const isKlingO1FflfMode = fal.isKlingO1VideoModel && fal.klingO1Variant === 'fflf';
   const isVeo31TailCapable = fal.isVeo31VideoModel && fal.veo31Variant === 'i2v-fflf';
   const isVeo31ExtendMode = fal.isVeo31VideoModel && fal.veo31Variant === 'extend';
@@ -318,7 +316,6 @@ export default function App() {
   const isWan27ReferenceMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'reference'; // Wan Reference labels tagged image/video refs.
   const isWan27EditMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'edit'; // Wan Edit uses a source video instead of an end frame.
   const supportsTailFrameSelection = fal.isKlingProVideoSelection
-    || fal.isKling26VideoModel
     || isKlingO1FflfMode
     || isVeo31TailCapable
     || (fal.isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode)
@@ -1063,7 +1060,7 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isWan27ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel,
+    labelReferences: fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isWan27ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
     includePrimaryImageAsReference: !isSeedance2ReferenceMode && !isWan27ReferenceMode, // Reference modes should label only tagged refs.
@@ -1165,7 +1162,6 @@ export default function App() {
 
   // Build prompt mention suggestions for Kling/Wan based on current reference/element selections.
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
-    isKlingModel,
     isKlingO1VideoModel: fal.isKlingO1VideoModel,
     isKlingO1EditMode: fal.isKlingO1EditMode,
     isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
@@ -1240,11 +1236,9 @@ export default function App() {
     isUpscaleModel: fal.isUpscaleModel,
     isSeedreamModel,
     isNanoBananaModel,
-    isKlingModel,
     isGrokModel, // Grok validation flag.
     isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isKlingVideoModel: fal.isKlingVideoModel,
-    isKling26VideoModel: fal.isKling26VideoModel,
     isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
@@ -1270,12 +1264,10 @@ export default function App() {
     usingFal,
     isSeedreamModel,
     isNanoBananaModel,
-    isKlingModel,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isUpscaleModel: fal.isUpscaleModel,
     isKlingVideoModel: fal.isKlingVideoModel,
     isKlingO1VideoModel: fal.isKlingO1VideoModel,
-    isKling26VideoModel: fal.isKling26VideoModel,
     isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
@@ -1293,7 +1285,6 @@ export default function App() {
     klingVariant: fal.klingVariant,
     klingO1Variant: fal.klingO1Variant,
     klingO1KeepAudio: fal.klingO1KeepAudio,
-    kling26AudioSelection: fal.kling26AudioSelection,
     kling26ControlVariant: fal.kling26ControlVariant,
     kling26ControlKeepSound: fal.kling26ControlKeepSound,
     kling26ControlDriver: fal.kling26ControlDriver,
@@ -1360,7 +1351,6 @@ export default function App() {
     onKlingVariantChange: fal.handleKlingVariantChange,
     onKlingO1VariantChange: fal.handleKlingO1VariantChange,
     onKlingO1KeepAudioChange: fal.handleKlingO1KeepAudioChange,
-    onKling26AudioChange: fal.handleKling26AudioChange,
     onKling26ControlVariantChange: fal.handleKling26ControlVariantChange,
     onKling26ControlKeepSoundChange: fal.handleKling26ControlKeepSoundChange,
     onKling26ControlDriverChange: fal.handleKling26ControlDriverChange,
@@ -1712,7 +1702,7 @@ export default function App() {
                 : 'Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... (Cmd/Ctrl + Enter to generate)')
               : fal.isWan27ImageModel
               ? 'Describe your generation, or your edit, or use @ to reference images (4 images in total)... (Cmd/Ctrl + Enter to generate)'
-              : isKlingModel || fal.isKlingO1VideoModel || fal.isFlux2MaxModel
+              : fal.isKlingO1VideoModel || fal.isFlux2MaxModel
                 ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
                 : promptPlaceholderText
           }
@@ -1723,7 +1713,7 @@ export default function App() {
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
           cameraThemeActive={isCameraPromptAccentActive}
-          klingSuggestionsEnabled={isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel}
+          klingSuggestionsEnabled={fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
           sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}

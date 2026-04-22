@@ -16,6 +16,7 @@ const LEGACY_NANO_BANANA_EDIT_MODEL_ID = 'fal-ai/nano-banana/edit'; // Legacy ed
 const LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana'; // Legacy t2i id.
 const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image'; // Legacy Wan image t2i id.
 const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image'; // Legacy Wan image edit id.
+const REMOVED_KLING_O1_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1'; // Removed Kling image id.
 
 export const normalizeModelId = (modelId: string | undefined): string | undefined => { // Normalize legacy ids.
   if (modelId === LEGACY_NANO_BANANA_EDIT_MODEL_ID) {
@@ -29,6 +30,9 @@ export const normalizeModelId = (modelId: string | undefined): string | undefine
   }
   if (modelId === LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID) {
     return WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID;
+  }
+  if (modelId === REMOVED_KLING_O1_IMAGE_MODEL_ID) {
+    return undefined;
   }
   return modelId;
 };

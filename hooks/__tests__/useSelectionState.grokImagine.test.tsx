@@ -21,7 +21,6 @@ type TestFalSettings = Pick<
   | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
   | 'isWan27VideoModel'
-  | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
   | 'isSeedance15VideoModel'
   | 'isSeedance2VideoModel'
@@ -69,7 +68,6 @@ describe('useSelectionState (grok imagine)', () => {
       isHeygenV3LipsyncVideoModel: false,
       isInfinitalkVideoModel: false,
       isWan27VideoModel: false,
-      isKling26VideoModel: false,
       isKling26ControlVideoModel: false,
       isSeedance15VideoModel: false,
       isSeedance2VideoModel: false,

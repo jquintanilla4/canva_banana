@@ -121,7 +121,6 @@ export type GenerationFalOptions = Partial<{
   heygenEnableSpeechEnhancement: boolean;
   heygenStartTime: number;
   heygenEndTime: number;
-  kling26Audio: boolean;
   kling26ControlVariant: 'standard' | 'pro';
   kling26ControlKeepSound: boolean;
   kling26ControlDriver: 'video' | 'image';

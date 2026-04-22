@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   FAL_IMAGE_MODEL_OPTIONS,
+  FAL_VIDEO_MODEL_OPTIONS,
   getFalNumImageMaxForModel,
   getFalNumImageOptionsForModel,
   getSeedreamImageSizeOptions,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  isFalVideoModelId,
   isFalModelId,
   isRecraftV4ProModel,
   normalizeFalModelId,
@@ -43,11 +45,30 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(normalizeFalModelId('fal-ai/sora-2/image-to-video/pro')).toBe(HAILUO_IMAGE_TO_VIDEO_MODEL_ID);
   });
 
+  it('removes Kling 2.6 from the video models', () => {
+    const videoModelIds = FAL_VIDEO_MODEL_OPTIONS.map(option => option.value);
+    const videoModelLabels = FAL_VIDEO_MODEL_OPTIONS.map(option => option.label as string);
+    const removedKling26ModelId = 'fal-ai/kling-video/v2.6/pro/image-to-video';
+
+    expect(videoModelIds).not.toContain(removedKling26ModelId);
+    expect(videoModelLabels).not.toContain('Kling 2.6');
+    expect(isFalVideoModelId(removedKling26ModelId)).toBe(false);
+    expect(isFalModelId(removedKling26ModelId)).toBe(false);
+    expect(normalizeFalModelId(removedKling26ModelId)).toBeUndefined();
+  });
+
   it('does not expose removed Reve image models', () => {
     const imageModelLabels = FAL_IMAGE_MODEL_OPTIONS.map(option => option.label as string);
     expect(imageModelLabels).not.toContain('Reve Image');
     expect(isFalModelId('fal-ai/reve/text-to-image')).toBe(false);
     expect(normalizeFalModelId('fal-ai/reve/text-to-image')).toBeUndefined();
+  });
+
+  it('does not expose removed Kling O1 image model', () => {
+    const imageModelLabels = FAL_IMAGE_MODEL_OPTIONS.map(option => option.label as string);
+    expect(imageModelLabels).not.toContain('Kling O1 Image');
+    expect(isFalModelId('fal-ai/kling-image/o1')).toBe(false);
+    expect(normalizeFalModelId('fal-ai/kling-image/o1')).toBeUndefined();
   });
 
   it('exposes Recraft v4 Pro as a Fal image model', () => {

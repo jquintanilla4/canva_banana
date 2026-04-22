@@ -4,7 +4,6 @@ import type { FalQueueUpdate, GenerateImageOptions } from './types'; // Fal requ
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
 import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue normalizers.
 import { logFalEvent } from './logging'; // Fal debug logging.
-import { collectReferenceUploadUrls, createTransparentPlaceholderUrl } from './media'; // Media upload helpers.
 import { extractInlineData } from './responses'; // Response parsing helper.
 import { createRandomSeed } from './random'; // Seed helper.
 import { isSeedreamTextToImageModelId, normalizeModelId, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
@@ -14,7 +13,6 @@ import {
   getFalNumImageMaxForModel,
   isNanoBananaTextToImageModelId,
   isRecraftV4ProModel,
-  KLING_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
@@ -32,15 +30,13 @@ export const generateImage = async (
   const modelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
   const isNanoBananaTextToImage = isNanoBananaTextToImageModelId(modelId);
-  const isKlingTextToImage = modelId === KLING_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan27ImageTextToImage = modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isRecraftV4ProTextToImage = isRecraftV4ProModel(modelId);
   const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
   const supportsAspectRatio = isNanoBananaTextToImage
-    || isKlingTextToImage
     || isGrokImagineModel; // Enable Grok aspect ratios.
-  const supportsResolution = isNanoBananaTextToImage || isKlingTextToImage;
+  const supportsResolution = isNanoBananaTextToImage;
   const numImagesOption = options.numImages;
   const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
   const imageSizeOption: FalImageSizeOption = rawImageSizeOption;
@@ -50,9 +46,6 @@ export const generateImage = async (
       ?? resolveSeedreamCustomSizeForModel(modelId, aspectRatioOption))
     : undefined;
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
-  const normalizedResolutionOption: FalResolutionOption = isKlingTextToImage && resolutionOption === '4K' ? '2K' : resolutionOption;
-  const referenceImages = Array.isArray(options.referenceImages) ? options.referenceImages : [];
-  const shouldSendReferenceImages = isKlingTextToImage;
 
   const body: {
     prompt: string;
@@ -63,7 +56,6 @@ export const generateImage = async (
     image_size?: { width: number; height: number } | string;
     seed?: number;
     resolution?: FalResolutionOption;
-    image_urls?: string[];
     safety_tolerance?: '5';
     colors?: Array<{ r: number; g: number; b: number }>;
     background_color?: { r: number; g: number; b: number };
@@ -121,26 +113,15 @@ export const generateImage = async (
     } else if (imageSizeOption !== 'default') {
       body.image_size = imageSizeOption;
     }
-  } else if (isNanoBananaTextToImage || isKlingTextToImage) {
+  } else if (isNanoBananaTextToImage) {
     if (aspectRatioOption !== 'default') {
       body.aspect_ratio = aspectRatioOption;
     }
     if (supportsResolution) {
-      body.resolution = isKlingTextToImage ? normalizedResolutionOption : resolutionOption;
+      body.resolution = resolutionOption;
     }
   } else if (supportsAspectRatio && aspectRatioOption !== 'default') {
     body.aspect_ratio = aspectRatioOption;
-  }
-
-  if (shouldSendReferenceImages) {
-    let referenceUrls: string[] = [];
-    if (referenceImages.length > 0) {
-      referenceUrls = await collectReferenceUploadUrls(referenceImages);
-    }
-    if (referenceUrls.length === 0) {
-      referenceUrls = [await createTransparentPlaceholderUrl()];
-    }
-    body.image_urls = referenceUrls;
   }
 
   let latestRequestId: string | undefined;

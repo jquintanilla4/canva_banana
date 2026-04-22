@@ -20,7 +20,6 @@ type TestFalSettings = Pick<
   | 'isLipsyncVideoModel'
   | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
-  | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
   | 'isWan27VideoModel'
   | 'wan27VideoVariant'
@@ -62,7 +61,6 @@ const createWan27FalStub = (): TestFalSettings => ({
   isLipsyncVideoModel: false,
   isHeygenV3LipsyncVideoModel: false,
   isInfinitalkVideoModel: false,
-  isKling26VideoModel: false,
   isKling26ControlVideoModel: false,
   isWan27VideoModel: true,
   wan27VideoVariant: 'smart',

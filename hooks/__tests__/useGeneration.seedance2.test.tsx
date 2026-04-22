@@ -67,7 +67,6 @@ const createFalStub = (): UseFalSettingsResult => ({
   klingVariant: 'standard',
   klingO1Variant: 'refI2V',
   klingO1KeepAudio: false,
-  kling26AudioSelection: 'off',
   kling26ControlVariant: 'standard',
   kling26ControlKeepSound: false,
   kling26ControlDriver: 'video',

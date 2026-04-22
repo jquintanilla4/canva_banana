@@ -40,7 +40,6 @@ describe('Seedance 2 reference labels', () => {
 
   it('surfaces seedance reference labels in prompt mention suggestions', () => {
     const { result } = renderHook(() => useKlingPromptMentions({
-      isKlingModel: false,
       isKlingO1VideoModel: false,
       isKlingO1EditMode: false,
       isSeedance2ReferenceMode: true,

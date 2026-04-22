@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import {
   getMaxReferenceImages,
   KLING_VIDEO_MODEL_ID,
-  KLING_IMAGE_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
@@ -26,10 +25,8 @@ type SelectionFalSettings = Pick<
   | 'falVideoModelId'
   | 'klingVariant'
   | 'klingO1Variant'
-  | 'isVideoMode'
   | 'isKlingProVideoSelection'
   | 'isKlingO1VideoModel'
-  | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
   | 'isKlingO1EditMode'
   | 'isKlingO1RefV2VMode'
@@ -100,10 +97,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     falVideoModelId,
     klingVariant,
     klingO1Variant,
-    isVideoMode,
   isKlingProVideoSelection,
   isKlingO1VideoModel,
-  isKling26VideoModel,
   isKling26ControlVideoModel,
   isKlingO1EditMode,
     isKlingO1RefV2VMode,
@@ -119,7 +114,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     veo31Variant,
   } = fal;
 
-  const isKlingImageModel = !isVideoMode && falModelId === KLING_IMAGE_MODEL_ID;
   const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
   const isWanVideoInputMode =
     apiProvider === 'fal'
@@ -445,7 +439,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKlingO1FflfMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -577,17 +571,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return;
     }
 
-    const applyKlingReferences = (nextSelectedIds: string[]) => {
-      if (!isKlingImageModel) {
-        return;
-      }
-      const maxReferenceImages = getMaxReferenceImages(falModelId);
-      if (nextSelectedIds.length > maxReferenceImages) {
-        onReferenceLimit(maxReferenceImages);
-      }
-      setReferenceImageIds(nextSelectedIds.slice(0, maxReferenceImages));
-    };
-
     if (!imageId) {
       if (!multi) {
         setSelectedImageIds([]);
@@ -604,9 +587,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (multi) {
-      if (!isKlingImageModel) {
-        setReferenceImageIds([]);
-      }
+      setReferenceImageIds([]);
       if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
         setReferenceVideoIds([]);
         setReferenceAudioIds([]);
@@ -631,7 +612,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         if (isAudioInputMode && targetImage?.mediaType === 'audio') {
           setSourceAudioId(prevId => (prevId === imageId && !nextSelectedIds.includes(imageId)) ? null : imageId);
         }
-        applyKlingReferences(nextSelectedIds);
         return nextSelectedIds;
       });
       return;
@@ -683,10 +663,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (isWan27VideoModel && targetImage?.mediaType !== 'audio') {
       setSourceAudioId(null);
     }
-    applyKlingReferences([imageId]);
-    if (!isKlingImageModel) {
-      setReferenceImageIds([]);
-    }
+    setReferenceImageIds([]);
     if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
       setReferenceVideoIds([]);
       setReferenceAudioIds([]);
@@ -707,7 +684,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     falVideoModelId,
     images,
     isKlingProVideoSelection,
-    isKling26VideoModel,
     isKlingO1FflfMode,
     isWan27EditMode,
     isWan27VideoModel,
@@ -719,7 +695,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     onError,
     onReferenceLimit,
     primaryImageId,
-    isKlingImageModel,
     falModelId,
     referenceAudioIds.length,
     referenceImageIds.length,

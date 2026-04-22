@@ -6,15 +6,12 @@ import {
   DEFAULT_FAL_VIDEO_MODEL_ID,
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
-  FAL_KLING_ASPECT_RATIO_OPTIONS,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
-  KLING_26_VIDEO_MODEL_ID,
-  KLING_IMAGE_MODEL_ID,
   KLING_O1_VIDEO_MODEL_ID,
   KLING_O1_VIDEO_EDIT_MODEL_ID,
   KLING_O1_VIDEO_REF_V2V_MODEL_ID,
@@ -76,7 +73,6 @@ import type {
   FalVideoModelId,
   Flux2MaxImageSizeSelectionValue,
   HailuoVariant,
-  Kling26AudioSelectionValue,
   Kling26ControlDriver,
   Kling26ControlVariant,
   KlingO1Variant,
@@ -127,7 +123,6 @@ type FalDerivedState = {
   isVideoMode: boolean;
   isKlingVideoModel: boolean;
   isKlingO1VideoModel: boolean;
-  isKling26VideoModel: boolean;
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
@@ -158,7 +153,6 @@ type FalHandlers = {
   handleKlingVariantChange: (value: string) => void;
   handleKlingO1VariantChange: (value: string) => void;
   handleKlingO1KeepAudioChange: (value: boolean) => void;
-  handleKling26AudioChange: (value: string) => void;
   handleKling26ControlVariantChange: (value: string) => void;
   handleKling26ControlKeepSoundChange: (value: boolean) => void;
   handleKling26ControlDriverChange: (value: string) => void;
@@ -231,7 +225,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   klingVariant: KlingVariant;
   klingO1Variant: KlingO1Variant;
   klingO1KeepAudio: boolean;
-  kling26AudioSelection: Kling26AudioSelectionValue;
   kling26ControlVariant: Kling26ControlVariant;
   kling26ControlKeepSound: boolean;
   kling26ControlDriver: Kling26ControlDriver;
@@ -299,7 +292,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setKlingVariant: Dispatch<SetStateAction<KlingVariant>>;
   setKlingO1Variant: Dispatch<SetStateAction<KlingO1Variant>>;
   setKlingO1KeepAudio: Dispatch<SetStateAction<boolean>>;
-  setKling26AudioSelection: Dispatch<SetStateAction<Kling26AudioSelectionValue>>;
   setKling26ControlVariant: Dispatch<SetStateAction<Kling26ControlVariant>>;
   setKling26ControlKeepSound: Dispatch<SetStateAction<boolean>>;
   setKling26ControlDriver: Dispatch<SetStateAction<Kling26ControlDriver>>;
@@ -371,7 +363,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [klingVariant, setKlingVariant] = useState<KlingVariant>('standard');
   const [klingO1Variant, setKlingO1Variant] = useState<KlingO1Variant>('refI2V');
   const [klingO1KeepAudio, setKlingO1KeepAudio] = useState<boolean>(false);
-  const [kling26AudioSelection, setKling26AudioSelection] = useState<Kling26AudioSelectionValue>('placeholder');
   const [kling26ControlVariant, setKling26ControlVariant] = useState<Kling26ControlVariant>('standard');
   const [kling26ControlKeepSound, setKling26ControlKeepSound] = useState<boolean>(true);
   const [kling26ControlDriver, setKling26ControlDriver] = useState<Kling26ControlDriver>('video');
@@ -439,7 +430,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isVideoMode = falModelMode === 'video';
   const isKlingVideoModel = isVideoMode && falVideoModelId === KLING_VIDEO_MODEL_ID;
   const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelId);
-  const isKling26VideoModel = isVideoMode && falVideoModelId === KLING_26_VIDEO_MODEL_ID;
   const isKling26ControlVideoModel = isVideoMode && falVideoModelId === KLING_26_CONTROL_VIDEO_MODEL_ID;
   const isHailuoVideoModel = isVideoMode && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
@@ -469,13 +459,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, [apiProvider, falModelMode]);
 
-  // Kling image model does not support 4K; downgrade silently for UX.
-  useEffect(() => {
-    if (falModelId === KLING_IMAGE_MODEL_ID && falResolutionSelection === '4K') {
-      setFalResolutionSelection('2K');
-    }
-  }, [falModelId, falResolutionSelection]);
-
   useEffect(() => {
     if (falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID) {
       setFalVideoDuration(prev => (prev === '10' ? '10' : '6'));
@@ -483,7 +466,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
     if (
       falVideoModelId === KLING_VIDEO_MODEL_ID
-      || falVideoModelId === KLING_26_VIDEO_MODEL_ID
       || falVideoModelId === KLING_O1_VIDEO_MODEL_ID
       || falVideoModelId === KLING_O1_VIDEO_EDIT_MODEL_ID
       || falVideoModelId === KLING_O1_VIDEO_REF_V2V_MODEL_ID
@@ -598,11 +580,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
     const aspectRatioOptions = falModelId === GROK_IMAGINE_IMAGE_MODEL_ID // Grok model branch.
       ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratios.
-      : falModelId === KLING_IMAGE_MODEL_ID
-        ? FAL_KLING_ASPECT_RATIO_OPTIONS
-        : isSeedreamModel
-          ? getSeedreamAspectRatioOptions(falModelId)
-          : FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS;
+      : isSeedreamModel
+        ? getSeedreamAspectRatioOptions(falModelId)
+        : FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS;
     const validOptions = aspectRatioOptions.map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
       const fallbackAspectRatio = falModelId === GROK_IMAGINE_IMAGE_MODEL_ID ? '1:1' : 'default'; // Grok uses 1:1 fallback.
@@ -674,18 +654,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
 
   const handleKlingO1KeepAudioChange = useCallback((value: boolean) => {
     setKlingO1KeepAudio(value);
-  }, []);
-
-  const handleKling26AudioChange = useCallback((value: string) => {
-    if (value === 'on') {
-      setKling26AudioSelection('on');
-      return;
-    }
-    if (value === 'off') {
-      setKling26AudioSelection('off');
-      return;
-    }
-    setKling26AudioSelection('placeholder');
   }, []);
 
   const handleKling26ControlVariantChange = useCallback((value: string) => {
@@ -997,9 +965,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, []);
 
   const handleFalResolutionChange = useCallback((value: string) => {
-    const nextValue = value === '4K' && falModelId === KLING_IMAGE_MODEL_ID ? '2K' : value;
-    setFalResolutionSelection(nextValue as FalResolutionSelectionValue);
-  }, [falModelId]);
+    setFalResolutionSelection(value as FalResolutionSelectionValue);
+  }, []);
 
   const handleFalNumImagesChange = useCallback((value: number) => {
     if (!Number.isFinite(value)) {
@@ -1053,7 +1020,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     klingVariant,
     klingO1Variant,
     klingO1KeepAudio,
-    kling26AudioSelection,
     kling26ControlVariant,
     kling26ControlKeepSound,
     kling26ControlDriver,
@@ -1118,7 +1084,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isVideoMode,
     isKlingVideoModel,
     isKlingO1VideoModel,
-    isKling26VideoModel,
     isKling26ControlVideoModel,
     isHailuoVideoModel,
     isWanAnimateVideoModel,
@@ -1144,7 +1109,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleKlingVariantChange,
     handleKlingO1VariantChange,
     handleKlingO1KeepAudioChange,
-    handleKling26AudioChange,
     handleKling26ControlVariantChange,
     handleKling26ControlKeepSoundChange,
     handleKling26ControlDriverChange,
@@ -1214,7 +1178,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setKlingVariant,
     setKlingO1Variant,
     setKlingO1KeepAudio,
-    setKling26AudioSelection,
     setKling26ControlVariant,
     setKling26ControlKeepSound,
     setKling26ControlDriver,

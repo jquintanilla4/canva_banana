@@ -19,7 +19,6 @@ export const SEEDREAM_V5_LITE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/edit
 export const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 export const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
 export const SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/text-to-image' as const;
-export const KLING_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1' as const;
 export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
 export const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit' as const;
 export const RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/recraft/v4/pro/text-to-image' as const; // Recraft v4 Pro t2i endpoint.
@@ -45,7 +44,6 @@ export const KLING_O1_VIDEO_MODEL_IDS = [
 export const KLING_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-video' as const;
 export const KLING_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video' as const;
 export const KLING_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video' as const;
-export const KLING_26_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/image-to-video' as const;
 export const KLING_26_CONTROL_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/standard/motion-control' as const;
 export const KLING_26_CONTROL_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/motion-control' as const;
 export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace' as const;
@@ -115,7 +113,6 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux2 Max' },
   { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine' }, // Grok model option.
-  { value: KLING_IMAGE_MODEL_ID, label: 'Kling O1 Image' },
   { value: NANO_BANANA_2_EDIT_MODEL_ID, label: 'NanoBanana 2' }, // Selector uses edit id.
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4 Pro' }, // Direct text-to-image endpoint.
@@ -135,7 +132,6 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: HEYGEN_V3_LIPSYNC_MODEL_ID, label: 'HeyGen V3 Lipsync' },
   { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
-  { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
   { value: KLING_26_CONTROL_VIDEO_MODEL_ID, label: 'Kling 2.6 Control' },
   { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
@@ -759,18 +755,17 @@ export type FalModelMode = 'image' | 'video';
 export type FalImageSizeSelectionValue = 'placeholder' | 'default' | FalImageSizePreset;
 export type FalAspectRatioSelectionValue = 'placeholder' | FalAspectRatioOption;
 export type FalResolutionSelectionValue = FalResolutionOption;
-export type Kling26AudioSelectionValue = 'placeholder' | 'on' | 'off';
 
-export type FalModelId = FalModelOption['value'];
 export type FalImageModelId = typeof FAL_IMAGE_MODEL_OPTIONS_BASE[number]['value'];
 export type FalVideoModelId = typeof FAL_VIDEO_MODEL_OPTIONS_BASE[number]['value'];
+export type FalModelId = FalImageModelId | FalVideoModelId;
 
-export const isFalModelId = (value: string | undefined): value is FalModelId =>
-  typeof value === 'string' && FAL_MODEL_OPTIONS.some(option => option.value === value);
 export const isFalImageModelId = (value: string | undefined): value is FalImageModelId =>
   typeof value === 'string' && FAL_IMAGE_MODEL_OPTIONS.some(option => option.value === value);
 export const isFalVideoModelId = (value: string | undefined): value is FalVideoModelId =>
   typeof value === 'string' && FAL_VIDEO_MODEL_OPTIONS.some(option => option.value === value);
+export const isFalModelId = (value: string | undefined): value is FalModelId =>
+  isFalImageModelId(value) || isFalVideoModelId(value);
 export const isSeedreamModelId = (value: FalModelId | undefined): value is SeedreamModelId =>
   !!value && (SEEDREAM_MODEL_IDS as readonly string[]).includes(value);
 export const getSeedreamTextToImageModelId = (modelId: SeedreamModelId): string =>
@@ -928,11 +923,6 @@ export const FAL_RESOLUTION_OPTIONS: ReadonlyArray<{ value: FalResolutionSelecti
   { value: '4K', label: '4K' },
 ] as const;
 
-export const FAL_KLING_RESOLUTION_OPTIONS: ReadonlyArray<{ value: FalResolutionSelectionValue; label: string }> = [
-  { value: '1K', label: '1K (default)' },
-  { value: '2K', label: '2K' },
-] as const;
-
 export const FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
   { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Auto (default)' },
@@ -946,19 +936,6 @@ export const FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAsp
   { value: '3:4', label: '3:4' },
   { value: '16:9', label: '16:9' },
   { value: '9:16', label: '9:16' },
-] as const;
-
-export const FAL_KLING_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
-  { value: 'placeholder', label: 'Aspect Ratio' },
-  { value: 'default', label: 'Auto (default)' },
-  { value: '21:9', label: '21:9' },
-  { value: '16:9', label: '16:9' },
-  { value: '9:16', label: '9:16' },
-  { value: '1:1', label: '1:1' },
-  { value: '4:3', label: '4:3' },
-  { value: '3:4', label: '3:4' },
-  { value: '3:2', label: '3:2' },
-  { value: '2:3', label: '2:3' },
 ] as const;
 
 export const FAL_GROK_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
@@ -987,16 +964,9 @@ export const getSeedreamAspectRatioOptions = (_modelId: string | undefined) => F
 
 export const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS.map(option => option.value),
-  ...FAL_KLING_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_GROK_ASPECT_RATIO_OPTIONS.map(option => option.value), // Grok ratio values.
   ...FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
-
-export const KLING26_AUDIO_OPTIONS: ReadonlyArray<{ value: Kling26AudioSelectionValue; label: string }> = [
-  { value: 'placeholder', label: 'Audio' },
-  { value: 'off', label: 'OFF' },
-  { value: 'on', label: 'ON' },
-] as const;
 
 export const FAL_IMAGE_SIZE_DEFAULT_OPTION = 'default';
 export const DEFAULT_MAX_REFERENCE_IMAGES = 13;
@@ -1006,7 +976,6 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SEEDREAM_MODEL_ID]: 7,
   [SEEDREAM_V45_MODEL_ID]: 10,
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.
-  [KLING_IMAGE_MODEL_ID]: 10,
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
   [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
   [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,
@@ -1017,7 +986,6 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [KLING_O1_VIDEO_REF_V2V_MODEL_ID]: 4,
   [KLING_O1_VIDEO_FFLF_MODEL_ID]: 6,
   [KLING_VIDEO_MODEL_ID]: 0,
-  [KLING_26_VIDEO_MODEL_ID]: 0,
   [KLING_26_CONTROL_VIDEO_MODEL_ID]: 0,
   [WAN_ANIMATE_MODEL_ID]: 0,
   [ONE_TO_ALL_ANIMATE_MODEL_ID]: 0,

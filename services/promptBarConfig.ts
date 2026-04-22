@@ -18,7 +18,6 @@ import type {
   Veo31DurationSelectionValue,
   Veo31ResolutionSelectionValue,
   Veo31Variant,
-  Kling26AudioSelectionValue,
   Kling26ControlDriver,
   Kling26ControlVariant,
   KlingO1Variant,
@@ -55,8 +54,6 @@ import {
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_IMAGE_MODEL_OPTIONS,
-  FAL_KLING_ASPECT_RATIO_OPTIONS,
-  FAL_KLING_RESOLUTION_OPTIONS,
   FAL_RESOLUTION_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
@@ -75,13 +72,10 @@ import {
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
   HAILUO_VARIANT_OPTIONS,
-  KLING26_AUDIO_OPTIONS,
   KLING26_CONTROL_DRIVER_OPTIONS,
   KLING26_CONTROL_SOUND_OPTIONS,
   KLING26_CONTROL_VARIANT_OPTIONS,
   KLING_O1_VARIANT_OPTIONS,
-  KLING_26_VIDEO_MODEL_ID,
-  KLING_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   LIPSYNC_SYNC_MODE_OPTIONS,
   INFINITALK_ACCELERATION_OPTIONS,
@@ -292,13 +286,11 @@ export type PromptBarControlsInput = {
   usingFal: boolean;
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
-  isKlingModel: boolean;
   isFlux2MaxModel: boolean;
   isWan27ImageModel: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
   isKlingO1VideoModel: boolean;
-  isKling26VideoModel: boolean;
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
@@ -316,7 +308,6 @@ export type PromptBarControlsInput = {
   klingVariant: KlingVariant;
   klingO1Variant: KlingO1Variant;
   klingO1KeepAudio: boolean;
-  kling26AudioSelection: Kling26AudioSelectionValue;
   kling26ControlVariant: Kling26ControlVariant;
   kling26ControlKeepSound: boolean;
   kling26ControlDriver: Kling26ControlDriver;
@@ -382,7 +373,6 @@ export type PromptBarControlsInput = {
   onKlingVariantChange: (value: string) => void;
   onKlingO1VariantChange: (value: string) => void;
   onKlingO1KeepAudioChange: (value: boolean) => void;
-  onKling26AudioChange: (value: string) => void;
   onKling26ControlVariantChange: (value: string) => void;
   onKling26ControlKeepSoundChange: (value: boolean) => void;
   onKling26ControlDriverChange: (value: string) => void;
@@ -458,13 +448,11 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     usingFal,
     isSeedreamModel,
     isNanoBananaModel,
-    isKlingModel,
     isFlux2MaxModel,
     isWan27ImageModel,
     isUpscaleModel,
     isKlingVideoModel,
     isKlingO1VideoModel,
-    isKling26VideoModel,
     isKling26ControlVideoModel,
     isHailuoVideoModel,
     isWanAnimateVideoModel,
@@ -482,7 +470,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     klingVariant,
     klingO1Variant,
     klingO1KeepAudio,
-    kling26AudioSelection,
     kling26ControlVariant,
     kling26ControlKeepSound,
     kling26ControlDriver,
@@ -548,7 +535,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onKlingVariantChange,
     onKlingO1VariantChange,
     onKlingO1KeepAudioChange,
-    onKling26AudioChange,
     onKling26ControlVariantChange,
     onKling26ControlKeepSoundChange,
     onKling26ControlDriverChange,
@@ -709,38 +695,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
         disabled: isLoading,
       });
     }
-  }
-
-  if (isKling26VideoModel) {
-    controls.push({
-      id: 'kling26-variant-select',
-      ariaLabel: 'Kling 2.6 Pro variant',
-      options: [{ value: 'pro', label: 'Pro' }],
-      value: 'pro',
-      onChange: () => {},
-      disabled: true,
-    });
-
-    controls.push({
-      id: 'kling26-video-duration-select',
-      ariaLabel: 'Select Kling 2.6 duration',
-      options: [
-        { value: '5', label: '5s' },
-        { value: '10', label: '10s' },
-      ],
-      value: falVideoDuration === '10' ? '10' : '5',
-      onChange: onFalVideoDurationChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'kling26-audio-select',
-      ariaLabel: 'Select Kling 2.6 audio',
-      options: KLING26_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: kling26AudioSelection,
-      onChange: onKling26AudioChange,
-      disabled: isLoading,
-    });
   }
 
   if (isKling26ControlVideoModel) {
@@ -1365,7 +1319,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }
 
   const supportsAspectRatioControl = isNanoBananaModel
-    || isKlingModel
     || isGrokImagineModel // Grok aspect ratio support.
     || (isSeedreamModel && !shouldShowSeedreamImageSizeControl); // Include Grok for AR control.
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || !isVideoMode);
@@ -1374,9 +1327,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       ? FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS
       : isGrokImagineModel // Grok aspect ratio branch.
         ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratio options.
-        : isSeedreamModel
-          ? getSeedreamAspectRatioOptions(falModelId)
-          : FAL_KLING_ASPECT_RATIO_OPTIONS;
+        : getSeedreamAspectRatioOptions(falModelId);
     controls.push({
       id: 'fal-aspect-ratio-select',
       prefixLabel: isGrokImagineModel ? 'AR' : undefined, // Grok uses short label.
@@ -1388,15 +1339,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
-  const shouldShowResolutionControl = apiProvider === 'fal' && (isNanoBananaModel || isKlingModel);
+  const shouldShowResolutionControl = apiProvider === 'fal' && isNanoBananaModel;
   if (shouldShowResolutionControl) {
-    const resolutionOptions = isKlingModel ? FAL_KLING_RESOLUTION_OPTIONS : FAL_RESOLUTION_OPTIONS;
-    const resolutionValue = isKlingModel && falResolutionSelection === '4K' ? '2K' : falResolutionSelection;
     controls.push({
       id: 'fal-resolution-select',
       ariaLabel: 'Select resolution',
-      options: resolutionOptions.map(option => ({ value: option.value, label: option.label })),
-      value: resolutionValue,
+      options: FAL_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: falResolutionSelection,
       onChange: onFalResolutionChange,
       disabled: isLoading,
     });
@@ -1404,7 +1353,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isKlingModel || isGrokImagineModel); // Include Grok for Num control.
+    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel); // Include Grok for Num control.
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
@@ -1427,4 +1376,4 @@ export const getPromptBarModelOptions = (mode: FalModelMode): ReadonlyArray<FalM
   mode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
 
 export const shouldShowKlingNegativePrompt = (falModelId: FalVideoModelId | string): boolean =>
-  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_26_VIDEO_MODEL_ID || falModelId === KLING_IMAGE_MODEL_ID || falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  falModelId === KLING_VIDEO_MODEL_ID || falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
