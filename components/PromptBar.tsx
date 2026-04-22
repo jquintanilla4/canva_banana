@@ -138,6 +138,7 @@ interface ModelOption {
   value: string;
   label: string;
   highlightColor?: string;
+  tooltip?: string;
 }
 
 interface FalModelSelectControlConfig {
@@ -151,6 +152,7 @@ interface FalModelSelectControlConfig {
   onChange: (value: string) => void;
   disabled: boolean;
   errorMessage?: string;
+  tooltip?: string;
 }
 
 interface FalModelColorControlConfig {
@@ -555,6 +557,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const selectHighlightStyle = selectedModelOption?.highlightColor
     ? { color: selectedModelOption.highlightColor }
     : undefined;
+  const getControlTooltip = (control: FalModelSelectControlConfig): string | undefined =>
+    control.tooltip ?? control.options.find(option => option.value === control.value)?.tooltip; // Prefer selected option guidance.
 
   const modelSelectLabel = modelMode === 'video' ? 'Select video model' : 'Select image edit model';
   const resolvedModeDisabled = modelModeDisabled || modelSelectDisabled;
@@ -686,6 +690,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                             key={option.value}
                             value={option.value}
                             style={option.highlightColor ? { color: option.highlightColor } : undefined}
+                            title={option.tooltip}
                           >
                             {option.label}
                           </option>
@@ -731,11 +736,14 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                         );
                       }
 
+                      const controlTooltip = getControlTooltip(control);
+
                       return (
-                      <div className="relative flex items-center gap-1" key={control.id}>
+                      <div className="relative flex items-center gap-1" key={control.id} title={controlTooltip}>
                         {control.hideSelectedValue ? (
                           <div
                             className={`relative inline-flex items-center focus-within:outline-none ${control.disabled ? 'opacity-60' : ''}`}
+                            title={controlTooltip}
                           >
                             <span
                               className={`text-sm px-[0.4rem] pr-[1.8rem] py-[0.34rem] select-none ${control.disabled ? 'text-gray-400' : 'text-white'}`}
@@ -757,9 +765,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                               disabled={control.disabled}
                               className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 disabled:cursor-not-allowed"
                               aria-label={control.ariaLabel}
+                              title={controlTooltip}
                             >
                               {control.options.map(option => (
-                                <option key={option.value} value={option.value} disabled={option.disabled}>
+                                <option key={option.value} value={option.value} disabled={option.disabled} title={option.tooltip}>
                                   {option.label}
                                 </option>
                               ))}
@@ -789,9 +798,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                               disabled={control.disabled}
                               className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
                               aria-label={control.ariaLabel}
+                              title={controlTooltip}
                             >
                               {control.options.map(option => (
-                                <option key={option.value} value={option.value} disabled={option.disabled}>
+                                <option key={option.value} value={option.value} disabled={option.disabled} title={option.tooltip}>
                                   {option.label}
                                 </option>
                               ))}

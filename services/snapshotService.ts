@@ -103,6 +103,12 @@ export type SnapshotManifestV2 = {
 	      wanAnimateShift?: string;
 	      wanAnimateQuality?: string;
 	      wanAnimateUseTurbo?: boolean;
+        heygenEnableCaption?: boolean;
+        heygenEnableDynamicDuration?: boolean;
+        heygenDisableMusicTrack?: boolean;
+        heygenEnableSpeechEnhancement?: boolean;
+        heygenStartTime?: number;
+        heygenEndTime?: number;
         infinitalkResolution?: string;
         infinitalkSeed?: string;
         infinitalkAcceleration?: string;
@@ -191,6 +197,12 @@ export type SnapshotMetaState = {
   wanAnimateShift?: string;
   wanAnimateQuality?: string;
   wanAnimateUseTurbo?: boolean;
+  heygenEnableCaption?: boolean;
+  heygenEnableDynamicDuration?: boolean;
+  heygenDisableMusicTrack?: boolean;
+  heygenEnableSpeechEnhancement?: boolean;
+  heygenStartTime?: number;
+  heygenEndTime?: number;
   infinitalkResolution?: string;
   infinitalkSeed?: string;
   infinitalkAcceleration?: string;
@@ -876,6 +888,36 @@ export const normalizeSnapshotImageMetadata = (
       const wanAnimateUseTurboValue = (typed as { wanAnimateUseTurbo?: unknown }).wanAnimateUseTurbo;
       if (typeof wanAnimateUseTurboValue === 'boolean') {
         normalizedOptions.wanAnimateUseTurbo = wanAnimateUseTurboValue;
+      }
+
+      const heygenEnableCaptionValue = (typed as { heygenEnableCaption?: unknown }).heygenEnableCaption;
+      if (typeof heygenEnableCaptionValue === 'boolean') {
+        normalizedOptions.heygenEnableCaption = heygenEnableCaptionValue;
+      }
+
+      const heygenEnableDynamicDurationValue = (typed as { heygenEnableDynamicDuration?: unknown }).heygenEnableDynamicDuration;
+      if (typeof heygenEnableDynamicDurationValue === 'boolean') {
+        normalizedOptions.heygenEnableDynamicDuration = heygenEnableDynamicDurationValue;
+      }
+
+      const heygenDisableMusicTrackValue = (typed as { heygenDisableMusicTrack?: unknown }).heygenDisableMusicTrack;
+      if (typeof heygenDisableMusicTrackValue === 'boolean') {
+        normalizedOptions.heygenDisableMusicTrack = heygenDisableMusicTrackValue;
+      }
+
+      const heygenEnableSpeechEnhancementValue = (typed as { heygenEnableSpeechEnhancement?: unknown }).heygenEnableSpeechEnhancement;
+      if (typeof heygenEnableSpeechEnhancementValue === 'boolean') {
+        normalizedOptions.heygenEnableSpeechEnhancement = heygenEnableSpeechEnhancementValue;
+      }
+
+      const heygenStartTimeValue = (typed as { heygenStartTime?: unknown }).heygenStartTime;
+      if (typeof heygenStartTimeValue === 'number' && Number.isFinite(heygenStartTimeValue) && heygenStartTimeValue >= 0) {
+        normalizedOptions.heygenStartTime = heygenStartTimeValue;
+      }
+
+      const heygenEndTimeValue = (typed as { heygenEndTime?: unknown }).heygenEndTime;
+      if (typeof heygenEndTimeValue === 'number' && Number.isFinite(heygenEndTimeValue) && heygenEndTimeValue >= 0) {
+        normalizedOptions.heygenEndTime = heygenEndTimeValue;
       }
 
       const lipsyncSyncModeValue = (typed as { lipsyncSyncMode?: unknown }).lipsyncSyncMode;

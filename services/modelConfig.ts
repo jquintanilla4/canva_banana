@@ -54,6 +54,7 @@ export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as const;
 export const ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as const;
 export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/v3' as const; // Sync v3 endpoint id.
+export const HEYGEN_V3_LIPSYNC_MODEL_ID = 'fal-ai/heygen/v3/lipsync/precision' as const; // HeyGen precision lipsync endpoint.
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as const;
 export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
@@ -126,6 +127,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: ONE_TO_ALL_ANIMATE_MODEL_ID, label: '1-to-All Animate' },
   { value: GROK_IMAGINE_VIDEO_MODEL_ID, label: 'Grok Imagine' },
   { value: HAILUO_IMAGE_TO_VIDEO_MODEL_ID, label: 'Hailuo 2.3' },
+  { value: HEYGEN_V3_LIPSYNC_MODEL_ID, label: 'HeyGen V3 Lipsync' },
   { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
   { value: KLING_26_VIDEO_MODEL_ID, label: 'Kling 2.6' },
@@ -306,6 +308,7 @@ export const getWanAnimateVideoEndpoint = (variant: WanAnimateVariant): string =
 };
 
 export type LipsyncSyncMode = 'cut_off' | 'loop' | 'bounce' | 'silence' | 'remap'; // Valid v3 duration modes.
+export type HeygenBooleanSelectionValue = 'true' | 'false'; // Dropdown-friendly boolean values.
 export type InfinitalkResolutionSelectionValue = '480p' | '720p';
 export type InfinitalkSeedSelectionValue = '42' | 'random';
 export type InfinitalkAccelerationSelectionValue = 'none' | 'regular' | 'high';
@@ -321,6 +324,26 @@ export const LIPSYNC_SYNC_MODE_OPTIONS: ReadonlyArray<{ value: LipsyncSyncMode; 
   { value: 'silence', label: 'Silence' },
   { value: 'remap', label: 'Remap' },
 ] as const; // Prompt bar sync choices.
+
+export const HEYGEN_CAPTION_OPTIONS: ReadonlyArray<{ value: HeygenBooleanSelectionValue; label: string; tooltip: string }> = [
+  { value: 'false', label: 'Off', tooltip: 'Do not generate captions in the output video.' },
+  { value: 'true', label: 'On', tooltip: 'Generate captions in the output video when HeyGen returns them.' },
+] as const;
+
+export const HEYGEN_DYNAMIC_DURATION_OPTIONS: ReadonlyArray<{ value: HeygenBooleanSelectionValue; label: string; tooltip: string }> = [
+  { value: 'true', label: 'Dynamic', tooltip: 'Allow HeyGen to adjust the video duration to match the replacement audio.' },
+  { value: 'false', label: 'Source', tooltip: 'Keep the source video duration instead of matching the replacement audio.' },
+] as const;
+
+export const HEYGEN_MUSIC_TRACK_OPTIONS: ReadonlyArray<{ value: HeygenBooleanSelectionValue; label: string; tooltip: string }> = [
+  { value: 'false', label: 'Keep', tooltip: 'Keep background music from the source video.' },
+  { value: 'true', label: 'Remove', tooltip: 'Remove background music from the source video.' },
+] as const;
+
+export const HEYGEN_SPEECH_ENHANCEMENT_OPTIONS: ReadonlyArray<{ value: HeygenBooleanSelectionValue; label: string; tooltip: string }> = [
+  { value: 'false', label: 'Original', tooltip: 'Use the replacement audio without extra speech enhancement.' },
+  { value: 'true', label: 'Enhanced', tooltip: 'Enhance the replacement audio quality before syncing.' },
+] as const;
 
 export const INFINITALK_RESOLUTION_OPTIONS: ReadonlyArray<{ value: InfinitalkResolutionSelectionValue; label: string }> = [
   { value: '480p', label: '480p' },

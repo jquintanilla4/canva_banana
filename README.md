@@ -38,32 +38,51 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
 
 2. **Set up environment variables:**
    - Set `GEMINI_API_KEY` in [.env.local](.env.local) for Google Gemini.
-   - Set `FAL_API_KEY` in [.env.local](.env.local) for Fal.ai.
+   - Set `FAL_API_KEY` in [.env.local](.env.local) for the secure Node backend's Fal.ai proxy.
+   - Set `MOONSHOT_API_KEY` in [.env.local](.env.local) for the secure Node backend's Kimi K2.6 intent parsing.
    - Set `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` in [.env.local](.env.local) for Seedance 2.
-   - Optional: `FAL_API_URL` to point at a different gateway.
+   - Optional: `SECURE_BACKEND_API_BASE_URL` to point the frontend at a different Node backend.
+   - Optional: `SECURE_BACKEND_ALLOWED_ORIGINS` to comma-separate trusted browser origins for the Node backend.
+   - Optional: `NODE_BACKEND_HOST` and `NODE_BACKEND_PORT` to override the Node backend bind address.
+   - Optional: `FAL_API_URL` to point the Fal SDK at a different proxy endpoint.
    - Optional: `FAL_MODEL_ID` to override the default Fal image model.
    
-   If `FAL_API_KEY` is not set, the Cloud switcher only shows Google and Fal-specific controls stay disabled. If both providers are configured, use the Cloud switcher to pick a provider per request.
+   Fal and Moonshot keys are only read by the Node backend. They are not injected into the Vite browser bundle.
 
 3. **Sync the Seedance backend dependencies:**
    ```bash
    uv sync --project backend
    ```
 
-4. **Start both services:**
+4. **Start all local services:**
    ```bash
    make dev
    ```
 
    This starts:
    - The Vite dev server on `http://localhost:3000`
+   - The secure Node backend on `http://localhost:8787`
    - The Seedance backend on `http://localhost:8000`
 
    If you only need one side of the app, these fallback commands still work:
    ```bash
    make frontend-dev
+   make secure-backend-dev
    make backend-dev
    ```
+
+### Secure Node Backend
+
+Fal.ai and Moonshot calls use the local Node backend so API keys stay out of browser-side JavaScript.
+
+```bash
+npm run secure-backend:dev
+```
+
+- `FAL_API_KEY` is used server-side for the Fal SDK proxy and Fal asset downloads.
+- `MOONSHOT_API_KEY` is used server-side for HeyGen prompt timing intent extraction with `kimi-k2.6`.
+- The backend listens on `127.0.0.1:8787` by default and only allows `http://localhost:3000` or `http://127.0.0.1:3000` browser origins.
+- The backend reads repo-root `.env.local` first and falls back to `.env`, while exported shell variables still win.
 
 ### Seedance 2 Backend
 

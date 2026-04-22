@@ -11,6 +11,7 @@ import {
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  HEYGEN_V3_LIPSYNC_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
   KLING_IMAGE_MODEL_ID,
@@ -125,6 +126,7 @@ type FalDerivedState = {
   isWanAnimateVideoModel: boolean;
   isOneToAllAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
+  isHeygenV3LipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
   isGrokImagineVideoModel: boolean;
   isWan26I2VVideoModel: boolean;
@@ -163,6 +165,10 @@ type FalHandlers = {
   handleWanAnimateQualityChange: (value: string) => void;
   handleWanAnimateTurboChange: (value: boolean) => void;
   handleLipsyncSyncModeChange: (value: string) => void;
+  handleHeygenEnableCaptionChange: (value: boolean) => void;
+  handleHeygenEnableDynamicDurationChange: (value: boolean) => void;
+  handleHeygenDisableMusicTrackChange: (value: boolean) => void;
+  handleHeygenEnableSpeechEnhancementChange: (value: boolean) => void;
   handleInfinitalkResolutionChange: (value: string) => void;
   handleInfinitalkSeedChange: (value: string) => void;
   handleInfinitalkAccelerationChange: (value: string) => void;
@@ -230,6 +236,10 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
   lipsyncSyncMode: LipsyncSyncMode;
+  heygenEnableCaption: boolean;
+  heygenEnableDynamicDuration: boolean;
+  heygenDisableMusicTrack: boolean;
+  heygenEnableSpeechEnhancement: boolean;
   infinitalkResolution: InfinitalkResolutionSelectionValue;
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
@@ -292,6 +302,10 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWanAnimateQuality: Dispatch<SetStateAction<WanAnimateQualitySelectionValue>>;
   setWanAnimateUseTurbo: Dispatch<SetStateAction<boolean>>;
   setLipsyncSyncMode: Dispatch<SetStateAction<LipsyncSyncMode>>;
+  setHeygenEnableCaption: Dispatch<SetStateAction<boolean>>;
+  setHeygenEnableDynamicDuration: Dispatch<SetStateAction<boolean>>;
+  setHeygenDisableMusicTrack: Dispatch<SetStateAction<boolean>>;
+  setHeygenEnableSpeechEnhancement: Dispatch<SetStateAction<boolean>>;
   setInfinitalkResolution: Dispatch<SetStateAction<InfinitalkResolutionSelectionValue>>;
   setInfinitalkSeed: Dispatch<SetStateAction<InfinitalkSeedSelectionValue>>;
   setInfinitalkAcceleration: Dispatch<SetStateAction<InfinitalkAccelerationSelectionValue>>;
@@ -358,6 +372,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wanAnimateQuality, setWanAnimateQuality] = useState<WanAnimateQualitySelectionValue>('high');
   const [wanAnimateUseTurbo, setWanAnimateUseTurbo] = useState<boolean>(false);
   const [lipsyncSyncMode, setLipsyncSyncMode] = useState<LipsyncSyncMode>('cut_off'); // Sync v3 default.
+  const [heygenEnableCaption, setHeygenEnableCaption] = useState<boolean>(false); // HeyGen captions default off.
+  const [heygenEnableDynamicDuration, setHeygenEnableDynamicDuration] = useState<boolean>(true); // HeyGen duration matching default.
+  const [heygenDisableMusicTrack, setHeygenDisableMusicTrack] = useState<boolean>(false); // HeyGen keeps music by default.
+  const [heygenEnableSpeechEnhancement, setHeygenEnableSpeechEnhancement] = useState<boolean>(false); // HeyGen speech enhancement default off.
   const [infinitalkResolution, setInfinitalkResolution] = useState<InfinitalkResolutionSelectionValue>('480p');
   const [infinitalkSeed, setInfinitalkSeed] = useState<InfinitalkSeedSelectionValue>('42');
   const [infinitalkAcceleration, setInfinitalkAcceleration] = useState<InfinitalkAccelerationSelectionValue>('regular');
@@ -412,6 +430,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
+  const isHeygenV3LipsyncVideoModel = isVideoMode && falVideoModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
   const isGrokImagineVideoModel = isVideoMode && falVideoModelId === GROK_IMAGINE_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
@@ -696,6 +715,22 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleHeygenEnableCaptionChange = useCallback((value: boolean) => {
+    setHeygenEnableCaption(Boolean(value));
+  }, []);
+
+  const handleHeygenEnableDynamicDurationChange = useCallback((value: boolean) => {
+    setHeygenEnableDynamicDuration(Boolean(value));
+  }, []);
+
+  const handleHeygenDisableMusicTrackChange = useCallback((value: boolean) => {
+    setHeygenDisableMusicTrack(Boolean(value));
+  }, []);
+
+  const handleHeygenEnableSpeechEnhancementChange = useCallback((value: boolean) => {
+    setHeygenEnableSpeechEnhancement(Boolean(value));
+  }, []);
+
   const handleInfinitalkResolutionChange = useCallback((value: string) => {
     if (value === '480p' || value === '720p') {
       setInfinitalkResolution(value);
@@ -974,6 +1009,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wanAnimateQuality,
     wanAnimateUseTurbo,
     lipsyncSyncMode,
+    heygenEnableCaption,
+    heygenEnableDynamicDuration,
+    heygenDisableMusicTrack,
+    heygenEnableSpeechEnhancement,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -1025,6 +1064,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isWanAnimateVideoModel,
     isOneToAllAnimateVideoModel,
     isLipsyncVideoModel,
+    isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
     isGrokImagineVideoModel,
     isVeo31VideoModel,
@@ -1058,6 +1098,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWanAnimateQualityChange,
     handleWanAnimateTurboChange,
     handleLipsyncSyncModeChange,
+    handleHeygenEnableCaptionChange,
+    handleHeygenEnableDynamicDurationChange,
+    handleHeygenDisableMusicTrackChange,
+    handleHeygenEnableSpeechEnhancementChange,
     handleInfinitalkResolutionChange,
     handleInfinitalkSeedChange,
     handleInfinitalkAccelerationChange,
@@ -1122,6 +1166,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWanAnimateQuality,
     setWanAnimateUseTurbo,
     setLipsyncSyncMode,
+    setHeygenEnableCaption,
+    setHeygenEnableDynamicDuration,
+    setHeygenDisableMusicTrack,
+    setHeygenEnableSpeechEnhancement,
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,

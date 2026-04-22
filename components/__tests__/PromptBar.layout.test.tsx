@@ -143,6 +143,79 @@ const renderInlinePromptBar = (maxInlineWidthPx?: number) => render(
   />
 );
 
+const renderHeygenPromptBar = () => render(
+  <PromptBar
+    prompt=""
+    onPromptChange={vi.fn()}
+    onSubmit={vi.fn()}
+    isLoading={false}
+    inputDisabled
+    submitDisabled={false}
+    modelOptions={[
+      { value: 'fal-ai/heygen/v3/lipsync/precision', label: 'HeyGen V3 Lipsync' },
+    ]}
+    selectedModel="fal-ai/heygen/v3/lipsync/precision"
+    onModelChange={vi.fn()}
+    modelSelectDisabled={false}
+    modelMode="video"
+    onModelModeChange={vi.fn()}
+    modelControls={[
+      {
+        id: 'heygen-caption-select',
+        prefixLabel: 'Captions',
+        ariaLabel: 'Toggle HeyGen captions',
+        options: [
+          { value: 'false', label: 'Off', tooltip: 'Do not generate captions in the output video.' },
+          { value: 'true', label: 'On', tooltip: 'Generate captions in the output video when HeyGen returns them.' },
+        ],
+        value: 'false',
+        onChange: vi.fn(),
+        disabled: false,
+        tooltip: 'Do not generate captions in the output video.',
+      },
+      {
+        id: 'heygen-dynamic-duration-select',
+        prefixLabel: 'Duration',
+        ariaLabel: 'Toggle HeyGen dynamic duration',
+        options: [
+          { value: 'true', label: 'Dynamic', tooltip: 'Allow HeyGen to adjust the video duration to match the replacement audio.' },
+          { value: 'false', label: 'Source', tooltip: 'Keep the source video duration instead of matching the replacement audio.' },
+        ],
+        value: 'true',
+        onChange: vi.fn(),
+        disabled: false,
+        tooltip: 'Allow HeyGen to adjust the video duration to match the replacement audio.',
+      },
+      {
+        id: 'heygen-music-track-select',
+        prefixLabel: 'Music',
+        ariaLabel: 'Toggle HeyGen music removal',
+        options: [
+          { value: 'false', label: 'Keep', tooltip: 'Keep background music from the source video.' },
+          { value: 'true', label: 'Remove', tooltip: 'Remove background music from the source video.' },
+        ],
+        value: 'false',
+        onChange: vi.fn(),
+        disabled: false,
+        tooltip: 'Keep background music from the source video.',
+      },
+      {
+        id: 'heygen-speech-enhancement-select',
+        prefixLabel: 'Speech',
+        ariaLabel: 'Toggle HeyGen speech enhancement',
+        options: [
+          { value: 'false', label: 'Original', tooltip: 'Use the replacement audio without extra speech enhancement.' },
+          { value: 'true', label: 'Enhanced', tooltip: 'Enhance the replacement audio quality before syncing.' },
+        ],
+        value: 'false',
+        onChange: vi.fn(),
+        disabled: false,
+        tooltip: 'Use the replacement audio without extra speech enhancement.',
+      },
+    ]}
+  />
+);
+
 const PromptBarMentionHarness = () => {
   const [prompt, setPrompt] = React.useState('Use @Image1 and ');
 
@@ -315,6 +388,24 @@ describe('PromptBar layout', () => {
     expect(footer.className).not.toContain('transition-[width,max-width]');
     expect(textarea.className).not.toContain('transition-all');
     expect(textarea.style.backgroundColor).toBe('transparent');
+  });
+
+  it('renders HeyGen boolean controls with option tooltips', () => {
+    renderHeygenPromptBar();
+
+    const captionsSelect = screen.getByLabelText('Toggle HeyGen captions') as HTMLSelectElement;
+    const durationSelect = screen.getByLabelText('Toggle HeyGen dynamic duration') as HTMLSelectElement;
+    const musicSelect = screen.getByLabelText('Toggle HeyGen music removal') as HTMLSelectElement;
+    const speechSelect = screen.getByLabelText('Toggle HeyGen speech enhancement') as HTMLSelectElement;
+
+    expect(captionsSelect.selectedOptions[0]?.textContent).toBe('Off');
+    expect(durationSelect.selectedOptions[0]?.textContent).toBe('Dynamic');
+    expect(musicSelect.selectedOptions[0]?.textContent).toBe('Keep');
+    expect(speechSelect.selectedOptions[0]?.textContent).toBe('Original');
+    expect(captionsSelect.title).toBe('Do not generate captions in the output video.');
+    expect(durationSelect.options[0]?.title).toBe('Allow HeyGen to adjust the video duration to match the replacement audio.');
+    expect(musicSelect.options[1]?.title).toBe('Remove background music from the source video.');
+    expect(speechSelect.options[1]?.title).toBe('Enhance the replacement audio quality before syncing.');
   });
 
   it('expands beyond the desktop baseline when model controls overflow', async () => {

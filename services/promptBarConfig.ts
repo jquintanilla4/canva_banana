@@ -63,6 +63,10 @@ import {
   GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS,
   GROK_IMAGINE_VIDEO_DURATION_OPTIONS,
   GROK_IMAGINE_VIDEO_RESOLUTION_OPTIONS,
+  HEYGEN_CAPTION_OPTIONS,
+  HEYGEN_DYNAMIC_DURATION_OPTIONS,
+  HEYGEN_MUSIC_TRACK_OPTIONS,
+  HEYGEN_SPEECH_ENHANCEMENT_OPTIONS,
   getFalNumImageMaxForModel,
   getFalNumImageOptionsForModel,
   getSeedreamAspectRatioOptions,
@@ -133,11 +137,12 @@ type PromptBarSelectControl = {
   prefixLabel?: string;
   hideSelectedValue?: boolean;
   ariaLabel: string;
-  options: ReadonlyArray<{ value: string; label: string; disabled?: boolean }>;
+  options: ReadonlyArray<{ value: string; label: string; disabled?: boolean; tooltip?: string }>;
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
   errorMessage?: string;
+  tooltip?: string;
 };
 
 type PromptBarColorControl = {
@@ -291,6 +296,7 @@ export type PromptBarControlsInput = {
   isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
+  isHeygenV3LipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
   isGrokImagineVideoModel: boolean;
   isVeo31VideoModel: boolean;
@@ -317,6 +323,10 @@ export type PromptBarControlsInput = {
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
   lipsyncSyncMode: LipsyncSyncMode;
+  heygenEnableCaption: boolean;
+  heygenEnableDynamicDuration: boolean;
+  heygenDisableMusicTrack: boolean;
+  heygenEnableSpeechEnhancement: boolean;
   infinitalkResolution: InfinitalkResolutionSelectionValue;
   infinitalkSeed: InfinitalkSeedSelectionValue;
   infinitalkAcceleration: InfinitalkAccelerationSelectionValue;
@@ -377,6 +387,10 @@ export type PromptBarControlsInput = {
   onWanAnimateQualityChange: (value: string) => void;
   onWanAnimateTurboChange: (value: boolean) => void;
   onLipsyncSyncModeChange: (value: string) => void;
+  onHeygenEnableCaptionChange: (value: boolean) => void;
+  onHeygenEnableDynamicDurationChange: (value: boolean) => void;
+  onHeygenDisableMusicTrackChange: (value: boolean) => void;
+  onHeygenEnableSpeechEnhancementChange: (value: boolean) => void;
   onInfinitalkResolutionChange: (value: string) => void;
   onInfinitalkSeedChange: (value: string) => void;
   onInfinitalkAccelerationChange: (value: string) => void;
@@ -444,6 +458,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isHailuoVideoModel,
     isWanAnimateVideoModel,
     isLipsyncVideoModel,
+    isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
     isGrokImagineVideoModel,
     isVeo31VideoModel,
@@ -470,6 +485,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     wanAnimateQuality,
     wanAnimateUseTurbo,
     lipsyncSyncMode,
+    heygenEnableCaption,
+    heygenEnableDynamicDuration,
+    heygenDisableMusicTrack,
+    heygenEnableSpeechEnhancement,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -530,6 +549,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onWanAnimateQualityChange,
     onWanAnimateTurboChange,
     onLipsyncSyncModeChange,
+    onHeygenEnableCaptionChange,
+    onHeygenEnableDynamicDurationChange,
+    onHeygenDisableMusicTrackChange,
+    onHeygenEnableSpeechEnhancementChange,
     onInfinitalkResolutionChange,
     onInfinitalkSeedChange,
     onInfinitalkAccelerationChange,
@@ -838,6 +861,52 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       value: lipsyncSyncMode,
       onChange: onLipsyncSyncModeChange,
       disabled: isLoading,
+    });
+  }
+
+  if (isHeygenV3LipsyncVideoModel) {
+    controls.push({
+      id: 'heygen-caption-select',
+      prefixLabel: 'Captions',
+      ariaLabel: 'Toggle HeyGen captions',
+      options: HEYGEN_CAPTION_OPTIONS.map(option => ({ value: option.value, label: option.label, tooltip: option.tooltip })),
+      value: heygenEnableCaption ? 'true' : 'false',
+      onChange: (value: string) => onHeygenEnableCaptionChange(value === 'true'),
+      disabled: isLoading,
+      tooltip: heygenEnableCaption ? HEYGEN_CAPTION_OPTIONS[1].tooltip : HEYGEN_CAPTION_OPTIONS[0].tooltip,
+    });
+
+    controls.push({
+      id: 'heygen-dynamic-duration-select',
+      prefixLabel: 'Duration',
+      ariaLabel: 'Toggle HeyGen dynamic duration',
+      options: HEYGEN_DYNAMIC_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label, tooltip: option.tooltip })),
+      value: heygenEnableDynamicDuration ? 'true' : 'false',
+      onChange: (value: string) => onHeygenEnableDynamicDurationChange(value === 'true'),
+      disabled: isLoading,
+      tooltip: heygenEnableDynamicDuration ? HEYGEN_DYNAMIC_DURATION_OPTIONS[0].tooltip : HEYGEN_DYNAMIC_DURATION_OPTIONS[1].tooltip,
+    });
+
+    controls.push({
+      id: 'heygen-music-track-select',
+      prefixLabel: 'Music',
+      ariaLabel: 'Toggle HeyGen music removal',
+      options: HEYGEN_MUSIC_TRACK_OPTIONS.map(option => ({ value: option.value, label: option.label, tooltip: option.tooltip })),
+      value: heygenDisableMusicTrack ? 'true' : 'false',
+      onChange: (value: string) => onHeygenDisableMusicTrackChange(value === 'true'),
+      disabled: isLoading,
+      tooltip: heygenDisableMusicTrack ? HEYGEN_MUSIC_TRACK_OPTIONS[1].tooltip : HEYGEN_MUSIC_TRACK_OPTIONS[0].tooltip,
+    });
+
+    controls.push({
+      id: 'heygen-speech-enhancement-select',
+      prefixLabel: 'Speech',
+      ariaLabel: 'Toggle HeyGen speech enhancement',
+      options: HEYGEN_SPEECH_ENHANCEMENT_OPTIONS.map(option => ({ value: option.value, label: option.label, tooltip: option.tooltip })),
+      value: heygenEnableSpeechEnhancement ? 'true' : 'false',
+      onChange: (value: string) => onHeygenEnableSpeechEnhancementChange(value === 'true'),
+      disabled: isLoading,
+      tooltip: heygenEnableSpeechEnhancement ? HEYGEN_SPEECH_ENHANCEMENT_OPTIONS[1].tooltip : HEYGEN_SPEECH_ENHANCEMENT_OPTIONS[0].tooltip,
     });
   }
 

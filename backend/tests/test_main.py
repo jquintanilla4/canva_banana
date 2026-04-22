@@ -134,6 +134,5 @@ class MainApiTests(unittest.TestCase):
 
         self.assertEqual(close_error.exception.code, 1008)
 
-
 if __name__ == "__main__":
     unittest.main()

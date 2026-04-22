@@ -28,6 +28,7 @@ import {
   FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  HEYGEN_V3_LIPSYNC_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   VEO_31_EXTEND_VIDEO_MODEL_ID,
   VEO_31_FFLF_VIDEO_MODEL_ID,
@@ -714,6 +715,36 @@ export const generateImageToVideo = async (
       video_url: options.sourceVideoUrl,
       audio_url: options.sourceAudioUrl,
       sync_mode: syncMode, // Fal v3 field name.
+    };
+
+    return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  const isHeygenV3LipsyncModel = modelId === HEYGEN_V3_LIPSYNC_MODEL_ID; // HeyGen requires video_url + audio_url.
+  if (isHeygenV3LipsyncModel) {
+    if (!options.sourceVideoUrl) {
+      throw new Error('HeyGen V3 Lipsync requires a source video.');
+    }
+    if (!options.sourceAudioUrl) {
+      throw new Error('HeyGen V3 Lipsync requires a source audio.');
+    }
+
+    const startTime = typeof options.heygenStartTime === 'number' && Number.isFinite(options.heygenStartTime)
+      ? Math.max(0, Math.round(options.heygenStartTime * 1000) / 1000)
+      : undefined;
+    const endTime = typeof options.heygenEndTime === 'number' && Number.isFinite(options.heygenEndTime)
+      ? Math.max(0, Math.round(options.heygenEndTime * 1000) / 1000)
+      : undefined;
+
+    const inputPayload: Record<string, unknown> = {
+      video_url: options.sourceVideoUrl,
+      audio_url: options.sourceAudioUrl,
+      enable_caption: options.heygenEnableCaption ?? false,
+      enable_dynamic_duration: options.heygenEnableDynamicDuration ?? true,
+      disable_music_track: options.heygenDisableMusicTrack ?? false,
+      enable_speech_enhancement: options.heygenEnableSpeechEnhancement ?? false,
+      ...(startTime !== undefined ? { start_time: startTime } : {}),
+      ...(endTime !== undefined && (startTime === undefined || endTime > startTime) ? { end_time: endTime } : {}),
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);

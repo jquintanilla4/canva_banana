@@ -97,7 +97,7 @@ const hasEnvValue = (value: string | undefined): boolean => typeof value === 'st
 // Detect which API providers are usable based on available API keys in env.
 const providerAvailability: Record<ApiProvider, boolean> = {
   google: hasEnvValue(process.env.GEMINI_API_KEY ?? process.env.API_KEY),
-  fal: hasEnvValue(process.env.FAL_API_KEY),
+  fal: true,
 };
 
 // Determine available API providers based on environment, assign user-friendly labels, and set default provider.
@@ -1275,6 +1275,7 @@ export default function App() {
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
     isLipsyncVideoModel: fal.isLipsyncVideoModel,
+    isHeygenV3LipsyncVideoModel: fal.isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel: fal.isInfinitalkVideoModel,
     isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
@@ -1301,6 +1302,10 @@ export default function App() {
     wanAnimateQuality: fal.wanAnimateQuality,
     wanAnimateUseTurbo: fal.wanAnimateUseTurbo,
     lipsyncSyncMode: fal.lipsyncSyncMode,
+    heygenEnableCaption: fal.heygenEnableCaption,
+    heygenEnableDynamicDuration: fal.heygenEnableDynamicDuration,
+    heygenDisableMusicTrack: fal.heygenDisableMusicTrack,
+    heygenEnableSpeechEnhancement: fal.heygenEnableSpeechEnhancement,
     infinitalkResolution: fal.infinitalkResolution,
     infinitalkSeed: fal.infinitalkSeed,
     infinitalkAcceleration: fal.infinitalkAcceleration,
@@ -1362,6 +1367,10 @@ export default function App() {
     onWanAnimateQualityChange: fal.handleWanAnimateQualityChange,
     onWanAnimateTurboChange: fal.handleWanAnimateTurboChange,
     onLipsyncSyncModeChange: fal.handleLipsyncSyncModeChange,
+    onHeygenEnableCaptionChange: fal.handleHeygenEnableCaptionChange,
+    onHeygenEnableDynamicDurationChange: fal.handleHeygenEnableDynamicDurationChange,
+    onHeygenDisableMusicTrackChange: fal.handleHeygenDisableMusicTrackChange,
+    onHeygenEnableSpeechEnhancementChange: fal.handleHeygenEnableSpeechEnhancementChange,
     onInfinitalkResolutionChange: fal.handleInfinitalkResolutionChange,
     onInfinitalkSeedChange: fal.handleInfinitalkSeedChange,
     onInfinitalkAccelerationChange: fal.handleInfinitalkAccelerationChange,

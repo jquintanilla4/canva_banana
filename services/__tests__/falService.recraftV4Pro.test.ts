@@ -14,7 +14,7 @@ import { generateImage } from '../falService';
 
 describe('falService (Recraft v4 Pro)', () => {
   beforeEach(() => {
-    process.env.FAL_API_KEY = 'test'; // Required by ensureFalClientConfigured().
+    process.env.FAL_API_KEY = 'test'; // Legacy env value; the browser SDK now uses the Node proxy.
     vi.clearAllMocks(); // Keep call assertions isolated per test.
   });
 

@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
-import { Tool, type CanvasImage } from './types';
-import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
+import App from '../App';
+import { Tool, type CanvasImage } from '../types';
+import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
 
 const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType']): CanvasImage => ({
   id,
@@ -66,6 +66,7 @@ const mockState = vi.hoisted(() => {
     isWanAnimateVideoModel: false,
     isOneToAllAnimateVideoModel: false,
     isLipsyncVideoModel: false,
+    isHeygenV3LipsyncVideoModel: false,
     isInfinitalkVideoModel: false,
     isGrokImagineVideoModel: false,
     isWan26I2VVideoModel: false,
@@ -106,6 +107,10 @@ const mockState = vi.hoisted(() => {
     wanAnimateQuality: 'high',
     wanAnimateUseTurbo: false,
     lipsyncSyncMode: 'cut_off',
+    heygenEnableCaption: false,
+    heygenEnableDynamicDuration: true,
+    heygenDisableMusicTrack: false,
+    heygenEnableSpeechEnhancement: false,
     infinitalkResolution: '480p',
     infinitalkSeed: '42',
     infinitalkAcceleration: 'none',
@@ -166,6 +171,10 @@ const mockState = vi.hoisted(() => {
   falState.handleWanAnimateQualityChange = vi.fn();
   falState.handleWanAnimateTurboChange = vi.fn();
   falState.handleLipsyncSyncModeChange = vi.fn();
+  falState.handleHeygenEnableCaptionChange = vi.fn();
+  falState.handleHeygenEnableDynamicDurationChange = vi.fn();
+  falState.handleHeygenDisableMusicTrackChange = vi.fn();
+  falState.handleHeygenEnableSpeechEnhancementChange = vi.fn();
   falState.handleInfinitalkResolutionChange = vi.fn();
   falState.handleInfinitalkSeedChange = vi.fn();
   falState.handleInfinitalkAccelerationChange = vi.fn();
@@ -220,7 +229,7 @@ const mockState = vi.hoisted(() => {
   };
 });
 
-vi.mock('./components/Toolbar', () => ({
+vi.mock('../components/Toolbar', () => ({
   Toolbar: ({ activeTool, onToolChange, isVideoPromptAreaToolEnabled }: { activeTool: Tool; onToolChange: (tool: Tool) => void; isVideoPromptAreaToolEnabled: boolean }) => (
     <div>
       <span data-testid="active-tool">{activeTool}</span>
@@ -232,7 +241,7 @@ vi.mock('./components/Toolbar', () => ({
   ),
 }));
 
-vi.mock('./components/PromptBar', () => ({
+vi.mock('../components/PromptBar', () => ({
   PromptBar: ({ onModelModeChange, leadingAccessory }: { onModelModeChange: (mode: 'image' | 'video') => void; leadingAccessory?: ReactNode }) => (
     <div>
       <button type="button" onClick={() => onModelModeChange('image')}>
@@ -243,7 +252,7 @@ vi.mock('./components/PromptBar', () => ({
   ),
 }));
 
-vi.mock('./components/Canvas', () => ({
+vi.mock('../components/Canvas', () => ({
   Canvas: (props: { onVideoPromptBarSubmit: (barId: string) => void } & Record<string, unknown>) => {
     mockState.lastCanvasProps = props;
     return (
@@ -254,23 +263,23 @@ vi.mock('./components/Canvas', () => ({
   },
 }));
 
-vi.mock('./components/RecordingOverlay', () => ({ RecordingOverlay: () => null }));
-vi.mock('./components/BackupsModal', () => ({ BackupsModal: () => null }));
-vi.mock('./components/FalQueuePanel', () => ({ FalQueuePanel: () => null }));
-vi.mock('./components/DebugLogPanel', () => ({ DebugLogPanel: () => null }));
-vi.mock('./components/FileMenu', () => ({
+vi.mock('../components/RecordingOverlay', () => ({ RecordingOverlay: () => null }));
+vi.mock('../components/BackupsModal', () => ({ BackupsModal: () => null }));
+vi.mock('../components/FalQueuePanel', () => ({ FalQueuePanel: () => null }));
+vi.mock('../components/DebugLogPanel', () => ({ DebugLogPanel: () => null }));
+vi.mock('../components/FileMenu', () => ({
   FileMenu: () => (
     <button type="button" aria-label="Snapshot menu">
       Menu
     </button>
   ),
 }));
-vi.mock('./components/ViewToolbar', () => ({ ViewToolbar: () => null }));
-vi.mock('./components/ProviderSwitcher', () => ({ ProviderSwitcher: () => null }));
-vi.mock('./components/StatusBanner', () => ({ StatusBanner: () => null }));
-vi.mock('./components/ImageResizeToast', () => ({ ImageResizeToast: () => null }));
+vi.mock('../components/ViewToolbar', () => ({ ViewToolbar: () => null }));
+vi.mock('../components/ProviderSwitcher', () => ({ ProviderSwitcher: () => null }));
+vi.mock('../components/StatusBanner', () => ({ StatusBanner: () => null }));
+vi.mock('../components/ImageResizeToast', () => ({ ImageResizeToast: () => null }));
 
-vi.mock('./hooks/useCanvasHistory', () => ({
+vi.mock('../hooks/useCanvasHistory', () => ({
   useCanvasHistory: () => ({
     images: mockState.images,
     paths: [],
@@ -297,7 +306,7 @@ vi.mock('./hooks/useCanvasHistory', () => ({
   }),
 }));
 
-vi.mock('./hooks/useSelectionState', () => ({
+vi.mock('../hooks/useSelectionState', () => ({
   useSelectionState: () => ({
     selectedImageIds: [],
     selectedNoteIds: [],
@@ -327,17 +336,17 @@ vi.mock('./hooks/useSelectionState', () => ({
   }),
 }));
 
-vi.mock('./hooks/useFalSettings', () => ({
+vi.mock('../hooks/useFalSettings', () => ({
   useFalSettings: () => mockState.falState,
 }));
 
-vi.mock('./hooks/useGeneration', () => ({
+vi.mock('../hooks/useGeneration', () => ({
   useGeneration: () => ({
     handleGenerate: mockState.handleGenerate,
   }),
 }));
 
-vi.mock('./hooks/useSnapshotIO', () => ({
+vi.mock('../hooks/useSnapshotIO', () => ({
   useSnapshotIO: () => ({
     exportSnapshot: vi.fn(),
     importSnapshotFromFile: vi.fn(),
@@ -346,7 +355,7 @@ vi.mock('./hooks/useSnapshotIO', () => ({
   }),
 }));
 
-vi.mock('./hooks/useCanvasMediaActions', () => ({
+vi.mock('../hooks/useCanvasMediaActions', () => ({
   useCanvasMediaActions: () => ({
     cropMode: null,
     transformMode: null,
@@ -364,11 +373,11 @@ vi.mock('./hooks/useCanvasMediaActions', () => ({
   }),
 }));
 
-vi.mock('./hooks/useKeyboardShortcuts', () => ({
+vi.mock('../hooks/useKeyboardShortcuts', () => ({
   useKeyboardShortcuts: () => undefined,
 }));
 
-vi.mock('./hooks/useAudioRecording', () => ({
+vi.mock('../hooks/useAudioRecording', () => ({
   useAudioRecording: () => ({
     isRecording: false,
     recordingDuration: 0,
@@ -378,7 +387,7 @@ vi.mock('./hooks/useAudioRecording', () => ({
   }),
 }));
 
-vi.mock('./hooks/useGenerationGuards', () => ({
+vi.mock('../hooks/useGenerationGuards', () => ({
   useGenerationGuards: () => ({
     submitDisabled: false,
     promptPlaceholderText: 'Describe your generation',
@@ -389,7 +398,7 @@ vi.mock('./hooks/useGenerationGuards', () => ({
   }),
 }));
 
-vi.mock('./hooks/useImageResize', () => ({
+vi.mock('../hooks/useImageResize', () => ({
   useImageResize: () => ({
     isOpen: false,
     width: 0,
@@ -406,28 +415,28 @@ vi.mock('./hooks/useImageResize', () => ({
   }),
 }));
 
-vi.mock('./hooks/useDuplicateCanvasMedia', () => ({
+vi.mock('../hooks/useDuplicateCanvasMedia', () => ({
   useDuplicateCanvasMedia: () => ({
     duplicateNote: vi.fn(),
     duplicateImage: vi.fn(),
   }),
 }));
 
-vi.mock('./hooks/useKlingReferenceHelpers', () => ({
+vi.mock('../hooks/useKlingReferenceHelpers', () => ({
   useKlingReferenceHelpers: () => ({
     referenceOrderLabels: {},
     elementOrderLabels: {},
   }),
 }));
 
-vi.mock('./hooks/useKlingPromptMentions', () => ({
+vi.mock('../hooks/useKlingPromptMentions', () => ({
   useKlingPromptMentions: () => ({
     klingPromptMentions: [],
     klingReferenceCount: 0,
   }),
 }));
 
-vi.mock('./hooks/useVideoNegativePrompt', () => ({
+vi.mock('../hooks/useVideoNegativePrompt', () => ({
   useVideoNegativePrompt: () => ({
     videoNegativePrompt: '',
     setVideoNegativePrompt: vi.fn(),
@@ -435,7 +444,7 @@ vi.mock('./hooks/useVideoNegativePrompt', () => ({
   }),
 }));
 
-vi.mock('./hooks/useFalQueueJobs', () => ({
+vi.mock('../hooks/useFalQueueJobs', () => ({
   useFalQueueJobs: () => ({
     falJobs: [],
     setFalJobs: vi.fn(),
@@ -443,7 +452,7 @@ vi.mock('./hooks/useFalQueueJobs', () => ({
   }),
 }));
 
-vi.mock('./hooks/useDebugLogState', () => ({
+vi.mock('../hooks/useDebugLogState', () => ({
   useDebugLogState: () => ({
     isDebugLogOpen: false,
     debugLogEntries: [],
@@ -453,18 +462,18 @@ vi.mock('./hooks/useDebugLogState', () => ({
   }),
 }));
 
-vi.mock('./services/backupService', () => ({
+vi.mock('../services/backupService', () => ({
   listBackupSessions: vi.fn(),
   getBackupSession: vi.fn(),
 }));
 
-vi.mock('./services/audioService', () => ({
+vi.mock('../services/audioService', () => ({
   convertAudioBlobToWav: vi.fn(),
   generateWaveformImage: vi.fn(),
   loadAudioFromBlob: vi.fn(),
 }));
 
-vi.mock('./services/debugLog', () => ({
+vi.mock('../services/debugLog', () => ({
   clearDebugLogs: vi.fn(),
 }));
 

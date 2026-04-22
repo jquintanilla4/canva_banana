@@ -18,6 +18,7 @@ type TestFalSettings = Pick<
   | 'isKlingO1EditMode'
   | 'isKlingO1RefV2VMode'
   | 'isLipsyncVideoModel'
+  | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
   | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
@@ -64,6 +65,7 @@ describe('useSelectionState (grok imagine)', () => {
       isKlingO1EditMode: false,
       isKlingO1RefV2VMode: false,
       isLipsyncVideoModel: false,
+      isHeygenV3LipsyncVideoModel: false,
       isInfinitalkVideoModel: false,
       isKling26VideoModel: false,
       isKling26ControlVideoModel: false,

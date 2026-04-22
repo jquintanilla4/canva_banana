@@ -26,7 +26,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 async def _read_upload(
     upload: UploadFile | None,
     *,

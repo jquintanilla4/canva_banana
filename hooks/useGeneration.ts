@@ -6,6 +6,7 @@ import {
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
   KLING_26_VIDEO_MODEL_ID,
@@ -109,6 +110,7 @@ import { getNaturalSize, isVideoFileType, loadMediaFromBlob, rasterizeImages } f
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
 import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/volcengineService';
+import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
 import {
   buildEffectiveSeedanceReferenceIds,
@@ -378,6 +380,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wanAnimateQuality,
     wanAnimateUseTurbo,
     lipsyncSyncMode,
+    heygenEnableCaption,
+    heygenEnableDynamicDuration,
+    heygenDisableMusicTrack,
+    heygenEnableSpeechEnhancement,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -487,6 +493,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const lipsyncSyncModeForRun = isLipsyncSyncMode(falOptionsOverride.lipsyncSyncMode)
       ? falOptionsOverride.lipsyncSyncMode
       : lipsyncSyncMode; // Reruns can override current UI.
+    const heygenEnableCaptionForRun = falOptionsOverride.heygenEnableCaption ?? heygenEnableCaption;
+    const heygenEnableDynamicDurationForRun = falOptionsOverride.heygenEnableDynamicDuration ?? heygenEnableDynamicDuration;
+    const heygenDisableMusicTrackForRun = falOptionsOverride.heygenDisableMusicTrack ?? heygenDisableMusicTrack;
+    const heygenEnableSpeechEnhancementForRun = falOptionsOverride.heygenEnableSpeechEnhancement ?? heygenEnableSpeechEnhancement;
+    const heygenStartTimeOverride = typeof falOptionsOverride.heygenStartTime === 'number' && Number.isFinite(falOptionsOverride.heygenStartTime)
+      ? Math.max(0, falOptionsOverride.heygenStartTime)
+      : undefined;
+    const heygenEndTimeOverride = typeof falOptionsOverride.heygenEndTime === 'number' && Number.isFinite(falOptionsOverride.heygenEndTime)
+      ? Math.max(0, falOptionsOverride.heygenEndTime)
+      : undefined;
     const infinitalkResolutionForRun = falOptionsOverride.infinitalkResolution ?? infinitalkResolution;
     const infinitalkSeedForRun = falOptionsOverride.infinitalkSeed ?? infinitalkSeed;
     const infinitalkAccelerationForRun = falOptionsOverride.infinitalkAcceleration ?? infinitalkAcceleration;
@@ -634,6 +650,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
     const isScailVideoModel = isVideoMode && falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID;
     const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
+    const isHeygenV3LipsyncVideoModel = isVideoMode && falVideoModelIdForRun === HEYGEN_V3_LIPSYNC_MODEL_ID;
     const isInfinitalkVideoModel = isVideoMode && falVideoModelIdForRun === INFINITALK_VIDEO_MODEL_ID;
     const isGrokImagineVideoModel = isVideoMode && falVideoModelIdForRun === GROK_IMAGINE_VIDEO_MODEL_ID;
     const isGrokImagineVideoEditMode = isGrokImagineVideoModel && primaryImageForRun?.mediaType === 'video';
@@ -643,6 +660,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isFalVideoInputMode = isWanVideoInputMode
       || isOneToAllAnimateVideoModel
       || isLipsyncVideoModel
+      || isHeygenV3LipsyncVideoModel
       || isInfinitalkVideoModel
       || isKling26ControlVideoModel
       || isVeo31ExtendMode
@@ -670,7 +688,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
     const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun;
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel);
-    const isLipsyncPromptOptional = usingFal && isVideoMode && isLipsyncVideoModel;
+    const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const requiresVideoSourceImage = usingFal && isVideoMode && !isAnySeedance2VideoModelForRun && !isKlingO1VideoInputMode && !isFalVideoInputMode
       && !(isGrokImagineVideoModel && isGrokImagineVideoEditMode);
@@ -709,7 +727,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
-    const requiresAudioInput = isLipsyncVideoModel || isInfinitalkVideoModel;
+    const requiresAudioInput = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
 
     if (usingFal && isVideoMode && requiresAudioInput) {
       if (!sourceVideoIdForRun) {
@@ -1302,7 +1320,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     ? 'Select a video on the canvas to drive Scail.'
                   : isKling26ControlVideoModel
                     ? 'Select a motion driver video on the canvas.'
-                  : isLipsyncVideoModel
+                  : isLipsyncVideoModel || isHeygenV3LipsyncVideoModel
                     ? 'Select a video on the canvas to lip sync.'
                     : isInfinitalkVideoModel
                       ? 'Select a video on the canvas to drive Infinitalk.'
@@ -1351,6 +1369,24 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setToastMessage('Uploading audio...');
           sourceAudioUrlForRequest = await uploadVideoToFal(audioFileForUpload);
           setToastMessage(null);
+        }
+
+        let heygenStartTimeForRequest = heygenStartTimeOverride;
+        let heygenEndTimeForRequest = heygenEndTimeOverride;
+        if (isHeygenV3LipsyncVideoModel && trimmedUserPrompt && heygenStartTimeForRequest === undefined && heygenEndTimeForRequest === undefined) {
+          const videoDurationSeconds = (sourceVideo?.element as HTMLVideoElement | undefined)?.duration;
+          setToastMessage('Reading HeyGen timing intent...');
+          try {
+            const clipIntent = await extractHeygenClipIntent(trimmedUserPrompt, {
+              videoDurationSeconds: typeof videoDurationSeconds === 'number' && Number.isFinite(videoDurationSeconds)
+                ? videoDurationSeconds
+                : undefined,
+            });
+            heygenStartTimeForRequest = clipIntent.startTime;
+            heygenEndTimeForRequest = clipIntent.endTime;
+          } finally {
+            setToastMessage(null);
+          }
         }
 
         const videoSourceImage = (isFalSeedance2VideoModelForRun && (!activePrimary || isSeedance2ReferenceModeForRun))
@@ -1498,6 +1534,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
             sourceVideoUrl: sourceVideoUrlForRequest,
             sourceAudioUrl: sourceAudioUrlForRequest,
             lipsyncSyncMode: lipsyncSyncModeForRun,
+          } : {}),
+          ...(isHeygenV3LipsyncVideoModel ? {
+            sourceVideoUrl: sourceVideoUrlForRequest,
+            sourceAudioUrl: sourceAudioUrlForRequest,
+            heygenEnableCaption: heygenEnableCaptionForRun,
+            heygenEnableDynamicDuration: heygenEnableDynamicDurationForRun,
+            heygenDisableMusicTrack: heygenDisableMusicTrackForRun,
+            heygenEnableSpeechEnhancement: heygenEnableSpeechEnhancementForRun,
+            ...(heygenStartTimeForRequest !== undefined ? { heygenStartTime: heygenStartTimeForRequest } : {}),
+            ...(heygenEndTimeForRequest !== undefined ? { heygenEndTime: heygenEndTimeForRequest } : {}),
           } : {}),
           ...(isInfinitalkVideoModel ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
@@ -1689,6 +1735,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   } : {}),
                   ...(isLipsyncVideoModel ? {
                     lipsyncSyncMode: lipsyncSyncModeForRun,
+                  } : {}),
+                  ...(isHeygenV3LipsyncVideoModel ? {
+                    heygenEnableCaption: heygenEnableCaptionForRun,
+                    heygenEnableDynamicDuration: heygenEnableDynamicDurationForRun,
+                    heygenDisableMusicTrack: heygenDisableMusicTrackForRun,
+                    heygenEnableSpeechEnhancement: heygenEnableSpeechEnhancementForRun,
+                    ...(heygenStartTimeForRequest !== undefined ? { heygenStartTime: heygenStartTimeForRequest } : {}),
+                    ...(heygenEndTimeForRequest !== undefined ? { heygenEndTime: heygenEndTimeForRequest } : {}),
                   } : {}),
                   ...(isInfinitalkVideoModel ? {
                     infinitalkResolution: infinitalkResolutionForRun,
@@ -2346,6 +2400,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wanTargetResolution,
     wanCreativity,
     lipsyncSyncMode,
+    heygenEnableCaption,
+    heygenEnableDynamicDuration,
+    heygenDisableMusicTrack,
+    heygenEnableSpeechEnhancement,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,

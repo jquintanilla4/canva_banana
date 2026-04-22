@@ -34,6 +34,7 @@ type SelectionFalSettings = Pick<
   | 'isKlingO1EditMode'
   | 'isKlingO1RefV2VMode'
   | 'isLipsyncVideoModel'
+  | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
   | 'isSeedance15VideoModel'
   | 'isSeedance2VideoModel'
@@ -99,6 +100,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   isKlingO1EditMode,
     isKlingO1RefV2VMode,
     isLipsyncVideoModel,
+    isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
@@ -121,7 +123,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const isScailVideoModel = apiProvider === 'fal'
     && falModelMode === 'video'
     && falVideoModelId === SCAIL_VIDEO_MODEL_ID;
-  const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
+  const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
   const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
   const isSeedance2ReferenceMode = apiProvider === 'fal'
     && falModelMode === 'video'
@@ -232,7 +234,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     });
   }, [isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
 
-  // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All / Scail / Lip Sync).
+  // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All / Scail / Lip Sync / HeyGen).
   useEffect(() => {
     if (!isVideoInputMode && sourceVideoId) {
       setSourceVideoId(null);
@@ -512,7 +514,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         } else {
           nextSelectedIds = [...prevIds, imageId];
         }
-        if (isLipsyncVideoModel && targetImage?.mediaType === 'video') {
+        if (isAudioInputMode && targetImage?.mediaType === 'video') {
           setSourceVideoId(prevId => (prevId === imageId && !nextSelectedIds.includes(imageId)) ? null : imageId);
         }
         if (isAudioInputMode && targetImage?.mediaType === 'audio') {

@@ -1,25 +1,23 @@
-import { ensureFalApiKey } from './client'; // Fal credentials helper.
 import { logFalEvent } from './logging'; // Fal debug logger.
+import { getFalAssetFetchUrl } from '../secureBackendService'; // Secure Fal asset proxy.
 
-const FAL_HOSTED_URL_REGEX = /^https?:\/\/[^/]*fal\.(ai|run)\b/i; // Detect Fal-hosted URLs.
+const FAL_HOSTED_URL_REGEX = /^https?:\/\/[^/]*fal\.(ai|run|media)\b/i; // Detect Fal-hosted URLs.
 
 export const extractInlineData = async (url: string): Promise<string> => { // Convert URLs to data URIs.
   if (url.startsWith('data:')) { // Data URLs are already inline.
     return url; // Skip network fetch.
   }
 
-  const requestOptions: RequestInit = {}; // Build fetch options.
+  let requestUrl = url; // Fetch target, proxied when Fal-hosted.
 
-  if (FAL_HOSTED_URL_REGEX.test(url)) { // Add auth for Fal-hosted assets.
-    requestOptions.headers = {
-      Authorization: `Key ${ensureFalApiKey()}`,
-    };
+  if (FAL_HOSTED_URL_REGEX.test(url)) { // Keep Fal asset auth server-side.
+    requestUrl = getFalAssetFetchUrl(url);
     logFalEvent('outbound', 'fal-storage', 'Fetching hosted image', { url });
   }
 
   let response: Response; // Track fetch response.
   try {
-    response = await fetch(url, requestOptions);
+    response = await fetch(requestUrl);
   } catch (error) {
     if (FAL_HOSTED_URL_REGEX.test(url)) {
       logFalEvent('error', 'fal-storage', 'Failed to fetch hosted image', {

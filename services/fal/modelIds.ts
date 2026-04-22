@@ -24,6 +24,7 @@ import {
   FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID as MODEL_SEEDANCE_2_FAL_T2V,
   FAL_SEEDANCE_2_IMAGE_TO_VIDEO_MODEL_ID as MODEL_SEEDANCE_2_FAL_I2V,
   FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID as MODEL_SEEDANCE_2_FAL_REF,
+  HEYGEN_V3_LIPSYNC_MODEL_ID as MODEL_HEYGEN_V3_LIPSYNC,
 } from '../modelConfig'; // Canonical model IDs.
 
 export const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = MODEL_HAILUO_STANDARD; // Hailuo standard endpoint.
@@ -50,6 +51,7 @@ export const VEO_31_FFLF_VIDEO_MODEL_ID = MODEL_VEO_31_FFLF; // Veo 3.1 fflf end
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = MODEL_VEO_31_EXTEND; // Veo 3.1 extend endpoint.
 export const WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID = MODEL_WAN_27_T2I; // Wan 2.7 Pro text-to-image endpoint.
 export const WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = MODEL_WAN_27_I2I; // Wan 2.7 Pro edit endpoint.
+export const HEYGEN_V3_LIPSYNC_MODEL_ID = MODEL_HEYGEN_V3_LIPSYNC; // HeyGen v3 lipsync endpoint.
 export const SEEDANCE_15_VIDEO_MODEL_ID = MODEL_SEEDANCE_15; // Seedance 1.5 endpoint.
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = MODEL_SEEDANCE_2_FAL; // Fal Seedance 2 selector.
 export const FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID = MODEL_SEEDANCE_2_FAL_T2V; // Fal Seedance 2 t2v endpoint.

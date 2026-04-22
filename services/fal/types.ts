@@ -100,6 +100,12 @@ export interface GenerateVideoOptions {
   characterOrientation?: 'image' | 'video';
   aspectRatio?: FalAspectRatioOption;
   lipsyncSyncMode?: LipsyncSyncMode; // Sync v3 duration behavior.
+  heygenEnableCaption?: boolean;
+  heygenEnableDynamicDuration?: boolean;
+  heygenDisableMusicTrack?: boolean;
+  heygenEnableSpeechEnhancement?: boolean;
+  heygenStartTime?: number;
+  heygenEndTime?: number;
   infinitalkDuration?: InfinitalkDurationSelectionValue;
   grokImagineVideoDuration?: GrokImagineVideoDurationSelectionValue;
   grokImagineVideoResolution?: GrokImagineVideoResolutionSelectionValue;

@@ -30,7 +30,7 @@ describe('falService (Seedance 2 FAL)', () => {
   const originalToBlobDescriptor = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'toBlob');
 
   beforeEach(() => {
-    process.env.FAL_API_KEY = 'test'; // Required by ensureFalClientConfigured().
+    process.env.FAL_API_KEY = 'test'; // Legacy env value; the browser SDK now uses the Node proxy.
     vi.clearAllMocks(); // Keep call assertions isolated per test.
     Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
       value: (callback: (blob: Blob | null) => void) => callback(new Blob(['test'], { type: 'image/png' })),

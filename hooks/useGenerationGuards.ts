@@ -3,6 +3,7 @@ import { Tool } from '../types';
 import {
   getFalModelLabel,
   getFalNumImageMaxForModel,
+  HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   isRecraftV4ProModel,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
@@ -98,12 +99,13 @@ export function useGenerationGuards({
   const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isScailVideoModel = isVideoMode && falModelId === SCAIL_VIDEO_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
+  const isHeygenV3LipsyncVideoModel = isVideoMode && falModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan26I2VVideoModel = isVideoMode && falModelId === WAN_26_I2V_MODEL_ID;
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isSeedance2ReferenceMode = isSeedance2VideoModel && seedance2Variant === 'reference';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
-  const isAudioInputMode = isLipsyncVideoModel || isInfinitalkVideoModel;
+  const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
   const isFalVideoInputMode = isWanVideoInputMode
     || isOneToAllAnimateVideoModel
     || isAudioInputMode
@@ -143,7 +145,7 @@ export function useGenerationGuards({
       falNumImages < 1 ||
       falNumImages > falNumImageMax;
     const isWanPromptOptional = usingFal && isWanVideoInputMode;
-    const isLipsyncPromptOptional = usingFal && isLipsyncVideoModel;
+    const isLipsyncPromptOptional = usingFal && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
@@ -187,6 +189,9 @@ export function useGenerationGuards({
             return 'Describe the motion or scene you want this image to turn into, or shift-click another still image to set the end frame...';
           }
           return 'Describe the video you want to create, or select an image for image-to-video...';
+        }
+        if (isHeygenV3LipsyncVideoModel) {
+          return 'Optional: describe the video segment to lip sync, such as "from 3.5s to 8s", or leave blank for the full video.';
         }
         if (isLipsyncVideoModel) {
           return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a video and audio clip to lip sync.`;
@@ -290,6 +295,7 @@ export function useGenerationGuards({
     hasSeedance2SmartUnsupportedSelection,
     primarySelectionMediaType,
     isGrokImagineVideoModel,
+    isHeygenV3LipsyncVideoModel,
     isNanoBananaModel,
     isHailuoVideoModel,
     isKling26VideoModel,

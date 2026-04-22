@@ -114,6 +114,12 @@ export type GenerationFalOptions = Partial<{
   wanAnimateQuality: 'high' | 'maximum';
   wanAnimateUseTurbo: boolean;
   lipsyncSyncMode: 'cut_off' | 'loop' | 'bounce' | 'silence' | 'remap'; // Sync v3 duration behavior.
+  heygenEnableCaption: boolean;
+  heygenEnableDynamicDuration: boolean;
+  heygenDisableMusicTrack: boolean;
+  heygenEnableSpeechEnhancement: boolean;
+  heygenStartTime: number;
+  heygenEndTime: number;
   kling26Audio: boolean;
   kling26ControlVariant: 'standard' | 'pro';
   kling26ControlKeepSound: boolean;

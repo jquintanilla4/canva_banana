@@ -156,6 +156,10 @@ export function useSnapshotIO({
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
+    heygenEnableCaption,
+    heygenEnableDynamicDuration,
+    heygenDisableMusicTrack,
+    heygenEnableSpeechEnhancement,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -192,6 +196,10 @@ export function useSnapshotIO({
     setWanAnimateShift,
     setWanAnimateQuality,
     setWanAnimateUseTurbo,
+    setHeygenEnableCaption,
+    setHeygenEnableDynamicDuration,
+    setHeygenDisableMusicTrack,
+    setHeygenEnableSpeechEnhancement,
     setInfinitalkResolution,
     setInfinitalkSeed,
     setInfinitalkAcceleration,
@@ -263,6 +271,10 @@ export function useSnapshotIO({
       wanAnimateShift,
       wanAnimateQuality,
       wanAnimateUseTurbo,
+      heygenEnableCaption,
+      heygenEnableDynamicDuration,
+      heygenDisableMusicTrack,
+      heygenEnableSpeechEnhancement,
       infinitalkResolution,
       infinitalkSeed,
       infinitalkAcceleration,
@@ -320,6 +332,10 @@ export function useSnapshotIO({
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
+    heygenEnableCaption,
+    heygenEnableDynamicDuration,
+    heygenDisableMusicTrack,
+    heygenEnableSpeechEnhancement,
     infinitalkResolution,
     infinitalkSeed,
     infinitalkAcceleration,
@@ -639,6 +655,18 @@ export function useSnapshotIO({
         }
         if (typeof meta.wanAnimateUseTurbo === 'boolean') {
           setWanAnimateUseTurbo(meta.wanAnimateUseTurbo);
+        }
+        if (typeof meta.heygenEnableCaption === 'boolean') {
+          setHeygenEnableCaption(meta.heygenEnableCaption);
+        }
+        if (typeof meta.heygenEnableDynamicDuration === 'boolean') {
+          setHeygenEnableDynamicDuration(meta.heygenEnableDynamicDuration);
+        }
+        if (typeof meta.heygenDisableMusicTrack === 'boolean') {
+          setHeygenDisableMusicTrack(meta.heygenDisableMusicTrack);
+        }
+        if (typeof meta.heygenEnableSpeechEnhancement === 'boolean') {
+          setHeygenEnableSpeechEnhancement(meta.heygenEnableSpeechEnhancement);
         }
         if (isInfinitalkResolutionSelectionValue(meta.infinitalkResolution)) {
           setInfinitalkResolution(meta.infinitalkResolution);
