@@ -15,6 +15,7 @@ export type AppState = {
 export type CommitOverrides = Partial<Pick<AppState, 'images' | 'paths' | 'notes' | 'videoPromptAreas' | 'videoPromptBars'>>;
 
 const DEFAULT_MAX_HISTORY_SIZE = 30;
+const getTextSignature = (value: string | undefined): string => JSON.stringify(value ?? ''); // Preserve exact text edits in compact history signatures.
 
 // Compact string signature lets us skip storing identical states while keeping undo/redo fast.
 const getStateSignature = (state: AppState): string => {
@@ -32,7 +33,7 @@ const getStateSignature = (state: AppState): string => {
     .map(area => `${area.id},${area.sequence},${area.x.toFixed(2)},${area.y.toFixed(2)},${area.width.toFixed(2)},${area.height.toFixed(2)},${area.borderColor ?? DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR},${area.promptBarId ?? ''},${area.orderedMediaIds.join(',')}`)
     .join(';');
   const videoPromptBarSignature = state.videoPromptBars
-    .map(bar => `${bar.id},${bar.assignedAreaId ?? ''},${bar.modelId ?? ''},${bar.x.toFixed(2)},${bar.y.toFixed(2)},${bar.width.toFixed(2)},${bar.height.toFixed(2)},${bar.prompt.length},${bar.negativePrompt.length},${bar.seedance2Variant},${bar.seedance2AspectRatio},${bar.seedance2Resolution},${bar.seedance2Duration},${bar.seedance2GenerateAudio ? 1 : 0},${bar.seedance2CameraFixed ? 1 : 0}`)
+    .map(bar => `${bar.id},${bar.assignedAreaId ?? ''},${bar.modelId ?? ''},${bar.x.toFixed(2)},${bar.y.toFixed(2)},${bar.width.toFixed(2)},${bar.height.toFixed(2)},${bar.prompt.length},${getTextSignature(bar.negativePrompt)},${getTextSignature(bar.klingV3MultiPrompt)},${bar.klingV3Duration ?? ''},${bar.klingV3GenerateAudio ? 1 : 0},${bar.klingV3CfgScale ?? ''},${bar.klingV3MultiPromptEnabled ? 1 : 0},${bar.klingV3Shot1Duration ?? ''},${bar.klingV3Shot2Duration ?? ''},${bar.seedance2Variant},${bar.seedance2AspectRatio},${bar.seedance2Resolution},${bar.seedance2Duration},${bar.seedance2GenerateAudio ? 1 : 0},${bar.seedance2CameraFixed ? 1 : 0}`)
     .join(';');
   return `${imageSignature}|${pathSignature}|${noteSignature}|${videoPromptAreaSignature}|${videoPromptBarSignature}`;
 };

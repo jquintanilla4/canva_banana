@@ -1,0 +1,57 @@
+import { describe, expect, it, vi } from 'vitest';
+import { KLING_V3_VIDEO_MODEL_ID } from '../modelConfig';
+import { buildPromptBarModelControls, type PromptBarControlsInput } from '../promptBarConfig';
+
+const baseInput = {
+  apiProvider: 'fal',
+  falModelId: KLING_V3_VIDEO_MODEL_ID,
+  falModelMode: 'video',
+  isVideoMode: true,
+  usingFal: true,
+  isKlingV3VideoModel: true,
+  klingV3Duration: '5',
+  klingV3GenerateAudio: true,
+  klingV3CfgScale: '0.5',
+  klingV3MultiPromptEnabled: false,
+  klingV3Shot1Duration: '5',
+  klingV3Shot2Duration: '5',
+  isLoading: false,
+  onKlingV3DurationChange: vi.fn(),
+  onKlingV3GenerateAudioChange: vi.fn(),
+  onKlingV3CfgScaleChange: vi.fn(),
+  onKlingV3MultiPromptEnabledChange: vi.fn(),
+  onKlingV3Shot1DurationChange: vi.fn(),
+  onKlingV3Shot2DurationChange: vi.fn(),
+} as unknown as PromptBarControlsInput;
+
+describe('promptBarConfig (Kling v3)', () => {
+  it('shows single prompt controls when multi prompt is off', () => {
+    const controls = buildPromptBarModelControls(baseInput);
+    const controlIds = controls?.map(control => control.id) ?? [];
+
+    expect(controlIds).toEqual([
+      'kling-v3-multi-select',
+      'kling-v3-duration-select',
+      'kling-v3-audio-select',
+      'kling-v3-cfg-select',
+    ]);
+  });
+
+  it('shows shot duration controls when multi prompt is on', () => {
+    const controls = buildPromptBarModelControls({
+      ...baseInput,
+      klingV3MultiPromptEnabled: true,
+    });
+    const controlIds = controls?.map(control => control.id) ?? [];
+    const shotControl = controls?.find(control => control.id === 'kling-v3-shot-1-duration-select' && control.kind !== 'action' && control.kind !== 'color');
+
+    expect(controlIds).toEqual([
+      'kling-v3-multi-select',
+      'kling-v3-shot-1-duration-select',
+      'kling-v3-shot-2-duration-select',
+      'kling-v3-audio-select',
+      'kling-v3-cfg-select',
+    ]);
+    expect(shotControl && 'options' in shotControl ? shotControl.options.map(option => option.value) : []).toContain('1');
+  });
+});

@@ -21,6 +21,9 @@ import type {
   Kling26ControlDriver,
   Kling26ControlVariant,
   KlingO1Variant,
+  KlingV3CfgScaleSelectionValue,
+  KlingV3DurationSelectionValue,
+  KlingV3ShotDurationSelectionValue,
   KlingVariant,
   LipsyncSyncMode,
   RecraftRgbColor,
@@ -76,6 +79,12 @@ import {
   KLING26_CONTROL_SOUND_OPTIONS,
   KLING26_CONTROL_VARIANT_OPTIONS,
   KLING_O1_VARIANT_OPTIONS,
+  KLING_V3_AUDIO_OPTIONS,
+  KLING_V3_CFG_SCALE_OPTIONS,
+  KLING_V3_DURATION_OPTIONS,
+  KLING_V3_MULTI_PROMPT_OPTIONS,
+  KLING_V3_SHOT_DURATION_OPTIONS,
+  KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   LIPSYNC_SYNC_MODE_OPTIONS,
   INFINITALK_ACCELERATION_OPTIONS,
@@ -278,6 +287,108 @@ export const buildSeedance2PromptBarControls = ({
   return controls;
 };
 
+type KlingV3PromptBarControlsInput = {
+  idPrefix?: string;
+  klingV3Duration: KlingV3DurationSelectionValue;
+  klingV3GenerateAudio: boolean;
+  klingV3CfgScale: KlingV3CfgScaleSelectionValue;
+  klingV3MultiPromptEnabled: boolean;
+  klingV3Shot1Duration: KlingV3ShotDurationSelectionValue;
+  klingV3Shot2Duration: KlingV3ShotDurationSelectionValue;
+  isLoading: boolean;
+  onKlingV3DurationChange: (value: KlingV3DurationSelectionValue) => void;
+  onKlingV3GenerateAudioChange: (value: boolean) => void;
+  onKlingV3CfgScaleChange: (value: KlingV3CfgScaleSelectionValue) => void;
+  onKlingV3MultiPromptEnabledChange: (value: boolean) => void;
+  onKlingV3Shot1DurationChange: (value: KlingV3ShotDurationSelectionValue) => void;
+  onKlingV3Shot2DurationChange: (value: KlingV3ShotDurationSelectionValue) => void;
+};
+
+const buildKlingV3ControlId = (controlName: string, idPrefix?: string): string =>
+  idPrefix ? `${idPrefix}-kling-v3-${controlName}-select` : `kling-v3-${controlName}-select`;
+
+const getKlingV3BooleanSelectionValue = (value: boolean): 'true' | 'false' => (
+  value ? 'true' : 'false'
+);
+
+export const buildKlingV3PromptBarControls = ({
+  idPrefix,
+  klingV3Duration,
+  klingV3GenerateAudio,
+  klingV3CfgScale,
+  klingV3MultiPromptEnabled,
+  klingV3Shot1Duration,
+  klingV3Shot2Duration,
+  isLoading,
+  onKlingV3DurationChange,
+  onKlingV3GenerateAudioChange,
+  onKlingV3CfgScaleChange,
+  onKlingV3MultiPromptEnabledChange,
+  onKlingV3Shot1DurationChange,
+  onKlingV3Shot2DurationChange,
+}: KlingV3PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => {
+  const controls: PromptBarModelControl[] = [{
+    id: buildKlingV3ControlId('multi', idPrefix),
+    prefixLabel: 'Multi',
+    ariaLabel: 'Toggle Kling 3.0 Pro multi prompt',
+    options: KLING_V3_MULTI_PROMPT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+    value: getKlingV3BooleanSelectionValue(klingV3MultiPromptEnabled),
+    onChange: (value: string) => onKlingV3MultiPromptEnabledChange(value === 'true'),
+    disabled: isLoading,
+  }];
+
+  if (klingV3MultiPromptEnabled) {
+    controls.push({
+      id: buildKlingV3ControlId('shot-1-duration', idPrefix),
+      prefixLabel: 'Shot 1',
+      ariaLabel: 'Select Kling 3.0 Pro first shot duration',
+      options: KLING_V3_SHOT_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: klingV3Shot1Duration,
+      onChange: (value: string) => onKlingV3Shot1DurationChange(value as KlingV3ShotDurationSelectionValue),
+      disabled: isLoading,
+    });
+    controls.push({
+      id: buildKlingV3ControlId('shot-2-duration', idPrefix),
+      prefixLabel: 'Shot 2',
+      ariaLabel: 'Select Kling 3.0 Pro second shot duration',
+      options: KLING_V3_SHOT_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: klingV3Shot2Duration,
+      onChange: (value: string) => onKlingV3Shot2DurationChange(value as KlingV3ShotDurationSelectionValue),
+      disabled: isLoading,
+    });
+  } else {
+    controls.push({
+      id: buildKlingV3ControlId('duration', idPrefix),
+      ariaLabel: 'Select Kling 3.0 Pro duration',
+      options: KLING_V3_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: klingV3Duration,
+      onChange: (value: string) => onKlingV3DurationChange(value as KlingV3DurationSelectionValue),
+      disabled: isLoading,
+    });
+  }
+
+  controls.push({
+    id: buildKlingV3ControlId('audio', idPrefix),
+    prefixLabel: 'Audio',
+    ariaLabel: 'Toggle Kling 3.0 Pro audio generation',
+    options: KLING_V3_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+    value: getKlingV3BooleanSelectionValue(klingV3GenerateAudio),
+    onChange: (value: string) => onKlingV3GenerateAudioChange(value === 'true'),
+    disabled: isLoading,
+  });
+  controls.push({
+    id: buildKlingV3ControlId('cfg', idPrefix),
+    prefixLabel: 'CFG',
+    ariaLabel: 'Select Kling 3.0 Pro CFG scale',
+    options: KLING_V3_CFG_SCALE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+    value: klingV3CfgScale,
+    onChange: (value: string) => onKlingV3CfgScaleChange(value as KlingV3CfgScaleSelectionValue),
+    disabled: isLoading,
+  });
+
+  return controls;
+};
+
 export type PromptBarControlsInput = {
   apiProvider: 'google' | 'fal';
   falModelId: string;
@@ -290,6 +401,7 @@ export type PromptBarControlsInput = {
   isWan27ImageModel: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
+  isKlingV3VideoModel: boolean;
   isKlingO1VideoModel: boolean;
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
@@ -306,6 +418,12 @@ export type PromptBarControlsInput = {
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
+  klingV3Duration: KlingV3DurationSelectionValue;
+  klingV3GenerateAudio: boolean;
+  klingV3CfgScale: KlingV3CfgScaleSelectionValue;
+  klingV3MultiPromptEnabled: boolean;
+  klingV3Shot1Duration: KlingV3ShotDurationSelectionValue;
+  klingV3Shot2Duration: KlingV3ShotDurationSelectionValue;
   klingO1Variant: KlingO1Variant;
   klingO1KeepAudio: boolean;
   kling26ControlVariant: Kling26ControlVariant;
@@ -371,6 +489,12 @@ export type PromptBarControlsInput = {
   onHailuoVariantChange: (value: string) => void;
   onFalVideoDurationChange: (value: string) => void;
   onKlingVariantChange: (value: string) => void;
+  onKlingV3DurationChange: (value: string) => void;
+  onKlingV3GenerateAudioChange: (value: boolean) => void;
+  onKlingV3CfgScaleChange: (value: string) => void;
+  onKlingV3MultiPromptEnabledChange: (value: boolean) => void;
+  onKlingV3Shot1DurationChange: (value: string) => void;
+  onKlingV3Shot2DurationChange: (value: string) => void;
   onKlingO1VariantChange: (value: string) => void;
   onKlingO1KeepAudioChange: (value: boolean) => void;
   onKling26ControlVariantChange: (value: string) => void;
@@ -452,6 +576,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isWan27ImageModel,
     isUpscaleModel,
     isKlingVideoModel,
+    isKlingV3VideoModel,
     isKlingO1VideoModel,
     isKling26ControlVideoModel,
     isHailuoVideoModel,
@@ -468,6 +593,12 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     hailuoVariant,
     falVideoDuration,
     klingVariant,
+    klingV3Duration,
+    klingV3GenerateAudio,
+    klingV3CfgScale,
+    klingV3MultiPromptEnabled,
+    klingV3Shot1Duration,
+    klingV3Shot2Duration,
     klingO1Variant,
     klingO1KeepAudio,
     kling26ControlVariant,
@@ -533,6 +664,12 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onHailuoVariantChange,
     onFalVideoDurationChange,
     onKlingVariantChange,
+    onKlingV3DurationChange,
+    onKlingV3GenerateAudioChange,
+    onKlingV3CfgScaleChange,
+    onKlingV3MultiPromptEnabledChange,
+    onKlingV3Shot1DurationChange,
+    onKlingV3Shot2DurationChange,
     onKlingO1VariantChange,
     onKlingO1KeepAudioChange,
     onKling26ControlVariantChange,
@@ -653,6 +790,24 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       onChange: onFalVideoDurationChange,
       disabled: isLoading,
     });
+  }
+
+  if (isKlingV3VideoModel) {
+    controls.push(...buildKlingV3PromptBarControls({
+      klingV3Duration,
+      klingV3GenerateAudio,
+      klingV3CfgScale,
+      klingV3MultiPromptEnabled,
+      klingV3Shot1Duration,
+      klingV3Shot2Duration,
+      isLoading,
+      onKlingV3DurationChange: value => onKlingV3DurationChange(value),
+      onKlingV3GenerateAudioChange,
+      onKlingV3CfgScaleChange: value => onKlingV3CfgScaleChange(value),
+      onKlingV3MultiPromptEnabledChange,
+      onKlingV3Shot1DurationChange: value => onKlingV3Shot1DurationChange(value),
+      onKlingV3Shot2DurationChange: value => onKlingV3Shot2DurationChange(value),
+    }));
   }
 
   if (isKlingO1VideoModel) {
@@ -1376,4 +1531,4 @@ export const getPromptBarModelOptions = (mode: FalModelMode): ReadonlyArray<FalM
   mode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
 
 export const shouldShowKlingNegativePrompt = (falModelId: FalVideoModelId | string): boolean =>
-  falModelId === KLING_VIDEO_MODEL_ID || falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_V3_VIDEO_MODEL_ID || falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;

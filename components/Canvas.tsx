@@ -1417,8 +1417,13 @@ export const Canvas: React.FC<CanvasProps> = ({
                   isLoading={isLoading}
                   inputDisabled={false}
                   submitDisabled={!barMembership || (
-                    bar.seedance2Variant === 'reference'
+                    !selectedEmbeddedModelId.includes('/kling-video/v3/pro')
+                      && bar.seedance2Variant === 'reference'
                       && (barMembership.acceptedImageIds.length + barMembership.acceptedVideoIds.length + barMembership.acceptedAudioIds.length) === 0
+                  ) || (
+                    selectedEmbeddedModelId.includes('/kling-video/v3/pro')
+                      && Boolean(bar.klingV3MultiPromptEnabled)
+                      && (!bar.prompt.trim() || !bar.klingV3MultiPrompt?.trim())
                   )}
                   modelOptions={embeddedVideoPromptBarModelOptions}
                   selectedModel={selectedEmbeddedModelId}
@@ -1429,7 +1434,17 @@ export const Canvas: React.FC<CanvasProps> = ({
                   modelModeDisabled
                   showModeSwitch={false}
                   modelControls={buildVideoPromptBarControls(bar)}
-                  promptPlaceholder="Describe the Seedance 2 video using the ordered media in this area... (Cmd/Ctrl + Enter to generate)"
+                  promptPlaceholder={selectedEmbeddedModelId.includes('/kling-video/v3/pro') ? 'Describe the first Kling 3.0 Pro shot using the first two still images as start/end frames... (Cmd/Ctrl + Enter to generate)' : 'Describe the Seedance 2 video using the ordered media in this area... (Cmd/Ctrl + Enter to generate)'}
+                  showMultiPrompt={selectedEmbeddedModelId.includes('/kling-video/v3/pro') && Boolean(bar.klingV3MultiPromptEnabled)}
+                  multiPrompt={bar.klingV3MultiPrompt ?? ''}
+                  onMultiPromptChange={(nextPrompt) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3MultiPrompt: nextPrompt }))}
+                  multiPromptPlaceholder="Describe the second Kling 3.0 Pro shot..."
+                  multiPromptOutlineColor={selectedEmbeddedModelId.includes('/kling-video/v3/pro') && bar.klingV3MultiPromptEnabled ? '#38bdf8' : undefined}
+                  showNegativePrompt={selectedEmbeddedModelId.includes('/kling-video/v3/pro')}
+                  negativePrompt={bar.negativePrompt}
+                  onNegativePromptChange={(nextPrompt) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, negativePrompt: nextPrompt }))}
+                  negativePromptPlaceholder="Describe what the video should avoid... (optional)"
+                  negativePromptOutlineColor={selectedEmbeddedModelId.includes('/kling-video/v3/pro') ? '#f87171' : undefined}
                   klingSuggestionsEnabled
                   klingReferenceCount={barMembership ? Object.keys(barMembership.orderLabels).length : 0}
                   klingSuggestionOptions={barMembership ? getMentionOptionsFromMembership(barMembership) : []}

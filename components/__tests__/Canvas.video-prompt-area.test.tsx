@@ -1,10 +1,91 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useState } from 'react';
+import { type ComponentProps, useState } from 'react';
 import { Canvas } from '../Canvas';
 import { buildSeedance2PromptBarControls } from '../../services/promptBarConfig';
 import { Tool, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
 import { EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING } from '../../utils/videoPromptAreas';
+
+const buildCanvasProps = (overrides: Partial<ComponentProps<typeof Canvas>> = {}): ComponentProps<typeof Canvas> => ({
+  images: [],
+  onImagesChange: vi.fn(),
+  notes: [],
+  onNotesChange: vi.fn(),
+  videoPromptAreas: [],
+  onVideoPromptAreasChange: vi.fn(),
+  videoPromptBars: [],
+  onVideoPromptBarsChange: vi.fn(),
+  selectedVideoPromptAreaId: null,
+  onVideoPromptAreaSelect: vi.fn(),
+  videoPromptAreaMemberships: {},
+  tool: Tool.SELECTION,
+  appMode: 'CANVAS',
+  paths: [],
+  onPathsChange: vi.fn(),
+  brushSize: 10,
+  eraserSize: 10,
+  brushColor: '#000000',
+  selectedImageIds: [],
+  selectedNoteIds: [],
+  referenceImageIds: [],
+  referenceVideoIds: [],
+  referenceAudioIds: [],
+  referenceImageOrderLabels: null,
+  disabledMediaIds: [],
+  elementImageIds: [],
+  elementImageOrderLabels: null,
+  videoLastFrameImageId: null,
+  sourceVideoId: null,
+  tailSelectionEnabled: false,
+  isKlingO1VideoInputMode: false,
+  isKlingO1FflfMode: false,
+  isSeedance15FflfMode: false,
+  isKling26ControlVideoInputMode: false,
+  isVeo31ExtendMode: false,
+  isWanAnimateVideoInputMode: false,
+  isWan27VideoMode: false,
+  onError: vi.fn(),
+  onImageSelect: vi.fn(),
+  onNoteSelect: vi.fn(),
+  zoomToFitTrigger: 0,
+  zoomToSelectionTrigger: 0,
+  zoomInTrigger: 0,
+  zoomOutTrigger: 0,
+  onFilesDrop: vi.fn(),
+  editingNoteId: null,
+  onNoteDoubleClick: vi.fn(),
+  onNoteTextChange: vi.fn(),
+  onNoteEditEnd: vi.fn(),
+  onImageOrderChange: vi.fn(),
+  isImageOverlapping: false,
+  canMoveUp: false,
+  canMoveDown: false,
+  cropMode: null,
+  onCropRectChange: vi.fn(),
+  onStartCrop: vi.fn(),
+  onConfirmCrop: vi.fn(),
+  onCancelCrop: vi.fn(),
+  onNoteCopy: vi.fn(),
+  onNoteDuplicate: vi.fn(),
+  onNoteFontSizeChange: vi.fn(),
+  onNoteColorChange: vi.fn(),
+  onImagePromptCopy: vi.fn(),
+  onImageDuplicate: vi.fn(),
+  onRerunGeneration: vi.fn(),
+  showMetadataOverlay: false,
+  transformMode: null,
+  onStartTransform: vi.fn(),
+  onExitTransform: vi.fn(),
+  isLoading: false,
+  onVideoPromptBarFocus: vi.fn(),
+  onVideoPromptBarBlur: vi.fn(),
+  onVideoPromptBarUpdate: vi.fn(),
+  onVideoPromptBarSubmit: vi.fn(),
+  buildVideoPromptBarControls: () => [],
+  embeddedVideoPromptBarModelOptions: [{ value: 'volcengine/seedance-2', label: 'Seedance 2' }],
+  onCommit: vi.fn(),
+  ...overrides,
+});
 
 describe('Canvas video prompt area tool', () => {
   afterEach(() => {
@@ -220,6 +301,69 @@ describe('Canvas video prompt area tool', () => {
     expect(onVideoPromptAreasChange).not.toHaveBeenCalled();
     expect(onCommit).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Video prompt area 01' })).toBeNull();
+  });
+
+  it('keeps Kling v3 embedded text-to-video submission enabled without area media', () => {
+    const videoPromptArea: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 40,
+      y: 60,
+      width: 720,
+      height: 360,
+      promptBarId: 'bar-1',
+      orderedMediaIds: [],
+    };
+    const videoPromptBar: CanvasVideoPromptBar = {
+      id: 'bar-1',
+      assignedAreaId: 'area-1',
+      modelId: 'fal-ai/kling-video/v3/pro',
+      x: 0,
+      y: 0,
+      width: 720,
+      height: 190,
+      prompt: 'A neon city timelapse',
+      negativePrompt: '',
+      seedance2Variant: 'reference',
+      seedance2AspectRatio: '16:9',
+      seedance2Resolution: '720p',
+      seedance2Duration: '5',
+      seedance2GenerateAudio: false,
+      seedance2CameraFixed: false,
+      klingV3MultiPrompt: '',
+      klingV3Duration: '5',
+      klingV3GenerateAudio: true,
+      klingV3CfgScale: '0.5',
+      klingV3MultiPromptEnabled: false,
+      klingV3Shot1Duration: '5',
+      klingV3Shot2Duration: '5',
+    };
+
+    render(
+      <Canvas
+        {...buildCanvasProps({
+          videoPromptAreas: [videoPromptArea],
+          videoPromptBars: [videoPromptBar],
+          videoPromptAreaMemberships: {
+            'area-1': {
+              orderedMediaIds: [],
+              acceptedImageIds: [],
+              acceptedVideoIds: [],
+              acceptedAudioIds: [],
+              ignoredMediaIds: [],
+              orderLabels: {},
+            },
+          },
+          embeddedVideoPromptBarModelOptions: [
+            { value: 'volcengine/seedance-2', label: 'Seedance 2' },
+            { value: 'fal-ai/kling-video/v3/pro', label: 'Kling 3.0 Pro' },
+          ],
+        })}
+      />,
+    );
+
+    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows resize handles only after the area is selected in selection mode', async () => {

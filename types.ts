@@ -104,6 +104,13 @@ export type GenerationFalOptions = Partial<{
   klingVariant: 'standard' | 'pro';
   klingO1Variant: 'refI2V' | 'edit' | 'fflf' | 'refV2V';
   klingO1KeepAudio: boolean;
+  klingV3Duration: '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  klingV3GenerateAudio: boolean;
+  klingV3CfgScale: '0' | '0.25' | '0.5' | '0.75' | '1';
+  klingV3MultiPromptEnabled: boolean;
+  klingV3MultiPrompt: string;
+  klingV3Shot1Duration: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  klingV3Shot2Duration: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   negativePrompt: string;
   wanTargetResolution: '720p' | '1080p';
   wanCreativity: 0 | 1 | 2 | 3 | 4;
@@ -242,6 +249,13 @@ export interface CanvasVideoPromptBar extends CanvasRect {
   modelId?: string; // Missing means the legacy Volcengine Seedance 2 bar.
   prompt: string;
   negativePrompt: string;
+  klingV3MultiPrompt?: string;
+  klingV3Duration?: '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  klingV3GenerateAudio?: boolean;
+  klingV3CfgScale?: '0' | '0.25' | '0.5' | '0.75' | '1';
+  klingV3MultiPromptEnabled?: boolean;
+  klingV3Shot1Duration?: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  klingV3Shot2Duration?: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   seedance2Variant: Seedance2Variant;
   seedance2AspectRatio: GenerationVolcengineOptions['seedance2AspectRatio'];
   seedance2Resolution: GenerationVolcengineOptions['seedance2Resolution'];

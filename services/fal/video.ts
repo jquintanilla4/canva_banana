@@ -19,6 +19,9 @@ import {
 import {
   HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
+  KLING_V3_IMAGE_TO_VIDEO_MODEL_ID,
+  KLING_V3_TEXT_TO_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
   KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID,
   KLING_O1_VIDEO_EDIT_MODEL_ID,
   KLING_O1_VIDEO_FFLF_MODEL_ID,
@@ -456,6 +459,78 @@ export const generateImageToVideo = async (
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);
+  }
+
+  if (modelId === KLING_V3_VIDEO_MODEL_ID) {
+    const trimmedPrompt = prompt.trim();
+    const useMultiPrompt = options.klingV3MultiPromptEnabled === true;
+    const multiPrompt = typeof options.klingV3MultiPrompt === 'string' ? options.klingV3MultiPrompt.trim() : '';
+    const duration = options.klingV3Duration === '3' || options.klingV3Duration === '4' || options.klingV3Duration === '5'
+      || options.klingV3Duration === '6' || options.klingV3Duration === '7' || options.klingV3Duration === '8'
+      || options.klingV3Duration === '9' || options.klingV3Duration === '10' || options.klingV3Duration === '11'
+      || options.klingV3Duration === '12' || options.klingV3Duration === '13' || options.klingV3Duration === '14'
+      || options.klingV3Duration === '15'
+      ? options.klingV3Duration
+      : '5';
+    const shot1Duration = options.klingV3Shot1Duration === '1' || options.klingV3Shot1Duration === '2'
+      || options.klingV3Shot1Duration === '3' || options.klingV3Shot1Duration === '4' || options.klingV3Shot1Duration === '5'
+      || options.klingV3Shot1Duration === '6' || options.klingV3Shot1Duration === '7' || options.klingV3Shot1Duration === '8'
+      || options.klingV3Shot1Duration === '9' || options.klingV3Shot1Duration === '10' || options.klingV3Shot1Duration === '11'
+      || options.klingV3Shot1Duration === '12' || options.klingV3Shot1Duration === '13' || options.klingV3Shot1Duration === '14'
+      || options.klingV3Shot1Duration === '15'
+      ? options.klingV3Shot1Duration
+      : '5';
+    const shot2Duration = options.klingV3Shot2Duration === '1' || options.klingV3Shot2Duration === '2'
+      || options.klingV3Shot2Duration === '3' || options.klingV3Shot2Duration === '4' || options.klingV3Shot2Duration === '5'
+      || options.klingV3Shot2Duration === '6' || options.klingV3Shot2Duration === '7' || options.klingV3Shot2Duration === '8'
+      || options.klingV3Shot2Duration === '9' || options.klingV3Shot2Duration === '10' || options.klingV3Shot2Duration === '11'
+      || options.klingV3Shot2Duration === '12' || options.klingV3Shot2Duration === '13' || options.klingV3Shot2Duration === '14'
+      || options.klingV3Shot2Duration === '15'
+      ? options.klingV3Shot2Duration
+      : '5';
+    const cfgScale = options.klingV3CfgScale === '0' || options.klingV3CfgScale === '0.25'
+      || options.klingV3CfgScale === '0.5' || options.klingV3CfgScale === '0.75' || options.klingV3CfgScale === '1'
+      ? Number(options.klingV3CfgScale)
+      : 0.5;
+    const negativePrompt = typeof options.negativePrompt === 'string' && options.negativePrompt.trim()
+      ? options.negativePrompt.trim()
+      : 'blur, distort, and low quality';
+    const sharedPayload: Record<string, unknown> = {
+      generate_audio: options.klingV3GenerateAudio ?? true,
+      negative_prompt: negativePrompt,
+      cfg_scale: cfgScale,
+    };
+
+    if (useMultiPrompt) {
+      if (!trimmedPrompt || !multiPrompt) {
+        throw new Error('Kling 3.0 Pro multi prompt requires both prompts.');
+      }
+      sharedPayload.multi_prompt = [
+        { prompt: trimmedPrompt, duration: shot1Duration },
+        { prompt: multiPrompt, duration: shot2Duration },
+      ];
+      sharedPayload.shot_type = 'customize';
+    } else {
+      if (!trimmedPrompt) {
+        throw new Error('Kling 3.0 Pro requires a prompt.');
+      }
+      sharedPayload.prompt = trimmedPrompt;
+      sharedPayload.duration = duration;
+    }
+
+    if (image) {
+      const imageUrl = await uploadImageElementToFal(image);
+      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage) : undefined;
+      const inputPayload: Record<string, unknown> = {
+        ...sharedPayload,
+        start_image_url: imageUrl,
+        ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
+      };
+
+      return subscribeForVideoUrl(KLING_V3_IMAGE_TO_VIDEO_MODEL_ID, inputPayload, options);
+    }
+
+    return subscribeForVideoUrl(KLING_V3_TEXT_TO_VIDEO_MODEL_ID, sharedPayload, options);
   }
 
   const isWan27VideoModel = modelId === WAN_27_VIDEO_MODEL_ID;

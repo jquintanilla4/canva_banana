@@ -196,6 +196,11 @@ interface PromptBarProps {
   modelModeDisabled?: boolean;
   modelControls?: ReadonlyArray<FalModelControlConfig>;
   promptPlaceholder?: string;
+  showMultiPrompt?: boolean;
+  multiPrompt?: string;
+  onMultiPromptChange?: (prompt: string) => void;
+  multiPromptPlaceholder?: string;
+  multiPromptOutlineColor?: string;
   showNegativePrompt?: boolean;
   negativePrompt?: string;
   onNegativePromptChange?: (prompt: string) => void;
@@ -233,6 +238,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   modelModeDisabled,
   modelControls,
   promptPlaceholder,
+  showMultiPrompt,
+  multiPrompt,
+  onMultiPromptChange,
+  multiPromptPlaceholder,
+  multiPromptOutlineColor,
   showNegativePrompt,
   negativePrompt,
   onNegativePromptChange,
@@ -256,6 +266,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const resolvedSizeMode = sizeMode as 'full' | 'mini';
   // Prompt input surface with dynamic model selectors and optional negative prompt for video flows.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const multiPromptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const negativeTextareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);
   const modelSelectRef = useRef<HTMLSelectElement>(null);
@@ -347,6 +358,16 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     }
     wasLoading.current = isLoading;
   }, [isLoading, inputDisabled]);
+
+  useLayoutEffect(() => {
+    if (!showMultiPrompt) {
+      return;
+    }
+    if (multiPromptTextareaRef.current) {
+      multiPromptTextareaRef.current.style.height = 'auto';
+      multiPromptTextareaRef.current.style.height = `${multiPromptTextareaRef.current.scrollHeight}px`;
+    }
+  }, [multiPrompt, showMultiPrompt]);
 
   useLayoutEffect(() => {
     if (!showNegativePrompt) {
@@ -544,6 +565,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       ? "Upload or select an image to begin editing..."
       : "Describe your edit or image idea... (Cmd/Ctrl + Enter to generate)"
   );
+  const resolvedMultiPromptPlaceholder = multiPromptPlaceholder ?? 'Describe the second shot...';
   const resolvedNegativePromptPlaceholder = negativePromptPlaceholder ?? 'What should the video avoid? (negative prompt)';
   const activeModeClassName = cameraThemeActive ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white';
   const submitButtonAccentClassName = cameraThemeActive ? 'bg-amber-500 hover:bg-amber-400' : 'bg-green-600 hover:bg-green-500';
@@ -570,14 +592,37 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const containerBaseClass = `relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex ${isMiniMode ? 'items-center' : 'items-end'} gap-[1.1rem] transition-all duration-300 ease-out ${isMiniMode ? 'py-[0.48rem] pl-[0.7rem] pr-[0.8rem]' : 'py-[0.81rem] pl-[0.83rem] pr-[1.15rem]'}`;
   const promptContainerClass = `${containerBaseClass} ${promptOutlineColor ? 'border' : ''}`;
   const negativePromptContainerClass = `${containerBaseClass} ${negativePromptOutlineColor ? 'border' : ''}`;
+  const multiPromptContainerClass = `${containerBaseClass} ${multiPromptOutlineColor ? 'border' : ''}`;
   const promptContainerStyle = promptOutlineColor ? { borderColor: promptOutlineColor } : undefined;
   const negativePromptContainerStyle = negativePromptOutlineColor ? { borderColor: negativePromptOutlineColor } : undefined;
+  const multiPromptContainerStyle = multiPromptOutlineColor ? { borderColor: multiPromptOutlineColor } : undefined;
   const textareaMinHeightRem = isMiniMode ? PROMPT_TEXTAREA_MINI_HEIGHT_REM : PROMPT_TEXTAREA_MIN_HEIGHT_REM;
   const textareaMaxHeightRem = isMiniMode ? PROMPT_TEXTAREA_MINI_MAX_HEIGHT_REM : PROMPT_TEXTAREA_MAX_HEIGHT_REM;
   const content = (
     <div className={`flex ${leadingAccessory ? `${isMiniMode ? 'items-center' : 'items-end'} gap-3` : ''}`}>
       {leadingAccessory}
       <div className="flex flex-1 flex-col gap-3">
+        {!isMiniMode && showMultiPrompt && (
+          <div className={multiPromptContainerClass} style={multiPromptContainerStyle}>
+            <div className="flex flex-1 flex-col">
+              <div className="flex items-center justify-between pr-1">
+                <span className="text-xs font-semibold text-sky-200 uppercase tracking-wide">Multi prompt</span>
+              </div>
+              <textarea
+                ref={multiPromptTextareaRef}
+                value={multiPrompt ?? ''}
+                onChange={(e) => onMultiPromptChange?.(e.target.value)}
+                onKeyDown={handleSubmitShortcut}
+                placeholder={resolvedMultiPromptPlaceholder}
+                disabled={isLoading || !onMultiPromptChange}
+                rows={3}
+                className="flex-1 appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+                style={{ minHeight: `${PROMPT_TEXTAREA_MIN_HEIGHT_REM}rem`, maxHeight: `${PROMPT_TEXTAREA_MAX_HEIGHT_REM}rem`, ...textareaPaintStyle }}
+                aria-label="Multi prompt input"
+              />
+            </div>
+          </div>
+        )}
         {!isMiniMode && showNegativePrompt && (
           <div className={negativePromptContainerClass} style={negativePromptContainerStyle}>
             <div className="flex flex-1 flex-col">

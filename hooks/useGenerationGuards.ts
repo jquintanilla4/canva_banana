@@ -5,6 +5,7 @@ import {
   getFalNumImageMaxForModel,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
   isRecraftV4ProModel,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
@@ -36,6 +37,7 @@ type Args = {
   isGrokModel: boolean; // Grok text-to-image flag.
   isGrokImagineVideoModel: boolean;
   isKlingVideoModel: boolean;
+  isKlingV3VideoModel?: boolean;
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isVeo31VideoModel: boolean;
@@ -78,6 +80,7 @@ export function useGenerationGuards({
   isGrokModel, // Grok text-to-image flag.
   isGrokImagineVideoModel,
   isKlingVideoModel,
+  isKlingV3VideoModel = false,
   isKling26ControlVideoModel,
   isHailuoVideoModel,
   isVeo31VideoModel,
@@ -102,6 +105,7 @@ export function useGenerationGuards({
   const isHeygenV3LipsyncVideoModel = isVideoMode && falModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan27VideoModel = isVideoMode && falModelId === WAN_27_VIDEO_MODEL_ID;
+  const isKlingV3SmartVideoModel = isVideoMode && (isKlingV3VideoModel || falModelId === KLING_V3_VIDEO_MODEL_ID);
   const isWan27ReferenceMode = isWan27VideoModel && wan27VideoVariant === 'reference';
   const isWan27EditMode = isWan27VideoModel && wan27VideoVariant === 'edit';
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
@@ -129,6 +133,11 @@ export function useGenerationGuards({
     && !isWan27ReferenceMode
     && !isWan27EditMode
     && primarySelectionMediaType === 'video'
+    && !hasPrimaryImage;
+  const hasKlingV3UnsupportedSelection = apiProvider === 'fal'
+    && isVideoMode
+    && isKlingV3SmartVideoModel
+    && primarySelectionMediaType !== null
     && !hasPrimaryImage;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
@@ -160,7 +169,7 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isSeedance2VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isSeedance2VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKling26Control = usingFal && isKling26ControlVideoModel && !hasKling26ControlStillImage;
@@ -177,6 +186,7 @@ export function useGenerationGuards({
       (usingFal && isWan27ReferenceMode && !hasWan27ReferenceAssets) ||
       hasSeedance2SmartUnsupportedSelection ||
       hasWan27SmartUnsupportedSelection ||
+      hasKlingV3UnsupportedSelection ||
       requiresSelectedImageForUpscale ||
       requiresSelectedImageForVideo ||
       requiresSelectedImageForWanAnimate ||
@@ -221,6 +231,15 @@ export function useGenerationGuards({
             return 'Optionally describe the motion or scene, or shift-click another still image to set the end frame...';
           }
           return 'Describe the video you want to create, or select an image for image-to-video...';
+        }
+        if (isKlingV3SmartVideoModel) {
+          if (hasKlingV3UnsupportedSelection) {
+            return 'Kling 3.0 Pro uses a still image as the first frame. Clear the current video or audio selection to run text-to-video...';
+          }
+          if (hasPrimaryImage) {
+            return 'Describe the first Kling 3.0 Pro shot, or shift-click another still image to set the end frame...';
+          }
+          return 'Describe the Kling 3.0 Pro video you want to create, or select an image for image-to-video...';
         }
         if (isHeygenV3LipsyncVideoModel) {
           return 'Optional: describe the video segment to lip sync, such as "from 3.5s to 8s", or leave blank for the full video.';
@@ -326,6 +345,7 @@ export function useGenerationGuards({
     hasSourceVideo,
     hasSeedance2SmartUnsupportedSelection,
     hasWan27SmartUnsupportedSelection,
+    hasKlingV3UnsupportedSelection,
     primarySelectionMediaType,
     isGrokImagineVideoModel,
     isHeygenV3LipsyncVideoModel,
@@ -334,6 +354,7 @@ export function useGenerationGuards({
     isKling26ControlVideoModel,
     isKlingO1EditMode,
     isKlingO1VideoInputMode,
+    isKlingV3SmartVideoModel,
     isKlingVideoModel,
     isSeedance2VideoModel,
     isWanAnimateVideoModel,

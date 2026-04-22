@@ -44,6 +44,9 @@ export const KLING_O1_VIDEO_MODEL_IDS = [
 export const KLING_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/image-to-video' as const;
 export const KLING_VIDEO_STANDARD_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video' as const;
 export const KLING_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video' as const;
+export const KLING_V3_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro' as const; // Smart Kling v3 selector id.
+export const KLING_V3_TEXT_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/text-to-video' as const; // Kling v3 t2v endpoint.
+export const KLING_V3_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/image-to-video' as const; // Kling v3 i2v endpoint.
 export const KLING_26_CONTROL_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/standard/motion-control' as const;
 export const KLING_26_CONTROL_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/motion-control' as const;
 export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace' as const;
@@ -76,6 +79,10 @@ export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 export type HailuoVariant = 'standard' | 'pro';
 export type KlingVariant = 'standard' | 'pro';
 export type KlingO1Variant = 'refI2V' | 'edit' | 'fflf' | 'refV2V';
+export type KlingV3DurationSelectionValue = '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+export type KlingV3ShotDurationSelectionValue = '1' | '2' | KlingV3DurationSelectionValue;
+export type KlingV3CfgScaleSelectionValue = '0' | '0.25' | '0.5' | '0.75' | '1';
+export type KlingV3BooleanSelectionValue = 'true' | 'false';
 export type Kling26ControlVariant = 'standard' | 'pro';
 export type Kling26ControlDriver = 'image' | 'video';
 export type Veo31Variant = 'i2v-fflf' | 'extend';
@@ -133,6 +140,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
   { value: KLING_26_CONTROL_VIDEO_MODEL_ID, label: 'Kling 2.6 Control' },
+  { value: KLING_V3_VIDEO_MODEL_ID, label: 'Kling 3.0 Pro' },
   { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
@@ -168,6 +176,46 @@ export const KLING_O1_VARIANT_OPTIONS: ReadonlyArray<{ value: KlingO1Variant; la
   { value: 'edit', label: 'Edit' },
   { value: 'refV2V', label: 'Ref-v2v' },
   { value: 'fflf', label: 'FFLF (First/Last)' },
+] as const;
+
+export const KLING_V3_DURATION_OPTIONS: ReadonlyArray<{ value: KlingV3DurationSelectionValue; label: string }> = [
+  { value: '3', label: '3s' },
+  { value: '4', label: '4s' },
+  { value: '5', label: '5s' },
+  { value: '6', label: '6s' },
+  { value: '7', label: '7s' },
+  { value: '8', label: '8s' },
+  { value: '9', label: '9s' },
+  { value: '10', label: '10s' },
+  { value: '11', label: '11s' },
+  { value: '12', label: '12s' },
+  { value: '13', label: '13s' },
+  { value: '14', label: '14s' },
+  { value: '15', label: '15s' },
+] as const;
+
+export const KLING_V3_SHOT_DURATION_OPTIONS: ReadonlyArray<{ value: KlingV3ShotDurationSelectionValue; label: string }> = [
+  { value: '1', label: '1s' },
+  { value: '2', label: '2s' },
+  ...KLING_V3_DURATION_OPTIONS,
+] as const;
+
+export const KLING_V3_AUDIO_OPTIONS: ReadonlyArray<{ value: KlingV3BooleanSelectionValue; label: string }> = [
+  { value: 'false', label: 'Off' },
+  { value: 'true', label: 'On' },
+] as const;
+
+export const KLING_V3_MULTI_PROMPT_OPTIONS: ReadonlyArray<{ value: KlingV3BooleanSelectionValue; label: string }> = [
+  { value: 'false', label: 'Off' },
+  { value: 'true', label: 'On' },
+] as const;
+
+export const KLING_V3_CFG_SCALE_OPTIONS: ReadonlyArray<{ value: KlingV3CfgScaleSelectionValue; label: string }> = [
+  { value: '0', label: '0' },
+  { value: '0.25', label: '0.25' },
+  { value: '0.5', label: '0.5' },
+  { value: '0.75', label: '0.75' },
+  { value: '1', label: '1' },
 ] as const;
 
 export const KLING26_CONTROL_VARIANT_OPTIONS: ReadonlyArray<{ value: Kling26ControlVariant; label: string }> = [
@@ -804,6 +852,15 @@ export const isGrokImagineVideoResolutionSelectionValue = (value: unknown): valu
 export const isGrokImagineVideoAspectRatioSelectionValue = (value: unknown): value is GrokImagineVideoAspectRatioSelectionValue =>
   value === 'auto' || value === '16:9' || value === '4:3' || value === '3:2' || value === '1:1' || value === '2:3' || value === '3:4' || value === '9:16';
 
+export const isKlingV3DurationSelectionValue = (value: unknown): value is KlingV3DurationSelectionValue =>
+  value === '3' || value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
+
+export const isKlingV3ShotDurationSelectionValue = (value: unknown): value is KlingV3ShotDurationSelectionValue =>
+  value === '1' || value === '2' || isKlingV3DurationSelectionValue(value);
+
+export const isKlingV3CfgScaleSelectionValue = (value: unknown): value is KlingV3CfgScaleSelectionValue =>
+  value === '0' || value === '0.25' || value === '0.5' || value === '0.75' || value === '1';
+
 export const isVeo31DurationSelectionValue = (value: unknown): value is Veo31DurationSelectionValue =>
   value === '4s' || value === '6s' || value === '8s' || value === '7s';
 
@@ -853,6 +910,9 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   }
   if (value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID) {
     return HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+  }
+  if (value === KLING_V3_TEXT_TO_VIDEO_MODEL_ID || value === KLING_V3_IMAGE_TO_VIDEO_MODEL_ID) {
+    return KLING_V3_VIDEO_MODEL_ID;
   }
   if (value === LEGACY_WAN_26_VIDEO_MODEL_ID || value === WAN_27_TEXT_TO_VIDEO_MODEL_ID || value === WAN_27_IMAGE_TO_VIDEO_MODEL_ID || value === WAN_27_REFERENCE_TO_VIDEO_MODEL_ID || value === WAN_27_EDIT_VIDEO_MODEL_ID) {
     return WAN_27_VIDEO_MODEL_ID;
@@ -997,6 +1057,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Seedance 2 reference mode supports up to 9 image refs.
   [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Fal Seedance 2 reference mode supports up to 9 image refs.
+  [KLING_V3_VIDEO_MODEL_ID]: 0,
   [SCAIL_VIDEO_MODEL_ID]: 0,
 };
 

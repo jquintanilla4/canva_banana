@@ -16,6 +16,7 @@ import {
   KLING_O1_VIDEO_EDIT_MODEL_ID,
   KLING_O1_VIDEO_REF_V2V_MODEL_ID,
   KLING_O1_VIDEO_FFLF_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
@@ -32,6 +33,9 @@ import {
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
+  isKlingV3CfgScaleSelectionValue,
+  isKlingV3DurationSelectionValue,
+  isKlingV3ShotDurationSelectionValue,
   isKlingO1VideoModelId,
   isFalImageModelId,
   isFalVideoModelId,
@@ -76,6 +80,9 @@ import type {
   Kling26ControlDriver,
   Kling26ControlVariant,
   KlingO1Variant,
+  KlingV3CfgScaleSelectionValue,
+  KlingV3DurationSelectionValue,
+  KlingV3ShotDurationSelectionValue,
   KlingVariant,
   InfinitalkAccelerationSelectionValue,
   InfinitalkDurationSelectionValue,
@@ -122,6 +129,7 @@ type FalDerivedState = {
   falModelId: FalModelId;
   isVideoMode: boolean;
   isKlingVideoModel: boolean;
+  isKlingV3VideoModel: boolean;
   isKlingO1VideoModel: boolean;
   isKling26ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
@@ -151,6 +159,13 @@ type FalHandlers = {
   handleFalVideoDurationChange: (value: string) => void;
   handleHailuoVariantChange: (value: string) => void;
   handleKlingVariantChange: (value: string) => void;
+  handleKlingV3DurationChange: (value: string) => void;
+  handleKlingV3GenerateAudioChange: (value: boolean) => void;
+  handleKlingV3CfgScaleChange: (value: string) => void;
+  handleKlingV3MultiPromptEnabledChange: (value: boolean) => void;
+  handleKlingV3MultiPromptChange: (value: string) => void;
+  handleKlingV3Shot1DurationChange: (value: string) => void;
+  handleKlingV3Shot2DurationChange: (value: string) => void;
   handleKlingO1VariantChange: (value: string) => void;
   handleKlingO1KeepAudioChange: (value: boolean) => void;
   handleKling26ControlVariantChange: (value: string) => void;
@@ -223,6 +238,13 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   falVideoDuration: FalVideoDuration;
   hailuoVariant: HailuoVariant;
   klingVariant: KlingVariant;
+  klingV3Duration: KlingV3DurationSelectionValue;
+  klingV3GenerateAudio: boolean;
+  klingV3CfgScale: KlingV3CfgScaleSelectionValue;
+  klingV3MultiPromptEnabled: boolean;
+  klingV3MultiPrompt: string;
+  klingV3Shot1Duration: KlingV3ShotDurationSelectionValue;
+  klingV3Shot2Duration: KlingV3ShotDurationSelectionValue;
   klingO1Variant: KlingO1Variant;
   klingO1KeepAudio: boolean;
   kling26ControlVariant: Kling26ControlVariant;
@@ -290,6 +312,13 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setFalVideoDuration: Dispatch<SetStateAction<FalVideoDuration>>;
   setHailuoVariant: Dispatch<SetStateAction<HailuoVariant>>;
   setKlingVariant: Dispatch<SetStateAction<KlingVariant>>;
+  setKlingV3Duration: Dispatch<SetStateAction<KlingV3DurationSelectionValue>>;
+  setKlingV3GenerateAudio: Dispatch<SetStateAction<boolean>>;
+  setKlingV3CfgScale: Dispatch<SetStateAction<KlingV3CfgScaleSelectionValue>>;
+  setKlingV3MultiPromptEnabled: Dispatch<SetStateAction<boolean>>;
+  setKlingV3MultiPrompt: Dispatch<SetStateAction<string>>;
+  setKlingV3Shot1Duration: Dispatch<SetStateAction<KlingV3ShotDurationSelectionValue>>;
+  setKlingV3Shot2Duration: Dispatch<SetStateAction<KlingV3ShotDurationSelectionValue>>;
   setKlingO1Variant: Dispatch<SetStateAction<KlingO1Variant>>;
   setKlingO1KeepAudio: Dispatch<SetStateAction<boolean>>;
   setKling26ControlVariant: Dispatch<SetStateAction<Kling26ControlVariant>>;
@@ -361,6 +390,13 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [falVideoDuration, setFalVideoDuration] = useState<FalVideoDuration>('6');
   const [hailuoVariant, setHailuoVariant] = useState<HailuoVariant>('standard');
   const [klingVariant, setKlingVariant] = useState<KlingVariant>('standard');
+  const [klingV3Duration, setKlingV3Duration] = useState<KlingV3DurationSelectionValue>('5');
+  const [klingV3GenerateAudio, setKlingV3GenerateAudio] = useState<boolean>(true);
+  const [klingV3CfgScale, setKlingV3CfgScale] = useState<KlingV3CfgScaleSelectionValue>('0.5');
+  const [klingV3MultiPromptEnabled, setKlingV3MultiPromptEnabled] = useState<boolean>(false);
+  const [klingV3MultiPrompt, setKlingV3MultiPrompt] = useState<string>('');
+  const [klingV3Shot1Duration, setKlingV3Shot1Duration] = useState<KlingV3ShotDurationSelectionValue>('5');
+  const [klingV3Shot2Duration, setKlingV3Shot2Duration] = useState<KlingV3ShotDurationSelectionValue>('5');
   const [klingO1Variant, setKlingO1Variant] = useState<KlingO1Variant>('refI2V');
   const [klingO1KeepAudio, setKlingO1KeepAudio] = useState<boolean>(false);
   const [kling26ControlVariant, setKling26ControlVariant] = useState<Kling26ControlVariant>('standard');
@@ -429,6 +465,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   );
   const isVideoMode = falModelMode === 'video';
   const isKlingVideoModel = isVideoMode && falVideoModelId === KLING_VIDEO_MODEL_ID;
+  const isKlingV3VideoModel = isVideoMode && falVideoModelId === KLING_V3_VIDEO_MODEL_ID;
   const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelId);
   const isKling26ControlVideoModel = isVideoMode && falVideoModelId === KLING_26_CONTROL_VIDEO_MODEL_ID;
   const isHailuoVideoModel = isVideoMode && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
@@ -645,6 +682,42 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const handleKlingVariantChange = useCallback((value: string) => {
     const variant = value === 'pro' ? 'pro' : 'standard';
     setKlingVariant(variant);
+  }, []);
+
+  const handleKlingV3DurationChange = useCallback((value: string) => {
+    if (isKlingV3DurationSelectionValue(value)) {
+      setKlingV3Duration(value);
+    }
+  }, []);
+
+  const handleKlingV3GenerateAudioChange = useCallback((value: boolean) => {
+    setKlingV3GenerateAudio(Boolean(value));
+  }, []);
+
+  const handleKlingV3CfgScaleChange = useCallback((value: string) => {
+    if (isKlingV3CfgScaleSelectionValue(value)) {
+      setKlingV3CfgScale(value);
+    }
+  }, []);
+
+  const handleKlingV3MultiPromptEnabledChange = useCallback((value: boolean) => {
+    setKlingV3MultiPromptEnabled(Boolean(value));
+  }, []);
+
+  const handleKlingV3MultiPromptChange = useCallback((value: string) => {
+    setKlingV3MultiPrompt(value);
+  }, []);
+
+  const handleKlingV3Shot1DurationChange = useCallback((value: string) => {
+    if (isKlingV3ShotDurationSelectionValue(value)) {
+      setKlingV3Shot1Duration(value);
+    }
+  }, []);
+
+  const handleKlingV3Shot2DurationChange = useCallback((value: string) => {
+    if (isKlingV3ShotDurationSelectionValue(value)) {
+      setKlingV3Shot2Duration(value);
+    }
   }, []);
 
   const handleKlingO1VariantChange = useCallback((value: string) => {
@@ -1018,6 +1091,13 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     falVideoDuration,
     hailuoVariant,
     klingVariant,
+    klingV3Duration,
+    klingV3GenerateAudio,
+    klingV3CfgScale,
+    klingV3MultiPromptEnabled,
+    klingV3MultiPrompt,
+    klingV3Shot1Duration,
+    klingV3Shot2Duration,
     klingO1Variant,
     klingO1KeepAudio,
     kling26ControlVariant,
@@ -1083,6 +1163,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     falCreativity,
     isVideoMode,
     isKlingVideoModel,
+    isKlingV3VideoModel,
     isKlingO1VideoModel,
     isKling26ControlVideoModel,
     isHailuoVideoModel,
@@ -1107,6 +1188,13 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleFalVideoDurationChange,
     handleHailuoVariantChange,
     handleKlingVariantChange,
+    handleKlingV3DurationChange,
+    handleKlingV3GenerateAudioChange,
+    handleKlingV3CfgScaleChange,
+    handleKlingV3MultiPromptEnabledChange,
+    handleKlingV3MultiPromptChange,
+    handleKlingV3Shot1DurationChange,
+    handleKlingV3Shot2DurationChange,
     handleKlingO1VariantChange,
     handleKlingO1KeepAudioChange,
     handleKling26ControlVariantChange,
@@ -1176,6 +1264,13 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setFalVideoDuration,
     setHailuoVariant,
     setKlingVariant,
+    setKlingV3Duration,
+    setKlingV3GenerateAudio,
+    setKlingV3CfgScale,
+    setKlingV3MultiPromptEnabled,
+    setKlingV3MultiPrompt,
+    setKlingV3Shot1Duration,
+    setKlingV3Shot2Duration,
     setKlingO1Variant,
     setKlingO1KeepAudio,
     setKling26ControlVariant,

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
   KLING_O1_VIDEO_MODEL_ID,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -350,6 +351,97 @@ describe('useGeneration (seedance 2)', () => {
         seedance2GenerateAudio: false,
       }),
     );
+  });
+
+  it('forwards Kling v3 smart promptbar settings to Fal video generation', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = KLING_V3_VIDEO_MODEL_ID;
+    fal.falModelId = KLING_V3_VIDEO_MODEL_ID;
+    fal.isKlingV3VideoModel = true;
+    fal.klingV3Duration = '12';
+    fal.klingV3GenerateAudio = true;
+    fal.klingV3CfgScale = '0.75';
+    fal.klingV3MultiPromptEnabled = true;
+    fal.klingV3MultiPrompt = 'Second shot pushes through clouds';
+    fal.klingV3Shot1Duration = '4';
+    fal.klingV3Shot2Duration = '6';
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'First shot rises over a neon harbor',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: 'avoid blur',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'First shot rises over a neon harbor',
+      null,
+      expect.objectContaining({
+        modelId: KLING_V3_VIDEO_MODEL_ID,
+        negativePrompt: 'avoid blur',
+        klingV3Duration: '12',
+        klingV3GenerateAudio: true,
+        klingV3CfgScale: '0.75',
+        klingV3MultiPromptEnabled: true,
+        klingV3MultiPrompt: 'Second shot pushes through clouds',
+        klingV3Shot1Duration: '4',
+        klingV3Shot2Duration: '6',
+      }),
+    );
+  });
+
+  it('rejects Kling v3 multi prompt runs when the second prompt is empty', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = KLING_V3_VIDEO_MODEL_ID;
+    fal.falModelId = KLING_V3_VIDEO_MODEL_ID;
+    fal.isKlingV3VideoModel = true;
+    fal.klingV3MultiPromptEnabled = true;
+    fal.klingV3MultiPrompt = '   ';
+    const setError = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'First shot',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(setError).toHaveBeenCalledWith('Kling 3.0 Pro multi prompt requires a second prompt.');
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
   });
 
   it('routes Seedance 2 (FAL) Reference runs through Fal with reference media files', async () => {

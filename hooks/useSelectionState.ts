@@ -41,6 +41,7 @@ type SelectionFalSettings = Pick<
   | 'veo31Variant'
 > & {
   wan27VideoVariant?: UseFalSettingsResult['wan27VideoVariant']; // Missing values fall back to Smart.
+  isKlingV3VideoModel?: UseFalSettingsResult['isKlingV3VideoModel']; // Older test stubs and snapshots do not carry this flag.
 };
 
 type SelectionOptions = {
@@ -98,6 +99,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     klingVariant,
     klingO1Variant,
   isKlingProVideoSelection,
+  isKlingV3VideoModel = false,
   isKlingO1VideoModel,
   isKling26ControlVideoModel,
   isKlingO1EditMode,
@@ -154,6 +156,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     || isScailVideoModel
     || isWan27EditMode;
   const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
+  const isKlingV3SmartMode = apiProvider === 'fal' && falModelMode === 'video' && isKlingV3VideoModel;
   const isSeedance15FflfMode = isSeedance15VideoModel;
   const isSeedance2SmartMode = apiProvider === 'fal'
     && falModelMode === 'video'
@@ -439,7 +442,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKlingO1FflfMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO1FflfMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -684,6 +687,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     falVideoModelId,
     images,
     isKlingProVideoSelection,
+    isKlingV3SmartMode,
     isKlingO1FflfMode,
     isWan27EditMode,
     isWan27VideoModel,

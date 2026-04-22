@@ -28,6 +28,9 @@ import {
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isKlingV3CfgScaleSelectionValue,
+  isKlingV3DurationSelectionValue,
+  isKlingV3ShotDurationSelectionValue,
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
@@ -187,6 +190,13 @@ export function useSnapshotIO({
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    klingV3Duration,
+    klingV3GenerateAudio,
+    klingV3CfgScale,
+    klingV3MultiPromptEnabled,
+    klingV3MultiPrompt,
+    klingV3Shot1Duration,
+    klingV3Shot2Duration,
     setFalModelMode,
     setFalImageModelId,
     setFalVideoModelId,
@@ -233,6 +243,13 @@ export function useSnapshotIO({
     setSeedance2Duration,
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
+    setKlingV3Duration,
+    setKlingV3GenerateAudio,
+    setKlingV3CfgScale,
+    setKlingV3MultiPromptEnabled,
+    setKlingV3MultiPrompt,
+    setKlingV3Shot1Duration,
+    setKlingV3Shot2Duration,
   } = fal;
 
   const {
@@ -314,6 +331,13 @@ export function useSnapshotIO({
       seedance2Duration,
       seedance2GenerateAudio,
       seedance2CameraFixed,
+      klingV3Duration,
+      klingV3GenerateAudio,
+      klingV3CfgScale,
+      klingV3MultiPromptEnabled,
+      klingV3MultiPrompt,
+      klingV3Shot1Duration,
+      klingV3Shot2Duration,
       selectedImageIds: [...selectedImageIds],
       selectedNoteIds: [...selectedNoteIds],
       referenceImageIds: [...referenceImageIds],
@@ -381,6 +405,13 @@ export function useSnapshotIO({
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    klingV3Duration,
+    klingV3GenerateAudio,
+    klingV3CfgScale,
+    klingV3MultiPromptEnabled,
+    klingV3MultiPrompt,
+    klingV3Shot1Duration,
+    klingV3Shot2Duration,
     falImageSizeSelection,
     falModelId,
     falNoiseScale,
@@ -763,6 +794,27 @@ export function useSnapshotIO({
         }
         if (typeof meta.seedance2CameraFixed === 'boolean') {
           setSeedance2CameraFixed(meta.seedance2CameraFixed);
+        }
+        if (isKlingV3DurationSelectionValue(meta.klingV3Duration)) {
+          setKlingV3Duration(meta.klingV3Duration);
+        }
+        if (typeof meta.klingV3GenerateAudio === 'boolean') {
+          setKlingV3GenerateAudio(meta.klingV3GenerateAudio);
+        }
+        if (isKlingV3CfgScaleSelectionValue(meta.klingV3CfgScale)) {
+          setKlingV3CfgScale(meta.klingV3CfgScale);
+        }
+        if (typeof meta.klingV3MultiPromptEnabled === 'boolean') {
+          setKlingV3MultiPromptEnabled(meta.klingV3MultiPromptEnabled);
+        }
+        if (typeof meta.klingV3MultiPrompt === 'string') {
+          setKlingV3MultiPrompt(meta.klingV3MultiPrompt);
+        }
+        if (isKlingV3ShotDurationSelectionValue(meta.klingV3Shot1Duration)) {
+          setKlingV3Shot1Duration(meta.klingV3Shot1Duration);
+        }
+        if (isKlingV3ShotDurationSelectionValue(meta.klingV3Shot2Duration)) {
+          setKlingV3Shot2Duration(meta.klingV3Shot2Duration);
         }
         setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
         setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);

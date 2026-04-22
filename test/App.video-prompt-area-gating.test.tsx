@@ -51,6 +51,13 @@ const mockState = vi.hoisted(() => {
     seedance2Duration: '5',
     seedance2GenerateAudio: false,
     seedance2CameraFixed: false,
+    klingV3MultiPrompt: '',
+    klingV3Duration: '5',
+    klingV3GenerateAudio: true,
+    klingV3CfgScale: '0.5',
+    klingV3MultiPromptEnabled: false,
+    klingV3Shot1Duration: '5',
+    klingV3Shot2Duration: '5',
   };
   const falState: any = {
     falModelMode: 'video',
@@ -59,6 +66,7 @@ const mockState = vi.hoisted(() => {
     falVideoModelId: 'volcengine/seedance-2',
     isVideoMode: true,
     isKlingVideoModel: false,
+    isKlingV3VideoModel: false,
     isKlingO1VideoModel: false,
     isKling26ControlVideoModel: false,
     isHailuoVideoModel: false,
@@ -90,6 +98,13 @@ const mockState = vi.hoisted(() => {
     falVideoDuration: '5',
     hailuoVariant: 'standard',
     klingVariant: 'standard',
+    klingV3Duration: '5',
+    klingV3GenerateAudio: true,
+    klingV3CfgScale: '0.5',
+    klingV3MultiPromptEnabled: false,
+    klingV3MultiPrompt: '',
+    klingV3Shot1Duration: '5',
+    klingV3Shot2Duration: '5',
     klingO1Variant: 'refI2V',
     klingO1KeepAudio: false,
     kling26ControlVariant: 'standard',
@@ -154,6 +169,13 @@ const mockState = vi.hoisted(() => {
   falState.handleFalVideoDurationChange = vi.fn();
   falState.handleHailuoVariantChange = vi.fn();
   falState.handleKlingVariantChange = vi.fn();
+  falState.handleKlingV3DurationChange = vi.fn();
+  falState.handleKlingV3GenerateAudioChange = vi.fn();
+  falState.handleKlingV3CfgScaleChange = vi.fn();
+  falState.handleKlingV3MultiPromptEnabledChange = vi.fn();
+  falState.handleKlingV3MultiPromptChange = vi.fn();
+  falState.handleKlingV3Shot1DurationChange = vi.fn();
+  falState.handleKlingV3Shot2DurationChange = vi.fn();
   falState.handleKlingO1VariantChange = vi.fn();
   falState.handleKlingO1KeepAudioChange = vi.fn();
   falState.handleKling26AudioChange = vi.fn();
@@ -646,6 +668,7 @@ describe('App video prompt area gating', () => {
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual([
       { value: 'volcengine/seedance-2', label: 'Seedance 2' },
       { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
+      { value: 'fal-ai/kling-video/v3/pro', label: 'Kling 3.0 Pro' },
     ]);
     expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'video',
@@ -658,6 +681,51 @@ describe('App video prompt area gating', () => {
     }));
     expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.not.objectContaining({
       volcengineOptions: expect.anything(),
+    }));
+  });
+
+  it('submits Kling v3 embedded prompt bars through smart first and last frame overrides', () => {
+    mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: ['image-1', 'image-2', 'video-1'] }];
+    mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: ['image-1', 'image-2', 'video-1'] }];
+    mockState.images = [buildCanvasMedia('image-1', 'image'), buildCanvasMedia('image-2', 'image'), buildCanvasMedia('video-1', 'video')];
+    mockState.displayedImages = mockState.images;
+    mockState.videoPromptBars = [{
+      ...mockState.baseVideoPromptBar,
+      modelId: 'fal-ai/kling-video/v3/pro',
+      negativePrompt: 'avoid blur',
+      klingV3MultiPrompt: 'Second embedded shot',
+      klingV3Duration: '12',
+      klingV3GenerateAudio: true,
+      klingV3CfgScale: '0.75',
+      klingV3MultiPromptEnabled: true,
+      klingV3Shot1Duration: '4',
+      klingV3Shot2Duration: '6',
+    }];
+    mockState.displayedVideoPromptBars = [...mockState.videoPromptBars];
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'video',
+      provider: 'fal',
+      modelId: 'fal-ai/kling-video/v3/pro',
+      primaryImageId: 'image-1',
+      videoLastFrameImageId: 'image-2',
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+      falOptions: expect.objectContaining({
+        negativePrompt: 'avoid blur',
+        klingV3MultiPrompt: 'Second embedded shot',
+        klingV3Duration: '12',
+        klingV3GenerateAudio: true,
+        klingV3CfgScale: '0.75',
+        klingV3MultiPromptEnabled: true,
+        klingV3Shot1Duration: '4',
+        klingV3Shot2Duration: '6',
+      }),
     }));
   });
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   KLING_DEFAULT_NEGATIVE_PROMPT,
+  KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
@@ -37,10 +38,12 @@ export function useVideoNegativePrompt({
     const isOneToAllVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
     const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
     const isKlingNegativePromptModel = isVideoMode && falVideoModelId === KLING_VIDEO_MODEL_ID;
+    const isKlingV3VideoModel = isVideoMode && falVideoModelId === KLING_V3_VIDEO_MODEL_ID;
     const shouldShowVideoNegativePrompt = isWanVisionEnhancerVideoModel
       || isWan27VideoModel
       || isOneToAllVideoModel
       || isKlingNegativePromptModel
+      || isKlingV3VideoModel
       || isVeo31VideoModel;
 
     const videoNegativePrompt = isWanVisionEnhancerVideoModel || isWan27VideoModel

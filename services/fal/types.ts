@@ -11,6 +11,9 @@ import type {
   GrokImagineVideoAspectRatioSelectionValue,
   GrokImagineVideoDurationSelectionValue,
   GrokImagineVideoResolutionSelectionValue,
+  KlingV3CfgScaleSelectionValue,
+  KlingV3DurationSelectionValue,
+  KlingV3ShotDurationSelectionValue,
   InfinitalkDurationSelectionValue,
   LipsyncSyncMode,
   RecraftRgbColor,
@@ -98,6 +101,13 @@ export interface GenerateVideoOptions {
   referenceImages?: HTMLImageElement[];
   elementImages?: HTMLImageElement[];
   klingO1Variant?: string;
+  klingV3Duration?: KlingV3DurationSelectionValue;
+  klingV3GenerateAudio?: boolean;
+  klingV3CfgScale?: KlingV3CfgScaleSelectionValue;
+  klingV3MultiPromptEnabled?: boolean;
+  klingV3MultiPrompt?: string;
+  klingV3Shot1Duration?: KlingV3ShotDurationSelectionValue;
+  klingV3Shot2Duration?: KlingV3ShotDurationSelectionValue;
   sourceVideoUrl?: string;
   sourceAudioUrl?: string;
   keepAudio?: boolean;

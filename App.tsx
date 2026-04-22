@@ -22,6 +22,7 @@ import {
   isNanoBananaEditModelId,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -33,6 +34,7 @@ import {
   isSeedreamModelId,
 } from './services/modelConfig';
 import {
+  buildKlingV3PromptBarControls,
   buildSeedance2PromptBarControls,
   buildPromptBarModelControls,
   getPromptBarModelOptions,
@@ -316,6 +318,7 @@ export default function App() {
   const isWan27ReferenceMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'reference'; // Wan Reference labels tagged image/video refs.
   const isWan27EditMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'edit'; // Wan Edit uses a source video instead of an end frame.
   const supportsTailFrameSelection = fal.isKlingProVideoSelection
+    || fal.isKlingV3VideoModel
     || isKlingO1FflfMode
     || isVeo31TailCapable
     || (fal.isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode)
@@ -401,6 +404,13 @@ export default function App() {
       seedance2Duration: '5',
       seedance2GenerateAudio: false,
       seedance2CameraFixed: false,
+      klingV3MultiPrompt: '',
+      klingV3Duration: '5',
+      klingV3GenerateAudio: true,
+      klingV3CfgScale: '0.5',
+      klingV3MultiPromptEnabled: false,
+      klingV3Shot1Duration: '5',
+      klingV3Shot2Duration: '5',
       ...snappedRect,
     };
     setState(prevState => ({
@@ -1077,7 +1087,7 @@ export default function App() {
   const videoPromptAreaVariantById = useMemo(() => (
     displayedVideoPromptBars.reduce<Record<string, CanvasVideoPromptBar['seedance2Variant']>>((acc, bar) => {
       if (bar.assignedAreaId) {
-        acc[bar.assignedAreaId] = bar.seedance2Variant; // Each area inherits the active variant from its attached prompt bar.
+        acc[bar.assignedAreaId] = bar.modelId === KLING_V3_VIDEO_MODEL_ID ? 'smart' : bar.seedance2Variant; // Kling v3 embedded bars use first/last-frame smart membership.
       }
       return acc;
     }, {})
@@ -1135,8 +1145,11 @@ export default function App() {
     if (!membership) {
       return;
     }
-    const targetModelId = targetBar.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? FAL_SEEDANCE_2_VIDEO_MODEL_ID : SEEDANCE_2_VIDEO_MODEL_ID; // Missing ids are legacy Volcengine bars.
-    const generationOverrides = buildEmbeddedSeedanceGenerationOverrides(membership, targetBar.seedance2Variant);
+    const isKlingV3PromptBar = targetBar.modelId === KLING_V3_VIDEO_MODEL_ID;
+    const targetModelId = isKlingV3PromptBar
+      ? KLING_V3_VIDEO_MODEL_ID
+      : targetBar.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? FAL_SEEDANCE_2_VIDEO_MODEL_ID : SEEDANCE_2_VIDEO_MODEL_ID; // Missing ids are legacy Volcengine bars.
+    const generationOverrides = buildEmbeddedSeedanceGenerationOverrides(membership, isKlingV3PromptBar ? 'smart' : targetBar.seedance2Variant);
     const seedanceOptions = {
       seedance2Variant: targetBar.seedance2Variant,
       seedance2AspectRatio: targetBar.seedance2AspectRatio,
@@ -1144,14 +1157,26 @@ export default function App() {
       seedance2Duration: targetBar.seedance2Duration,
       seedance2GenerateAudio: targetBar.seedance2GenerateAudio,
     };
+    const klingV3Options = {
+      negativePrompt: targetBar.negativePrompt,
+      klingV3Duration: targetBar.klingV3Duration ?? '5',
+      klingV3GenerateAudio: targetBar.klingV3GenerateAudio ?? true,
+      klingV3CfgScale: targetBar.klingV3CfgScale ?? '0.5',
+      klingV3MultiPromptEnabled: targetBar.klingV3MultiPromptEnabled ?? false,
+      klingV3MultiPrompt: targetBar.klingV3MultiPrompt ?? '',
+      klingV3Shot1Duration: targetBar.klingV3Shot1Duration ?? '5',
+      klingV3Shot2Duration: targetBar.klingV3Shot2Duration ?? '5',
+    };
     void handleGenerate({
       kind: 'video',
       prompt: targetBar.prompt,
-      provider: targetModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? 'fal' : 'volcengine',
+      provider: targetModelId === SEEDANCE_2_VIDEO_MODEL_ID ? 'volcengine' : 'fal',
       modelId: targetModelId,
       modelMode: 'video',
       ...generationOverrides,
-      ...(targetModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID
+      ...(targetModelId === KLING_V3_VIDEO_MODEL_ID
+        ? { falOptions: klingV3Options }
+        : targetModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID
         ? { falOptions: seedanceOptions }
         : { volcengineOptions: { ...seedanceOptions, seedance2CameraFixed: targetBar.seedance2CameraFixed } }),
     });
@@ -1177,43 +1202,65 @@ export default function App() {
   const embeddedVideoPromptBarModelOptions = useMemo(() => ([
     { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
     { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' },
+    { value: KLING_V3_VIDEO_MODEL_ID, label: 'Kling 3.0 Pro' },
   ]), []);
-  const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => buildSeedance2PromptBarControls({
-    idPrefix: bar.id,
-    seedance2Variant: bar.seedance2Variant,
-    seedance2AspectRatio: bar.seedance2AspectRatio ?? '16:9',
-    seedance2Resolution: bar.seedance2Resolution ?? '720p',
-    seedance2Duration: bar.seedance2Duration ?? '5',
-    seedance2GenerateAudio: bar.seedance2GenerateAudio,
-    seedance2CameraFixed: bar.seedance2CameraFixed,
-    showCameraFixed: bar.modelId !== FAL_SEEDANCE_2_VIDEO_MODEL_ID,
-    allowFullResolution: bar.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
-    isLoading,
-    onSeedance2VariantChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-      ...currentBar,
-      seedance2Variant: value,
-    })),
-    onSeedance2AspectRatioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-      ...currentBar,
-      seedance2AspectRatio: value,
-    })),
-    onSeedance2ResolutionChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-      ...currentBar,
-      seedance2Resolution: value,
-    })),
-    onSeedance2DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-      ...currentBar,
-      seedance2Duration: value,
-    })),
-    onSeedance2GenerateAudioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-      ...currentBar,
-      seedance2GenerateAudio: value,
-    })),
-    onSeedance2CameraFixedChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-      ...currentBar,
-      seedance2CameraFixed: value,
-    })),
-  }), [handleEmbeddedPromptBarUpdate, isLoading]);
+  const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => {
+    if (bar.modelId === KLING_V3_VIDEO_MODEL_ID) {
+      return buildKlingV3PromptBarControls({
+        idPrefix: bar.id,
+        klingV3Duration: bar.klingV3Duration ?? '5',
+        klingV3GenerateAudio: bar.klingV3GenerateAudio ?? true,
+        klingV3CfgScale: bar.klingV3CfgScale ?? '0.5',
+        klingV3MultiPromptEnabled: bar.klingV3MultiPromptEnabled ?? false,
+        klingV3Shot1Duration: bar.klingV3Shot1Duration ?? '5',
+        klingV3Shot2Duration: bar.klingV3Shot2Duration ?? '5',
+        isLoading,
+        onKlingV3DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3Duration: value })),
+        onKlingV3GenerateAudioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3GenerateAudio: value })),
+        onKlingV3CfgScaleChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3CfgScale: value })),
+        onKlingV3MultiPromptEnabledChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3MultiPromptEnabled: value })),
+        onKlingV3Shot1DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3Shot1Duration: value })),
+        onKlingV3Shot2DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3Shot2Duration: value })),
+      });
+    }
+
+    return buildSeedance2PromptBarControls({
+      idPrefix: bar.id,
+      seedance2Variant: bar.seedance2Variant,
+      seedance2AspectRatio: bar.seedance2AspectRatio ?? '16:9',
+      seedance2Resolution: bar.seedance2Resolution ?? '720p',
+      seedance2Duration: bar.seedance2Duration ?? '5',
+      seedance2GenerateAudio: bar.seedance2GenerateAudio,
+      seedance2CameraFixed: bar.seedance2CameraFixed,
+      showCameraFixed: bar.modelId !== FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      allowFullResolution: bar.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      isLoading,
+      onSeedance2VariantChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2Variant: value,
+      })),
+      onSeedance2AspectRatioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2AspectRatio: value,
+      })),
+      onSeedance2ResolutionChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2Resolution: value,
+      })),
+      onSeedance2DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2Duration: value,
+      })),
+      onSeedance2GenerateAudioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2GenerateAudio: value,
+      })),
+      onSeedance2CameraFixedChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        seedance2CameraFixed: value,
+      })),
+    });
+  }, [handleEmbeddedPromptBarUpdate, isLoading]);
 
   // Validation layer for prompt submission that enforces provider/model-specific rules.
   const {
@@ -1239,6 +1286,7 @@ export default function App() {
     isGrokModel, // Grok validation flag.
     isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isKlingVideoModel: fal.isKlingVideoModel,
+    isKlingV3VideoModel: fal.isKlingV3VideoModel,
     isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
@@ -1267,6 +1315,7 @@ export default function App() {
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isUpscaleModel: fal.isUpscaleModel,
     isKlingVideoModel: fal.isKlingVideoModel,
+    isKlingV3VideoModel: fal.isKlingV3VideoModel,
     isKlingO1VideoModel: fal.isKlingO1VideoModel,
     isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
@@ -1283,6 +1332,12 @@ export default function App() {
     hailuoVariant: fal.hailuoVariant,
     falVideoDuration: fal.falVideoDuration,
     klingVariant: fal.klingVariant,
+    klingV3Duration: fal.klingV3Duration,
+    klingV3GenerateAudio: fal.klingV3GenerateAudio,
+    klingV3CfgScale: fal.klingV3CfgScale,
+    klingV3MultiPromptEnabled: fal.klingV3MultiPromptEnabled,
+    klingV3Shot1Duration: fal.klingV3Shot1Duration,
+    klingV3Shot2Duration: fal.klingV3Shot2Duration,
     klingO1Variant: fal.klingO1Variant,
     klingO1KeepAudio: fal.klingO1KeepAudio,
     kling26ControlVariant: fal.kling26ControlVariant,
@@ -1349,6 +1404,12 @@ export default function App() {
     onHailuoVariantChange: fal.handleHailuoVariantChange,
     onFalVideoDurationChange: fal.handleFalVideoDurationChange,
     onKlingVariantChange: fal.handleKlingVariantChange,
+    onKlingV3DurationChange: fal.handleKlingV3DurationChange,
+    onKlingV3GenerateAudioChange: fal.handleKlingV3GenerateAudioChange,
+    onKlingV3CfgScaleChange: fal.handleKlingV3CfgScaleChange,
+    onKlingV3MultiPromptEnabledChange: fal.handleKlingV3MultiPromptEnabledChange,
+    onKlingV3Shot1DurationChange: fal.handleKlingV3Shot1DurationChange,
+    onKlingV3Shot2DurationChange: fal.handleKlingV3Shot2DurationChange,
     onKlingO1VariantChange: fal.handleKlingO1VariantChange,
     onKlingO1KeepAudioChange: fal.handleKlingO1KeepAudioChange,
     onKling26ControlVariantChange: fal.handleKling26ControlVariantChange,
@@ -1707,6 +1768,11 @@ export default function App() {
                 : promptPlaceholderText
           }
           showNegativePrompt={shouldShowNegativePrompt}
+          showMultiPrompt={fal.isKlingV3VideoModel && fal.klingV3MultiPromptEnabled}
+          multiPrompt={fal.klingV3MultiPrompt}
+          onMultiPromptChange={fal.handleKlingV3MultiPromptChange}
+          multiPromptPlaceholder="Describe the second Kling 3.0 Pro shot... (Cmd/Ctrl + Enter to generate)"
+          multiPromptOutlineColor={fal.isKlingV3VideoModel && fal.klingV3MultiPromptEnabled ? '#38bdf8' : undefined}
           negativePrompt={activeNegativePrompt}
           onNegativePromptChange={activeNegativePromptSetter}
           negativePromptPlaceholder={fal.isWan27ImageModel ? 'Describe what the image should avoid... (optional)' : 'Describe what the video should avoid... (optional)'}

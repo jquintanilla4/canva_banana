@@ -25,6 +25,9 @@ import {
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isKlingV3CfgScaleSelectionValue,
+  isKlingV3DurationSelectionValue,
+  isKlingV3ShotDurationSelectionValue,
   isLipsyncSyncMode,
   isRecraftV4ProImageSizeSelectionValue,
   isSeedance2AspectRatioSelectionValue,
@@ -39,6 +42,7 @@ import {
   normalizeRecraftRgbColor,
   RECRAFT_V4_PRO_MAX_COLORS,
   isGenerationKind,
+  KLING_V3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
 } from './modelConfig';
@@ -131,6 +135,13 @@ export type SnapshotManifestV2 = {
         seedance2Duration?: string;
         seedance2GenerateAudio?: boolean;
         seedance2CameraFixed?: boolean;
+        klingV3Duration?: string;
+        klingV3GenerateAudio?: boolean;
+        klingV3CfgScale?: string;
+        klingV3MultiPromptEnabled?: boolean;
+        klingV3MultiPrompt?: string;
+        klingV3Shot1Duration?: string;
+        klingV3Shot2Duration?: string;
 	      selectedImageIds: string[];
 	      selectedNoteIds: string[];
 	      referenceImageIds: string[];
@@ -231,6 +242,13 @@ export type SnapshotMetaState = {
   seedance2Duration?: string;
   seedance2GenerateAudio?: boolean;
   seedance2CameraFixed?: boolean;
+  klingV3Duration?: string;
+  klingV3GenerateAudio?: boolean;
+  klingV3CfgScale?: string;
+  klingV3MultiPromptEnabled?: boolean;
+  klingV3MultiPrompt?: string;
+  klingV3Shot1Duration?: string;
+  klingV3Shot2Duration?: string;
   selectedImageIds: string[];
   selectedNoteIds: string[];
   referenceImageIds: string[];
@@ -736,7 +754,16 @@ export const restoreSnapshotFromFile = async (
     height: typeof bar?.height === 'number' ? bar.height : 190,
     prompt: typeof bar?.prompt === 'string' ? bar.prompt : '',
     negativePrompt: typeof bar?.negativePrompt === 'string' ? bar.negativePrompt : '',
-    modelId: bar?.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? FAL_SEEDANCE_2_VIDEO_MODEL_ID : SEEDANCE_2_VIDEO_MODEL_ID,
+    modelId: bar?.modelId === KLING_V3_VIDEO_MODEL_ID
+      ? KLING_V3_VIDEO_MODEL_ID
+      : bar?.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? FAL_SEEDANCE_2_VIDEO_MODEL_ID : SEEDANCE_2_VIDEO_MODEL_ID,
+    klingV3MultiPrompt: typeof bar?.klingV3MultiPrompt === 'string' ? bar.klingV3MultiPrompt : '',
+    klingV3Duration: isKlingV3DurationSelectionValue(bar?.klingV3Duration) ? bar.klingV3Duration : '5',
+    klingV3GenerateAudio: typeof bar?.klingV3GenerateAudio === 'boolean' ? bar.klingV3GenerateAudio : true,
+    klingV3CfgScale: isKlingV3CfgScaleSelectionValue(bar?.klingV3CfgScale) ? bar.klingV3CfgScale : '0.5',
+    klingV3MultiPromptEnabled: Boolean(bar?.klingV3MultiPromptEnabled),
+    klingV3Shot1Duration: isKlingV3ShotDurationSelectionValue(bar?.klingV3Shot1Duration) ? bar.klingV3Shot1Duration : '5',
+    klingV3Shot2Duration: isKlingV3ShotDurationSelectionValue(bar?.klingV3Shot2Duration) ? bar.klingV3Shot2Duration : '5',
     seedance2Variant: bar?.seedance2Variant === 'smart' ? 'smart' : 'reference',
     seedance2AspectRatio: typeof bar?.seedance2AspectRatio === 'string' ? bar.seedance2AspectRatio : '16:9',
     seedance2Resolution: typeof bar?.seedance2Resolution === 'string' ? bar.seedance2Resolution : '720p',
@@ -850,6 +877,34 @@ export const normalizeSnapshotImageMetadata = (
       const klingVariantValue = (typed as { klingVariant?: unknown }).klingVariant;
       if (klingVariantValue === 'standard' || klingVariantValue === 'pro') {
         normalizedOptions.klingVariant = klingVariantValue;
+      }
+      const klingV3DurationValue = (typed as { klingV3Duration?: unknown }).klingV3Duration;
+      if (isKlingV3DurationSelectionValue(klingV3DurationValue)) {
+        normalizedOptions.klingV3Duration = klingV3DurationValue;
+      }
+      const klingV3GenerateAudioValue = (typed as { klingV3GenerateAudio?: unknown }).klingV3GenerateAudio;
+      if (typeof klingV3GenerateAudioValue === 'boolean') {
+        normalizedOptions.klingV3GenerateAudio = klingV3GenerateAudioValue;
+      }
+      const klingV3CfgScaleValue = (typed as { klingV3CfgScale?: unknown }).klingV3CfgScale;
+      if (isKlingV3CfgScaleSelectionValue(klingV3CfgScaleValue)) {
+        normalizedOptions.klingV3CfgScale = klingV3CfgScaleValue;
+      }
+      const klingV3MultiPromptEnabledValue = (typed as { klingV3MultiPromptEnabled?: unknown }).klingV3MultiPromptEnabled;
+      if (typeof klingV3MultiPromptEnabledValue === 'boolean') {
+        normalizedOptions.klingV3MultiPromptEnabled = klingV3MultiPromptEnabledValue;
+      }
+      const klingV3MultiPromptValue = (typed as { klingV3MultiPrompt?: unknown }).klingV3MultiPrompt;
+      if (typeof klingV3MultiPromptValue === 'string') {
+        normalizedOptions.klingV3MultiPrompt = klingV3MultiPromptValue;
+      }
+      const klingV3Shot1DurationValue = (typed as { klingV3Shot1Duration?: unknown }).klingV3Shot1Duration;
+      if (isKlingV3ShotDurationSelectionValue(klingV3Shot1DurationValue)) {
+        normalizedOptions.klingV3Shot1Duration = klingV3Shot1DurationValue;
+      }
+      const klingV3Shot2DurationValue = (typed as { klingV3Shot2Duration?: unknown }).klingV3Shot2Duration;
+      if (isKlingV3ShotDurationSelectionValue(klingV3Shot2DurationValue)) {
+        normalizedOptions.klingV3Shot2Duration = klingV3Shot2DurationValue;
       }
       const negativePrompt = (typed as { negativePrompt?: unknown }).negativePrompt;
       if (typeof negativePrompt === 'string' && negativePrompt.trim().length > 0) {

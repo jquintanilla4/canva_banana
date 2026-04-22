@@ -9,6 +9,7 @@ import {
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   KLING_26_CONTROL_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
@@ -40,6 +41,9 @@ import {
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
   isKlingO1VideoModelId,
+  isKlingV3CfgScaleSelectionValue,
+  isKlingV3DurationSelectionValue,
+  isKlingV3ShotDurationSelectionValue,
   isLipsyncSyncMode,
   isNanoBananaEditModelId,
   isRecraftV4ProModel,
@@ -69,6 +73,9 @@ import {
   type FalVideoModelId,
   type HailuoVariant,
   type KlingO1Variant,
+  type KlingV3CfgScaleSelectionValue,
+  type KlingV3DurationSelectionValue,
+  type KlingV3ShotDurationSelectionValue,
   type KlingVariant,
   type WanAnimateQualitySelectionValue,
   type WanAnimateResolutionSelectionValue,
@@ -336,6 +343,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
     falVideoDuration,
     hailuoVariant,
     klingVariant,
+    klingV3Duration,
+    klingV3GenerateAudio,
+    klingV3CfgScale,
+    klingV3MultiPromptEnabled,
+    klingV3MultiPrompt,
+    klingV3Shot1Duration,
+    klingV3Shot2Duration,
     klingO1Variant,
     klingO1KeepAudio,
     kling26ControlVariant,
@@ -452,6 +466,23 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const falVideoDurationForRun = falOptionsOverride.videoDuration ?? falVideoDuration;
     const hailuoVariantForRun = falOptionsOverride.hailuoVariant ?? hailuoVariant;
     const klingVariantForRun = falOptionsOverride.klingVariant ?? klingVariant;
+    const klingV3DurationForRun: KlingV3DurationSelectionValue = isKlingV3DurationSelectionValue(falOptionsOverride.klingV3Duration)
+      ? falOptionsOverride.klingV3Duration
+      : klingV3Duration;
+    const klingV3GenerateAudioForRun = falOptionsOverride.klingV3GenerateAudio ?? klingV3GenerateAudio;
+    const klingV3CfgScaleForRun: KlingV3CfgScaleSelectionValue = isKlingV3CfgScaleSelectionValue(falOptionsOverride.klingV3CfgScale)
+      ? falOptionsOverride.klingV3CfgScale
+      : klingV3CfgScale;
+    const klingV3MultiPromptEnabledForRun = falOptionsOverride.klingV3MultiPromptEnabled ?? klingV3MultiPromptEnabled;
+    const klingV3MultiPromptForRun = typeof falOptionsOverride.klingV3MultiPrompt === 'string'
+      ? falOptionsOverride.klingV3MultiPrompt
+      : klingV3MultiPrompt;
+    const klingV3Shot1DurationForRun: KlingV3ShotDurationSelectionValue = isKlingV3ShotDurationSelectionValue(falOptionsOverride.klingV3Shot1Duration)
+      ? falOptionsOverride.klingV3Shot1Duration
+      : klingV3Shot1Duration;
+    const klingV3Shot2DurationForRun: KlingV3ShotDurationSelectionValue = isKlingV3ShotDurationSelectionValue(falOptionsOverride.klingV3Shot2Duration)
+      ? falOptionsOverride.klingV3Shot2Duration
+      : klingV3Shot2Duration;
     const klingO1VariantForRun = falOptionsOverride.klingO1Variant ?? klingO1Variant;
     const videoNegativePromptForRun = falOptionsOverride.negativePrompt ?? videoNegativePrompt;
     const legacyWanOptions = falOptionsOverride as {
@@ -635,6 +666,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isHailuoStandardVideoModel = isHailuoVideoModel && hailuoVariantForRun === 'standard';
     const actualHailuoModelId = isHailuoVideoModel ? getHailuoActualModelId(hailuoVariantForRun) : null;
     const isKlingVideoModel = isVideoMode && falVideoModelIdForRun === KLING_VIDEO_MODEL_ID;
+    const isKlingV3VideoModel = isVideoMode && falVideoModelIdForRun === KLING_V3_VIDEO_MODEL_ID;
     const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelIdForRun);
     const isKlingO1EditMode = isKlingO1VideoModel && klingO1VariantForRun === 'edit';
     const isKlingO1RefV2VMode = isKlingO1VideoModel && klingO1VariantForRun === 'refV2V';
@@ -682,7 +714,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? (falVideoDurationForRun === '10' ? '10' : '5')
         : undefined;
     const normalizedVideoNegativePrompt =
-      (isKlingVideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun)
+      (isKlingVideoModel || isKlingV3VideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun)
         ? videoNegativePromptForRun.trim()
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
@@ -690,7 +722,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun && Boolean(activePrimary)));
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
-    const requiresVideoSourceImage = usingFal && isVideoMode && !isAnySeedance2VideoModelForRun && !isWan27VideoModelForRun && !isKlingO1VideoInputMode && !isFalVideoInputMode
+    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isAnySeedance2VideoModelForRun && !isWan27VideoModelForRun && !isKlingO1VideoInputMode && !isFalVideoInputMode
       && !(isGrokImagineVideoModel && isGrokImagineVideoEditMode);
     const generationKind: GenerationKind = overrideKind
       ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
@@ -701,6 +733,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
         : isTextToImage
           ? 'Please describe the image you want to create.'
           : 'Please write a prompt to describe your edit.');
+      return;
+    }
+
+    if (usingFal && isKlingV3VideoModel && klingV3MultiPromptEnabledForRun && !klingV3MultiPromptForRun.trim()) {
+      setError('Kling 3.0 Pro multi prompt requires a second prompt.');
       return;
     }
 
@@ -758,6 +795,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
         : isKlingVideoModel
           ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
+          : isKlingV3VideoModel
+            ? `${baseModelLabel}${klingV3MultiPromptEnabledForRun ? ' Multi' : ' Smart'}`
           : isKlingO1VideoModel
             ? `${baseModelLabel} ${klingO1VariantLabel}`
             : isKling26ControlVideoModel
@@ -1193,6 +1232,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Wan 2.7 first/last-frame mode requires a starting still image.');
           return;
         }
+        if (isKlingV3VideoModel && primarySelection?.mediaType === 'video') {
+          setError('Kling 3.0 Pro uses a still image as the first frame. Select an image or clear the selection.');
+          return;
+        }
+        if (isKlingV3VideoModel && videoLastFrameImageIdForRun && !activePrimary) {
+          setError('Kling 3.0 Pro first/last-frame mode requires a starting still image.');
+          return;
+        }
 
         let seedanceReferenceImageCanvasItems: Array<CanvasImage & { element: HTMLImageElement }> = [];
         let seedanceReferenceVideoCanvasItems: CanvasImage[] = [];
@@ -1380,7 +1427,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             sourceVideoUrlForRequest = await uploadVideoToFal(sourceVideo.file);
             setToastMessage(null);
           }
-        } else if (!activePrimary && !isWan27VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun))) {
+        } else if (!activePrimary && !isKlingV3VideoModel && !isWan27VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun))) {
           throw new Error('Unable to find the starting frame for this video.');
         }
 
@@ -1499,7 +1546,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingO1FflfMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart'); // Allow end-frame input for tail-capable variants.
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO1FflfMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart'); // Allow end-frame input for tail-capable variants.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -1538,7 +1585,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
         const oneToAllNegativePromptForRequest = isOneToAllAnimateVideoModel ? videoNegativePromptForRun.trim() : undefined;
         const negativePromptForRequest =
-          (isKlingVideoModel || isWanVisionEnhancerVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun) && hasVideoNegativePrompt
+          (isKlingVideoModel || isKlingV3VideoModel || isWanVisionEnhancerVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun) && hasVideoNegativePrompt
             ? normalizedVideoNegativePrompt
             : undefined;
         const keepOriginalSoundForRequest = isKling26ControlVideoModel ? kling26ControlKeepSoundForRun : undefined;
@@ -1588,6 +1635,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 aspectRatio: falAspectRatioSelectionForRun === 'default' ? 'auto' : falAspectRatioSelectionForRun,
               } : {}),
             } : {}),
+          } : {}),
+          ...(isKlingV3VideoModel ? {
+            klingV3Duration: klingV3DurationForRun,
+            klingV3GenerateAudio: klingV3GenerateAudioForRun,
+            klingV3CfgScale: klingV3CfgScaleForRun,
+            klingV3MultiPromptEnabled: klingV3MultiPromptEnabledForRun,
+            klingV3MultiPrompt: klingV3MultiPromptForRun,
+            klingV3Shot1Duration: klingV3Shot1DurationForRun,
+            klingV3Shot2Duration: klingV3Shot2DurationForRun,
           } : {}),
           ...(isLipsyncVideoModel ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
@@ -1740,6 +1796,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           const hasAudio = hasDetectedAudio
             || (isWan27VideoModelForRun && Boolean(sourceAudioUrlForRequest))
             || (isVeo31VideoModelForRun && veo31GenerateAudioForRun)
+            || (isKlingV3VideoModel && klingV3GenerateAudioForRun)
             || (isFalSeedance2VideoModelForRun && seedance2GenerateAudioForRun);
 
           const newVideo: CanvasImage = {
@@ -1783,6 +1840,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
                   ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
                   ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
+                  ...(isKlingV3VideoModel ? {
+                    klingV3Duration: klingV3DurationForRun,
+                    klingV3GenerateAudio: klingV3GenerateAudioForRun,
+                    klingV3CfgScale: klingV3CfgScaleForRun,
+                    klingV3MultiPromptEnabled: klingV3MultiPromptEnabledForRun,
+                    klingV3MultiPrompt: klingV3MultiPromptForRun,
+                    klingV3Shot1Duration: klingV3Shot1DurationForRun,
+                    klingV3Shot2Duration: klingV3Shot2DurationForRun,
+                  } : {}),
                   ...(isKlingO1VideoModel ? { klingO1Variant: klingO1VariantForRun } : {}),
                   ...(isKlingO1VideoInputMode ? { klingO1KeepAudio: klingO1KeepAudioForRun } : {}),
                   ...(isKlingO1RefV2VMode ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
@@ -2399,6 +2465,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
     falVideoDuration,
     hailuoVariant,
     klingVariant,
+    klingV3Duration,
+    klingV3GenerateAudio,
+    klingV3CfgScale,
+    klingV3MultiPromptEnabled,
+    klingV3MultiPrompt,
+    klingV3Shot1Duration,
+    klingV3Shot2Duration,
     klingO1Variant,
     kling26ControlVariant,
     kling26ControlKeepSound,
