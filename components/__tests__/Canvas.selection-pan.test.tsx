@@ -43,7 +43,7 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   isKling26ControlVideoInputMode: false,
   isVeo31ExtendMode: false,
   isWanAnimateVideoInputMode: false,
-  isWan26I2VMode: false,
+  isWan27VideoMode: false,
   onError: vi.fn(),
   onImageSelect: vi.fn(),
   onNoteSelect: vi.fn(),

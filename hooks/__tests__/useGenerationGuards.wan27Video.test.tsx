@@ -1,0 +1,109 @@
+import { renderHook } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { Tool } from '../../types';
+import { WAN_27_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { useGenerationGuards } from '../useGenerationGuards';
+
+const renderWan27Guard = (overrides: Partial<Parameters<typeof useGenerationGuards>[0]> = {}) => renderHook(() => useGenerationGuards({
+  apiProvider: 'fal',
+  appMode: 'CANVAS',
+  tool: Tool.FREE_SELECTION,
+  prompt: 'A cinematic street scene',
+  isKlingO1EditMode: false,
+  isKlingO1RefV2VMode: false,
+  hasSourceVideo: false,
+  hasSourceAudio: false,
+  isVideoMode: true,
+  isUpscaleModel: false,
+  isSeedreamModel: false,
+  isNanoBananaModel: false,
+  isKlingModel: false,
+  isGrokModel: false,
+  isGrokImagineVideoModel: false,
+  isKlingVideoModel: false,
+  isKling26VideoModel: false,
+  isKling26ControlVideoModel: false,
+  isHailuoVideoModel: false,
+  isVeo31VideoModel: false,
+  isSeedance2VideoModel: false,
+  seedance2Variant: 'smart',
+  seedance2ReferenceAssetCount: 0,
+  veo31Variant: 'i2v-fflf',
+  falModelId: WAN_27_VIDEO_MODEL_ID,
+  falNumImages: 1,
+  activePrimaryImage: null,
+  primarySelectionMediaType: null,
+  hasSelectedStillImage: false,
+  ...overrides,
+}));
+
+describe('useGenerationGuards (Wan 2.7 Video)', () => {
+  it('keeps text-to-video enabled when no image is selected and a prompt is present', () => {
+    const { result } = renderWan27Guard();
+
+    expect(result.current.submitDisabled).toBe(false);
+    expect(result.current.promptPlaceholderText).toContain('Describe the video you want to create');
+  });
+
+  it('requires a prompt for text-to-video when no image is selected', () => {
+    const { result } = renderWan27Guard({ prompt: '' });
+
+    expect(result.current.submitDisabled).toBe(true);
+  });
+
+  it('allows audio-driven text-to-video with a prompt', () => {
+    const { result } = renderWan27Guard({
+      primarySelectionMediaType: 'audio',
+      hasSourceAudio: true,
+    });
+
+    expect(result.current.submitDisabled).toBe(false);
+    expect(result.current.promptPlaceholderText).toContain('Describe the video you want to create');
+  });
+
+  it('allows image-to-video with a selected image and an empty prompt', () => {
+    const { result } = renderWan27Guard({
+      prompt: '',
+      activePrimaryImage: {},
+      primarySelectionMediaType: 'image',
+      hasSelectedStillImage: true,
+    });
+
+    expect(result.current.submitDisabled).toBe(false);
+    expect(result.current.promptPlaceholderText).toContain('Optionally describe');
+  });
+
+  it('allows image-to-video with first-frame audio and no end frame', () => {
+    const { result } = renderWan27Guard({
+      prompt: '',
+      activePrimaryImage: {},
+      primarySelectionMediaType: 'image',
+      hasSelectedStillImage: true,
+      hasSourceAudio: true,
+    });
+
+    expect(result.current.submitDisabled).toBe(false);
+  });
+
+  it('allows image-to-video with first-frame audio after an end frame is selected', () => {
+    const { result } = renderWan27Guard({
+      activePrimaryImage: {},
+      primarySelectionMediaType: 'image',
+      hasSelectedStillImage: true,
+      hasSourceAudio: true,
+    });
+
+    expect(result.current.submitDisabled).toBe(false);
+    expect(result.current.promptPlaceholderText).toContain('Optionally describe');
+  });
+
+  it('blocks unsupported selected video inputs until continuation is wired', () => {
+    const { result } = renderWan27Guard({
+      activePrimaryImage: null,
+      primarySelectionMediaType: 'video',
+    });
+
+    expect(result.current.submitDisabled).toBe(true);
+    expect(result.current.promptPlaceholderText).toContain('Clear the current video selection');
+  });
+});

@@ -36,6 +36,7 @@ type SelectionFalSettings = Pick<
   | 'isLipsyncVideoModel'
   | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
+  | 'isWan27VideoModel'
   | 'isSeedance15VideoModel'
   | 'isSeedance2VideoModel'
   | 'seedance2Variant'
@@ -102,6 +103,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isLipsyncVideoModel,
     isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
+    isWan27VideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     seedance2Variant,
@@ -123,7 +125,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const isScailVideoModel = apiProvider === 'fal'
     && falModelMode === 'video'
     && falVideoModelId === SCAIL_VIDEO_MODEL_ID;
-  const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
+  const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel || isWan27VideoModel;
   const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
   const isSeedance2ReferenceMode = apiProvider === 'fal'
     && falModelMode === 'video'
@@ -364,7 +366,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKling26VideoModel && !isKlingO1FflfMode && !isWan27VideoModel && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -491,6 +493,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         setElementImageIds([]);
         setVideoLastFrameImageId(null);
         setSourceVideoId(null);
+        setSourceAudioId(null);
       }
       return;
     }
@@ -566,6 +569,9 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
 
     setSelectedImageIds([imageId]);
     setSelectedNoteIds([]);
+    if (isWan27VideoModel && targetImage?.mediaType !== 'audio') {
+      setSourceAudioId(null);
+    }
     applyKlingReferences([imageId]);
     if (!isKlingImageModel) {
       setReferenceImageIds([]);
@@ -589,6 +595,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isKlingProVideoSelection,
     isKling26VideoModel,
     isKlingO1FflfMode,
+    isWan27VideoModel,
     isSeedance15FflfMode,
     isSeedance2SmartMode,
     isVeo31TailCapable,

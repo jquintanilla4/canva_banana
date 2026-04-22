@@ -11,7 +11,7 @@ import {
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
-  WAN_26_I2V_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
   type FalModelId,
 } from '../services/modelConfig';
 import {
@@ -101,7 +101,7 @@ export function useGenerationGuards({
   const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
   const isHeygenV3LipsyncVideoModel = isVideoMode && falModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
-  const isWan26I2VVideoModel = isVideoMode && falModelId === WAN_26_I2V_MODEL_ID;
+  const isWan27VideoModel = isVideoMode && falModelId === WAN_27_VIDEO_MODEL_ID;
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isSeedance2ReferenceMode = isSeedance2VideoModel && seedance2Variant === 'reference';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
@@ -119,6 +119,11 @@ export function useGenerationGuards({
     && isSeedance2VideoModel
     && !isSeedance2ReferenceMode
     && primarySelectionMediaType !== null
+    && !hasPrimaryImage;
+  const hasWan27SmartUnsupportedSelection = apiProvider === 'fal'
+    && isVideoMode
+    && isWan27VideoModel
+    && primarySelectionMediaType === 'video'
     && !hasPrimaryImage;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
   return useMemo(() => {
@@ -144,12 +149,12 @@ export function useGenerationGuards({
       !Number.isFinite(falNumImages) ||
       falNumImages < 1 ||
       falNumImages > falNumImageMax;
-    const isWanPromptOptional = usingFal && isWanVideoInputMode;
+    const isWanPromptOptional = usingFal && (isWanVideoInputMode || (isWan27VideoModel && hasPrimaryImage));
     const isLipsyncPromptOptional = usingFal && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isSeedance2VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isSeedance2VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKling26Control = usingFal && isKling26ControlVideoModel && !hasKling26ControlStillImage;
@@ -164,6 +169,7 @@ export function useGenerationGuards({
       (shouldValidateFalOptions && isNumImagesInvalid) ||
       (usingFal && isSeedance2ReferenceMode && seedance2ReferenceAssetCount === 0) ||
       hasSeedance2SmartUnsupportedSelection ||
+      hasWan27SmartUnsupportedSelection ||
       requiresSelectedImageForUpscale ||
       requiresSelectedImageForVideo ||
       requiresSelectedImageForWanAnimate ||
@@ -187,6 +193,15 @@ export function useGenerationGuards({
           }
           if (hasPrimaryImage) {
             return 'Describe the motion or scene you want this image to turn into, or shift-click another still image to set the end frame...';
+          }
+          return 'Describe the video you want to create, or select an image for image-to-video...';
+        }
+        if (isWan27VideoModel) {
+          if (hasWan27SmartUnsupportedSelection) {
+            return 'Wan 2.7 uses a still image as the first frame. Clear the current video selection to run text-to-video...';
+          }
+          if (hasPrimaryImage) {
+            return 'Optionally describe the motion or scene, or shift-click another still image to set the end frame...';
           }
           return 'Describe the video you want to create, or select an image for image-to-video...';
         }
@@ -293,6 +308,7 @@ export function useGenerationGuards({
     hasSourceAudio,
     hasSourceVideo,
     hasSeedance2SmartUnsupportedSelection,
+    hasWan27SmartUnsupportedSelection,
     primarySelectionMediaType,
     isGrokImagineVideoModel,
     isHeygenV3LipsyncVideoModel,
@@ -310,7 +326,7 @@ export function useGenerationGuards({
     isInfinitalkVideoModel,
     isLipsyncVideoModel,
     isOneToAllAnimateVideoModel,
-    isWan26I2VVideoModel,
+    isWan27VideoModel,
     isVeo31ExtendMode,
     isSeedreamModel,
     isUpscaleModel,

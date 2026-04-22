@@ -69,7 +69,7 @@ const mockState = vi.hoisted(() => {
     isHeygenV3LipsyncVideoModel: false,
     isInfinitalkVideoModel: false,
     isGrokImagineVideoModel: false,
-    isWan26I2VVideoModel: false,
+    isWan27VideoModel: false,
     isSeedance15VideoModel: false,
     isSeedance2VideoModel: true,
     isFalSeedance2VideoModel: false,
@@ -123,10 +123,10 @@ const mockState = vi.hoisted(() => {
     veo31Resolution: '720p',
     veo31AspectRatio: 'auto',
     veo31GenerateAudio: false,
-    wan26Resolution: '720p',
-    wan26Duration: '5',
-    wan26PromptExpansion: false,
-    wan26MultiShots: false,
+    wan27VideoResolution: '720p',
+    wan27VideoDuration: '5',
+    wan27VideoAspectRatio: '16:9',
+    wan27VideoPromptExpansion: false,
     seedance15AspectRatio: '16:9',
     seedance15Resolution: '720p',
     seedance15Duration: '5',
@@ -187,10 +187,10 @@ const mockState = vi.hoisted(() => {
   falState.handleVeo31ResolutionChange = vi.fn();
   falState.handleVeo31AspectRatioChange = vi.fn();
   falState.handleVeo31GenerateAudioChange = vi.fn();
-  falState.handleWan26ResolutionChange = vi.fn();
-  falState.handleWan26DurationChange = vi.fn();
-  falState.handleWan26PromptExpansionChange = vi.fn();
-  falState.handleWan26MultiShotsChange = vi.fn();
+  falState.handleWan27VideoResolutionChange = vi.fn();
+  falState.handleWan27VideoDurationChange = vi.fn();
+  falState.handleWan27VideoPromptExpansionChange = vi.fn();
+  falState.handleWan27VideoAspectRatioChange = vi.fn();
   falState.handleSeedance15AspectRatioChange = vi.fn();
   falState.handleSeedance15ResolutionChange = vi.fn();
   falState.handleSeedance15DurationChange = vi.fn();

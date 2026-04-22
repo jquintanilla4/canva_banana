@@ -22,7 +22,7 @@ type TestFalSettings = Pick<
   | 'isInfinitalkVideoModel'
   | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
-  | 'isWan26I2VVideoModel'
+  | 'isWan27VideoModel'
   | 'isSeedance15VideoModel'
   | 'isSeedance2VideoModel'
   | 'seedance2Variant'
@@ -63,7 +63,7 @@ const createFalStub = (): TestFalSettings => ({
   isInfinitalkVideoModel: false,
   isKling26VideoModel: false,
   isKling26ControlVideoModel: false,
-  isWan26I2VVideoModel: false,
+  isWan27VideoModel: false,
   isSeedance15VideoModel: false,
   isSeedance2VideoModel: true,
   seedance2Variant: 'reference',

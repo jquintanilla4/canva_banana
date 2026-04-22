@@ -33,7 +33,9 @@ import {
   VEO_31_EXTEND_VIDEO_MODEL_ID,
   VEO_31_FFLF_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_26_I2V_MODEL_ID,
+  WAN_27_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_TEXT_TO_VIDEO_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_REPLACE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
 } from './modelIds'; // Fal service model IDs.
@@ -455,43 +457,65 @@ export const generateImageToVideo = async (
     return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
-  const isWan26I2VModel = modelId === WAN_26_I2V_MODEL_ID;
-  if (isWan26I2VModel) {
-    if (!image) {
-      throw new Error('Wan 2.6 requires an image.');
-    }
-
+  const isWan27VideoModel = modelId === WAN_27_VIDEO_MODEL_ID;
+  if (isWan27VideoModel) {
     const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) {
-      throw new Error('Wan 2.6 requires a prompt.');
+    const resolution = options.wan27VideoResolution === '720p' || options.wan27VideoResolution === '1080p'
+      ? options.wan27VideoResolution
+      : '1080p';
+    const durationValue = options.wan27VideoDuration === '2' || options.wan27VideoDuration === '3' || options.wan27VideoDuration === '4'
+      || options.wan27VideoDuration === '5' || options.wan27VideoDuration === '6' || options.wan27VideoDuration === '7'
+      || options.wan27VideoDuration === '8' || options.wan27VideoDuration === '9' || options.wan27VideoDuration === '10'
+      || options.wan27VideoDuration === '11' || options.wan27VideoDuration === '12' || options.wan27VideoDuration === '13'
+      || options.wan27VideoDuration === '14' || options.wan27VideoDuration === '15'
+      ? Number(options.wan27VideoDuration)
+      : 5;
+    const aspectRatio = options.wan27VideoAspectRatio === '16:9' || options.wan27VideoAspectRatio === '9:16'
+      || options.wan27VideoAspectRatio === '1:1' || options.wan27VideoAspectRatio === '4:3' || options.wan27VideoAspectRatio === '3:4'
+      ? options.wan27VideoAspectRatio
+      : '16:9';
+    const enablePromptExpansion = typeof options.wan27VideoPromptExpansion === 'boolean'
+      ? options.wan27VideoPromptExpansion
+      : true;
+    const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
+    const seed = typeof options.seed === 'number' && Number.isFinite(options.seed)
+      ? Math.max(0, Math.min(2147483647, Math.floor(options.seed)))
+      : undefined;
+    const sharedPayload: Record<string, unknown> = {
+      resolution,
+      duration: durationValue,
+      enable_prompt_expansion: enablePromptExpansion,
+      enable_safety_checker: false,
+      ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+      ...(seed !== undefined ? { seed } : {}),
+    };
+
+    if (image) {
+      const imageUrl = await uploadImageElementToFal(image);
+      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage) : undefined;
+      const inputPayload: Record<string, unknown> = {
+        ...sharedPayload,
+        image_url: imageUrl,
+        ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
+        ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
+        ...(options.sourceAudioUrl ? { audio_url: options.sourceAudioUrl } : {}),
+      };
+
+      return subscribeForVideoUrl(WAN_27_IMAGE_TO_VIDEO_MODEL_ID, inputPayload, options);
     }
 
-    const imageUrl = await uploadImageElementToFal(image);
-
-    const resolution = options.wan26Resolution === '720p' || options.wan26Resolution === '1080p'
-      ? options.wan26Resolution
-      : '720p';
-    const videoDuration = options.wan26Duration === '5' || options.wan26Duration === '10' || options.wan26Duration === '15'
-      ? options.wan26Duration
-      : '5';
-    const enablePromptExpansion = typeof options.wan26PromptExpansion === 'boolean'
-      ? options.wan26PromptExpansion
-      : true;
-    const multiShots = typeof options.wan26MultiShots === 'boolean'
-      ? options.wan26MultiShots
-      : false;
+    if (!trimmedPrompt) {
+      throw new Error('Wan 2.7 text-to-video requires a prompt.');
+    }
 
     const inputPayload: Record<string, unknown> = {
+      ...sharedPayload,
       prompt: trimmedPrompt,
-      image_url: imageUrl,
-      resolution,
-      duration: videoDuration,
-      enable_prompt_expansion: enablePromptExpansion,
-      multi_shots: multiShots,
+      aspect_ratio: aspectRatio,
       ...(options.sourceAudioUrl ? { audio_url: options.sourceAudioUrl } : {}),
     };
 
-    return subscribeForVideoUrl(modelId, inputPayload, options);
+    return subscribeForVideoUrl(WAN_27_TEXT_TO_VIDEO_MODEL_ID, inputPayload, options);
   }
 
   const isSeedance15Model = modelId === SEEDANCE_15_VIDEO_MODEL_ID;

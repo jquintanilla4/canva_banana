@@ -24,7 +24,7 @@ import {
   SYNC_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
-  WAN_26_I2V_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
@@ -57,6 +57,9 @@ import {
   isRecraftV4ProImageSizeSelectionValue,
   isWan27ImageAspectRatioSelectionValue,
   isWan27ImageMaxImagesSelectionValue,
+  isWan27VideoAspectRatioSelectionValue,
+  isWan27VideoDurationSelectionValue,
+  isWan27VideoResolutionSelectionValue,
   RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   RECRAFT_V4_PRO_MAX_COLORS,
@@ -98,8 +101,9 @@ import type {
   Seedance2Variant,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
-  Wan26DurationSelectionValue,
-  Wan26ResolutionSelectionValue,
+  Wan27VideoAspectRatioSelectionValue,
+  Wan27VideoDurationSelectionValue,
+  Wan27VideoResolutionSelectionValue,
   Wan27ImageAspectRatioSelectionValue,
   Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
@@ -129,7 +133,7 @@ type FalDerivedState = {
   isHeygenV3LipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
   isGrokImagineVideoModel: boolean;
-  isWan26I2VVideoModel: boolean;
+  isWan27VideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
@@ -181,10 +185,10 @@ type FalHandlers = {
   handleVeo31ResolutionChange: (value: string) => void;
   handleVeo31AspectRatioChange: (value: string) => void;
   handleVeo31GenerateAudioChange: (value: boolean) => void;
-  handleWan26ResolutionChange: (value: string) => void;
-  handleWan26DurationChange: (value: string) => void;
-  handleWan26PromptExpansionChange: (value: boolean) => void;
-  handleWan26MultiShotsChange: (value: boolean) => void;
+  handleWan27VideoResolutionChange: (value: string) => void;
+  handleWan27VideoDurationChange: (value: string) => void;
+  handleWan27VideoAspectRatioChange: (value: string) => void;
+  handleWan27VideoPromptExpansionChange: (value: boolean) => void;
   handleSeedance15AspectRatioChange: (value: string) => void;
   handleSeedance15ResolutionChange: (value: string) => void;
   handleSeedance15DurationChange: (value: string) => void;
@@ -252,10 +256,10 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   veo31Resolution: Veo31ResolutionSelectionValue;
   veo31AspectRatio: Veo31AspectRatioSelectionValue;
   veo31GenerateAudio: boolean;
-  wan26Resolution: Wan26ResolutionSelectionValue;
-  wan26Duration: Wan26DurationSelectionValue;
-  wan26PromptExpansion: boolean;
-  wan26MultiShots: boolean;
+  wan27VideoResolution: Wan27VideoResolutionSelectionValue;
+  wan27VideoDuration: Wan27VideoDurationSelectionValue;
+  wan27VideoAspectRatio: Wan27VideoAspectRatioSelectionValue;
+  wan27VideoPromptExpansion: boolean;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -318,10 +322,10 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setVeo31Resolution: Dispatch<SetStateAction<Veo31ResolutionSelectionValue>>;
   setVeo31AspectRatio: Dispatch<SetStateAction<Veo31AspectRatioSelectionValue>>;
   setVeo31GenerateAudio: Dispatch<SetStateAction<boolean>>;
-  setWan26Resolution: Dispatch<SetStateAction<Wan26ResolutionSelectionValue>>;
-  setWan26Duration: Dispatch<SetStateAction<Wan26DurationSelectionValue>>;
-  setWan26PromptExpansion: Dispatch<SetStateAction<boolean>>;
-  setWan26MultiShots: Dispatch<SetStateAction<boolean>>;
+  setWan27VideoResolution: Dispatch<SetStateAction<Wan27VideoResolutionSelectionValue>>;
+  setWan27VideoDuration: Dispatch<SetStateAction<Wan27VideoDurationSelectionValue>>;
+  setWan27VideoAspectRatio: Dispatch<SetStateAction<Wan27VideoAspectRatioSelectionValue>>;
+  setWan27VideoPromptExpansion: Dispatch<SetStateAction<boolean>>;
   setSeedance15AspectRatio: Dispatch<SetStateAction<Seedance15AspectRatioSelectionValue>>;
   setSeedance15Resolution: Dispatch<SetStateAction<Seedance15ResolutionSelectionValue>>;
   setSeedance15Duration: Dispatch<SetStateAction<Seedance15DurationSelectionValue>>;
@@ -388,10 +392,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [veo31Resolution, setVeo31Resolution] = useState<Veo31ResolutionSelectionValue>('720p');
   const [veo31AspectRatio, setVeo31AspectRatio] = useState<Veo31AspectRatioSelectionValue>('auto');
   const [veo31GenerateAudio, setVeo31GenerateAudio] = useState<boolean>(true);
-  const [wan26Resolution, setWan26Resolution] = useState<Wan26ResolutionSelectionValue>('720p');
-  const [wan26Duration, setWan26Duration] = useState<Wan26DurationSelectionValue>('5');
-  const [wan26PromptExpansion, setWan26PromptExpansion] = useState<boolean>(true);
-  const [wan26MultiShots, setWan26MultiShots] = useState<boolean>(false);
+  const [wan27VideoResolution, setWan27VideoResolution] = useState<Wan27VideoResolutionSelectionValue>('1080p');
+  const [wan27VideoDuration, setWan27VideoDuration] = useState<Wan27VideoDurationSelectionValue>('5');
+  const [wan27VideoAspectRatio, setWan27VideoAspectRatio] = useState<Wan27VideoAspectRatioSelectionValue>('16:9');
+  const [wan27VideoPromptExpansion, setWan27VideoPromptExpansion] = useState<boolean>(true);
   const [seedance15AspectRatio, setSeedance15AspectRatio] = useState<Seedance15AspectRatioSelectionValue>('16:9');
   const [seedance15Resolution, setSeedance15Resolution] = useState<Seedance15ResolutionSelectionValue>('720p');
   const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
@@ -433,7 +437,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isHeygenV3LipsyncVideoModel = isVideoMode && falVideoModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
   const isGrokImagineVideoModel = isVideoMode && falVideoModelId === GROK_IMAGINE_VIDEO_MODEL_ID;
-  const isWan26I2VVideoModel = isVideoMode && falVideoModelId === WAN_26_I2V_MODEL_ID;
+  const isWan27VideoModel = isVideoMode && falVideoModelId === WAN_27_VIDEO_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
   const isSeedance2VideoModel = isVideoMode && isSeedance2VideoModelId(falVideoModelId);
   const isFalSeedance2VideoModel = isVideoMode && falVideoModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
@@ -800,27 +804,26 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setVeo31GenerateAudio(Boolean(value));
   }, []);
 
-  const handleWan26ResolutionChange = useCallback((value: string) => {
-    if (value === '720p' || value === '1080p') {
-      setWan26Resolution(value);
+  const handleWan27VideoResolutionChange = useCallback((value: string) => {
+    if (isWan27VideoResolutionSelectionValue(value)) {
+      setWan27VideoResolution(value);
     }
   }, []);
 
-  const handleWan26DurationChange = useCallback((value: string) => {
-    if (value === '5' || value === '10' || value === '15') {
-      setWan26Duration(value);
+  const handleWan27VideoDurationChange = useCallback((value: string) => {
+    if (isWan27VideoDurationSelectionValue(value)) {
+      setWan27VideoDuration(value);
     }
   }, []);
 
-  const handleWan26PromptExpansionChange = useCallback((value: boolean) => {
-    setWan26PromptExpansion(value);
-    if (!value) {
-      setWan26MultiShots(false);
+  const handleWan27VideoAspectRatioChange = useCallback((value: string) => {
+    if (isWan27VideoAspectRatioSelectionValue(value)) {
+      setWan27VideoAspectRatio(value);
     }
   }, []);
 
-  const handleWan26MultiShotsChange = useCallback((value: boolean) => {
-    setWan26MultiShots(value);
+  const handleWan27VideoPromptExpansionChange = useCallback((value: boolean) => {
+    setWan27VideoPromptExpansion(value);
   }, []);
 
   const handleSeedance15AspectRatioChange = useCallback((value: string) => {
@@ -1025,10 +1028,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     veo31Resolution,
     veo31AspectRatio,
     veo31GenerateAudio,
-    wan26Resolution,
-    wan26Duration,
-    wan26PromptExpansion,
-    wan26MultiShots,
+    wan27VideoResolution,
+    wan27VideoDuration,
+    wan27VideoAspectRatio,
+    wan27VideoPromptExpansion,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -1068,7 +1071,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isInfinitalkVideoModel,
     isGrokImagineVideoModel,
     isVeo31VideoModel,
-    isWan26I2VVideoModel,
+    isWan27VideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
@@ -1114,10 +1117,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleVeo31ResolutionChange,
     handleVeo31AspectRatioChange,
     handleVeo31GenerateAudioChange,
-    handleWan26ResolutionChange,
-    handleWan26DurationChange,
-    handleWan26PromptExpansionChange,
-    handleWan26MultiShotsChange,
+    handleWan27VideoResolutionChange,
+    handleWan27VideoDurationChange,
+    handleWan27VideoAspectRatioChange,
+    handleWan27VideoPromptExpansionChange,
     handleSeedance15AspectRatioChange,
     handleSeedance15ResolutionChange,
     handleSeedance15DurationChange,
@@ -1182,10 +1185,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setVeo31Resolution,
     setVeo31AspectRatio,
     setVeo31GenerateAudio,
-    setWan26Resolution,
-    setWan26Duration,
-    setWan26PromptExpansion,
-    setWan26MultiShots,
+    setWan27VideoResolution,
+    setWan27VideoDuration,
+    setWan27VideoAspectRatio,
+    setWan27VideoPromptExpansion,
     setSeedance15AspectRatio,
     setSeedance15Resolution,
     setSeedance15Duration,

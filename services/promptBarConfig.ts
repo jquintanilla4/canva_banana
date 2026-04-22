@@ -34,8 +34,9 @@ import type {
   Seedance2ResolutionSelectionValue,
   Seedance2DurationSelectionValue,
   Seedance2Variant,
-  Wan26DurationSelectionValue,
-  Wan26ResolutionSelectionValue,
+  Wan27VideoAspectRatioSelectionValue,
+  Wan27VideoDurationSelectionValue,
+  Wan27VideoResolutionSelectionValue,
   Wan27ImageAspectRatioSelectionValue,
   Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
@@ -120,11 +121,10 @@ import {
   WAN_CREATIVITY_OPTIONS,
   WAN_TARGET_RESOLUTION_OPTIONS,
   WAN_VISION_ENHANCER_MODEL_ID,
-  WAN_26_I2V_MODEL_ID,
-  WAN_26_RESOLUTION_OPTIONS,
-  WAN_26_DURATION_OPTIONS,
-  WAN_26_PROMPT_EXPANSION_OPTIONS,
-  WAN_26_MULTI_SHOTS_OPTIONS,
+  WAN_27_VIDEO_ASPECT_RATIO_OPTIONS,
+  WAN_27_VIDEO_DURATION_OPTIONS,
+  WAN_27_VIDEO_PROMPT_EXPANSION_OPTIONS,
+  WAN_27_VIDEO_RESOLUTION_OPTIONS,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_ASPECT_RATIO_OPTIONS,
   WAN_27_IMAGE_MAX_IMAGES_OPTIONS,
@@ -300,7 +300,7 @@ export type PromptBarControlsInput = {
   isInfinitalkVideoModel: boolean;
   isGrokImagineVideoModel: boolean;
   isVeo31VideoModel: boolean;
-  isWan26I2VVideoModel: boolean;
+  isWan27VideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
@@ -339,10 +339,10 @@ export type PromptBarControlsInput = {
   veo31Resolution: Veo31ResolutionSelectionValue;
   veo31AspectRatio: Veo31AspectRatioSelectionValue;
   veo31GenerateAudio: boolean;
-  wan26Resolution: Wan26ResolutionSelectionValue;
-  wan26Duration: Wan26DurationSelectionValue;
-  wan26PromptExpansion: boolean;
-  wan26MultiShots: boolean;
+  wan27VideoResolution: Wan27VideoResolutionSelectionValue;
+  wan27VideoDuration: Wan27VideoDurationSelectionValue;
+  wan27VideoAspectRatio: Wan27VideoAspectRatioSelectionValue;
+  wan27VideoPromptExpansion: boolean;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -403,10 +403,10 @@ export type PromptBarControlsInput = {
   onVeo31ResolutionChange: (value: string) => void;
   onVeo31AspectRatioChange: (value: string) => void;
   onVeo31GenerateAudioChange: (value: boolean) => void;
-  onWan26ResolutionChange: (value: string) => void;
-  onWan26DurationChange: (value: string) => void;
-  onWan26PromptExpansionChange: (value: boolean) => void;
-  onWan26MultiShotsChange: (value: boolean) => void;
+  onWan27VideoResolutionChange: (value: string) => void;
+  onWan27VideoDurationChange: (value: string) => void;
+  onWan27VideoAspectRatioChange: (value: string) => void;
+  onWan27VideoPromptExpansionChange: (value: boolean) => void;
   onSeedance15AspectRatioChange: (value: string) => void;
   onSeedance15ResolutionChange: (value: string) => void;
   onSeedance15DurationChange: (value: string) => void;
@@ -462,7 +462,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isInfinitalkVideoModel,
     isGrokImagineVideoModel,
     isVeo31VideoModel,
-    isWan26I2VVideoModel,
+    isWan27VideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
@@ -501,10 +501,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     veo31Resolution,
     veo31AspectRatio,
     veo31GenerateAudio,
-    wan26Resolution,
-    wan26Duration,
-    wan26PromptExpansion,
-    wan26MultiShots,
+    wan27VideoResolution,
+    wan27VideoDuration,
+    wan27VideoAspectRatio,
+    wan27VideoPromptExpansion,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -565,10 +565,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onVeo31ResolutionChange,
     onVeo31AspectRatioChange,
     onVeo31GenerateAudioChange,
-    onWan26ResolutionChange,
-    onWan26DurationChange,
-    onWan26PromptExpansionChange,
-    onWan26MultiShotsChange,
+    onWan27VideoResolutionChange,
+    onWan27VideoDurationChange,
+    onWan27VideoAspectRatioChange,
+    onWan27VideoPromptExpansionChange,
     onSeedance15AspectRatioChange,
     onSeedance15ResolutionChange,
     onSeedance15DurationChange,
@@ -1036,43 +1036,43 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
-  if (isWan26I2VVideoModel) {
+  if (isWan27VideoModel) {
     controls.push({
-      id: 'wan26-resolution-select',
-      ariaLabel: 'Select Wan 2.6 resolution',
-      options: WAN_26_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan26Resolution,
-      onChange: onWan26ResolutionChange,
+      id: 'wan27-video-aspect-ratio-select',
+      prefixLabel: 'AR',
+      ariaLabel: 'Select Wan 2.7 aspect ratio',
+      options: WAN_27_VIDEO_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan27VideoAspectRatio,
+      onChange: onWan27VideoAspectRatioChange,
       disabled: isLoading,
     });
 
     controls.push({
-      id: 'wan26-duration-select',
-      ariaLabel: 'Select Wan 2.6 duration',
-      options: WAN_26_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan26Duration,
-      onChange: onWan26DurationChange,
+      id: 'wan27-video-resolution-select',
+      ariaLabel: 'Select Wan 2.7 resolution',
+      options: WAN_27_VIDEO_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan27VideoResolution,
+      onChange: onWan27VideoResolutionChange,
       disabled: isLoading,
     });
 
     controls.push({
-      id: 'wan26-prompt-expansion-select',
+      id: 'wan27-video-duration-select',
+      ariaLabel: 'Select Wan 2.7 duration',
+      options: WAN_27_VIDEO_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan27VideoDuration,
+      onChange: onWan27VideoDurationChange,
+      disabled: isLoading,
+    });
+
+    controls.push({
+      id: 'wan27-video-prompt-expansion-select',
       prefixLabel: 'Prompt+',
-      ariaLabel: 'Toggle Wan 2.6 prompt expansion',
-      options: WAN_26_PROMPT_EXPANSION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan26PromptExpansion ? 'true' : 'false',
-      onChange: (value: string) => onWan26PromptExpansionChange(value === 'true'),
+      ariaLabel: 'Toggle Wan 2.7 prompt expansion',
+      options: WAN_27_VIDEO_PROMPT_EXPANSION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan27VideoPromptExpansion ? 'true' : 'false',
+      onChange: (value: string) => onWan27VideoPromptExpansionChange(value === 'true'),
       disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'wan26-multi-shots-select',
-      prefixLabel: 'Multi-shots',
-      ariaLabel: 'Toggle Wan 2.6 multi-shots',
-      options: WAN_26_MULTI_SHOTS_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan26MultiShots ? 'true' : 'false',
-      onChange: (value: string) => onWan26MultiShotsChange(value === 'true'),
-      disabled: isLoading || !wan26PromptExpansion,
     });
   }
 

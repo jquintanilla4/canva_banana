@@ -319,6 +319,7 @@ export default function App() {
     || fal.isKling26VideoModel
     || isKlingO1FflfMode
     || isVeo31TailCapable
+    || fal.isWan27VideoModel
     || fal.isSeedance15VideoModel
     || (fal.isSeedance2VideoModel && fal.seedance2Variant === 'smart'); // End-frame capable modes.
 
@@ -1279,7 +1280,7 @@ export default function App() {
     isInfinitalkVideoModel: fal.isInfinitalkVideoModel,
     isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
-    isWan26I2VVideoModel: fal.isWan26I2VVideoModel,
+    isWan27VideoModel: fal.isWan27VideoModel,
     isSeedance15VideoModel: fal.isSeedance15VideoModel,
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
     isFalSeedance2VideoModel: fal.isFalSeedance2VideoModel,
@@ -1318,10 +1319,10 @@ export default function App() {
     veo31Resolution: fal.veo31Resolution,
     veo31AspectRatio: fal.veo31AspectRatio,
     veo31GenerateAudio: fal.veo31GenerateAudio,
-    wan26Resolution: fal.wan26Resolution,
-    wan26Duration: fal.wan26Duration,
-    wan26PromptExpansion: fal.wan26PromptExpansion,
-    wan26MultiShots: fal.wan26MultiShots,
+    wan27VideoResolution: fal.wan27VideoResolution,
+    wan27VideoDuration: fal.wan27VideoDuration,
+    wan27VideoAspectRatio: fal.wan27VideoAspectRatio,
+    wan27VideoPromptExpansion: fal.wan27VideoPromptExpansion,
     seedance15AspectRatio: fal.seedance15AspectRatio,
     seedance15Resolution: fal.seedance15Resolution,
     seedance15Duration: fal.seedance15Duration,
@@ -1383,10 +1384,10 @@ export default function App() {
     onVeo31ResolutionChange: fal.handleVeo31ResolutionChange,
     onVeo31AspectRatioChange: fal.handleVeo31AspectRatioChange,
     onVeo31GenerateAudioChange: fal.handleVeo31GenerateAudioChange,
-    onWan26ResolutionChange: fal.handleWan26ResolutionChange,
-    onWan26DurationChange: fal.handleWan26DurationChange,
-    onWan26PromptExpansionChange: fal.handleWan26PromptExpansionChange,
-    onWan26MultiShotsChange: fal.handleWan26MultiShotsChange,
+    onWan27VideoResolutionChange: fal.handleWan27VideoResolutionChange,
+    onWan27VideoDurationChange: fal.handleWan27VideoDurationChange,
+    onWan27VideoAspectRatioChange: fal.handleWan27VideoAspectRatioChange,
+    onWan27VideoPromptExpansionChange: fal.handleWan27VideoPromptExpansionChange,
     onSeedance15AspectRatioChange: fal.handleSeedance15AspectRatioChange,
     onSeedance15ResolutionChange: fal.handleSeedance15ResolutionChange,
     onSeedance15DurationChange: fal.handleSeedance15DurationChange,
@@ -1564,7 +1565,7 @@ export default function App() {
           isKling26ControlVideoInputMode={fal.isKling26ControlVideoModel}
           isVeo31ExtendMode={isVeo31ExtendMode}
           isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel || isScailVideoModel}
-          isWan26I2VMode={fal.isWan26I2VVideoModel}
+          isWan27VideoMode={fal.isWan27VideoModel}
           onError={setError}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}

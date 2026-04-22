@@ -7,6 +7,7 @@ import {
   ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_DEFAULT_NEGATIVE_PROMPT,
+  WAN_27_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
 } from '../services/modelConfig';
 import type { FalVideoModelId } from '../services/modelConfig';
@@ -33,6 +34,7 @@ export function useVideoNegativePrompt({
 
   return useMemo(() => {
     const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelId === WAN_VISION_ENHANCER_MODEL_ID;
+    const isWan27VideoModel = isVideoMode && falVideoModelId === WAN_27_VIDEO_MODEL_ID;
     const isOneToAllVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
     const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
     const isKlingNegativePromptModel = isVideoMode && (
@@ -40,18 +42,19 @@ export function useVideoNegativePrompt({
       || falVideoModelId === KLING_26_VIDEO_MODEL_ID
     );
     const shouldShowVideoNegativePrompt = isWanVisionEnhancerVideoModel
+      || isWan27VideoModel
       || isOneToAllVideoModel
       || isKlingNegativePromptModel
       || isVeo31VideoModel;
 
-    const videoNegativePrompt = isWanVisionEnhancerVideoModel
+    const videoNegativePrompt = isWanVisionEnhancerVideoModel || isWan27VideoModel
       ? wanNegativePrompt
       : isOneToAllVideoModel
         ? oneToAllNegativePrompt
         : isVeo31VideoModel
           ? veo31NegativePrompt
           : klingNegativePrompt;
-    const setVideoNegativePrompt = isWanVisionEnhancerVideoModel
+    const setVideoNegativePrompt = isWanVisionEnhancerVideoModel || isWan27VideoModel
       ? setWanNegativePrompt
       : isOneToAllVideoModel
         ? setOneToAllNegativePrompt

@@ -6,10 +6,12 @@ import {
   KLING_O1_VIDEO_MODEL_ID,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
 } from '../../services/modelConfig';
 import { Tool, type CanvasImage, type FalQueueJob } from '../../types';
-import { generateImageToVideo } from '../../services/falService';
+import { generateImageToVideo, uploadVideoToFal } from '../../services/falService';
 import { generateImage as generateGoogleImage, generateImageEdit as generateGoogleImageEdit } from '../../services/geminiService';
+import { loadMediaFromBlob } from '../../services/mediaService';
 import { generateSeedanceVideo } from '../../services/volcengineService';
 import type { UseFalSettingsResult } from '../useFalSettings';
 import type { SelectionStateResult } from '../useSelectionState';
@@ -20,6 +22,7 @@ vi.mock('../../services/falService', async () => {
   return {
     ...actual,
     generateImageToVideo: vi.fn(),
+    uploadVideoToFal: vi.fn(),
   };
 });
 
@@ -37,6 +40,14 @@ vi.mock('../../services/geminiService', async () => {
     ...actual,
     generateImage: vi.fn(),
     generateImageEdit: vi.fn(),
+  };
+});
+
+vi.mock('../../services/mediaService', async () => {
+  const actual = await vi.importActual<typeof import('../../services/mediaService')>('../../services/mediaService');
+  return {
+    ...actual,
+    loadMediaFromBlob: vi.fn(actual.loadMediaFromBlob),
   };
 });
 
@@ -86,11 +97,11 @@ const createFalStub = (): UseFalSettingsResult => ({
   veo31Resolution: '720p',
   veo31AspectRatio: 'auto',
   veo31GenerateAudio: false,
-  wan26Resolution: '720p',
-  wan26Duration: '5',
-  wan26PromptExpansion: false,
-  wan26MultiShots: false,
-  isWan26I2VVideoModel: false,
+  wan27VideoResolution: '720p',
+  wan27VideoDuration: '5',
+  wan27VideoAspectRatio: '16:9',
+  wan27VideoPromptExpansion: false,
+  isWan27VideoModel: false,
   seedance15AspectRatio: '16:9',
   seedance15Resolution: '720p',
   seedance15Duration: '5',
@@ -179,6 +190,7 @@ const buildCanvasMedia = (
 describe('useGeneration (seedance 2)', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -391,6 +403,165 @@ describe('useGeneration (seedance 2)', () => {
         referenceAudios: [expect.any(File)],
       }),
     );
+  });
+
+  it('uploads selected audio for Wan 2.7 text-to-video', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
+    fal.isWan27VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    const audio1 = buildCanvasMedia('audio-1', 'audio', 4);
+    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/audio.wav');
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A neon dance sequence synced to the beat',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [audio1.id],
+        primaryImageId: audio1.id,
+        primaryImage: audio1,
+        primarySelectionMediaType: 'audio',
+        sourceAudioId: audio1.id,
+      }),
+      images: [audio1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(uploadVideoToFal).toHaveBeenCalledWith(audio1.file);
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'A neon dance sequence synced to the beat',
+      null,
+      expect.objectContaining({
+        modelId: WAN_27_VIDEO_MODEL_ID,
+        sourceAudioUrl: 'https://example.com/audio.wav',
+        wan27VideoResolution: '720p',
+        wan27VideoDuration: '5',
+        wan27VideoAspectRatio: '16:9',
+      }),
+    );
+  });
+
+  it('does not attach current audio when rerunning a Wan 2.7 generation without saved audio', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
+    fal.isWan27VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    const audio1 = buildCanvasMedia('audio-1', 'audio', 4);
+    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/audio.wav');
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so rerun payload can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [audio1.id],
+        primaryImageId: audio1.id,
+        primaryImage: audio1,
+        primarySelectionMediaType: 'audio',
+        sourceAudioId: audio1.id,
+      }),
+      images: [audio1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'video',
+        prompt: 'Repeat the saved silent Wan scene',
+        provider: 'fal',
+        modelId: WAN_27_VIDEO_MODEL_ID,
+        modelMode: 'video',
+      });
+      await Promise.resolve();
+    });
+
+    const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
+    expect(uploadVideoToFal).not.toHaveBeenCalled();
+    expect(submittedOptions).not.toHaveProperty('sourceAudioUrl');
+  });
+
+  it('marks Wan 2.7 outputs generated with uploaded audio as audible', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
+    fal.isWan27VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    const audio1 = buildCanvasMedia('audio-1', 'audio', 4);
+    const setState = vi.fn();
+    const videoElement = document.createElement('video');
+    Object.defineProperty(videoElement, 'videoWidth', { configurable: true, value: 640 });
+    Object.defineProperty(videoElement, 'videoHeight', { configurable: true, value: 360 });
+    Object.defineProperty(videoElement, 'play', { configurable: true, value: vi.fn().mockResolvedValue(undefined) });
+    Object.defineProperty(videoElement, 'pause', { configurable: true, value: vi.fn() });
+    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/audio.wav');
+    vi.mocked(generateImageToVideo).mockResolvedValue({ videoUrl: 'https://example.com/wan.mp4', requestId: 'req-wan' });
+    vi.mocked(loadMediaFromBlob).mockResolvedValue(videoElement);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['video'], { type: 'video/mp4' })),
+    }));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A neon dance sequence synced to the beat',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [audio1.id],
+        primaryImageId: audio1.id,
+        primaryImage: audio1,
+        primarySelectionMediaType: 'audio',
+        sourceAudioId: audio1.id,
+      }),
+      images: [audio1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState,
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    const stateUpdater = setState.mock.calls.find(([value]) => typeof value === 'function')?.[0] as ((prev: { images: CanvasImage[] }) => { images: CanvasImage[] }) | undefined;
+    expect(stateUpdater).toBeTruthy();
+    const nextState = stateUpdater?.({ images: [] });
+    expect(nextState?.images[0]?.hasAudio).toBe(true);
   });
 
   it('does not merge selected media into references for non-Seedance video runs', async () => {

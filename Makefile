@@ -56,7 +56,7 @@ dev:
 		exit $$?; \
 	fi; \
 	echo "Starting Vite frontend on http://localhost:3000"; \
-	npm run dev -- --clearScreen false & \
+	npm run dev & \
 	frontend_pid=$$!; \
 	while :; do \
 		if ! kill -0 "$$secure_backend_pid" 2>/dev/null; then \

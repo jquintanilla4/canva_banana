@@ -109,7 +109,7 @@ const renderPromptBar = () => render(
     submitDisabled={false}
     modelOptions={[
       { value: 'seedance-2', label: 'Seedance 2' },
-      { value: 'wan-2.6', label: 'Wan 2.6' },
+      { value: 'wan-2.7', label: 'Wan 2.7' },
     ]}
     selectedModel="seedance-2"
     onModelChange={vi.fn()}
@@ -131,7 +131,7 @@ const renderInlinePromptBar = (maxInlineWidthPx?: number) => render(
     submitDisabled={false}
     modelOptions={[
       { value: 'seedance-2', label: 'Seedance 2' },
-      { value: 'wan-2.6', label: 'Wan 2.6' },
+      { value: 'wan-2.7', label: 'Wan 2.7' },
     ]}
     selectedModel="seedance-2"
     onModelChange={vi.fn()}
@@ -458,7 +458,7 @@ describe('PromptBar layout', () => {
         submitDisabled={false}
         modelOptions={[
           { value: 'seedance-2', label: 'Seedance 2' },
-          { value: 'wan-2.6', label: 'Wan 2.6' },
+          { value: 'wan-2.7', label: 'Wan 2.7' },
         ]}
         selectedModel="seedance-2"
         onModelChange={vi.fn()}
@@ -484,9 +484,9 @@ describe('PromptBar layout', () => {
         submitDisabled={false}
         modelOptions={[
           { value: 'seedance-2', label: 'Seedance 2' },
-          { value: 'wan-2.6', label: 'Wan 2.6' },
+          { value: 'wan-2.7', label: 'Wan 2.7' },
         ]}
-        selectedModel="wan-2.6"
+        selectedModel="wan-2.7"
         onModelChange={vi.fn()}
         modelSelectDisabled={false}
         modelMode="video"

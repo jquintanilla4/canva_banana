@@ -15,6 +15,9 @@ import type {
   LipsyncSyncMode,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
+  Wan27VideoAspectRatioSelectionValue,
+  Wan27VideoDurationSelectionValue,
+  Wan27VideoResolutionSelectionValue,
 } from '../modelConfig'; // Model-specific option types.
 
 export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED'; // Fal queue status enum.
@@ -114,10 +117,10 @@ export interface GenerateVideoOptions {
   veo31Resolution?: '720p' | '1080p' | '4k';
   veo31AspectRatio?: 'auto' | '16:9' | '9:16';
   veo31GenerateAudio?: boolean;
-  wan26Resolution?: '720p' | '1080p';
-  wan26Duration?: '5' | '10' | '15';
-  wan26PromptExpansion?: boolean;
-  wan26MultiShots?: boolean;
+  wan27VideoResolution?: Wan27VideoResolutionSelectionValue;
+  wan27VideoDuration?: Wan27VideoDurationSelectionValue;
+  wan27VideoAspectRatio?: Wan27VideoAspectRatioSelectionValue;
+  wan27VideoPromptExpansion?: boolean;
   seedance15AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
   seedance15Resolution?: '480p' | '720p' | '1080p';
   seedance15Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';

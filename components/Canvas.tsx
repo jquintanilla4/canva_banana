@@ -80,7 +80,7 @@ interface CanvasProps {
   isKling26ControlVideoInputMode: boolean;
   isVeo31ExtendMode: boolean;
   isWanAnimateVideoInputMode: boolean;
-  isWan26I2VMode: boolean;
+  isWan27VideoMode: boolean;
   onError?: (message: string) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
@@ -179,7 +179,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   isKling26ControlVideoInputMode,
   isVeo31ExtendMode,
   isWanAnimateVideoInputMode,
-  isWan26I2VMode,
+  isWan27VideoMode,
   onError,
   onImageSelect,
   onNoteSelect,
@@ -428,12 +428,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       isKling26ControlVideoInputMode,
       isVeo31ExtendMode,
       isWanAnimateVideoInputMode,
-      isWan26I2VMode,
+      isWan27VideoMode,
       showMetadataOverlay,
       cropMode,
       transformMode,
     });
-  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan26I2VMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
+  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {

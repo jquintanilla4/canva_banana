@@ -35,7 +35,7 @@ type DrawCanvasArgs = {
   isKling26ControlVideoInputMode: boolean;
   isVeo31ExtendMode: boolean;
   isWanAnimateVideoInputMode: boolean;
-  isWan26I2VMode: boolean;
+  isWan27VideoMode: boolean;
   showMetadataOverlay: boolean;
   cropMode: CropModeState | null;
   transformMode: TransformModeState | null;
@@ -67,7 +67,7 @@ export function drawCanvas({
   isKling26ControlVideoInputMode,
   isVeo31ExtendMode,
   isWanAnimateVideoInputMode,
-  isWan26I2VMode,
+  isWan27VideoMode,
   showMetadataOverlay,
   cropMode,
   transformMode,
@@ -270,8 +270,8 @@ export function drawCanvas({
         ctx.fillStyle = '#000000';
         ctx.fillText(durationText, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
       }
-    } else if (isWan26I2VMode && selectedImageIds.includes(image.id) && image.mediaType === 'image') {
-      ctx.strokeStyle = '#3b82f6'; // blue-500 for images in Wan 2.6 mode
+    } else if (isWan27VideoMode && selectedImageIds.includes(image.id) && image.mediaType === 'image') {
+      ctx.strokeStyle = '#3b82f6'; // blue-500 for images in Wan 2.7 mode
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);

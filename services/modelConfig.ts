@@ -56,7 +56,9 @@ export const ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as 
 export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/v3' as const; // Sync v3 endpoint id.
 export const HEYGEN_V3_LIPSYNC_MODEL_ID = 'fal-ai/heygen/v3/lipsync/precision' as const; // HeyGen precision lipsync endpoint.
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as const;
-export const WAN_26_I2V_MODEL_ID = 'wan/v2.6/image-to-video' as const;
+export const WAN_27_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7' as const; // Wan 2.7 smart video selector.
+export const WAN_27_TEXT_TO_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/text-to-video' as const; // Wan 2.7 text-to-video endpoint.
+export const WAN_27_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/image-to-video' as const; // Wan 2.7 image-to-video endpoint.
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
 export const SEEDANCE_2_VIDEO_MODEL_ID = 'volcengine/seedance-2' as const;
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0' as const; // Selector id for the Fal Seedance 2 family.
@@ -139,7 +141,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' }, // Fal-backed Seedance 2.
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync 3 Lipsync' },
   { value: VEO_31_IMAGE_TO_VIDEO_MODEL_ID, label: 'Veo 3.1' },
-  { value: WAN_26_I2V_MODEL_ID, label: 'Wan 2.6' },
+  { value: WAN_27_VIDEO_MODEL_ID, label: 'Wan 2.7' },
   { value: WAN_ANIMATE_MODEL_ID, label: 'Wan Animate' },
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
@@ -451,28 +453,42 @@ export const INFINITALK_DURATION_TO_NUM_FRAMES: Record<InfinitalkDurationSelecti
   '12s': 288,
 } as const;
 
-export type Wan26ResolutionSelectionValue = '720p' | '1080p';
-export type Wan26DurationSelectionValue = '5' | '10' | '15';
-export type Wan26PromptExpansionSelectionValue = 'true' | 'false';
-export type Wan26MultiShotsSelectionValue = 'true' | 'false';
+export type Wan27VideoResolutionSelectionValue = '720p' | '1080p';
+export type Wan27VideoDurationSelectionValue = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+export type Wan27VideoAspectRatioSelectionValue = '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
+export type Wan27VideoPromptExpansionSelectionValue = 'true' | 'false';
 
-export const WAN_26_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Wan26ResolutionSelectionValue; label: string }> = [
+export const WAN_27_VIDEO_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Wan27VideoResolutionSelectionValue; label: string }> = [
   { value: '720p', label: '720p' },
   { value: '1080p', label: '1080p' },
 ] as const;
 
-export const WAN_26_DURATION_OPTIONS: ReadonlyArray<{ value: Wan26DurationSelectionValue; label: string }> = [
+export const WAN_27_VIDEO_DURATION_OPTIONS: ReadonlyArray<{ value: Wan27VideoDurationSelectionValue; label: string }> = [
+  { value: '2', label: '2s' },
+  { value: '3', label: '3s' },
+  { value: '4', label: '4s' },
   { value: '5', label: '5s' },
+  { value: '6', label: '6s' },
+  { value: '7', label: '7s' },
+  { value: '8', label: '8s' },
+  { value: '9', label: '9s' },
   { value: '10', label: '10s' },
+  { value: '11', label: '11s' },
+  { value: '12', label: '12s' },
+  { value: '13', label: '13s' },
+  { value: '14', label: '14s' },
   { value: '15', label: '15s' },
 ] as const;
 
-export const WAN_26_PROMPT_EXPANSION_OPTIONS: ReadonlyArray<{ value: Wan26PromptExpansionSelectionValue; label: string }> = [
-  { value: 'true', label: 'ON' },
-  { value: 'false', label: 'OFF' },
+export const WAN_27_VIDEO_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan27VideoAspectRatioSelectionValue; label: string }> = [
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+  { value: '1:1', label: '1:1' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:4', label: '3:4' },
 ] as const;
 
-export const WAN_26_MULTI_SHOTS_OPTIONS: ReadonlyArray<{ value: Wan26MultiShotsSelectionValue; label: string }> = [
+export const WAN_27_VIDEO_PROMPT_EXPANSION_OPTIONS: ReadonlyArray<{ value: Wan27VideoPromptExpansionSelectionValue; label: string }> = [
   { value: 'true', label: 'ON' },
   { value: 'false', label: 'OFF' },
 ] as const;
@@ -756,11 +772,15 @@ export const isVeo31AspectRatioSelectionValue = (value: unknown): value is Veo31
 export const isVeo31Variant = (value: unknown): value is Veo31Variant =>
   value === 'i2v-fflf' || value === 'extend';
 
-export const isWan26ResolutionSelectionValue = (value: unknown): value is Wan26ResolutionSelectionValue =>
+export const isWan27VideoResolutionSelectionValue = (value: unknown): value is Wan27VideoResolutionSelectionValue =>
   value === '720p' || value === '1080p';
 
-export const isWan26DurationSelectionValue = (value: unknown): value is Wan26DurationSelectionValue =>
-  value === '5' || value === '10' || value === '15';
+export const isWan27VideoDurationSelectionValue = (value: unknown): value is Wan27VideoDurationSelectionValue =>
+  value === '2' || value === '3' || value === '4' || value === '5' || value === '6' || value === '7' || value === '8'
+  || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
+
+export const isWan27VideoAspectRatioSelectionValue = (value: unknown): value is Wan27VideoAspectRatioSelectionValue =>
+  value === '16:9' || value === '9:16' || value === '1:1' || value === '4:3' || value === '3:4';
 
 export const isApiProvider = (value: unknown): value is ApiProviderId =>
   value === 'google' || value === 'fal';
@@ -773,6 +793,7 @@ export const isGenerationKind = (value: unknown): value is GenerationKind =>
 
 const LEGACY_NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 const LEGACY_SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const;
+const LEGACY_WAN_26_VIDEO_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
 const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
 export const LEGACY_SYNC_LIPSYNC_REACT_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const; // Old Sync React-1 id.
@@ -785,6 +806,9 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   }
   if (value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID) {
     return HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+  }
+  if (value === LEGACY_WAN_26_VIDEO_MODEL_ID || value === WAN_27_TEXT_TO_VIDEO_MODEL_ID || value === WAN_27_IMAGE_TO_VIDEO_MODEL_ID) {
+    return WAN_27_VIDEO_MODEL_ID;
   }
   if (value === LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID || value === LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID) {
     return WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
@@ -949,7 +973,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SYNC_LIPSYNC_MODEL_ID]: 0,
   [INFINITALK_VIDEO_MODEL_ID]: 0,
   [VEO_31_IMAGE_TO_VIDEO_MODEL_ID]: 0,
-  [WAN_26_I2V_MODEL_ID]: 0,
+  [WAN_27_VIDEO_MODEL_ID]: 0,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Seedance 2 reference mode supports up to 9 image refs.
   [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Fal Seedance 2 reference mode supports up to 9 image refs.
