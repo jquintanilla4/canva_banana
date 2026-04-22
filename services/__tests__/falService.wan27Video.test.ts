@@ -14,6 +14,7 @@ import {
   isFalModelId,
   normalizeFalModelId,
   WAN_27_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_TEXT_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
 } from '../modelConfig';
@@ -212,5 +213,44 @@ describe('falService (Wan 2.7 Video)', () => {
         audio_url: 'https://example.com/audio.wav',
       }),
     }));
+  });
+
+  it('routes reference requests to the Wan 2.7 reference endpoint', async () => {
+    vi.mocked(fal.storage.upload)
+      .mockResolvedValueOnce('https://example.com/reference.png')
+      .mockResolvedValueOnce('https://example.com/reference.mp4');
+
+    await generateImageToVideo('wan reference prompt', null, {
+      modelId: WAN_27_VIDEO_MODEL_ID,
+      wan27VideoVariant: 'reference',
+      wan27VideoAspectRatio: '3:4',
+      wan27VideoResolution: '720p',
+      wan27VideoDuration: '10',
+      negativePrompt: 'no blur',
+      referenceImages: [createTestImage()],
+      referenceVideos: [new File(['video'], 'reference.mp4', { type: 'video/mp4' })],
+    });
+
+    expect(fal.subscribe).toHaveBeenCalledWith(WAN_27_REFERENCE_TO_VIDEO_MODEL_ID, expect.objectContaining({
+      input: expect.objectContaining({
+        prompt: 'wan reference prompt',
+        aspect_ratio: '3:4',
+        resolution: '720p',
+        duration: 10,
+        negative_prompt: 'no blur',
+        enable_safety_checker: false,
+        reference_image_urls: ['https://example.com/reference.png'],
+        reference_video_urls: ['https://example.com/reference.mp4'],
+      }),
+    }));
+  });
+
+  it('requires reference assets for Wan 2.7 reference requests', async () => {
+    await expect(generateImageToVideo('wan reference prompt', null, {
+      modelId: WAN_27_VIDEO_MODEL_ID,
+      wan27VideoVariant: 'reference',
+    })).rejects.toThrow('Wan 2.7 Reference requires at least one reference image or video.');
+
+    expect(fal.subscribe).not.toHaveBeenCalled();
   });
 });

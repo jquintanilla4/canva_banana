@@ -28,6 +28,8 @@ const renderWan27Guard = (overrides: Partial<Parameters<typeof useGenerationGuar
   isSeedance2VideoModel: false,
   seedance2Variant: 'smart',
   seedance2ReferenceAssetCount: 0,
+  wan27VideoVariant: 'smart',
+  wan27ReferenceAssetCount: 0,
   veo31Variant: 'i2v-fflf',
   falModelId: WAN_27_VIDEO_MODEL_ID,
   falNumImages: 1,
@@ -105,5 +107,25 @@ describe('useGenerationGuards (Wan 2.7 Video)', () => {
 
     expect(result.current.submitDisabled).toBe(true);
     expect(result.current.promptPlaceholderText).toContain('Clear the current video selection');
+  });
+
+  it('requires references in Wan 2.7 reference mode', () => {
+    const { result } = renderWan27Guard({
+      wan27VideoVariant: 'reference',
+      wan27ReferenceAssetCount: 0,
+    });
+
+    expect(result.current.submitDisabled).toBe(true);
+    expect(result.current.promptPlaceholderText).toContain('tag at least one image or video reference');
+  });
+
+  it('enables Wan 2.7 reference mode with a prompt and reference asset', () => {
+    const { result } = renderWan27Guard({
+      wan27VideoVariant: 'reference',
+      wan27ReferenceAssetCount: 1,
+    });
+
+    expect(result.current.submitDisabled).toBe(false);
+    expect(result.current.promptPlaceholderText).toContain('Wan 2.7 Reference');
   });
 });

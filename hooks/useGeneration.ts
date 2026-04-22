@@ -54,6 +54,7 @@ import {
   isWan27VideoAspectRatioSelectionValue,
   isWan27VideoDurationSelectionValue,
   isWan27VideoResolutionSelectionValue,
+  isWan27VideoVariant,
   getSeedreamTextToImageModelId,
   isFalImageModelId,
   isFalModelMode,
@@ -81,6 +82,7 @@ import {
   type Wan27VideoAspectRatioSelectionValue,
   type Wan27VideoDurationSelectionValue,
   type Wan27VideoResolutionSelectionValue,
+  type Wan27VideoVariant,
   type WanTargetResolution,
 } from '../services/modelConfig';
 import type { UseFalSettingsResult } from './useFalSettings';
@@ -407,6 +409,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wan27VideoDuration,
     wan27VideoAspectRatio,
     wan27VideoPromptExpansion,
+    wan27VideoVariant,
     isWan27VideoModel,
     seedance15AspectRatio,
     seedance15Resolution,
@@ -511,6 +514,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : typeof legacyWanOptions.wan26PromptExpansion === 'boolean'
         ? legacyWanOptions.wan26PromptExpansion
         : wan27VideoPromptExpansion;
+    const wan27VideoVariantForRun: Wan27VideoVariant = isWan27VideoVariant(falOptionsOverride.wan27VideoVariant)
+      ? falOptionsOverride.wan27VideoVariant
+      : generationOverride ? 'smart' : wan27VideoVariant;
     const wanTargetResolutionForRun = falOptionsOverride.wanTargetResolution ?? wanTargetResolution;
     const wanCreativityForRun = falOptionsOverride.wanCreativity ?? wanCreativity;
     const wanAnimateVariantForRun = falOptionsOverride.wanAnimateVariant ?? wanAnimateVariant;
@@ -686,6 +692,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isGrokImagineVideoEditMode = isGrokImagineVideoModel && primaryImageForRun?.mediaType === 'video';
     const isVeo31VideoModelForRun = isVideoMode && falVideoModelIdForRun === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
     const isWan27VideoModelForRun = isVideoMode && falVideoModelIdForRun === WAN_27_VIDEO_MODEL_ID;
+    const isWan27ReferenceModeForRun = isWan27VideoModelForRun && wan27VideoVariantForRun === 'reference';
     const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
     const isVeo31ExtendMode = isVeo31VideoModelForRun && veo31VariantForRun === 'extend';
     const isFalVideoInputMode = isWanVideoInputMode
@@ -707,7 +714,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isFalSeedance2VideoModelForRun = isVideoMode && falVideoModelIdForRun === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
     const isAnySeedance2VideoModelForRun = isVideoMode && (falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID || isFalSeedance2VideoModelForRun);
     const isSeedance2ReferenceModeForRun = isAnySeedance2VideoModelForRun && seedance2VariantForRun === 'reference';
-    const wan27AudioIdForRun = isWan27VideoModelForRun ? sourceAudioIdForRun : null; // Wan 2.7 supports audio for text and image video.
+    const wan27AudioIdForRun = isWan27VideoModelForRun && !isWan27ReferenceModeForRun ? sourceAudioIdForRun : null; // Wan 2.7 Smart supports optional audio.
     const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
       ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
       : (isKlingVideoModel || isKling26VideoModel || isKlingO1VideoModel)
@@ -719,7 +726,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
     const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun;
-    const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel || (isWan27VideoModelForRun && Boolean(activePrimary)));
+    const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && Boolean(activePrimary)));
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const requiresVideoSourceImage = usingFal && isVideoMode && !isAnySeedance2VideoModelForRun && !isWan27VideoModelForRun && !isKlingO1VideoInputMode && !isFalVideoInputMode
@@ -733,6 +740,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
         : isTextToImage
           ? 'Please describe the image you want to create.'
           : 'Please write a prompt to describe your edit.');
+      return;
+    }
+
+    if (usingFal && isVideoMode && isWan27ReferenceModeForRun && referenceImageIdsForRun.length + referenceVideoIdsForRun.length === 0) {
+      setError('Wan 2.7 Reference requires at least one tagged reference image or video.');
       return;
     }
 
@@ -795,6 +807,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 ? `${baseModelLabel} ${veo31VariantLabel}`
                 : isWanAnimateVideoModel
                   ? `${baseModelLabel} ${wanAnimateVariantForRun === 'replace' ? 'Keep BG' : 'Replace BG'}`
+                  : isWan27VideoModelForRun
+                    ? `${baseModelLabel} ${wan27VideoVariantForRun === 'reference' ? 'Reference' : 'Smart'}`
                   : isFalSeedance2VideoModelForRun
                     ? buildSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun)
                     : baseModelLabel;
@@ -1212,11 +1226,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Scail requires a still image. Capture a frame or upload an image.');
           return;
         }
-        if (isWan27VideoModelForRun && primarySelection?.mediaType === 'video') {
+        if (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && primarySelection?.mediaType === 'video') {
           setError('Wan 2.7 uses a still image as the first frame. Select an image or clear the selection.');
           return;
         }
-        if (isWan27VideoModelForRun && videoLastFrameImageIdForRun && !activePrimary) {
+        if (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && videoLastFrameImageIdForRun && !activePrimary) {
           setError('Wan 2.7 first/last-frame mode requires a starting still image.');
           return;
         }
@@ -1224,6 +1238,26 @@ export const useGeneration = (args: UseGenerationArgs) => {
         let seedanceReferenceImageCanvasItems: Array<CanvasImage & { element: HTMLImageElement }> = [];
         let seedanceReferenceVideoCanvasItems: CanvasImage[] = [];
         let seedanceReferenceAudioCanvasItems: CanvasImage[] = [];
+        let wan27ReferenceVideoCanvasItems: CanvasImage[] = [];
+
+        if (isWan27ReferenceModeForRun) {
+          const referenceAssetCount = referenceImageIdsForRun.length + referenceVideoIdsForRun.length;
+          if (referenceAssetCount === 0) {
+            setError('Wan 2.7 Reference requires at least one tagged reference image or video.');
+            return;
+          }
+          if (referenceAudioIdsForRun.length > 0) {
+            setError('Wan 2.7 Reference supports image and video references only.');
+            return;
+          }
+          wan27ReferenceVideoCanvasItems = referenceVideoIdsForRun
+            .map(id => images.find(img => img.id === id))
+            .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'video'));
+          if (wan27ReferenceVideoCanvasItems.length !== referenceVideoIdsForRun.length) {
+            setError('Wan 2.7 video references must be videos on the canvas.');
+            return;
+          }
+        }
 
         if (isFalSeedance2VideoModelForRun) {
           const referenceAssetCount = referenceImageIdsForRun.length + referenceVideoIdsForRun.length + referenceAudioIdsForRun.length;
@@ -1431,7 +1465,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
 
-        const videoSourceImage = (isFalSeedance2VideoModelForRun && (!activePrimary || isSeedance2ReferenceModeForRun))
+        const videoSourceImage = (isFalSeedance2VideoModelForRun && (!activePrimary || isSeedance2ReferenceModeForRun)) || isWan27ReferenceModeForRun
           ? null
           : (isWanAnimateVideoModel || isOneToAllAnimateVideoModel || isKling26ControlVideoModel || isScailVideoModel)
             ? activePrimary?.element as HTMLImageElement
@@ -1443,6 +1477,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const seedanceReferenceVideoFilesForRun = isSeedance2ReferenceModeForRun
           ? seedanceReferenceVideoCanvasItems.map((img, index) => (
             new File([img.file], img.file.name || `seedance2-fal-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' })
+          ))
+          : [];
+        const wan27ReferenceVideoFilesForRun = isWan27ReferenceModeForRun
+          ? wan27ReferenceVideoCanvasItems.map((img, index) => (
+            new File([img.file], img.file.name || `wan27-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' })
           ))
           : [];
         const seedanceReferenceAudioFilesForRun = isSeedance2ReferenceModeForRun
@@ -1480,8 +1519,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
             return;
           }
         }
+        if (isWan27ReferenceModeForRun && referenceImagesForRun.length !== referenceImageIdsForRun.length) {
+          setError('Wan 2.7 image references must be still images.');
+          return;
+        }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKling26VideoModel || isKlingO1FflfMode || isVeo31TailCapable || isWan27VideoModelForRun || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart'); // Allow end-frame input for tail-capable variants.
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKling26VideoModel || isKlingO1FflfMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart'); // Allow end-frame input for tail-capable variants.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -1613,6 +1656,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
             wan27VideoDuration: wan27VideoDurationForRun,
             wan27VideoAspectRatio: wan27VideoAspectRatioForRun,
             wan27VideoPromptExpansion: wan27VideoPromptExpansionForRun,
+            wan27VideoVariant: wan27VideoVariantForRun,
+            ...(isWan27ReferenceModeForRun ? {
+              referenceImages: referenceImagesForRun,
+              referenceVideos: wan27ReferenceVideoFilesForRun,
+            } : {}),
             ...(wan27AudioIdForRun && sourceAudioUrlForRequest ? { sourceAudioUrl: sourceAudioUrlForRequest } : {}),
           } : {}),
           ...(isSeedance15VideoModel ? {
@@ -1743,14 +1791,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 modelLabel: jobModelLabel,
                 modelMode: falModelModeForRun,
                 url: videoResult.videoUrl,
-                primaryImageId: primaryImageIdForRun ?? undefined,
+                primaryImageId: isWan27ReferenceModeForRun ? undefined : primaryImageIdForRun ?? undefined,
                 ...(referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
                 ...(referenceVideoIdsForRun.length ? { referenceVideoIds: referenceVideoIdsForRun } : {}),
                 ...(referenceAudioIdsForRun.length ? { referenceAudioIds: referenceAudioIdsForRun } : {}),
                 ...(elementImageIdsForRun.length ? { elementImageIds: elementImageIdsForRun } : {}),
                 ...(activePrimary?.metadata?.generation?.originalSourceImageId
                   ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
-                  : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
+                  : primaryImageIdForRun && !isWan27ReferenceModeForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameIdForMetadata ? { videoLastFrameImageId: videoLastFrameIdForMetadata } : {}),
                 ...((isKlingO1VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
                 ...(sourceAudioIdForMetadata ? { sourceAudioId: sourceAudioIdForMetadata } : {}),
@@ -1810,7 +1858,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     wan27VideoResolution: wan27VideoResolutionForRun,
                     wan27VideoDuration: wan27VideoDurationForRun,
                     wan27VideoAspectRatio: wan27VideoAspectRatioForRun,
-                    wan27VideoPromptExpansion: wan27VideoPromptExpansionForRun,
+                    wan27VideoVariant: wan27VideoVariantForRun,
+                    ...(!isWan27ReferenceModeForRun ? { wan27VideoPromptExpansion: wan27VideoPromptExpansionForRun } : {}),
                   } : {}),
                   ...(isSeedance15VideoModel ? {
                     seedance15AspectRatio: seedance15AspectRatio,
@@ -2461,6 +2510,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wan27VideoDuration,
     wan27VideoAspectRatio,
     wan27VideoPromptExpansion,
+    wan27VideoVariant,
     isWan27VideoModel,
     seedance15AspectRatio,
     seedance15Resolution,

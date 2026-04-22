@@ -120,6 +120,11 @@ export type SnapshotManifestV2 = {
         veo31Resolution?: string;
         veo31AspectRatio?: string;
         veo31GenerateAudio?: boolean;
+        wan27VideoResolution?: string;
+        wan27VideoDuration?: string;
+        wan27VideoAspectRatio?: string;
+        wan27VideoPromptExpansion?: boolean;
+        wan27VideoVariant?: string;
         seedance2Variant?: string;
         seedance2AspectRatio?: string;
         seedance2Resolution?: string;
@@ -214,6 +219,11 @@ export type SnapshotMetaState = {
   veo31Resolution?: string;
   veo31AspectRatio?: string;
   veo31GenerateAudio?: boolean;
+  wan27VideoResolution?: string;
+  wan27VideoDuration?: string;
+  wan27VideoAspectRatio?: string;
+  wan27VideoPromptExpansion?: boolean;
+  wan27VideoVariant?: string;
   seedance2Variant?: string;
   seedance2AspectRatio?: string;
   seedance2Resolution?: string;
@@ -872,6 +882,11 @@ export const normalizeSnapshotImageMetadata = (
         ?? (typed as { wan26PromptExpansion?: unknown }).wan26PromptExpansion;
       if (typeof wan27VideoPromptExpansionValue === 'boolean') {
         normalizedOptions.wan27VideoPromptExpansion = wan27VideoPromptExpansionValue;
+      }
+
+      const wan27VideoVariantValue = (typed as { wan27VideoVariant?: unknown }).wan27VideoVariant;
+      if (wan27VideoVariantValue === 'smart' || wan27VideoVariantValue === 'reference') {
+        normalizedOptions.wan27VideoVariant = wan27VideoVariantValue;
       }
 
       const wanTargetResolution = (typed as { wanTargetResolution?: unknown }).wanTargetResolution;

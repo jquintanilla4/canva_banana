@@ -127,6 +127,7 @@ const mockState = vi.hoisted(() => {
     wan27VideoDuration: '5',
     wan27VideoAspectRatio: '16:9',
     wan27VideoPromptExpansion: false,
+    wan27VideoVariant: 'smart',
     seedance15AspectRatio: '16:9',
     seedance15Resolution: '720p',
     seedance15Duration: '5',
@@ -190,6 +191,7 @@ const mockState = vi.hoisted(() => {
   falState.handleWan27VideoResolutionChange = vi.fn();
   falState.handleWan27VideoDurationChange = vi.fn();
   falState.handleWan27VideoPromptExpansionChange = vi.fn();
+  falState.handleWan27VideoVariantChange = vi.fn();
   falState.handleWan27VideoAspectRatioChange = vi.fn();
   falState.handleSeedance15AspectRatioChange = vi.fn();
   falState.handleSeedance15ResolutionChange = vi.fn();
@@ -496,6 +498,8 @@ afterEach(() => {
     isSeedance2VideoModel: true,
     isFalSeedance2VideoModel: false,
     isVolcengineSeedance2VideoModel: true,
+    isWan27VideoModel: false,
+    wan27VideoVariant: 'smart',
   });
   mockState.falState.handleModelModeChange.mockClear();
 });
@@ -530,6 +534,36 @@ describe('App video prompt area gating', () => {
     render(<App />);
 
     expect(screen.getByRole('button', { name: 'Create video prompt bar' })).toBeTruthy();
+  });
+
+  it('disables tail-frame selection for Wan 2.7 Reference mode', () => {
+    Object.assign(mockState.falState, {
+      falModelId: 'fal-ai/wan/v2.7',
+      falVideoModelId: 'fal-ai/wan/v2.7',
+      isSeedance2VideoModel: false,
+      isVolcengineSeedance2VideoModel: false,
+      isWan27VideoModel: true,
+      wan27VideoVariant: 'reference',
+    });
+
+    render(<App />);
+
+    expect(mockState.lastCanvasProps?.tailSelectionEnabled).toBe(false);
+  });
+
+  it('keeps tail-frame selection enabled for Wan 2.7 Smart mode', () => {
+    Object.assign(mockState.falState, {
+      falModelId: 'fal-ai/wan/v2.7',
+      falVideoModelId: 'fal-ai/wan/v2.7',
+      isSeedance2VideoModel: false,
+      isVolcengineSeedance2VideoModel: false,
+      isWan27VideoModel: true,
+      wan27VideoVariant: 'smart',
+    });
+
+    render(<App />);
+
+    expect(mockState.lastCanvasProps?.tailSelectionEnabled).toBe(true);
   });
 
   it('hides the footer add button after switching away from video mode even when areas still exist', async () => {

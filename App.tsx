@@ -315,11 +315,12 @@ export default function App() {
   const isVeo31TailCapable = fal.isVeo31VideoModel && fal.veo31Variant === 'i2v-fflf';
   const isVeo31ExtendMode = fal.isVeo31VideoModel && fal.veo31Variant === 'extend';
   const isScailVideoModel = fal.isVideoMode && fal.falVideoModelId === SCAIL_VIDEO_MODEL_ID;
+  const isWan27ReferenceMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'reference'; // Wan Reference labels tagged image/video refs.
   const supportsTailFrameSelection = fal.isKlingProVideoSelection
     || fal.isKling26VideoModel
     || isKlingO1FflfMode
     || isVeo31TailCapable
-    || fal.isWan27VideoModel
+    || (fal.isWan27VideoModel && !isWan27ReferenceMode)
     || fal.isSeedance15VideoModel
     || (fal.isSeedance2VideoModel && fal.seedance2Variant === 'smart'); // End-frame capable modes.
 
@@ -1061,13 +1062,13 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel,
+    labelReferences: isKlingModel || fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isWan27ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
-    includePrimaryImageAsReference: !isSeedance2ReferenceMode, // Seedance reference mode should not auto-label the current primary pick.
-    referenceImageIds: effectiveSeedanceReferenceImageIds,
-    referenceVideoIds: effectiveSeedanceReferenceVideoIds,
-    referenceAudioIds: effectiveSeedanceReferenceAudioIds,
+    includePrimaryImageAsReference: !isSeedance2ReferenceMode && !isWan27ReferenceMode, // Reference modes should label only tagged refs.
+    referenceImageIds: isSeedance2ReferenceMode ? effectiveSeedanceReferenceImageIds : referenceImageIds,
+    referenceVideoIds: isSeedance2ReferenceMode ? effectiveSeedanceReferenceVideoIds : referenceVideoIds,
+    referenceAudioIds: isSeedance2ReferenceMode ? effectiveSeedanceReferenceAudioIds : referenceAudioIds,
     labelElements: fal.isKlingO1VideoModel,
     elementImageIds,
     isEditMode: isKlingO1VideoInputMode,
@@ -1249,6 +1250,8 @@ export default function App() {
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
     seedance2Variant: fal.seedance2Variant,
     seedance2ReferenceAssetCount,
+    wan27VideoVariant: fal.wan27VideoVariant,
+    wan27ReferenceAssetCount: isWan27ReferenceMode ? referenceImageIds.length + referenceVideoIds.length : 0,
     veo31Variant: fal.veo31Variant,
     falModelId: fal.falModelId,
     falNumImages: fal.falNumImages,
@@ -1323,6 +1326,7 @@ export default function App() {
     wan27VideoDuration: fal.wan27VideoDuration,
     wan27VideoAspectRatio: fal.wan27VideoAspectRatio,
     wan27VideoPromptExpansion: fal.wan27VideoPromptExpansion,
+    wan27VideoVariant: fal.wan27VideoVariant,
     seedance15AspectRatio: fal.seedance15AspectRatio,
     seedance15Resolution: fal.seedance15Resolution,
     seedance15Duration: fal.seedance15Duration,
@@ -1388,6 +1392,7 @@ export default function App() {
     onWan27VideoDurationChange: fal.handleWan27VideoDurationChange,
     onWan27VideoAspectRatioChange: fal.handleWan27VideoAspectRatioChange,
     onWan27VideoPromptExpansionChange: fal.handleWan27VideoPromptExpansionChange,
+    onWan27VideoVariantChange: fal.handleWan27VideoVariantChange,
     onSeedance15AspectRatioChange: fal.handleSeedance15AspectRatioChange,
     onSeedance15ResolutionChange: fal.handleSeedance15ResolutionChange,
     onSeedance15DurationChange: fal.handleSeedance15DurationChange,

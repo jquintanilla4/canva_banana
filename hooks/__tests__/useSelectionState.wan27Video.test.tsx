@@ -1,7 +1,7 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useSelectionState } from '../useSelectionState';
-import { WAN_27_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, KLING_O1_VIDEO_MODEL_ID, WAN_27_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage } from '../../types';
 import type { UseFalSettingsResult } from '../useFalSettings';
 
@@ -23,6 +23,7 @@ type TestFalSettings = Pick<
   | 'isKling26VideoModel'
   | 'isKling26ControlVideoModel'
   | 'isWan27VideoModel'
+  | 'wan27VideoVariant'
   | 'isSeedance15VideoModel'
   | 'isSeedance2VideoModel'
   | 'seedance2Variant'
@@ -64,6 +65,7 @@ const createWan27FalStub = (): TestFalSettings => ({
   isKling26VideoModel: false,
   isKling26ControlVideoModel: false,
   isWan27VideoModel: true,
+  wan27VideoVariant: 'smart',
   isSeedance15VideoModel: false,
   isSeedance2VideoModel: false,
   seedance2Variant: 'smart',
@@ -124,5 +126,185 @@ describe('useSelectionState (Wan 2.7 video)', () => {
     expect(result.current.sourceAudioId).toBe(audio.id);
     expect(result.current.selectedImageIds).toEqual([image.id, audio.id]);
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('tags image and video references in Wan 2.7 reference mode', () => {
+    const image = buildCanvasMedia('image-1', 'image');
+    const video = buildCanvasMedia('video-1', 'video');
+    const images = [image, video];
+    const fal = { ...createWan27FalStub(), wan27VideoVariant: 'reference' as const };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => {
+      result.current.handleImageSelection(image.id, { reference: true });
+    });
+    act(() => {
+      result.current.handleImageSelection(video.id, { reference: true });
+    });
+
+    expect(result.current.referenceImageIds).toEqual([image.id]);
+    expect(result.current.referenceVideoIds).toEqual([video.id]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('rejects audio references in Wan 2.7 reference mode', () => {
+    const audio = buildCanvasMedia('audio-1', 'audio');
+    const fal = { ...createWan27FalStub(), wan27VideoVariant: 'reference' as const };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: [audio],
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => {
+      result.current.handleImageSelection(audio.id, { reference: true });
+    });
+
+    expect(result.current.referenceAudioIds).toEqual([]);
+    expect(onError).toHaveBeenCalledWith('Wan 2.7 Reference supports image and video references only.');
+  });
+
+  it('clamps Wan 2.7 video references when switching to Seedance 2 reference mode', async () => {
+    const videos = Array.from({ length: 4 }, (_, index) => buildCanvasMedia(`video-${index + 1}`, 'video'));
+    const wanFal: TestFalSettings = { ...createWan27FalStub(), wan27VideoVariant: 'reference' as const };
+    const seedanceFal: TestFalSettings = {
+      ...createWan27FalStub(),
+      falModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      falVideoModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      isWan27VideoModel: false,
+      wan27VideoVariant: 'smart' as const,
+      isSeedance2VideoModel: true,
+      seedance2Variant: 'reference' as const,
+    };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result, rerender } = renderHook(({ fal }) => useSelectionState({
+      images: videos,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }), {
+      initialProps: { fal: wanFal },
+    });
+
+    videos.forEach(video => {
+      act(() => {
+        result.current.handleImageSelection(video.id, { reference: true });
+      });
+    });
+    expect(result.current.referenceVideoIds).toEqual(videos.map(video => video.id));
+
+    rerender({ fal: seedanceFal });
+
+    await waitFor(() => {
+      expect(result.current.referenceVideoIds).toEqual(['video-1', 'video-2', 'video-3']);
+    });
+    expect(onError).toHaveBeenCalledWith('Seedance 2 reference supports up to 3 videos.');
+  });
+
+  it('clamps Wan 2.7 image references when switching to Seedance 2 reference mode', async () => {
+    const images = Array.from({ length: 10 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const wanFal: TestFalSettings = { ...createWan27FalStub(), wan27VideoVariant: 'reference' as const };
+    const seedanceFal: TestFalSettings = {
+      ...createWan27FalStub(),
+      falModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      falVideoModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      isWan27VideoModel: false,
+      wan27VideoVariant: 'smart' as const,
+      isSeedance2VideoModel: true,
+      seedance2Variant: 'reference' as const,
+    };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result, rerender } = renderHook(({ fal }) => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }), {
+      initialProps: { fal: wanFal },
+    });
+
+    images.forEach(image => {
+      act(() => {
+        result.current.handleImageSelection(image.id, { reference: true });
+      });
+    });
+    expect(result.current.referenceImageIds).toEqual(images.map(image => image.id));
+
+    rerender({ fal: seedanceFal });
+
+    await waitFor(() => {
+      expect(result.current.referenceImageIds).toEqual(images.slice(0, 9).map(image => image.id));
+    });
+    expect(onReferenceLimit).toHaveBeenCalledWith(9);
+  });
+
+  it('clears video and audio references when switching to Kling O1', async () => {
+    const image = buildCanvasMedia('image-1', 'image');
+    const video = buildCanvasMedia('video-1', 'video');
+    const audio = buildCanvasMedia('audio-1', 'audio');
+    const assets = [image, video, audio];
+    const seedanceFal: TestFalSettings = {
+      ...createWan27FalStub(),
+      falModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      falVideoModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      isWan27VideoModel: false,
+      wan27VideoVariant: 'smart' as const,
+      isSeedance2VideoModel: true,
+      seedance2Variant: 'reference' as const,
+    };
+    const klingFal: TestFalSettings = {
+      ...createWan27FalStub(),
+      falModelId: KLING_O1_VIDEO_MODEL_ID,
+      falVideoModelId: KLING_O1_VIDEO_MODEL_ID,
+      isKlingO1VideoModel: true,
+      isWan27VideoModel: false,
+      wan27VideoVariant: 'smart' as const,
+      isSeedance2VideoModel: false,
+      seedance2Variant: 'smart' as const,
+    };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result, rerender } = renderHook(({ fal }) => useSelectionState({
+      images: assets,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }), {
+      initialProps: { fal: seedanceFal },
+    });
+
+    act(() => {
+      result.current.handleImageSelection(image.id, { reference: true });
+      result.current.handleImageSelection(video.id, { reference: true });
+      result.current.handleImageSelection(audio.id, { reference: true });
+    });
+    expect(result.current.referenceImageIds).toEqual([image.id]);
+    expect(result.current.referenceVideoIds).toEqual([video.id]);
+    expect(result.current.referenceAudioIds).toEqual([audio.id]);
+
+    rerender({ fal: klingFal });
+
+    await waitFor(() => {
+      expect(result.current.referenceVideoIds).toEqual([]);
+      expect(result.current.referenceAudioIds).toEqual([]);
+    });
+    expect(result.current.referenceImageIds).toEqual([image.id]);
   });
 });

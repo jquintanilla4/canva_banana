@@ -60,6 +60,7 @@ import {
   isWan27VideoAspectRatioSelectionValue,
   isWan27VideoDurationSelectionValue,
   isWan27VideoResolutionSelectionValue,
+  isWan27VideoVariant,
   RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   RECRAFT_V4_PRO_MAX_COLORS,
@@ -104,6 +105,7 @@ import type {
   Wan27VideoAspectRatioSelectionValue,
   Wan27VideoDurationSelectionValue,
   Wan27VideoResolutionSelectionValue,
+  Wan27VideoVariant,
   Wan27ImageAspectRatioSelectionValue,
   Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
@@ -189,6 +191,7 @@ type FalHandlers = {
   handleWan27VideoDurationChange: (value: string) => void;
   handleWan27VideoAspectRatioChange: (value: string) => void;
   handleWan27VideoPromptExpansionChange: (value: boolean) => void;
+  handleWan27VideoVariantChange: (value: string) => void;
   handleSeedance15AspectRatioChange: (value: string) => void;
   handleSeedance15ResolutionChange: (value: string) => void;
   handleSeedance15DurationChange: (value: string) => void;
@@ -260,6 +263,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wan27VideoDuration: Wan27VideoDurationSelectionValue;
   wan27VideoAspectRatio: Wan27VideoAspectRatioSelectionValue;
   wan27VideoPromptExpansion: boolean;
+  wan27VideoVariant: Wan27VideoVariant;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -326,6 +330,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWan27VideoDuration: Dispatch<SetStateAction<Wan27VideoDurationSelectionValue>>;
   setWan27VideoAspectRatio: Dispatch<SetStateAction<Wan27VideoAspectRatioSelectionValue>>;
   setWan27VideoPromptExpansion: Dispatch<SetStateAction<boolean>>;
+  setWan27VideoVariant: Dispatch<SetStateAction<Wan27VideoVariant>>;
   setSeedance15AspectRatio: Dispatch<SetStateAction<Seedance15AspectRatioSelectionValue>>;
   setSeedance15Resolution: Dispatch<SetStateAction<Seedance15ResolutionSelectionValue>>;
   setSeedance15Duration: Dispatch<SetStateAction<Seedance15DurationSelectionValue>>;
@@ -396,6 +401,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wan27VideoDuration, setWan27VideoDuration] = useState<Wan27VideoDurationSelectionValue>('5');
   const [wan27VideoAspectRatio, setWan27VideoAspectRatio] = useState<Wan27VideoAspectRatioSelectionValue>('16:9');
   const [wan27VideoPromptExpansion, setWan27VideoPromptExpansion] = useState<boolean>(true);
+  const [wan27VideoVariant, setWan27VideoVariant] = useState<Wan27VideoVariant>('smart');
   const [seedance15AspectRatio, setSeedance15AspectRatio] = useState<Seedance15AspectRatioSelectionValue>('16:9');
   const [seedance15Resolution, setSeedance15Resolution] = useState<Seedance15ResolutionSelectionValue>('720p');
   const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
@@ -481,6 +487,15 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       setFalVideoDuration(prev => (prev === '10' ? '10' : '5'));
     }
   }, [falVideoModelId]);
+
+  useEffect(() => {
+    if (!isWan27VideoModel || wan27VideoVariant !== 'reference') {
+      return;
+    }
+    if (wan27VideoDuration === '11' || wan27VideoDuration === '12' || wan27VideoDuration === '13' || wan27VideoDuration === '14' || wan27VideoDuration === '15') {
+      setWan27VideoDuration('10');
+    }
+  }, [isWan27VideoModel, wan27VideoDuration, wan27VideoVariant]);
 
   useEffect(() => {
     if (!isVeo31VideoModel) {
@@ -826,6 +841,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWan27VideoPromptExpansion(value);
   }, []);
 
+  const handleWan27VideoVariantChange = useCallback((value: string) => {
+    setWan27VideoVariant(isWan27VideoVariant(value) ? value : 'smart');
+  }, []);
+
   const handleSeedance15AspectRatioChange = useCallback((value: string) => {
     const valid = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] as const;
     if (valid.includes(value as Seedance15AspectRatioSelectionValue)) {
@@ -1032,6 +1051,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wan27VideoDuration,
     wan27VideoAspectRatio,
     wan27VideoPromptExpansion,
+    wan27VideoVariant,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -1121,6 +1141,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWan27VideoDurationChange,
     handleWan27VideoAspectRatioChange,
     handleWan27VideoPromptExpansionChange,
+    handleWan27VideoVariantChange,
     handleSeedance15AspectRatioChange,
     handleSeedance15ResolutionChange,
     handleSeedance15DurationChange,
@@ -1189,6 +1210,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWan27VideoDuration,
     setWan27VideoAspectRatio,
     setWan27VideoPromptExpansion,
+    setWan27VideoVariant,
     setSeedance15AspectRatio,
     setSeedance15Resolution,
     setSeedance15Duration,

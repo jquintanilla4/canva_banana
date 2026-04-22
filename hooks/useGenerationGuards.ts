@@ -44,6 +44,8 @@ type Args = {
   isSeedance2VideoModel: boolean;
   seedance2Variant: 'smart' | 'reference';
   seedance2ReferenceAssetCount: number;
+  wan27VideoVariant?: 'smart' | 'reference';
+  wan27ReferenceAssetCount?: number;
   veo31Variant: 'i2v-fflf' | 'extend';
   falModelId: string;
   falNumImages: number;
@@ -86,6 +88,8 @@ export function useGenerationGuards({
   isSeedance2VideoModel,
   seedance2Variant,
   seedance2ReferenceAssetCount,
+  wan27VideoVariant,
+  wan27ReferenceAssetCount = 0,
   veo31Variant,
   falModelId,
   falNumImages,
@@ -102,6 +106,7 @@ export function useGenerationGuards({
   const isHeygenV3LipsyncVideoModel = isVideoMode && falModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan27VideoModel = isVideoMode && falModelId === WAN_27_VIDEO_MODEL_ID;
+  const isWan27ReferenceMode = isWan27VideoModel && wan27VideoVariant === 'reference';
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isSeedance2ReferenceMode = isSeedance2VideoModel && seedance2Variant === 'reference';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
@@ -123,6 +128,7 @@ export function useGenerationGuards({
   const hasWan27SmartUnsupportedSelection = apiProvider === 'fal'
     && isVideoMode
     && isWan27VideoModel
+    && !isWan27ReferenceMode
     && primarySelectionMediaType === 'video'
     && !hasPrimaryImage;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
@@ -149,7 +155,8 @@ export function useGenerationGuards({
       !Number.isFinite(falNumImages) ||
       falNumImages < 1 ||
       falNumImages > falNumImageMax;
-    const isWanPromptOptional = usingFal && (isWanVideoInputMode || (isWan27VideoModel && hasPrimaryImage));
+    const hasWan27ReferenceAssets = wan27ReferenceAssetCount > 0;
+    const isWanPromptOptional = usingFal && (isWanVideoInputMode || (isWan27VideoModel && !isWan27ReferenceMode && hasPrimaryImage));
     const isLipsyncPromptOptional = usingFal && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
@@ -168,6 +175,7 @@ export function useGenerationGuards({
     const submitDisabled = isPromptMissing ||
       (shouldValidateFalOptions && isNumImagesInvalid) ||
       (usingFal && isSeedance2ReferenceMode && seedance2ReferenceAssetCount === 0) ||
+      (usingFal && isWan27ReferenceMode && !hasWan27ReferenceAssets) ||
       hasSeedance2SmartUnsupportedSelection ||
       hasWan27SmartUnsupportedSelection ||
       requiresSelectedImageForUpscale ||
@@ -197,6 +205,11 @@ export function useGenerationGuards({
           return 'Describe the video you want to create, or select an image for image-to-video...';
         }
         if (isWan27VideoModel) {
+          if (isWan27ReferenceMode) {
+            return hasWan27ReferenceAssets
+              ? 'Wan 2.7 Reference: shift-click image or video references as @Image1 or @Video1, then describe the scene...'
+              : 'Wan 2.7 Reference: tag at least one image or video reference, then describe the scene...';
+          }
           if (hasWan27SmartUnsupportedSelection) {
             return 'Wan 2.7 uses a still image as the first frame. Clear the current video selection to run text-to-video...';
           }
@@ -327,6 +340,7 @@ export function useGenerationGuards({
     isLipsyncVideoModel,
     isOneToAllAnimateVideoModel,
     isWan27VideoModel,
+    isWan27ReferenceMode,
     isVeo31ExtendMode,
     isSeedreamModel,
     isUpscaleModel,
@@ -334,6 +348,7 @@ export function useGenerationGuards({
     prompt,
     seedance2ReferenceAssetCount,
     seedance2Variant,
+    wan27ReferenceAssetCount,
     tool,
   ]);
 }

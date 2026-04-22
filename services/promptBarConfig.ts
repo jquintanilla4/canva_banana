@@ -37,6 +37,7 @@ import type {
   Wan27VideoAspectRatioSelectionValue,
   Wan27VideoDurationSelectionValue,
   Wan27VideoResolutionSelectionValue,
+  Wan27VideoVariant,
   Wan27ImageAspectRatioSelectionValue,
   Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
@@ -124,7 +125,9 @@ import {
   WAN_27_VIDEO_ASPECT_RATIO_OPTIONS,
   WAN_27_VIDEO_DURATION_OPTIONS,
   WAN_27_VIDEO_PROMPT_EXPANSION_OPTIONS,
+  WAN_27_VIDEO_REFERENCE_DURATION_OPTIONS,
   WAN_27_VIDEO_RESOLUTION_OPTIONS,
+  WAN_27_VIDEO_VARIANT_OPTIONS,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_ASPECT_RATIO_OPTIONS,
   WAN_27_IMAGE_MAX_IMAGES_OPTIONS,
@@ -343,6 +346,7 @@ export type PromptBarControlsInput = {
   wan27VideoDuration: Wan27VideoDurationSelectionValue;
   wan27VideoAspectRatio: Wan27VideoAspectRatioSelectionValue;
   wan27VideoPromptExpansion: boolean;
+  wan27VideoVariant: Wan27VideoVariant;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -407,6 +411,7 @@ export type PromptBarControlsInput = {
   onWan27VideoDurationChange: (value: string) => void;
   onWan27VideoAspectRatioChange: (value: string) => void;
   onWan27VideoPromptExpansionChange: (value: boolean) => void;
+  onWan27VideoVariantChange: (value: string) => void;
   onSeedance15AspectRatioChange: (value: string) => void;
   onSeedance15ResolutionChange: (value: string) => void;
   onSeedance15DurationChange: (value: string) => void;
@@ -505,6 +510,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     wan27VideoDuration,
     wan27VideoAspectRatio,
     wan27VideoPromptExpansion,
+    wan27VideoVariant,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -569,6 +575,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onWan27VideoDurationChange,
     onWan27VideoAspectRatioChange,
     onWan27VideoPromptExpansionChange,
+    onWan27VideoVariantChange,
     onSeedance15AspectRatioChange,
     onSeedance15ResolutionChange,
     onSeedance15DurationChange,
@@ -1037,6 +1044,22 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }
 
   if (isWan27VideoModel) {
+    const wan27VariantValue = wan27VideoVariant === 'reference' ? 'reference' : 'smart';
+    const isWan27ReferenceMode = wan27VariantValue === 'reference';
+    const wan27DurationOptions = isWan27ReferenceMode
+      ? WAN_27_VIDEO_REFERENCE_DURATION_OPTIONS
+      : WAN_27_VIDEO_DURATION_OPTIONS;
+
+    controls.push({
+      id: 'wan27-video-variant-select',
+      prefixLabel: 'Variant',
+      ariaLabel: 'Select Wan 2.7 variant',
+      options: WAN_27_VIDEO_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: wan27VariantValue,
+      onChange: onWan27VideoVariantChange,
+      disabled: isLoading,
+    });
+
     controls.push({
       id: 'wan27-video-aspect-ratio-select',
       prefixLabel: 'AR',
@@ -1059,21 +1082,23 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     controls.push({
       id: 'wan27-video-duration-select',
       ariaLabel: 'Select Wan 2.7 duration',
-      options: WAN_27_VIDEO_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      options: wan27DurationOptions.map(option => ({ value: option.value, label: option.label })),
       value: wan27VideoDuration,
       onChange: onWan27VideoDurationChange,
       disabled: isLoading,
     });
 
-    controls.push({
-      id: 'wan27-video-prompt-expansion-select',
-      prefixLabel: 'Prompt+',
-      ariaLabel: 'Toggle Wan 2.7 prompt expansion',
-      options: WAN_27_VIDEO_PROMPT_EXPANSION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan27VideoPromptExpansion ? 'true' : 'false',
-      onChange: (value: string) => onWan27VideoPromptExpansionChange(value === 'true'),
-      disabled: isLoading,
-    });
+    if (!isWan27ReferenceMode) {
+      controls.push({
+        id: 'wan27-video-prompt-expansion-select',
+        prefixLabel: 'Prompt+',
+        ariaLabel: 'Toggle Wan 2.7 prompt expansion',
+        options: WAN_27_VIDEO_PROMPT_EXPANSION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+        value: wan27VideoPromptExpansion ? 'true' : 'false',
+        onChange: (value: string) => onWan27VideoPromptExpansionChange(value === 'true'),
+        disabled: isLoading,
+      });
+    }
   }
 
   if (isSeedance15VideoModel) {

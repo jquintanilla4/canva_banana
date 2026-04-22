@@ -34,6 +34,7 @@ import {
   VEO_31_FFLF_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_TEXT_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_REPLACE_MODEL_ID,
@@ -460,6 +461,7 @@ export const generateImageToVideo = async (
   const isWan27VideoModel = modelId === WAN_27_VIDEO_MODEL_ID;
   if (isWan27VideoModel) {
     const trimmedPrompt = prompt.trim();
+    const wan27Variant = options.wan27VideoVariant === 'reference' ? 'reference' : 'smart';
     const resolution = options.wan27VideoResolution === '720p' || options.wan27VideoResolution === '1080p'
       ? options.wan27VideoResolution
       : '1080p';
@@ -489,6 +491,33 @@ export const generateImageToVideo = async (
       ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
       ...(seed !== undefined ? { seed } : {}),
     };
+
+    if (wan27Variant === 'reference') {
+      if (!trimmedPrompt) {
+        throw new Error('Wan 2.7 Reference requires a prompt.');
+      }
+      const imageUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
+      const videoUrls = options.referenceVideos?.length
+        ? await Promise.all(options.referenceVideos.map(file => uploadVideoToFal(file)))
+        : [];
+      if (imageUrls.length + videoUrls.length === 0) {
+        throw new Error('Wan 2.7 Reference requires at least one reference image or video.');
+      }
+      const referenceDuration = durationValue > 10 ? 10 : durationValue;
+      const inputPayload: Record<string, unknown> = {
+        prompt: trimmedPrompt,
+        resolution,
+        duration: referenceDuration,
+        aspect_ratio: aspectRatio,
+        enable_safety_checker: false,
+        ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+        ...(seed !== undefined ? { seed } : {}),
+        ...(imageUrls.length ? { reference_image_urls: imageUrls } : {}),
+        ...(videoUrls.length ? { reference_video_urls: videoUrls } : {}),
+      };
+
+      return subscribeForVideoUrl(WAN_27_REFERENCE_TO_VIDEO_MODEL_ID, inputPayload, options);
+    }
 
     if (image) {
       const imageUrl = await uploadImageElementToFal(image);

@@ -101,6 +101,7 @@ const createFalStub = (): UseFalSettingsResult => ({
   wan27VideoDuration: '5',
   wan27VideoAspectRatio: '16:9',
   wan27VideoPromptExpansion: false,
+  wan27VideoVariant: 'smart',
   isWan27VideoModel: false,
   seedance15AspectRatio: '16:9',
   seedance15Resolution: '720p',

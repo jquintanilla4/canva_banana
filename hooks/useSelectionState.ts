@@ -42,7 +42,9 @@ type SelectionFalSettings = Pick<
   | 'seedance2Variant'
   | 'isVeo31VideoModel'
   | 'veo31Variant'
->;
+> & {
+  wan27VideoVariant?: UseFalSettingsResult['wan27VideoVariant']; // Missing values fall back to Smart.
+};
 
 type SelectionOptions = {
   images: CanvasImage[];
@@ -85,6 +87,10 @@ export type SelectionStateResult = {
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
   !!img && img.mediaType === 'image';
 
+const WAN_27_REFERENCE_IMAGE_LIMIT = 20; // Wan reference accepts multiple images.
+const WAN_27_REFERENCE_VIDEO_LIMIT = 20; // Wan reference accepts multiple videos.
+const NO_REFERENCE_LIMIT = 0; // Non-reference modes should not keep video/audio refs.
+
 export const useSelectionState = (options: SelectionOptions): SelectionStateResult => {
   const { images, apiProvider, fal, onError, onReferenceLimit } = options;
   const {
@@ -104,6 +110,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
     isWan27VideoModel,
+    wan27VideoVariant,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     seedance2Variant,
@@ -125,7 +132,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const isScailVideoModel = apiProvider === 'fal'
     && falModelMode === 'video'
     && falVideoModelId === SCAIL_VIDEO_MODEL_ID;
-  const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel || isWan27VideoModel;
+  const isWan27ReferenceMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isWan27VideoModel
+    && wan27VideoVariant === 'reference';
+  const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel || (isWan27VideoModel && !isWan27ReferenceMode);
   const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
   const isSeedance2ReferenceMode = apiProvider === 'fal'
     && falModelMode === 'video'
@@ -200,17 +211,58 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setSourceAudioId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
   }, [elementImageIds.length, images, referenceAudioIds.length, referenceImageIds.length, referenceVideoIds.length, seedanceReferenceOrderIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
 
-  useEffect(() => {
+  const referenceLimits = useMemo(() => {
     if (isSeedance2ReferenceMode) {
+      return {
+        images: SEEDANCE_REFERENCE_IMAGE_LIMIT,
+        videos: SEEDANCE_REFERENCE_VIDEO_LIMIT,
+        audios: SEEDANCE_REFERENCE_AUDIO_LIMIT,
+      };
+    }
+    if (isWan27ReferenceMode) {
+      return {
+        images: WAN_27_REFERENCE_IMAGE_LIMIT,
+        videos: WAN_27_REFERENCE_VIDEO_LIMIT,
+        audios: NO_REFERENCE_LIMIT,
+      };
+    }
+    return {
+      images: getMaxReferenceImages(falModelId),
+      videos: NO_REFERENCE_LIMIT,
+      audios: NO_REFERENCE_LIMIT,
+    };
+  }, [falModelId, isSeedance2ReferenceMode, isWan27ReferenceMode]);
+
+  useEffect(() => {
+    setReferenceVideoIds(prevIds => {
+      if (prevIds.length <= referenceLimits.videos) {
+        return prevIds;
+      }
+      if (isSeedance2ReferenceMode) {
+        onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
+      }
+      return prevIds.slice(0, referenceLimits.videos);
+    });
+    setReferenceAudioIds(prevIds => {
+      if (prevIds.length <= referenceLimits.audios) {
+        return prevIds;
+      }
+      if (isSeedance2ReferenceMode) {
+        onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
+      }
+      return prevIds.slice(0, referenceLimits.audios);
+    });
+    if (isKlingO1VideoModel) {
       return;
     }
-    if (referenceVideoIds.length > 0) {
-      setReferenceVideoIds([]);
-    }
-    if (referenceAudioIds.length > 0) {
-      setReferenceAudioIds([]);
-    }
-  }, [isSeedance2ReferenceMode, referenceAudioIds.length, referenceVideoIds.length]);
+    setReferenceImageIds(prevIds => {
+      if (prevIds.length <= referenceLimits.images) {
+        return prevIds;
+      }
+      onReferenceLimit(referenceLimits.images);
+      return prevIds.slice(0, referenceLimits.images);
+    });
+  }, [isKlingO1VideoModel, isSeedance2ReferenceMode, onError, onReferenceLimit, referenceAudioIds.length, referenceImageIds.length, referenceLimits, referenceVideoIds.length]);
 
   useEffect(() => {
     const effectiveSeedanceReferenceIds = isSeedance2ReferenceMode
@@ -269,21 +321,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     });
   }, [elementImageIds.length, falModelId, isKlingO1VideoInputMode, isKlingO1VideoModel, onReferenceLimit]);
 
-  // For non-Kling O1 models, keep references within per-model limits.
-  useEffect(() => {
-    if (isKlingO1VideoModel) {
-      return;
-    }
-    const maxReferenceImages = getMaxReferenceImages(falModelId);
-    setReferenceImageIds(prev => {
-      if (prev.length <= maxReferenceImages) {
-        return prev;
-      }
-      onReferenceLimit(maxReferenceImages);
-      return prev.slice(0, maxReferenceImages);
-    });
-  }, [falModelId, isKlingO1VideoModel, onReferenceLimit, setReferenceImageIds]);
-
   useEffect(() => {
     if (!isKlingO1VideoModel) {
       return;
@@ -331,6 +368,29 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
         return prevIds;
       });
+      return;
+    }
+
+    if (reference && isWan27ReferenceMode && targetImage?.mediaType === 'video') {
+      if (!imageId) {
+        setReferenceVideoIds([]);
+        return;
+      }
+      setReferenceVideoIds(prevIds => {
+        if (prevIds.includes(imageId)) {
+          return prevIds.filter(id => id !== imageId);
+        }
+        if (prevIds.length < WAN_27_REFERENCE_VIDEO_LIMIT) {
+          return [...prevIds, imageId];
+        }
+        onError(`Wan 2.7 Reference supports up to ${WAN_27_REFERENCE_VIDEO_LIMIT} videos.`);
+        return prevIds;
+      });
+      return;
+    }
+
+    if (reference && isWan27ReferenceMode && targetImage?.mediaType === 'audio') {
+      onError('Wan 2.7 Reference supports image and video references only.');
       return;
     }
 
@@ -429,7 +489,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (reference) {
-      if (primaryImageId && imageId === primaryImageId && !isSeedance2ReferenceMode) {
+      if (primaryImageId && imageId === primaryImageId && !isSeedance2ReferenceMode && !isWan27ReferenceMode) {
         return;
       }
       if (!imageId) {
@@ -445,6 +505,19 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
             return [...prevIds, imageId];
           }
           onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images.`);
+          return prevIds;
+        });
+        return;
+      }
+      if (isWan27ReferenceMode) {
+        setReferenceImageIds(prevIds => {
+          if (prevIds.includes(imageId)) {
+            return prevIds.filter(id => id !== imageId);
+          }
+          if (prevIds.length < WAN_27_REFERENCE_IMAGE_LIMIT) {
+            return [...prevIds, imageId];
+          }
+          onReferenceLimit(WAN_27_REFERENCE_IMAGE_LIMIT);
           return prevIds;
         });
         return;
@@ -502,8 +575,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       if (!isKlingImageModel) {
         setReferenceImageIds([]);
       }
-      if (!isSeedance2ReferenceMode) {
+      if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
         setReferenceVideoIds([]);
+        setReferenceAudioIds([]);
+      }
+      if (isWan27ReferenceMode) {
         setReferenceAudioIds([]);
       }
       if (!isKlingO1VideoSelection) {
@@ -532,8 +608,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (primaryImageId === imageId && selectedImageIds.length === 1) {
       setSelectedNoteIds([]);
       setReferenceImageIds([]);
-      if (!isSeedance2ReferenceMode) {
+      if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
         setReferenceVideoIds([]);
+        setReferenceAudioIds([]);
+      }
+      if (isWan27ReferenceMode) {
         setReferenceAudioIds([]);
       }
       if (!isKlingO1VideoSelection) {
@@ -576,8 +655,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (!isKlingImageModel) {
       setReferenceImageIds([]);
     }
-    if (!isSeedance2ReferenceMode) {
+    if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
       setReferenceVideoIds([]);
+      setReferenceAudioIds([]);
+    }
+    if (isWan27ReferenceMode) {
       setReferenceAudioIds([]);
     }
     if (!isKlingO1VideoSelection) {
@@ -614,9 +696,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
 	    isKlingO1VideoInputMode,
 	    isVideoInputMode,
 	    sourceVideoId,
-	    isAudioInputMode,
-	    sourceAudioId,
+      isAudioInputMode,
+      sourceAudioId,
       isSeedance2ReferenceMode,
+      isWan27ReferenceMode,
 	  ]);
 
   const handleNoteSelection = useCallback((

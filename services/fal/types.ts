@@ -18,6 +18,7 @@ import type {
   Wan27VideoAspectRatioSelectionValue,
   Wan27VideoDurationSelectionValue,
   Wan27VideoResolutionSelectionValue,
+  Wan27VideoVariant,
 } from '../modelConfig'; // Model-specific option types.
 
 export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED'; // Fal queue status enum.
@@ -121,6 +122,7 @@ export interface GenerateVideoOptions {
   wan27VideoDuration?: Wan27VideoDurationSelectionValue;
   wan27VideoAspectRatio?: Wan27VideoAspectRatioSelectionValue;
   wan27VideoPromptExpansion?: boolean;
+  wan27VideoVariant?: Wan27VideoVariant;
   seedance15AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
   seedance15Resolution?: '480p' | '720p' | '1080p';
   seedance15Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';

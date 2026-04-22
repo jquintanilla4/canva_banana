@@ -39,6 +39,10 @@ import {
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
   isVeo31Variant,
+  isWan27VideoAspectRatioSelectionValue,
+  isWan27VideoDurationSelectionValue,
+  isWan27VideoResolutionSelectionValue,
+  isWan27VideoVariant,
   normalizeVeo31Variant,
   isFalVideoModelId,
   normalizeFalModelId,
@@ -171,6 +175,11 @@ export function useSnapshotIO({
     veo31Resolution,
     veo31AspectRatio,
     veo31GenerateAudio,
+    wan27VideoResolution,
+    wan27VideoDuration,
+    wan27VideoAspectRatio,
+    wan27VideoPromptExpansion,
+    wan27VideoVariant,
     seedance2Variant,
     seedance2AspectRatio,
     seedance2Resolution,
@@ -211,6 +220,11 @@ export function useSnapshotIO({
     setVeo31Resolution,
     setVeo31AspectRatio,
     setVeo31GenerateAudio,
+    setWan27VideoResolution,
+    setWan27VideoDuration,
+    setWan27VideoAspectRatio,
+    setWan27VideoPromptExpansion,
+    setWan27VideoVariant,
     setSeedance2Variant,
     setSeedance2AspectRatio,
     setSeedance2Resolution,
@@ -286,6 +300,11 @@ export function useSnapshotIO({
       veo31Resolution,
       veo31AspectRatio,
       veo31GenerateAudio,
+      wan27VideoResolution,
+      wan27VideoDuration,
+      wan27VideoAspectRatio,
+      wan27VideoPromptExpansion,
+      wan27VideoVariant,
       seedance2Variant,
       seedance2AspectRatio,
       seedance2Resolution,
@@ -347,6 +366,11 @@ export function useSnapshotIO({
     veo31Resolution,
     veo31AspectRatio,
     veo31GenerateAudio,
+    wan27VideoResolution,
+    wan27VideoDuration,
+    wan27VideoAspectRatio,
+    wan27VideoPromptExpansion,
+    wan27VideoVariant,
     seedance2Variant,
     seedance2AspectRatio,
     seedance2Resolution,
@@ -702,6 +726,19 @@ export function useSnapshotIO({
         if (typeof meta.veo31GenerateAudio === 'boolean') {
           setVeo31GenerateAudio(meta.veo31GenerateAudio);
         }
+        if (isWan27VideoResolutionSelectionValue(meta.wan27VideoResolution)) {
+          setWan27VideoResolution(meta.wan27VideoResolution);
+        }
+        if (isWan27VideoDurationSelectionValue(meta.wan27VideoDuration)) {
+          setWan27VideoDuration(meta.wan27VideoDuration);
+        }
+        if (isWan27VideoAspectRatioSelectionValue(meta.wan27VideoAspectRatio)) {
+          setWan27VideoAspectRatio(meta.wan27VideoAspectRatio);
+        }
+        if (typeof meta.wan27VideoPromptExpansion === 'boolean') {
+          setWan27VideoPromptExpansion(meta.wan27VideoPromptExpansion);
+        }
+        setWan27VideoVariant(isWan27VideoVariant(meta.wan27VideoVariant) ? meta.wan27VideoVariant : 'smart');
         if (isSeedance2Variant(meta.seedance2Variant)) {
           setSeedance2Variant(meta.seedance2Variant);
         }
