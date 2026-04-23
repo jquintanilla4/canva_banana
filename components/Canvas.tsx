@@ -77,7 +77,7 @@ interface CanvasProps {
   isKlingO1VideoInputMode: boolean;
   isKlingO1FflfMode: boolean;
   isSeedance15FflfMode: boolean;
-  isKling26ControlVideoInputMode: boolean;
+  isKlingV3ControlVideoInputMode: boolean;
   isVeo31ExtendMode: boolean;
   isWanAnimateVideoInputMode: boolean;
   isWan27VideoMode: boolean;
@@ -176,7 +176,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   isKlingO1VideoInputMode,
   isKlingO1FflfMode,
   isSeedance15FflfMode,
-  isKling26ControlVideoInputMode,
+  isKlingV3ControlVideoInputMode,
   isVeo31ExtendMode,
   isWanAnimateVideoInputMode,
   isWan27VideoMode,
@@ -425,7 +425,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       isKlingO1VideoInputMode,
       isKlingO1FflfMode,
       isSeedance15FflfMode,
-      isKling26ControlVideoInputMode,
+      isKlingV3ControlVideoInputMode,
       isVeo31ExtendMode,
       isWanAnimateVideoInputMode,
       isWan27VideoMode,
@@ -433,7 +433,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       cropMode,
       transformMode,
     });
-  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKling26ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
+  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {

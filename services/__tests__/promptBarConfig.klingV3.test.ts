@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KLING_V3_VIDEO_MODEL_ID } from '../modelConfig';
+import { KLING_V3_CONTROL_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID } from '../modelConfig';
 import { buildPromptBarModelControls, type PromptBarControlsInput } from '../promptBarConfig';
 
 const baseInput = {
@@ -53,5 +53,25 @@ describe('promptBarConfig (Kling v3)', () => {
       'kling-v3-cfg-select',
     ]);
     expect(shotControl && 'options' in shotControl ? shotControl.options.map(option => option.value) : []).toContain('1');
+  });
+
+  it('shows Kling 3.0 Control sound and orientation controls without a variant picker', () => {
+    const controls = buildPromptBarModelControls({
+      ...baseInput,
+      falModelId: KLING_V3_CONTROL_VIDEO_MODEL_ID,
+      isKlingV3VideoModel: false,
+      isKlingV3ControlVideoModel: true,
+      klingV3ControlKeepSound: true,
+      klingV3ControlOrientation: 'video',
+      onKlingV3ControlKeepSoundChange: vi.fn(),
+      onKlingV3ControlOrientationChange: vi.fn(),
+    } as unknown as PromptBarControlsInput);
+    const controlIds = controls?.map(control => control.id) ?? [];
+
+    expect(controlIds).toEqual([
+      'kling-v3-control-keep-sound',
+      'kling-v3-control-orientation',
+    ]);
+    expect(controlIds).not.toContain('kling26-control-variant-select');
   });
 });

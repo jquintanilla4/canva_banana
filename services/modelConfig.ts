@@ -47,8 +47,7 @@ export const KLING_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.5-turbo/pro/image
 export const KLING_V3_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro' as const; // Smart Kling v3 selector id.
 export const KLING_V3_TEXT_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/text-to-video' as const; // Kling v3 t2v endpoint.
 export const KLING_V3_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/image-to-video' as const; // Kling v3 i2v endpoint.
-export const KLING_26_CONTROL_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/standard/motion-control' as const;
-export const KLING_26_CONTROL_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/motion-control' as const;
+export const KLING_V3_CONTROL_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/motion-control' as const; // Kling v3 Control endpoint.
 export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace' as const;
 export const WAN_ANIMATE_MOVE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/move' as const;
 export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
@@ -83,12 +82,11 @@ export type KlingV3DurationSelectionValue = '3' | '4' | '5' | '6' | '7' | '8' | 
 export type KlingV3ShotDurationSelectionValue = '1' | '2' | KlingV3DurationSelectionValue;
 export type KlingV3CfgScaleSelectionValue = '0' | '0.25' | '0.5' | '0.75' | '1';
 export type KlingV3BooleanSelectionValue = 'true' | 'false';
-export type Kling26ControlVariant = 'standard' | 'pro';
-export type Kling26ControlDriver = 'image' | 'video';
+export type KlingV3ControlOrientation = 'image' | 'video';
 export type Veo31Variant = 'i2v-fflf' | 'extend';
 export type Seedance2Variant = 'smart' | 'reference';
 export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
-export type Kling26ControlSoundSelectionValue = 'true' | 'false';
+export type KlingV3ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
   'oversaturated, overexposed, static, blurry details, subtitles, stylized, artwork, painting, still frame, overall gray, worst quality, low quality, JPEG artifacts, ugly, mutated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, static motion, cluttered background, three legs, crowded background, walking backwards';
@@ -139,7 +137,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: HEYGEN_V3_LIPSYNC_MODEL_ID, label: 'HeyGen V3 Lipsync' },
   { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
-  { value: KLING_26_CONTROL_VIDEO_MODEL_ID, label: 'Kling 2.6 Control' },
+  { value: KLING_V3_CONTROL_VIDEO_MODEL_ID, label: 'Kling 3.0 Control' },
   { value: KLING_V3_VIDEO_MODEL_ID, label: 'Kling 3.0 Pro' },
   { value: KLING_O1_VIDEO_MODEL_ID, label: 'Kling O1 Video' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
@@ -218,12 +216,7 @@ export const KLING_V3_CFG_SCALE_OPTIONS: ReadonlyArray<{ value: KlingV3CfgScaleS
   { value: '1', label: '1' },
 ] as const;
 
-export const KLING26_CONTROL_VARIANT_OPTIONS: ReadonlyArray<{ value: Kling26ControlVariant; label: string }> = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'pro', label: 'Pro' },
-] as const;
-
-export const KLING26_CONTROL_DRIVER_OPTIONS: ReadonlyArray<{ value: Kling26ControlDriver; label: string }> = [
+export const KLING_V3_CONTROL_ORIENTATION_OPTIONS: ReadonlyArray<{ value: KlingV3ControlOrientation; label: string }> = [
   { value: 'video', label: 'Video (30s)' },
   { value: 'image', label: 'Image (10s)' },
 ] as const;
@@ -279,13 +272,10 @@ export const SEEDANCE2_CAMERA_FIXED_OPTIONS: ReadonlyArray<{ value: Seedance2Boo
   { value: 'true', label: 'Fixed' },
 ] as const;
 
-export const KLING26_CONTROL_SOUND_OPTIONS: ReadonlyArray<{ value: Kling26ControlSoundSelectionValue; label: string }> = [
+export const KLING_V3_CONTROL_SOUND_OPTIONS: ReadonlyArray<{ value: KlingV3ControlSoundSelectionValue; label: string }> = [
   { value: 'true', label: 'True' },
   { value: 'false', label: 'False' },
 ] as const;
-
-export const getKling26ControlModelId = (variant: Kling26ControlVariant): string =>
-  variant === 'pro' ? KLING_26_CONTROL_VIDEO_PRO_MODEL_ID : KLING_26_CONTROL_VIDEO_MODEL_ID;
 
 export const getKlingO1VideoEndpoint = (variant: KlingO1Variant): string => {
   if (variant === 'edit') return KLING_O1_VIDEO_EDIT_MODEL_ID;
@@ -900,6 +890,8 @@ const LEGACY_SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as c
 const LEGACY_WAN_26_VIDEO_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
 const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
+const LEGACY_KLING_26_CONTROL_VIDEO_MODEL_ID = 'fal-ai/kling-video/v2.6/standard/motion-control' as const; // Old Kling Control standard id.
+const LEGACY_KLING_26_CONTROL_VIDEO_PRO_MODEL_ID = 'fal-ai/kling-video/v2.6/pro/motion-control' as const; // Old Kling Control pro id.
 export const LEGACY_SYNC_LIPSYNC_REACT_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const; // Old Sync React-1 id.
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
   if (value === LEGACY_NANO_BANANA_MODEL_ID) {
@@ -913,6 +905,9 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   }
   if (value === KLING_V3_TEXT_TO_VIDEO_MODEL_ID || value === KLING_V3_IMAGE_TO_VIDEO_MODEL_ID) {
     return KLING_V3_VIDEO_MODEL_ID;
+  }
+  if (value === LEGACY_KLING_26_CONTROL_VIDEO_MODEL_ID || value === LEGACY_KLING_26_CONTROL_VIDEO_PRO_MODEL_ID) {
+    return KLING_V3_CONTROL_VIDEO_MODEL_ID;
   }
   if (value === LEGACY_WAN_26_VIDEO_MODEL_ID || value === WAN_27_TEXT_TO_VIDEO_MODEL_ID || value === WAN_27_IMAGE_TO_VIDEO_MODEL_ID || value === WAN_27_REFERENCE_TO_VIDEO_MODEL_ID || value === WAN_27_EDIT_VIDEO_MODEL_ID) {
     return WAN_27_VIDEO_MODEL_ID;
@@ -1046,7 +1041,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [KLING_O1_VIDEO_REF_V2V_MODEL_ID]: 4,
   [KLING_O1_VIDEO_FFLF_MODEL_ID]: 6,
   [KLING_VIDEO_MODEL_ID]: 0,
-  [KLING_26_CONTROL_VIDEO_MODEL_ID]: 0,
+  [KLING_V3_CONTROL_VIDEO_MODEL_ID]: 0,
   [WAN_ANIMATE_MODEL_ID]: 0,
   [ONE_TO_ALL_ANIMATE_MODEL_ID]: 0,
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,

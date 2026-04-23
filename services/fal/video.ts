@@ -7,8 +7,7 @@ import { collectReferenceUploadUrls, uploadImageElementToFal, uploadVideoToFal }
 import {
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
-  KLING_26_CONTROL_VIDEO_MODEL_ID,
-  KLING_26_CONTROL_VIDEO_PRO_MODEL_ID,
+  KLING_V3_CONTROL_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
   SCAIL_VIDEO_MODEL_ID,
@@ -1044,14 +1043,13 @@ export const generateImageToVideo = async (
     return { videoUrl, requestId };
   }
 
-  const isKling26ControlModel = modelId === KLING_26_CONTROL_VIDEO_MODEL_ID
-    || modelId === KLING_26_CONTROL_VIDEO_PRO_MODEL_ID;
-  if (isKling26ControlModel) {
+  const isKlingV3ControlModel = modelId === KLING_V3_CONTROL_VIDEO_MODEL_ID;
+  if (isKlingV3ControlModel) {
     if (!options.sourceVideoUrl) {
-      throw new Error('Kling 2.6 Control requires a source video.');
+      throw new Error('Kling 3.0 Control requires a source video.');
     }
     if (!image) {
-      throw new Error('Kling 2.6 Control requires a character image.');
+      throw new Error('Kling 3.0 Control requires a character image.');
     }
 
     const trimmedPrompt = prompt.trim();

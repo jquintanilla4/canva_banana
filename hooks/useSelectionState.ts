@@ -27,7 +27,7 @@ type SelectionFalSettings = Pick<
   | 'klingO1Variant'
   | 'isKlingProVideoSelection'
   | 'isKlingO1VideoModel'
-  | 'isKling26ControlVideoModel'
+  | 'isKlingV3ControlVideoModel'
   | 'isKlingO1EditMode'
   | 'isKlingO1RefV2VMode'
   | 'isLipsyncVideoModel'
@@ -101,7 +101,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   isKlingProVideoSelection,
   isKlingV3VideoModel = false,
   isKlingO1VideoModel,
-  isKling26ControlVideoModel,
+  isKlingV3ControlVideoModel,
   isKlingO1EditMode,
     isKlingO1RefV2VMode,
     isLipsyncVideoModel,
@@ -143,7 +143,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && !isWan27ReferenceMode
     && !isWan27EditMode;
   const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel || isWan27SmartMode;
-  const isKling26ControlVideoInputMode = isKling26ControlVideoModel;
+  const isKlingV3ControlVideoInputMode = isKlingV3ControlVideoModel;
   const isSeedance2ReferenceMode = apiProvider === 'fal'
     && falModelMode === 'video'
     && isSeedance2VideoModel
@@ -151,7 +151,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const isVideoInputMode = isKlingO1VideoInputMode
     || isWanVideoInputMode
     || isAudioInputMode
-    || isKling26ControlVideoInputMode
+    || isKlingV3ControlVideoInputMode
     || isVeo31ExtendMode
     || isScailVideoModel
     || isWan27EditMode;

@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { HEYGEN_V3_LIPSYNC_MODEL_ID } from '../../services/modelConfig';
+import { KLING_V3_CONTROL_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import { Tool } from '../../types';
 import { useGenerationGuards } from '../useGenerationGuards';
 
@@ -12,7 +12,7 @@ const buildGuardArgs = (overrides: Partial<Parameters<typeof useGenerationGuards
   isKlingO1EditMode: false,
   isKlingO1RefV2VMode: false,
   hasSourceVideo: true,
-  hasSourceAudio: true,
+  hasSourceAudio: false,
   isVideoMode: true,
   isUpscaleModel: false,
   isSeedreamModel: false,
@@ -20,35 +20,35 @@ const buildGuardArgs = (overrides: Partial<Parameters<typeof useGenerationGuards
   isGrokModel: false,
   isGrokImagineVideoModel: false,
   isKlingVideoModel: false,
-  isKlingV3ControlVideoModel: false,
+  isKlingV3ControlVideoModel: true,
   isHailuoVideoModel: false,
   isVeo31VideoModel: false,
   isSeedance2VideoModel: false,
   seedance2Variant: 'smart',
   seedance2ReferenceAssetCount: 0,
   veo31Variant: 'i2v-fflf',
-  falModelId: HEYGEN_V3_LIPSYNC_MODEL_ID,
+  falModelId: KLING_V3_CONTROL_VIDEO_MODEL_ID,
   falNumImages: 1,
   activePrimaryImage: null,
-  primarySelectionMediaType: 'video',
-  hasSelectedStillImage: false,
+  primarySelectionMediaType: 'image',
+  hasSelectedStillImage: true,
   ...overrides,
 });
 
-describe('useGenerationGuards (HeyGen V3 Lipsync)', () => {
-  it('allows promptless submission when video and audio are selected', () => {
+describe('useGenerationGuards (Kling v3 Control)', () => {
+  it('allows promptless submission when motion video and character image are selected', () => {
     const { result } = renderHook(() => useGenerationGuards(buildGuardArgs()));
 
     expect(result.current.submitDisabled).toBe(false);
-    expect(result.current.disablePromptInput).toBe(false);
-    expect(result.current.promptPlaceholderText).toContain('describe the video segment to lip sync');
+    expect(result.current.promptEmpty).toBe(true);
+    expect(result.current.promptPlaceholderText).toContain('Describe the motion or scene you want to transfer');
   });
 
-  it('requires both source video and source audio', () => {
+  it('still requires a motion video and character image', () => {
     const missingVideo = renderHook(() => useGenerationGuards(buildGuardArgs({ hasSourceVideo: false })));
-    const missingAudio = renderHook(() => useGenerationGuards(buildGuardArgs({ hasSourceAudio: false })));
+    const missingImage = renderHook(() => useGenerationGuards(buildGuardArgs({ hasSelectedStillImage: false })));
 
     expect(missingVideo.result.current.submitDisabled).toBe(true);
-    expect(missingAudio.result.current.submitDisabled).toBe(true);
+    expect(missingImage.result.current.submitDisabled).toBe(true);
   });
 });

@@ -68,7 +68,7 @@ const mockState = vi.hoisted(() => {
     isKlingVideoModel: false,
     isKlingV3VideoModel: false,
     isKlingO1VideoModel: false,
-    isKling26ControlVideoModel: false,
+    isKlingV3ControlVideoModel: false,
     isHailuoVideoModel: false,
     isWanAnimateVideoModel: false,
     isOneToAllAnimateVideoModel: false,
@@ -107,9 +107,8 @@ const mockState = vi.hoisted(() => {
     klingV3Shot2Duration: '5',
     klingO1Variant: 'refI2V',
     klingO1KeepAudio: false,
-    kling26ControlVariant: 'standard',
-    kling26ControlKeepSound: false,
-    kling26ControlDriver: 'video',
+    klingV3ControlKeepSound: false,
+    klingV3ControlOrientation: 'video',
     wanTargetResolution: '720p',
     wanCreativity: 0,
     wanAnimateVariant: 'replace',
@@ -178,10 +177,8 @@ const mockState = vi.hoisted(() => {
   falState.handleKlingV3Shot2DurationChange = vi.fn();
   falState.handleKlingO1VariantChange = vi.fn();
   falState.handleKlingO1KeepAudioChange = vi.fn();
-  falState.handleKling26AudioChange = vi.fn();
-  falState.handleKling26ControlVariantChange = vi.fn();
-  falState.handleKling26ControlKeepSoundChange = vi.fn();
-  falState.handleKling26ControlDriverChange = vi.fn();
+  falState.handleKlingV3ControlKeepSoundChange = vi.fn();
+  falState.handleKlingV3ControlOrientationChange = vi.fn();
   falState.handleWanTargetResolutionChange = vi.fn();
   falState.handleWanCreativityChange = vi.fn();
   falState.handleWanAnimateVariantChange = vi.fn();

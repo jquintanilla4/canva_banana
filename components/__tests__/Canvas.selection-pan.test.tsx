@@ -40,7 +40,7 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   isKlingO1VideoInputMode: false,
   isKlingO1FflfMode: false,
   isSeedance15FflfMode: false,
-  isKling26ControlVideoInputMode: false,
+  isKlingV3ControlVideoInputMode: false,
   isVeo31ExtendMode: false,
   isWanAnimateVideoInputMode: false,
   isWan27VideoMode: false,

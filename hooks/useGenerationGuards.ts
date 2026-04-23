@@ -38,7 +38,7 @@ type Args = {
   isGrokImagineVideoModel: boolean;
   isKlingVideoModel: boolean;
   isKlingV3VideoModel?: boolean;
-  isKling26ControlVideoModel: boolean;
+  isKlingV3ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isVeo31VideoModel: boolean;
   isSeedance2VideoModel: boolean;
@@ -81,7 +81,7 @@ export function useGenerationGuards({
   isGrokImagineVideoModel,
   isKlingVideoModel,
   isKlingV3VideoModel = false,
-  isKling26ControlVideoModel,
+  isKlingV3ControlVideoModel,
   isHailuoVideoModel,
   isVeo31VideoModel,
   isSeedance2VideoModel,
@@ -115,7 +115,7 @@ export function useGenerationGuards({
   const isFalVideoInputMode = isWanVideoInputMode
     || isOneToAllAnimateVideoModel
     || isAudioInputMode
-    || isKling26ControlVideoModel
+    || isKlingV3ControlVideoModel
     || isVeo31ExtendMode
     || isScailVideoModel
     || isWan27EditMode;
@@ -149,7 +149,7 @@ export function useGenerationGuards({
       ? hasSelectedStillImage
       : hasPrimaryImage;
     const hasScailStillImage = isScailVideoModel ? hasSelectedStillImage : hasPrimaryImage;
-    const hasKling26ControlStillImage = isKling26ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
+    const hasKlingV3ControlStillImage = isKlingV3ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const isRecraftTextToImage = usingFal && !isVideoMode && isRecraftV4ProModel(falModelId); // Recraft t2i is Fal-only.
     const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage) && !(isVideoMode && (
       (isVideoInputMode && hasSourceVideo) || isGrokImagineVideoEditMode
@@ -165,14 +165,15 @@ export function useGenerationGuards({
       falNumImages > falNumImageMax;
     const hasWan27ReferenceAssets = wan27ReferenceAssetCount > 0;
     const isWanPromptOptional = usingFal && (isWanVideoInputMode || (isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode && hasPrimaryImage));
+    const isKlingV3ControlPromptOptional = usingFal && isKlingV3ControlVideoModel; // Kling Control v3 prompt is optional.
     const isLipsyncPromptOptional = usingFal && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
-    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isLipsyncPromptOptional));
+    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
     const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isSeedance2VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
-    const requiresSelectedImageForKling26Control = usingFal && isKling26ControlVideoModel && !hasKling26ControlStillImage;
+    const requiresSelectedImageForKlingV3Control = usingFal && isKlingV3ControlVideoModel && !hasKlingV3ControlStillImage;
     const requiresSelectedImageForScail = usingFal && isScailVideoModel && !hasScailStillImage;
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
     const requiresSourceAudioForVideoInput = usingFal && isVideoMode && isAudioInputMode && !hasSourceAudio;
@@ -191,7 +192,7 @@ export function useGenerationGuards({
       requiresSelectedImageForVideo ||
       requiresSelectedImageForWanAnimate ||
       requiresSelectedImageForOneToAll ||
-      requiresSelectedImageForKling26Control ||
+      requiresSelectedImageForKlingV3Control ||
       requiresSelectedImageForScail ||
       requiresSourceVideoForVideoInput ||
       requiresSourceAudioForVideoInput ||
@@ -272,11 +273,11 @@ export function useGenerationGuards({
             ? 'Describe the motion you want to apply to the reference image...'
             : 'Select a reference image to animate...';
         }
-        if (isKling26ControlVideoModel) {
+        if (isKlingV3ControlVideoModel) {
           if (!hasSourceVideo) {
             return 'Select a motion driver video, then select a character image...';
           }
-          return hasKling26ControlStillImage
+          return hasKlingV3ControlStillImage
             ? 'Describe the motion or scene you want to transfer...'
             : 'Select a character image to control the motion...';
         }
@@ -351,7 +352,7 @@ export function useGenerationGuards({
     isHeygenV3LipsyncVideoModel,
     isNanoBananaModel,
     isHailuoVideoModel,
-    isKling26ControlVideoModel,
+    isKlingV3ControlVideoModel,
     isKlingO1EditMode,
     isKlingO1VideoInputMode,
     isKlingV3SmartVideoModel,

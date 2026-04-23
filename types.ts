@@ -128,9 +128,8 @@ export type GenerationFalOptions = Partial<{
   heygenEnableSpeechEnhancement: boolean;
   heygenStartTime: number;
   heygenEndTime: number;
-  kling26ControlVariant: 'standard' | 'pro';
-  kling26ControlKeepSound: boolean;
-  kling26ControlDriver: 'video' | 'image';
+  klingV3ControlKeepSound: boolean;
+  klingV3ControlOrientation: 'video' | 'image';
   infinitalkResolution: '480p' | '720p';
   infinitalkSeed: '42' | 'random';
   infinitalkAcceleration: 'none' | 'regular' | 'high';

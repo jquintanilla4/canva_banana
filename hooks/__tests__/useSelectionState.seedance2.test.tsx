@@ -20,7 +20,7 @@ type TestFalSettings = Pick<
   | 'isLipsyncVideoModel'
   | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
-  | 'isKling26ControlVideoModel'
+  | 'isKlingV3ControlVideoModel'
   | 'isWan27VideoModel'
   | 'isSeedance15VideoModel'
   | 'isSeedance2VideoModel'
@@ -60,7 +60,7 @@ const createFalStub = (): TestFalSettings => ({
   isLipsyncVideoModel: false,
   isHeygenV3LipsyncVideoModel: false,
   isInfinitalkVideoModel: false,
-  isKling26ControlVideoModel: false,
+  isKlingV3ControlVideoModel: false,
   isWan27VideoModel: false,
   isSeedance15VideoModel: false,
   isSeedance2VideoModel: true,

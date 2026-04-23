@@ -1287,7 +1287,7 @@ export default function App() {
     isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isKlingVideoModel: fal.isKlingVideoModel,
     isKlingV3VideoModel: fal.isKlingV3VideoModel,
-    isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
+    isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
@@ -1317,7 +1317,7 @@ export default function App() {
     isKlingVideoModel: fal.isKlingVideoModel,
     isKlingV3VideoModel: fal.isKlingV3VideoModel,
     isKlingO1VideoModel: fal.isKlingO1VideoModel,
-    isKling26ControlVideoModel: fal.isKling26ControlVideoModel,
+    isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
     isLipsyncVideoModel: fal.isLipsyncVideoModel,
@@ -1340,9 +1340,8 @@ export default function App() {
     klingV3Shot2Duration: fal.klingV3Shot2Duration,
     klingO1Variant: fal.klingO1Variant,
     klingO1KeepAudio: fal.klingO1KeepAudio,
-    kling26ControlVariant: fal.kling26ControlVariant,
-    kling26ControlKeepSound: fal.kling26ControlKeepSound,
-    kling26ControlDriver: fal.kling26ControlDriver,
+    klingV3ControlKeepSound: fal.klingV3ControlKeepSound,
+    klingV3ControlOrientation: fal.klingV3ControlOrientation,
     wanTargetResolution: fal.wanTargetResolution,
     wanCreativity: fal.wanCreativity,
     wanAnimateVariant: fal.wanAnimateVariant,
@@ -1412,9 +1411,8 @@ export default function App() {
     onKlingV3Shot2DurationChange: fal.handleKlingV3Shot2DurationChange,
     onKlingO1VariantChange: fal.handleKlingO1VariantChange,
     onKlingO1KeepAudioChange: fal.handleKlingO1KeepAudioChange,
-    onKling26ControlVariantChange: fal.handleKling26ControlVariantChange,
-    onKling26ControlKeepSoundChange: fal.handleKling26ControlKeepSoundChange,
-    onKling26ControlDriverChange: fal.handleKling26ControlDriverChange,
+    onKlingV3ControlKeepSoundChange: fal.handleKlingV3ControlKeepSoundChange,
+    onKlingV3ControlOrientationChange: fal.handleKlingV3ControlOrientationChange,
     onWanTargetResolutionChange: fal.handleWanTargetResolutionChange,
     onWanCreativityChange: fal.handleWanCreativityChange,
     onWanAnimateVariantChange: fal.handleWanAnimateVariantChange,
@@ -1621,7 +1619,7 @@ export default function App() {
           isKlingO1VideoInputMode={isKlingO1VideoInputMode}
           isKlingO1FflfMode={isKlingO1FflfMode}
           isSeedance15FflfMode={fal.isSeedance15VideoModel}
-          isKling26ControlVideoInputMode={fal.isKling26ControlVideoModel}
+          isKlingV3ControlVideoInputMode={fal.isKlingV3ControlVideoModel}
           isVeo31ExtendMode={isVeo31ExtendMode}
           isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel || isScailVideoModel}
           isWan27VideoMode={fal.isWan27VideoModel}
