@@ -11,6 +11,7 @@ import type {
   GrokImagineVideoAspectRatioSelectionValue,
   GrokImagineVideoDurationSelectionValue,
   GrokImagineVideoResolutionSelectionValue,
+  KlingO3DurationSelectionValue,
   KlingV3CfgScaleSelectionValue,
   KlingV3DurationSelectionValue,
   KlingV3ShotDurationSelectionValue,
@@ -84,7 +85,7 @@ export interface GenerateVideoOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
   promptOptimizer?: boolean;
   modelId?: string;
-  duration?: FalVideoDuration;
+  duration?: FalVideoDuration | KlingO3DurationSelectionValue;
   negativePrompt?: string;
   numInferenceSteps?: number;
   resolution?: '480p' | '580p' | '720p';
@@ -100,7 +101,9 @@ export interface GenerateVideoOptions {
   generateAudio?: boolean;
   referenceImages?: HTMLImageElement[];
   elementImages?: HTMLImageElement[];
-  klingO1Variant?: string;
+  klingO3Variant?: string;
+  klingO3Duration?: KlingO3DurationSelectionValue;
+  klingO3GenerateAudio?: boolean;
   klingV3Duration?: KlingV3DurationSelectionValue;
   klingV3GenerateAudio?: boolean;
   klingV3CfgScale?: KlingV3CfgScaleSelectionValue;
@@ -111,6 +114,7 @@ export interface GenerateVideoOptions {
   sourceVideoUrl?: string;
   sourceAudioUrl?: string;
   keepAudio?: boolean;
+  klingO3KeepAudio?: boolean;
   keepOriginalSound?: boolean;
   characterOrientation?: 'image' | 'video';
   aspectRatio?: FalAspectRatioOption;

@@ -14,6 +14,7 @@ import {
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MOVE_MODEL_ID,
   INFINITALK_DURATION_TO_NUM_FRAMES,
+  isKlingO3DurationSelectionValue,
 } from '../modelConfig'; // Canonical model IDs.
 import {
   HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
@@ -21,10 +22,8 @@ import {
   KLING_V3_IMAGE_TO_VIDEO_MODEL_ID,
   KLING_V3_TEXT_TO_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
-  KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID,
-  KLING_O1_VIDEO_EDIT_MODEL_ID,
-  KLING_O1_VIDEO_FFLF_MODEL_ID,
-  KLING_O1_VIDEO_REF_V2V_MODEL_ID,
+  KLING_O3_REFERENCE_TO_VIDEO_MODEL_ID,
+  KLING_O3_VIDEO_EDIT_MODEL_ID,
   FAL_SEEDANCE_2_IMAGE_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID,
@@ -120,19 +119,14 @@ export const generateImageToVideo = async (
   const isVeo31ImageToVideoModel = modelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID; // Veo 3.1 i2v route.
   const isVeo31FflfModel = modelId === VEO_31_FFLF_VIDEO_MODEL_ID; // Veo 3.1 fflf route.
   const isVeo31ExtendModel = modelId === VEO_31_EXTEND_VIDEO_MODEL_ID; // Veo 3.1 extend route.
-  const isKlingO1VideoModel = modelId === KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID // Kling O1 family.
-    || modelId === KLING_O1_VIDEO_EDIT_MODEL_ID
-    || modelId === KLING_O1_VIDEO_REF_V2V_MODEL_ID
-    || modelId === KLING_O1_VIDEO_FFLF_MODEL_ID;
+  const isKlingO3VideoModel = modelId === KLING_O3_REFERENCE_TO_VIDEO_MODEL_ID || modelId === KLING_O3_VIDEO_EDIT_MODEL_ID; // Kling O3 family.
   const referenceImages = Array.isArray(options.referenceImages) ? options.referenceImages : []; // Optional references list.
   const elementImages = Array.isArray(options.elementImages) ? options.elementImages : []; // Optional elements list.
-  const isEditVariant = options.klingO1Variant === 'edit'; // Kling O1 edit variant flag.
-  const isRefV2VVariant = options.klingO1Variant === 'refV2V'; // Kling O1 ref-v2v variant flag.
-  const isKlingO1FflfVariant = options.klingO1Variant === 'fflf'; // Kling O1 fflf variant flag.
+  const isKlingO3EditVariant = modelId === KLING_O3_VIDEO_EDIT_MODEL_ID || options.klingO3Variant === 'edit'; // Kling O3 edit endpoint or variant.
 
-  if (isKlingO1VideoModel && isEditVariant) { // Kling O1 edit requires video_url + optional images.
+  if (isKlingO3VideoModel && isKlingO3EditVariant) { // Kling O3 edit requires video_url + optional images.
     if (!options.sourceVideoUrl) {
-      throw new Error('Kling O1 Video Edit requires a source video.');
+      throw new Error('Kling O3 Video Edit requires a source video.');
     }
 
     const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
@@ -144,84 +138,30 @@ export const generateImageToVideo = async (
 
     const totalImageCount = referenceUrls.length + elementsPayload.length;
     if (totalImageCount > 4) { // Max 4 total when using video.
-      throw new Error('Kling O1 Video Edit supports up to 4 images total (references + elements).');
+      throw new Error('Kling O3 Video Edit supports up to 4 images total (references + elements).');
     }
-
-    let latestRequestId: string | undefined;
 
     const inputPayload: Record<string, unknown> = {
       prompt,
       video_url: options.sourceVideoUrl,
       ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
       ...(elementsPayload.length ? { elements: elementsPayload } : {}),
-      ...(typeof options.keepAudio === 'boolean' ? { keep_audio: options.keepAudio } : {}),
+      keep_audio: typeof options.klingO3KeepAudio === 'boolean'
+        ? options.klingO3KeepAudio
+        : typeof options.keepAudio === 'boolean'
+          ? options.keepAudio
+          : true,
     };
 
-    const editModelId = KLING_O1_VIDEO_EDIT_MODEL_ID;
-    logFalEvent('outbound', editModelId, 'Outbound request (fal.subscribe)', {
-      input: inputPayload,
-    });
-
-    let result: Awaited<ReturnType<typeof fal.subscribe>>;
-    try {
-      result = await fal.subscribe(editModelId, {
-        input: inputPayload,
-        logs: true,
-        onQueueUpdate: update => {
-          const queueUpdate = update as unknown as FalQueueUpdate;
-          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-          if (resolvedRequestId) {
-            latestRequestId = resolvedRequestId;
-          }
-          logFalEvent('inbound', editModelId, 'Queue update', {
-            status: queueUpdate.status,
-            position: queueUpdate.position,
-            eta: queueUpdate.eta,
-            requestId: resolvedRequestId,
-            logs: normalizedLogs.map(log => log?.message ?? ''),
-          });
-          options.onQueueUpdate?.({
-            ...queueUpdate,
-            requestId: resolvedRequestId || '',
-            logs: normalizedLogs,
-          });
-        },
-      });
-    } catch (error) {
-      logFalEvent('error', editModelId, 'Request failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-
-    logFalEvent('inbound', editModelId, 'Result received', {
-      requestId: result?.requestId || latestRequestId,
-      data: (result?.data as Record<string, unknown>) ?? undefined,
-    });
-
-    const data = result?.data as { video?: string | { url?: string } } | undefined;
-    const videoEntry = data?.video;
-    const videoUrl = typeof videoEntry === 'string'
-      ? videoEntry
-      : videoEntry && typeof videoEntry.url === 'string'
-        ? videoEntry.url
-        : null;
-
-    if (!videoUrl) {
-      throw new Error('Fal.ai API did not return a video.');
-    }
-
-    const requestId = result?.requestId || latestRequestId;
-
-    return { videoUrl, requestId };
+    return subscribeForVideoUrl(KLING_O3_VIDEO_EDIT_MODEL_ID, inputPayload, options);
   }
 
-  if (isKlingO1VideoModel && isRefV2VVariant) { // Kling O1 ref-v2v supports duration + aspect ratio.
-    if (!options.sourceVideoUrl) {
-      throw new Error('Kling O1 Video Ref-v2v requires a source video.');
+  if (isKlingO3VideoModel) { // Kling O3 reference mode uses a still image plus optional end frame.
+    if (!image) {
+      throw new Error('Kling O3 Reference requires an image.');
     }
 
+    const imageUrl = await uploadImageElementToFal(image);
     const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
     const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img)));
     const elementsPayload = elementUrls.map(url => ({
@@ -230,82 +170,31 @@ export const generateImageToVideo = async (
     }));
 
     const totalImageCount = referenceUrls.length + elementsPayload.length;
-    if (totalImageCount > 4) { // Max 4 total when using video.
-      throw new Error('Kling O1 Video Ref-v2v supports up to 4 images total (references + elements).');
+    if (totalImageCount > 4) { // Max 4 total beyond the primary start image.
+      throw new Error('Kling O3 Video Reference supports up to 4 images total (references + elements).');
     }
 
-    let latestRequestId: string | undefined;
-
-    const aspectRatioValue = options.aspectRatio && options.aspectRatio !== 'default' ? options.aspectRatio : 'auto';
+    const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage) : undefined;
+    const aspectRatioValue = options.aspectRatio === '9:16' || options.aspectRatio === '1:1' ? options.aspectRatio : '16:9';
+    const referenceDuration = options.klingO3Duration ?? (isKlingO3DurationSelectionValue(duration) ? duration : '5');
+    const generateAudio = typeof options.klingO3GenerateAudio === 'boolean'
+      ? options.klingO3GenerateAudio
+      : typeof options.generateAudio === 'boolean'
+        ? options.generateAudio
+        : false;
 
     const inputPayload: Record<string, unknown> = {
       prompt,
-      video_url: options.sourceVideoUrl,
+      start_image_url: imageUrl,
+      ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
       ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
       ...(elementsPayload.length ? { elements: elementsPayload } : {}),
-      ...(typeof options.keepAudio === 'boolean' ? { keep_audio: options.keepAudio } : {}),
-      ...(duration ? { duration } : {}),
+      duration: referenceDuration,
+      generate_audio: generateAudio,
       aspect_ratio: aspectRatioValue,
     };
 
-    const refV2VModelId = KLING_O1_VIDEO_REF_V2V_MODEL_ID;
-    logFalEvent('outbound', refV2VModelId, 'Outbound request (fal.subscribe)', {
-      input: inputPayload,
-    });
-
-    let result: Awaited<ReturnType<typeof fal.subscribe>>;
-    try {
-      result = await fal.subscribe(refV2VModelId, {
-        input: inputPayload,
-        logs: true,
-        onQueueUpdate: update => {
-          const queueUpdate = update as unknown as FalQueueUpdate;
-          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-          if (resolvedRequestId) {
-            latestRequestId = resolvedRequestId;
-          }
-          logFalEvent('inbound', refV2VModelId, 'Queue update', {
-            status: queueUpdate.status,
-            position: queueUpdate.position,
-            eta: queueUpdate.eta,
-            requestId: resolvedRequestId,
-            logs: normalizedLogs.map(log => log?.message ?? ''),
-          });
-          options.onQueueUpdate?.({
-            ...queueUpdate,
-            requestId: resolvedRequestId || '',
-            logs: normalizedLogs,
-          });
-        },
-      });
-    } catch (error) {
-      logFalEvent('error', refV2VModelId, 'Request failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-
-    logFalEvent('inbound', refV2VModelId, 'Result received', {
-      requestId: result?.requestId || latestRequestId,
-      data: (result?.data as Record<string, unknown>) ?? undefined,
-    });
-
-    const data = result?.data as { video?: string | { url?: string } } | undefined;
-    const videoEntry = data?.video;
-    const videoUrl = typeof videoEntry === 'string'
-      ? videoEntry
-      : videoEntry && typeof videoEntry.url === 'string'
-        ? videoEntry.url
-        : null;
-
-    if (!videoUrl) {
-      throw new Error('Fal.ai API did not return a video.');
-    }
-
-    const requestId = result?.requestId || latestRequestId;
-
-    return { videoUrl, requestId };
+    return subscribeForVideoUrl(KLING_O3_REFERENCE_TO_VIDEO_MODEL_ID, inputPayload, options);
   }
 
   if (modelId === GROK_IMAGINE_VIDEO_EDIT_MODEL_ID) {
@@ -1068,168 +957,10 @@ export const generateImageToVideo = async (
     return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
-  if (!image) { // Non-edit/refV2V variants require an image.
+  if (!image) { // Remaining image-first video models require an image.
     throw new Error('Image is required for video generation.');
   }
   const imageUrl = await uploadImageElementToFal(image);
-
-  if (isKlingO1VideoModel && isKlingO1FflfVariant) {
-    if (referenceImages.length > 0 || elementImages.length > 0) {
-      throw new Error('Kling O1 FFLF only supports a start and end frame. Remove reference or element images.');
-    }
-    const tailImage = options.tailImage;
-    const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage) : undefined;
-    let latestRequestId: string | undefined;
-
-    const inputPayload: Record<string, unknown> = {
-      prompt,
-      start_image_url: imageUrl,
-      ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
-      ...(duration ? { duration } : {}),
-    };
-
-    const fflfModelId = KLING_O1_VIDEO_FFLF_MODEL_ID;
-    logFalEvent('outbound', fflfModelId, 'Outbound request (fal.subscribe)', {
-      input: inputPayload,
-    });
-
-    let result: Awaited<ReturnType<typeof fal.subscribe>>;
-    try {
-      result = await fal.subscribe(fflfModelId, {
-        input: inputPayload,
-        logs: true,
-        onQueueUpdate: update => {
-          const queueUpdate = update as unknown as FalQueueUpdate;
-          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-          if (resolvedRequestId) {
-            latestRequestId = resolvedRequestId;
-          }
-          logFalEvent('inbound', fflfModelId, 'Queue update', {
-            status: queueUpdate.status,
-            position: queueUpdate.position,
-            eta: queueUpdate.eta,
-            requestId: resolvedRequestId,
-            logs: normalizedLogs.map(log => log?.message ?? ''),
-          });
-          options.onQueueUpdate?.({
-            ...queueUpdate,
-            requestId: resolvedRequestId || '',
-            logs: normalizedLogs,
-          });
-        },
-      });
-    } catch (error) {
-      logFalEvent('error', fflfModelId, 'Request failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-
-    logFalEvent('inbound', fflfModelId, 'Result received', {
-      requestId: result?.requestId || latestRequestId,
-      data: (result?.data as Record<string, unknown>) ?? undefined,
-    });
-
-    const data = result?.data as { video?: string | { url?: string } } | undefined;
-    const videoEntry = data?.video;
-    const videoUrl = typeof videoEntry === 'string'
-      ? videoEntry
-      : videoEntry && typeof videoEntry.url === 'string'
-        ? videoEntry.url
-        : null;
-
-    if (!videoUrl) {
-      throw new Error('Fal.ai API did not return a video.');
-    }
-
-    const requestId = result?.requestId || latestRequestId;
-
-    return { videoUrl, requestId };
-  }
-
-  if (isKlingO1VideoModel) {
-    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
-    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img)));
-    const elementsPayload = elementUrls.map(url => ({
-      frontal_image_url: url,
-      reference_image_urls: [url], // Reuse frontal view when alternates are missing.
-    }));
-    const totalImages = 1 + referenceUrls.length + elementsPayload.length;
-    if (totalImages > 7) {
-      throw new Error('Kling O1 Video supports up to 7 images (start + references + elements).');
-    }
-
-    let latestRequestId: string | undefined;
-
-    const variant = options.klingO1Variant;
-    const inputPayload: Record<string, unknown> = {
-      prompt,
-      image_urls: [imageUrl, ...referenceUrls],
-      ...(duration ? { duration } : {}),
-      ...(elementsPayload.length ? { elements: elementsPayload } : {}),
-      ...(variant ? { variant } : {}),
-    };
-
-    logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
-      input: inputPayload,
-      ...(variant ? { variant } : {}),
-    });
-
-    let result: Awaited<ReturnType<typeof fal.subscribe>>;
-    try {
-      result = await fal.subscribe(modelId, {
-        input: inputPayload,
-        logs: true,
-        onQueueUpdate: update => {
-          const queueUpdate = update as unknown as FalQueueUpdate;
-          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-          if (resolvedRequestId) {
-            latestRequestId = resolvedRequestId;
-          }
-          logFalEvent('inbound', modelId, 'Queue update', {
-            status: queueUpdate.status,
-            position: queueUpdate.position,
-            eta: queueUpdate.eta,
-            requestId: resolvedRequestId,
-            logs: normalizedLogs.map(log => log?.message ?? ''),
-          });
-          options.onQueueUpdate?.({
-            ...queueUpdate,
-            requestId: resolvedRequestId || '',
-            logs: normalizedLogs,
-          });
-        },
-      });
-    } catch (error) {
-      logFalEvent('error', modelId, 'Request failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-
-    logFalEvent('inbound', modelId, 'Result received', {
-      requestId: result?.requestId || latestRequestId,
-      data: (result?.data as Record<string, unknown>) ?? undefined,
-    });
-
-    const data = result?.data as { video?: string | { url?: string } } | undefined;
-    const videoEntry = data?.video;
-    const videoUrl = typeof videoEntry === 'string'
-      ? videoEntry
-      : videoEntry && typeof videoEntry.url === 'string'
-        ? videoEntry.url
-        : null;
-
-    if (!videoUrl) {
-      throw new Error('Fal.ai API did not return a video.');
-    }
-
-    const requestId = result?.requestId || latestRequestId;
-
-    return { videoUrl, requestId };
-  }
 
   const isHailuoVideoModel = modelId.includes('hailuo-2.3');
   const promptOptimizer = options.promptOptimizer ?? (isHailuoVideoModel ? true : undefined);

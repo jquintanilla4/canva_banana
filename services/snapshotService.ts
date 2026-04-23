@@ -25,6 +25,7 @@ import {
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isKlingO3DurationSelectionValue,
   isKlingV3CfgScaleSelectionValue,
   isKlingV3DurationSelectionValue,
   isKlingV3ShotDurationSelectionValue,
@@ -38,6 +39,7 @@ import {
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
   isVeo31Variant,
+  normalizeKlingO3Variant,
   normalizeVeo31Variant,
   normalizeRecraftRgbColor,
   RECRAFT_V4_PRO_MAX_COLORS,
@@ -877,6 +879,26 @@ export const normalizeSnapshotImageMetadata = (
       const klingVariantValue = (typed as { klingVariant?: unknown }).klingVariant;
       if (klingVariantValue === 'standard' || klingVariantValue === 'pro') {
         normalizedOptions.klingVariant = klingVariantValue;
+      }
+      const klingO3VariantValue = (typed as { klingO3Variant?: unknown; klingO1Variant?: unknown }).klingO3Variant
+        ?? (typed as { klingO1Variant?: unknown }).klingO1Variant; // Old snapshots used Kling O1 names.
+      if (klingO3VariantValue === 'refV2V') {
+        normalizedOptions.klingO1Variant = 'refV2V';
+      } else if (klingO3VariantValue === 'reference' || klingO3VariantValue === 'edit' || klingO3VariantValue === 'refI2V' || klingO3VariantValue === 'fflf') {
+        normalizedOptions.klingO3Variant = normalizeKlingO3Variant(klingO3VariantValue);
+      }
+      const klingO3DurationValue = (typed as { klingO3Duration?: unknown }).klingO3Duration;
+      if (isKlingO3DurationSelectionValue(klingO3DurationValue)) {
+        normalizedOptions.klingO3Duration = klingO3DurationValue;
+      }
+      const klingO3GenerateAudioValue = (typed as { klingO3GenerateAudio?: unknown }).klingO3GenerateAudio;
+      if (typeof klingO3GenerateAudioValue === 'boolean') {
+        normalizedOptions.klingO3GenerateAudio = klingO3GenerateAudioValue;
+      }
+      const klingO3KeepAudioValue = (typed as { klingO3KeepAudio?: unknown; klingO1KeepAudio?: unknown }).klingO3KeepAudio
+        ?? (typed as { klingO1KeepAudio?: unknown }).klingO1KeepAudio; // Old snapshots used Kling O1 names.
+      if (typeof klingO3KeepAudioValue === 'boolean') {
+        normalizedOptions.klingO3KeepAudio = klingO3KeepAudioValue;
       }
       const klingV3DurationValue = (typed as { klingV3Duration?: unknown }).klingV3Duration;
       if (isKlingV3DurationSelectionValue(klingV3DurationValue)) {

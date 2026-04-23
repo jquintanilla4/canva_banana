@@ -74,8 +74,8 @@ interface CanvasProps {
   videoLastFrameImageId: string | null;
   sourceVideoId: string | null;
   tailSelectionEnabled: boolean;
-  isKlingO1VideoInputMode: boolean;
-  isKlingO1FflfMode: boolean;
+  isKlingO3VideoInputMode: boolean;
+  isKlingO3ReferenceMode: boolean;
   isSeedance15FflfMode: boolean;
   isKlingV3ControlVideoInputMode: boolean;
   isVeo31ExtendMode: boolean;
@@ -173,8 +173,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   videoLastFrameImageId,
   sourceVideoId,
   tailSelectionEnabled,
-  isKlingO1VideoInputMode,
-  isKlingO1FflfMode,
+  isKlingO3VideoInputMode,
+  isKlingO3ReferenceMode,
   isSeedance15FflfMode,
   isKlingV3ControlVideoInputMode,
   isVeo31ExtendMode,
@@ -422,8 +422,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       elementImageOrderLabels,
       videoLastFrameImageId,
       sourceVideoId,
-      isKlingO1VideoInputMode,
-      isKlingO1FflfMode,
+      isKlingO3VideoInputMode,
+      isKlingO3ReferenceMode,
       isSeedance15FflfMode,
       isKlingV3ControlVideoInputMode,
       isVeo31ExtendMode,
@@ -433,7 +433,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       cropMode,
       transformMode,
     });
-  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO1FflfMode, isSeedance15FflfMode, isKlingO1VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
+  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {

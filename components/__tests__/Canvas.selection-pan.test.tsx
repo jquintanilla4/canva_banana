@@ -2,7 +2,7 @@ import { fireEvent, render } from '@testing-library/react';
 import { type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
-import { Tool } from '../../types';
+import { Tool, type CanvasImage } from '../../types';
 
 type CanvasProps = ComponentProps<typeof Canvas>;
 
@@ -37,8 +37,8 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   videoLastFrameImageId: null,
   sourceVideoId: null,
   tailSelectionEnabled: false,
-  isKlingO1VideoInputMode: false,
-  isKlingO1FflfMode: false,
+  isKlingO3VideoInputMode: false,
+  isKlingO3ReferenceMode: false,
   isSeedance15FflfMode: false,
   isKlingV3ControlVideoInputMode: false,
   isVeo31ExtendMode: false,
@@ -92,6 +92,20 @@ const dragCanvas = (root: HTMLElement, from: { x: number; y: number }, to: { x: 
   fireEvent.mouseMove(root, { clientX: to.x, clientY: to.y, button }); // Move the pointer to update pan state.
   fireEvent.mouseUp(root, { clientX: to.x, clientY: to.y, button }); // Finish the gesture and flush commit logic.
 };
+
+const buildImage = (id = 'image-1'): CanvasImage => ({
+  id,
+  element: document.createElement('img'),
+  mediaType: 'image',
+  x: 10,
+  y: 10,
+  width: 100,
+  height: 80,
+  rotation: 0,
+  naturalWidth: 100,
+  naturalHeight: 80,
+  file: new File(['image'], `${id}.png`, { type: 'image/png' }),
+});
 
 describe('Canvas selection temporary pan', () => {
   it('temporarily pans while space is held and returns to selection on keyup', () => {
@@ -189,5 +203,20 @@ describe('Canvas selection temporary pan', () => {
     dragCanvas(root, { x: 120, y: 150 }, { x: 180, y: 230 }, 1);
 
     expect(root.style.backgroundPosition).toBe('60px 80px');
+  });
+
+  it('uses option-shift click as a reference toggle when shift marks an end frame', () => {
+    const onImageSelect = vi.fn();
+    const { container } = render(<Canvas {...buildCanvasProps({
+      images: [buildImage()],
+      onImageSelect,
+      tailSelectionEnabled: true,
+      isKlingO3ReferenceMode: true,
+    })} />);
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    fireEvent.mouseDown(root, { clientX: 20, clientY: 20, altKey: true, shiftKey: true });
+
+    expect(onImageSelect).toHaveBeenCalledWith('image-1', { reference: true });
   });
 });

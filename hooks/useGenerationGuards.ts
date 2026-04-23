@@ -26,8 +26,7 @@ type Args = {
   appMode: 'CANVAS' | 'ANNOTATE';
   tool: Tool;
   prompt: string;
-  isKlingO1EditMode: boolean;
-  isKlingO1RefV2VMode?: boolean;
+  isKlingO3EditMode: boolean;
   hasSourceVideo: boolean;
   hasSourceAudio: boolean;
   isVideoMode: boolean;
@@ -38,6 +37,7 @@ type Args = {
   isGrokImagineVideoModel: boolean;
   isKlingVideoModel: boolean;
   isKlingV3VideoModel?: boolean;
+  isKlingO3VideoModel: boolean;
   isKlingV3ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isVeo31VideoModel: boolean;
@@ -69,8 +69,7 @@ export function useGenerationGuards({
   appMode,
   tool,
   prompt,
-  isKlingO1EditMode,
-  isKlingO1RefV2VMode = false,
+  isKlingO3EditMode,
   hasSourceVideo,
   hasSourceAudio,
   isVideoMode,
@@ -81,6 +80,7 @@ export function useGenerationGuards({
   isGrokImagineVideoModel,
   isKlingVideoModel,
   isKlingV3VideoModel = false,
+  isKlingO3VideoModel,
   isKlingV3ControlVideoModel,
   isHailuoVideoModel,
   isVeo31VideoModel,
@@ -96,7 +96,7 @@ export function useGenerationGuards({
   primarySelectionMediaType,
   hasSelectedStillImage,
 }: Args): GenerationGuardsResult {
-  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+  const isKlingO3VideoInputMode = isKlingO3EditMode;
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
@@ -119,7 +119,7 @@ export function useGenerationGuards({
     || isVeo31ExtendMode
     || isScailVideoModel
     || isWan27EditMode;
-  const isVideoInputMode = isKlingO1VideoInputMode || isFalVideoInputMode;
+  const isVideoInputMode = isKlingO3VideoInputMode || isFalVideoInputMode;
   const hasPrimaryImage = Boolean(activePrimaryImage);
   const hasSeedance2SmartUnsupportedSelection = apiProvider === 'fal'
     && isVideoMode
@@ -296,8 +296,11 @@ export function useGenerationGuards({
             if (isInfinitalkVideoModel) {
               return 'Describe the talking avatar and expression you want to generate...';
             }
-            if (isKlingO1EditMode) {
+            if (isKlingO3EditMode) {
               return 'Describe how you want to edit this video...';
+            }
+            if (isKlingO3VideoModel) {
+              return 'Describe the scene you want to generate from this image...';
             }
             return 'Describe the next shot based on this reference video...';
           }
@@ -307,8 +310,11 @@ export function useGenerationGuards({
           if (isInfinitalkVideoModel) {
             return 'Select a video and audio clip, then describe the talking avatar...';
           }
-          if (isKlingO1EditMode) {
+          if (isKlingO3EditMode) {
             return 'Select a video to edit, then describe the changes...';
+          }
+          if (isKlingO3VideoModel) {
+            return 'Select an image, then describe the video you want to generate...';
           }
           return 'Select a reference video, then describe the next shot...';
         }
@@ -353,8 +359,9 @@ export function useGenerationGuards({
     isNanoBananaModel,
     isHailuoVideoModel,
     isKlingV3ControlVideoModel,
-    isKlingO1EditMode,
-    isKlingO1VideoInputMode,
+    isKlingO3EditMode,
+    isKlingO3VideoInputMode,
+    isKlingO3VideoModel,
     isKlingV3SmartVideoModel,
     isKlingVideoModel,
     isSeedance2VideoModel,

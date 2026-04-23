@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KLING_V3_CONTROL_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID } from '../modelConfig';
+import { KLING_O3_VIDEO_MODEL_ID, KLING_V3_CONTROL_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID } from '../modelConfig';
 import { buildPromptBarModelControls, type PromptBarControlsInput } from '../promptBarConfig';
 
 const baseInput = {
@@ -73,5 +73,57 @@ describe('promptBarConfig (Kling v3)', () => {
       'kling-v3-control-orientation',
     ]);
     expect(controlIds).not.toContain('kling26-control-variant-select');
+  });
+
+  it('shows Kling O3 reference controls with duration, audio, and aspect ratio', () => {
+    const controls = buildPromptBarModelControls({
+      ...baseInput,
+      falModelId: KLING_O3_VIDEO_MODEL_ID,
+      isKlingV3VideoModel: false,
+      isKlingO3VideoModel: true,
+      klingO3Variant: 'reference',
+      klingO3Duration: '8',
+      klingO3GenerateAudio: false,
+      klingO3KeepAudio: true,
+      falAspectRatioSelection: '1:1',
+      onKlingO3VariantChange: vi.fn(),
+      onKlingO3DurationChange: vi.fn(),
+      onKlingO3GenerateAudioChange: vi.fn(),
+      onKlingO3KeepAudioChange: vi.fn(),
+      onFalAspectRatioChange: vi.fn(),
+    } as unknown as PromptBarControlsInput);
+    const controlIds = controls?.map(control => control.id) ?? [];
+    const durationControl = controls?.find(control => control.id === 'kling-o3-video-duration-select' && control.kind !== 'action' && control.kind !== 'color');
+
+    expect(controlIds).toEqual([
+      'kling-o3-variant-select',
+      'kling-o3-video-duration-select',
+      'kling-o3-audio-select',
+      'kling-o3-aspect-ratio-select',
+    ]);
+    expect(durationControl && 'options' in durationControl ? durationControl.options.map(option => option.value) : []).toContain('15');
+  });
+
+  it('shows only the keep-audio control for Kling O3 edit mode', () => {
+    const controls = buildPromptBarModelControls({
+      ...baseInput,
+      falModelId: KLING_O3_VIDEO_MODEL_ID,
+      isKlingV3VideoModel: false,
+      isKlingO3VideoModel: true,
+      klingO3Variant: 'edit',
+      klingO3Duration: '5',
+      klingO3GenerateAudio: false,
+      klingO3KeepAudio: true,
+      onKlingO3VariantChange: vi.fn(),
+      onKlingO3DurationChange: vi.fn(),
+      onKlingO3GenerateAudioChange: vi.fn(),
+      onKlingO3KeepAudioChange: vi.fn(),
+    } as unknown as PromptBarControlsInput);
+    const controlIds = controls?.map(control => control.id) ?? [];
+
+    expect(controlIds).toEqual([
+      'kling-o3-variant-select',
+      'kling-o3-keep-audio',
+    ]);
   });
 });

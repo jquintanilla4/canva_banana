@@ -38,10 +38,28 @@ describe('Seedance 2 reference labels', () => {
     });
   });
 
+  it('labels only tagged reference images for Kling O3 Reference prompts', () => {
+    const { result } = renderHook(() => useKlingReferenceHelpers({
+      labelReferences: true,
+      primaryImageId: 'start-image',
+      primaryImageMediaType: 'image',
+      includePrimaryImageAsReference: false,
+      referenceImageIds: ['reference-image'],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+      includeTailFrame: false,
+      tailImageId: 'end-image',
+    }));
+
+    expect(result.current.referenceOrderLabels).toEqual({
+      'reference-image': '@Image1',
+    });
+  });
+
   it('surfaces seedance reference labels in prompt mention suggestions', () => {
     const { result } = renderHook(() => useKlingPromptMentions({
-      isKlingO1VideoModel: false,
-      isKlingO1EditMode: false,
+      isKlingO3VideoModel: false,
+      isKlingO3EditMode: false,
       isSeedance2ReferenceMode: true,
       referenceOrderLabels: {
         'image-1': '@Image1',

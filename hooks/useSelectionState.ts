@@ -8,7 +8,7 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
-  isKlingO1VideoModelId,
+  isKlingO3VideoModelId,
 } from '../services/modelConfig';
 import type { ApiProviderId, CanvasImage, CanvasNote } from '../types';
 import type { UseFalSettingsResult } from './useFalSettings';
@@ -24,12 +24,11 @@ type SelectionFalSettings = Pick<
   | 'falModelMode'
   | 'falVideoModelId'
   | 'klingVariant'
-  | 'klingO1Variant'
+  | 'klingO3Variant'
   | 'isKlingProVideoSelection'
-  | 'isKlingO1VideoModel'
+  | 'isKlingO3VideoModel'
   | 'isKlingV3ControlVideoModel'
-  | 'isKlingO1EditMode'
-  | 'isKlingO1RefV2VMode'
+  | 'isKlingO3EditMode'
   | 'isLipsyncVideoModel'
   | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
@@ -97,13 +96,12 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     falModelMode,
     falVideoModelId,
     klingVariant,
-    klingO1Variant,
-  isKlingProVideoSelection,
-  isKlingV3VideoModel = false,
-  isKlingO1VideoModel,
-  isKlingV3ControlVideoModel,
-  isKlingO1EditMode,
-    isKlingO1RefV2VMode,
+    klingO3Variant,
+    isKlingProVideoSelection,
+    isKlingV3VideoModel = false,
+    isKlingO3VideoModel,
+    isKlingV3ControlVideoModel,
+    isKlingO3EditMode,
     isLipsyncVideoModel,
     isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
@@ -116,7 +114,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     veo31Variant,
   } = fal;
 
-  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+  const isKlingO3VideoInputMode = isKlingO3EditMode;
   const isWanVideoInputMode =
     apiProvider === 'fal'
     && falModelMode === 'video'
@@ -148,14 +146,14 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isSeedance2VideoModel
     && seedance2Variant === 'reference';
-  const isVideoInputMode = isKlingO1VideoInputMode
+  const isVideoInputMode = isKlingO3VideoInputMode
     || isWanVideoInputMode
     || isAudioInputMode
     || isKlingV3ControlVideoInputMode
     || isVeo31ExtendMode
     || isScailVideoModel
     || isWan27EditMode;
-  const isKlingO1FflfMode = isKlingO1VideoModel && klingO1Variant === 'fflf';
+  const isKlingO3ReferenceMode = isKlingO3VideoModel && klingO3Variant === 'reference';
   const isKlingV3SmartMode = apiProvider === 'fal' && falModelMode === 'video' && isKlingV3VideoModel;
   const isSeedance15FflfMode = isSeedance15VideoModel;
   const isSeedance2SmartMode = apiProvider === 'fal'
@@ -261,14 +259,14 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       }
       setReferenceAudioIds(prevIds => prevIds.slice(0, referenceLimits.audios));
     }
-    if (isKlingO1VideoModel) {
+    if (isKlingO3VideoModel) {
       return;
     }
     if (referenceImageIds.length > referenceLimits.images) {
       onReferenceLimit(referenceLimits.images);
       setReferenceImageIds(prevIds => prevIds.slice(0, referenceLimits.images));
     }
-  }, [isKlingO1VideoModel, isSeedance2ReferenceMode, onError, onReferenceLimit, referenceAudioIds.length, referenceImageIds.length, referenceLimits, referenceVideoIds.length]);
+  }, [isKlingO3VideoModel, isSeedance2ReferenceMode, onError, onReferenceLimit, referenceAudioIds.length, referenceImageIds.length, referenceLimits, referenceVideoIds.length]);
 
   useEffect(() => {
     const effectiveSeedanceReferenceIds = isSeedance2ReferenceMode
@@ -294,7 +292,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     });
   }, [isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
 
-  // Clear sourceVideoId when leaving a video input mode (Kling O1 / Wan / 1-to-All / Scail / Lip Sync / HeyGen).
+  // Clear sourceVideoId when leaving a video input mode (Kling O3 / Wan / 1-to-All / Scail / Lip Sync / HeyGen).
   useEffect(() => {
     if (!isVideoInputMode && sourceVideoId) {
       setSourceVideoId(null);
@@ -309,14 +307,13 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   }, [isAudioInputMode, sourceAudioId]);
 
   useEffect(() => {
-    if (!isKlingO1VideoModel) {
+    if (!isKlingO3VideoModel) {
       if (elementImageIds.length > 0) {
         setElementImageIds([]);
       }
       return;
     }
-    // Edit/refV2V variants have a 4 total limit (elements + references), refI2V has 6
-    const baseMaxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
+    const baseMaxReferenceImages = getMaxReferenceImages(falModelId);
     const maxReferences = Math.max(0, baseMaxReferenceImages - elementImageIds.length);
     setReferenceImageIds(prev => {
       if (prev.length <= maxReferences) {
@@ -325,14 +322,13 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       onReferenceLimit(maxReferences);
       return prev.slice(0, maxReferences);
     });
-  }, [elementImageIds.length, falModelId, isKlingO1VideoInputMode, isKlingO1VideoModel, onReferenceLimit]);
+  }, [elementImageIds.length, falModelId, isKlingO3VideoModel, onReferenceLimit]);
 
   useEffect(() => {
-    if (!isKlingO1VideoModel) {
+    if (!isKlingO3VideoModel) {
       return;
     }
-    // Edit/refV2V variants have a 4 total limit (elements + references), refI2V has 6
-    const baseMaxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
+    const baseMaxReferenceImages = getMaxReferenceImages(falModelId);
     const maxElements = Math.max(0, baseMaxReferenceImages - referenceImageIds.length);
     setElementImageIds(prev => {
       if (prev.length <= maxElements) {
@@ -341,7 +337,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       onReferenceLimit(maxElements);
       return prev.slice(0, maxElements);
     });
-  }, [falModelId, isKlingO1VideoInputMode, isKlingO1VideoModel, onReferenceLimit, referenceImageIds.length]);
+  }, [falModelId, isKlingO3VideoModel, onReferenceLimit, referenceImageIds.length]);
 
   const handleImageSelection = useCallback((
     imageId: string | null,
@@ -355,9 +351,9 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     const isOneToAllVideoSelection = apiProvider === 'fal'
       && falModelMode === 'video'
       && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
-    const isKlingO1VideoSelection = apiProvider === 'fal'
+    const isKlingO3VideoSelection = apiProvider === 'fal'
       && falModelMode === 'video'
-      && isKlingO1VideoModelId(falVideoModelId);
+      && isKlingO3VideoModelId(falVideoModelId);
 
     if (reference && isSeedance2ReferenceMode && targetImage?.mediaType === 'video') {
       if (!imageId) {
@@ -442,7 +438,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO1FflfMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -477,7 +473,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (element) {
-      if (!isKlingO1VideoSelection) {
+      if (!isKlingO3VideoSelection) {
         return;
       }
       if (primaryImageId && imageId === primaryImageId) {
@@ -487,8 +483,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         setElementImageIds([]);
         return;
       }
-      // Edit/refV2V variants have a 4 total limit (elements + references), refI2V has 6
-      const baseMaxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
+      const baseMaxReferenceImages = getMaxReferenceImages(falModelId);
       const maxElements = Math.max(0, baseMaxReferenceImages - referenceImageIds.length);
       setReferenceImageIds(prev => prev.filter(id => id !== imageId));
       setElementImageIds(prevIds => {
@@ -552,9 +547,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         return;
       }
       // Reference images power Kling prompts; enforce per-model limits.
-      // Edit/refV2V variants have a 4 total limit (elements + references), refI2V has 6
-      const baseMaxReferenceImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelId);
-      const maxReferenceImages = isKlingO1VideoSelection
+      const baseMaxReferenceImages = getMaxReferenceImages(falModelId);
+      const maxReferenceImages = isKlingO3VideoSelection
         ? Math.max(0, baseMaxReferenceImages - elementImageIds.length)
         : baseMaxReferenceImages;
       const isAlreadyReference = referenceImageIds.includes(imageId);
@@ -598,7 +592,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       if (isWan27ReferenceMode) {
         setReferenceAudioIds([]);
       }
-      if (!isKlingO1VideoSelection) {
+      if (!isKlingO3VideoSelection) {
         setElementImageIds([]);
       }
       setVideoLastFrameImageId(null);
@@ -630,7 +624,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       if (isWan27ReferenceMode) {
         setReferenceAudioIds([]);
       }
-      if (!isKlingO1VideoSelection) {
+      if (!isKlingO3VideoSelection) {
         setElementImageIds([]);
       }
       setVideoLastFrameImageId(null);
@@ -674,7 +668,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (isWan27ReferenceMode) {
       setReferenceAudioIds([]);
     }
-    if (!isKlingO1VideoSelection) {
+    if (!isKlingO3VideoSelection) {
       setElementImageIds([]);
     }
     if (videoLastFrameImageId && videoLastFrameImageId === imageId) {
@@ -688,7 +682,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     images,
     isKlingProVideoSelection,
     isKlingV3SmartMode,
-    isKlingO1FflfMode,
+    isKlingO3ReferenceMode,
     isWan27EditMode,
     isWan27VideoModel,
     isWan27SmartMode,
@@ -704,16 +698,16 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     referenceImageIds.length,
     referenceVideoIds.length,
     elementImageIds.length,
-	    selectedImageIds.length,
-	    videoLastFrameImageId,
-	    isKlingO1VideoInputMode,
-	    isVideoInputMode,
-	    sourceVideoId,
-      isAudioInputMode,
-      sourceAudioId,
-      isSeedance2ReferenceMode,
-      isWan27ReferenceMode,
-	  ]);
+    selectedImageIds.length,
+    videoLastFrameImageId,
+    isKlingO3VideoInputMode,
+    isVideoInputMode,
+    sourceVideoId,
+    isAudioInputMode,
+    sourceAudioId,
+    isSeedance2ReferenceMode,
+    isWan27ReferenceMode,
+  ]);
 
   const handleNoteSelection = useCallback((
     noteId: string | null,

@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useSelectionState } from '../useSelectionState';
-import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, KLING_O1_VIDEO_MODEL_ID, WAN_27_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, KLING_O3_VIDEO_MODEL_ID, WAN_27_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage } from '../../types';
 import type { UseFalSettingsResult } from '../useFalSettings';
 
@@ -11,12 +11,11 @@ type TestFalSettings = Pick<
   | 'falModelMode'
   | 'falVideoModelId'
   | 'klingVariant'
-  | 'klingO1Variant'
+  | 'klingO3Variant'
   | 'isVideoMode'
   | 'isKlingProVideoSelection'
-  | 'isKlingO1VideoModel'
-  | 'isKlingO1EditMode'
-  | 'isKlingO1RefV2VMode'
+  | 'isKlingO3VideoModel'
+  | 'isKlingO3EditMode'
   | 'isLipsyncVideoModel'
   | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
@@ -52,13 +51,12 @@ const createWan27FalStub = (): TestFalSettings => ({
   falModelMode: 'video',
   falVideoModelId: WAN_27_VIDEO_MODEL_ID,
   klingVariant: 'standard',
-  klingO1Variant: 'refI2V',
+  klingO3Variant: 'reference',
   isVideoMode: true,
   isKlingProVideoSelection: false,
-  isKlingO1VideoModel: false,
-  isKlingO1EditMode: false,
-  isKlingO1RefV2VMode: false,
-  isLipsyncVideoModel: false,
+  isKlingO3VideoModel: false,
+  isKlingO3EditMode: false,
+    isLipsyncVideoModel: false,
   isHeygenV3LipsyncVideoModel: false,
   isInfinitalkVideoModel: false,
   isKlingV3ControlVideoModel: false,
@@ -328,7 +326,7 @@ describe('useSelectionState (Wan 2.7 video)', () => {
     expect(onReferenceLimit).toHaveBeenCalledWith(9);
   });
 
-  it('clears video and audio references when switching to Kling O1', async () => {
+  it('clears video and audio references when switching to Kling O3', async () => {
     const image = buildCanvasMedia('image-1', 'image');
     const video = buildCanvasMedia('video-1', 'video');
     const audio = buildCanvasMedia('audio-1', 'audio');
@@ -344,9 +342,9 @@ describe('useSelectionState (Wan 2.7 video)', () => {
     };
     const klingFal: TestFalSettings = {
       ...createWan27FalStub(),
-      falModelId: KLING_O1_VIDEO_MODEL_ID,
-      falVideoModelId: KLING_O1_VIDEO_MODEL_ID,
-      isKlingO1VideoModel: true,
+      falModelId: KLING_O3_VIDEO_MODEL_ID,
+      falVideoModelId: KLING_O3_VIDEO_MODEL_ID,
+      isKlingO3VideoModel: true,
       isWan27VideoModel: false,
       wan27VideoVariant: 'smart' as const,
       isSeedance2VideoModel: false,

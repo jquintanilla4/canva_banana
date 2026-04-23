@@ -2,9 +2,8 @@ import { useMemo } from 'react';
 import type { CanvasMediaType } from '../types';
 
 type UseKlingPromptMentionsArgs = {
-  isKlingO1VideoModel: boolean;
-  isKlingO1EditMode: boolean;
-  isKlingO1RefV2VMode?: boolean;
+  isKlingO3VideoModel: boolean;
+  isKlingO3EditMode: boolean;
   isSeedance2ReferenceMode?: boolean; // Reuses the Kling mention UX for Seedance reference prompts.
   isFlux2MaxModel?: boolean;
   isWan27ImageModel?: boolean;
@@ -21,9 +20,8 @@ type UseKlingPromptMentionsResult = {
 };
 
 export const useKlingPromptMentions = ({
-  isKlingO1VideoModel,
-  isKlingO1EditMode,
-  isKlingO1RefV2VMode = false,
+  isKlingO3VideoModel,
+  isKlingO3EditMode,
   isSeedance2ReferenceMode = false,
   isFlux2MaxModel = false,
   isWan27ImageModel = false,
@@ -33,9 +31,9 @@ export const useKlingPromptMentions = ({
   hasSingleImageSelected,
   primarySelectionMediaType,
 }: UseKlingPromptMentionsArgs): UseKlingPromptMentionsResult => {
-  const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode; // Both Kling O1 video-input variants share the same "Video" mention behavior.
+  const isKlingO3VideoInputMode = isKlingO3EditMode; // Only Kling O3 edit uses a source video mention path.
   return useMemo(() => {
-    if (!isKlingO1VideoModel && !isSeedance2ReferenceMode && !isFlux2MaxModel && !isWan27ImageModel) {
+    if (!isKlingO3VideoModel && !isSeedance2ReferenceMode && !isFlux2MaxModel && !isWan27ImageModel) {
       return { klingPromptMentions: [], klingReferenceCount: 0 };
     }
 
@@ -58,8 +56,8 @@ export const useKlingPromptMentions = ({
     });
 
     if (
-      isKlingO1VideoModel &&
-      isKlingO1VideoInputMode &&
+      isKlingO3VideoModel &&
+      isKlingO3VideoInputMode &&
       hasPrimaryVideoSelected &&
       klingPromptMentions.length === 0 &&
       referenceImageIds.length === 0
@@ -76,8 +74,8 @@ export const useKlingPromptMentions = ({
     elementOrderLabels,
     hasSingleImageSelected,
     primarySelectionMediaType,
-    isKlingO1VideoModel,
-    isKlingO1VideoInputMode,
+    isKlingO3VideoModel,
+    isKlingO3VideoInputMode,
     isSeedance2ReferenceMode,
     isFlux2MaxModel,
     isWan27ImageModel,

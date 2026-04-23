@@ -11,12 +11,11 @@ type TestFalSettings = Pick<
   | 'falModelMode'
   | 'falVideoModelId'
   | 'klingVariant'
-  | 'klingO1Variant'
+  | 'klingO3Variant'
   | 'isVideoMode'
   | 'isKlingProVideoSelection'
-  | 'isKlingO1VideoModel'
-  | 'isKlingO1EditMode'
-  | 'isKlingO1RefV2VMode'
+  | 'isKlingO3VideoModel'
+  | 'isKlingO3EditMode'
   | 'isLipsyncVideoModel'
   | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel'
@@ -62,13 +61,12 @@ describe('useSelectionState (one-to-all)', () => {
       falModelMode: 'video',
       falVideoModelId: ONE_TO_ALL_ANIMATE_MODEL_ID,
       klingVariant: 'standard',
-      klingO1Variant: 'refI2V',
+      klingO3Variant: 'reference',
       isVideoMode: true,
       isKlingProVideoSelection: false,
-      isKlingO1VideoModel: false,
-      isKlingO1EditMode: false,
-      isKlingO1RefV2VMode: false,
-      isLipsyncVideoModel: false,
+      isKlingO3VideoModel: false,
+      isKlingO3EditMode: false,
+            isLipsyncVideoModel: false,
       isHeygenV3LipsyncVideoModel: false,
       isInfinitalkVideoModel: false,
       isKlingV3ControlVideoModel: false,

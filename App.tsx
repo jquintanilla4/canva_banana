@@ -30,7 +30,7 @@ import {
   WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
   getMaxReferenceImages,
-  isKlingO1VideoModelId,
+  isKlingO3VideoModelId,
   isSeedreamModelId,
 } from './services/modelConfig';
 import {
@@ -275,14 +275,11 @@ export default function App() {
   }, [tool]);
 
   // Shows a toast when the reference image limit is reached for the current model.
-  const isKlingO1VideoInputMode = fal.isKlingO1EditMode || fal.isKlingO1RefV2VMode;
+  const isKlingO3VideoInputMode = fal.isKlingO3EditMode;
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
-    if (isKlingO1VideoModelId(fal.falModelId)) {
-      // Edit/refV2V variants have 4 total limit, refI2V has 6
-      const baseLimit = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(fal.falModelId);
-      const totalLimit = baseLimit + 1;
-      const variantLabel = fal.isKlingO1EditMode ? 'Kling O1 Edit' : fal.isKlingO1RefV2VMode ? 'Kling O1 Ref-v2v' : 'Kling O1 Video';
-      setToastMessage(`${variantLabel} supports up to ${totalLimit} images total (source + references + elements). Slots remaining: ${Math.max(0, maxReferenceImages)} for references/elements.`);
+    if (isKlingO3VideoModelId(fal.falModelId)) {
+      const variantLabel = fal.isKlingO3EditMode ? 'Kling O3 Edit' : 'Kling O3 Reference';
+      setToastMessage(`${variantLabel} supports up to 5 images total (source + references + elements). Slots remaining: ${Math.max(0, maxReferenceImages)} for references/elements.`);
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
@@ -309,9 +306,9 @@ export default function App() {
     const totalLimit = maxReferenceImages + 1;
     setToastMessage(`${getFalModelLabel(fal.falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [fal.falModelId, fal.isKlingO1EditMode, fal.isKlingO1RefV2VMode, isKlingO1VideoInputMode, setToastMessage]);
+  }, [fal.falModelId, fal.isKlingO3EditMode, setToastMessage]);
 
-  const isKlingO1FflfMode = fal.isKlingO1VideoModel && fal.klingO1Variant === 'fflf';
+  const isKlingO3ReferenceMode = fal.isKlingO3VideoModel && fal.klingO3Variant === 'reference';
   const isVeo31TailCapable = fal.isVeo31VideoModel && fal.veo31Variant === 'i2v-fflf';
   const isVeo31ExtendMode = fal.isVeo31VideoModel && fal.veo31Variant === 'extend';
   const isScailVideoModel = fal.isVideoMode && fal.falVideoModelId === SCAIL_VIDEO_MODEL_ID;
@@ -319,7 +316,7 @@ export default function App() {
   const isWan27EditMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'edit'; // Wan Edit uses a source video instead of an end frame.
   const supportsTailFrameSelection = fal.isKlingProVideoSelection
     || fal.isKlingV3VideoModel
-    || isKlingO1FflfMode
+    || isKlingO3ReferenceMode
     || isVeo31TailCapable
     || (fal.isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode)
     || fal.isSeedance15VideoModel
@@ -1070,18 +1067,18 @@ export default function App() {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: fal.isKlingO1VideoModel || isSeedance2ReferenceMode || isWan27ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel,
+    labelReferences: fal.isKlingO3VideoModel || isSeedance2ReferenceMode || isWan27ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
-    includePrimaryImageAsReference: !isSeedance2ReferenceMode && !isWan27ReferenceMode, // Reference modes should label only tagged refs.
+    includePrimaryImageAsReference: !isKlingO3ReferenceMode && !isSeedance2ReferenceMode && !isWan27ReferenceMode, // Only API prompt references get @Image labels.
     referenceImageIds: isSeedance2ReferenceMode ? effectiveSeedanceReferenceImageIds : referenceImageIds,
     referenceVideoIds: isSeedance2ReferenceMode ? effectiveSeedanceReferenceVideoIds : referenceVideoIds,
     referenceAudioIds: isSeedance2ReferenceMode ? effectiveSeedanceReferenceAudioIds : referenceAudioIds,
-    labelElements: fal.isKlingO1VideoModel,
+    labelElements: fal.isKlingO3VideoModel,
     elementImageIds,
-    isEditMode: isKlingO1VideoInputMode,
+    isEditMode: isKlingO3VideoInputMode,
     sourceVideoId,
-    includeTailFrame: isKlingO1FflfMode,
+    includeTailFrame: false,
     tailImageId: videoLastFrameImageId,
   });
   const videoPromptAreaVariantById = useMemo(() => (
@@ -1187,9 +1184,8 @@ export default function App() {
 
   // Build prompt mention suggestions for Kling/Wan based on current reference/element selections.
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
-    isKlingO1VideoModel: fal.isKlingO1VideoModel,
-    isKlingO1EditMode: fal.isKlingO1EditMode,
-    isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
+    isKlingO3VideoModel: fal.isKlingO3VideoModel,
+    isKlingO3EditMode: fal.isKlingO3EditMode,
     isSeedance2ReferenceMode,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isWan27ImageModel: fal.isWan27ImageModel,
@@ -1275,8 +1271,7 @@ export default function App() {
     appMode,
     tool,
     prompt,
-    isKlingO1EditMode: fal.isKlingO1EditMode,
-    isKlingO1RefV2VMode: fal.isKlingO1RefV2VMode,
+    isKlingO3EditMode: fal.isKlingO3EditMode,
     hasSourceVideo: hasSourceVideoSelected,
     hasSourceAudio: hasSourceAudioSelected,
     isVideoMode: fal.isVideoMode,
@@ -1287,6 +1282,7 @@ export default function App() {
     isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isKlingVideoModel: fal.isKlingVideoModel,
     isKlingV3VideoModel: fal.isKlingV3VideoModel,
+    isKlingO3VideoModel: fal.isKlingO3VideoModel,
     isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
@@ -1316,7 +1312,7 @@ export default function App() {
     isUpscaleModel: fal.isUpscaleModel,
     isKlingVideoModel: fal.isKlingVideoModel,
     isKlingV3VideoModel: fal.isKlingV3VideoModel,
-    isKlingO1VideoModel: fal.isKlingO1VideoModel,
+    isKlingO3VideoModel: fal.isKlingO3VideoModel,
     isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
     isHailuoVideoModel: fal.isHailuoVideoModel,
     isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
@@ -1338,8 +1334,10 @@ export default function App() {
     klingV3MultiPromptEnabled: fal.klingV3MultiPromptEnabled,
     klingV3Shot1Duration: fal.klingV3Shot1Duration,
     klingV3Shot2Duration: fal.klingV3Shot2Duration,
-    klingO1Variant: fal.klingO1Variant,
-    klingO1KeepAudio: fal.klingO1KeepAudio,
+    klingO3Variant: fal.klingO3Variant,
+    klingO3Duration: fal.klingO3Duration,
+    klingO3GenerateAudio: fal.klingO3GenerateAudio,
+    klingO3KeepAudio: fal.klingO3KeepAudio,
     klingV3ControlKeepSound: fal.klingV3ControlKeepSound,
     klingV3ControlOrientation: fal.klingV3ControlOrientation,
     wanTargetResolution: fal.wanTargetResolution,
@@ -1409,8 +1407,10 @@ export default function App() {
     onKlingV3MultiPromptEnabledChange: fal.handleKlingV3MultiPromptEnabledChange,
     onKlingV3Shot1DurationChange: fal.handleKlingV3Shot1DurationChange,
     onKlingV3Shot2DurationChange: fal.handleKlingV3Shot2DurationChange,
-    onKlingO1VariantChange: fal.handleKlingO1VariantChange,
-    onKlingO1KeepAudioChange: fal.handleKlingO1KeepAudioChange,
+    onKlingO3VariantChange: fal.handleKlingO3VariantChange,
+    onKlingO3DurationChange: fal.handleKlingO3DurationChange,
+    onKlingO3GenerateAudioChange: fal.handleKlingO3GenerateAudioChange,
+    onKlingO3KeepAudioChange: fal.handleKlingO3KeepAudioChange,
     onKlingV3ControlKeepSoundChange: fal.handleKlingV3ControlKeepSoundChange,
     onKlingV3ControlOrientationChange: fal.handleKlingV3ControlOrientationChange,
     onWanTargetResolutionChange: fal.handleWanTargetResolutionChange,
@@ -1616,8 +1616,8 @@ export default function App() {
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
           tailSelectionEnabled={supportsTailFrameSelection}
-          isKlingO1VideoInputMode={isKlingO1VideoInputMode}
-          isKlingO1FflfMode={isKlingO1FflfMode}
+          isKlingO3VideoInputMode={isKlingO3VideoInputMode}
+          isKlingO3ReferenceMode={isKlingO3ReferenceMode}
           isSeedance15FflfMode={fal.isSeedance15VideoModel}
           isKlingV3ControlVideoInputMode={fal.isKlingV3ControlVideoModel}
           isVeo31ExtendMode={isVeo31ExtendMode}
@@ -1761,7 +1761,11 @@ export default function App() {
                 : 'Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... (Cmd/Ctrl + Enter to generate)')
               : fal.isWan27ImageModel
               ? 'Describe your generation, or your edit, or use @ to reference images (4 images in total)... (Cmd/Ctrl + Enter to generate)'
-              : fal.isKlingO1VideoModel || fal.isFlux2MaxModel
+              : fal.isKlingO3VideoModel
+                ? (isKlingO3ReferenceMode
+                  ? 'Kling O3 Reference: click a start image, Shift-click an end image, Option/Alt-click elements (@Element1), Option/Alt+Shift-click reference images (@Image1)...'
+                  : 'Kling O3 Edit: click a source video, Option/Alt-click elements, Shift-click reference images, then describe the edit... (Cmd/Ctrl + Enter to generate)')
+              : fal.isFlux2MaxModel
                 ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
                 : promptPlaceholderText
           }
@@ -1777,7 +1781,7 @@ export default function App() {
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
           cameraThemeActive={isCameraPromptAccentActive}
-          klingSuggestionsEnabled={fal.isKlingO1VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel}
+          klingSuggestionsEnabled={fal.isKlingO3VideoModel || isSeedance2ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel}
           klingReferenceCount={klingReferenceCount}
           klingSuggestionOptions={klingPromptMentions}
           sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}

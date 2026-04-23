@@ -29,8 +29,8 @@ type DrawCanvasArgs = {
   elementImageOrderLabels?: Record<string, string> | null;
   videoLastFrameImageId: string | null;
   sourceVideoId: string | null;
-  isKlingO1VideoInputMode: boolean;
-  isKlingO1FflfMode: boolean;
+  isKlingO3VideoInputMode: boolean;
+  isKlingO3ReferenceMode: boolean;
   isSeedance15FflfMode: boolean;
   isKlingV3ControlVideoInputMode: boolean;
   isVeo31ExtendMode: boolean;
@@ -61,8 +61,8 @@ export function drawCanvas({
   elementImageOrderLabels,
   videoLastFrameImageId,
   sourceVideoId,
-  isKlingO1VideoInputMode,
-  isKlingO1FflfMode,
+  isKlingO3VideoInputMode,
+  isKlingO3ReferenceMode,
   isSeedance15FflfMode,
   isKlingV3ControlVideoInputMode,
   isVeo31ExtendMode,
@@ -203,7 +203,7 @@ export function drawCanvas({
     ctx.globalAlpha = 1;
 
     const padding = 5 / scale;
-    const isFflfSelectedVideo = isKlingO1FflfMode && image.mediaType === 'video' && selectedImageIds.includes(image.id);
+    const isFflfSelectedVideo = isKlingO3ReferenceMode && image.mediaType === 'video' && selectedImageIds.includes(image.id);
 
     const isReferenceTagged = referenceImageIds.includes(image.id)
       || referenceVideoIds.includes(image.id)
@@ -215,7 +215,7 @@ export function drawCanvas({
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if ((isKlingO1VideoInputMode || isKlingV3ControlVideoInputMode || isVeo31ExtendMode) && sourceVideoId === image.id) {
+    } else if ((isKlingO3VideoInputMode || isKlingV3ControlVideoInputMode || isVeo31ExtendMode) && sourceVideoId === image.id) {
       ctx.strokeStyle = '#f97316'; // orange-500 for source video in video input mode
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
@@ -296,7 +296,7 @@ export function drawCanvas({
       ctx.setLineDash([]);
     }
 
-    const isKlingSourceVideo = isKlingO1VideoInputMode && sourceVideoId === image.id;
+    const isKlingSourceVideo = isKlingO3VideoInputMode && sourceVideoId === image.id;
     const referenceOrderLabel = isKlingSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id];
     const shouldShowReferenceBadge = !!referenceOrderLabel;
     if (shouldShowReferenceBadge) {

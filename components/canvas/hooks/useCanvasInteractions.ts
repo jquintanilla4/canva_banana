@@ -364,8 +364,8 @@ export function useCanvasInteractions({
 
     const isMultiSelectKey = e.metaKey || e.ctrlKey;
     const wantsTailSelection = tailSelectionEnabled && !isMultiSelectKey && e.shiftKey && !e.altKey;
-    const isElementToggle = e.altKey && !isMultiSelectKey;
-    const isReferenceToggle = !wantsTailSelection && !isMultiSelectKey && e.shiftKey && !isElementToggle;
+    const isElementToggle = e.altKey && !e.shiftKey && !isMultiSelectKey;
+    const isReferenceToggle = !wantsTailSelection && !isMultiSelectKey && e.shiftKey;
 
     const beginDrag = (imageIdsToDrag: string[], noteIdsToDrag: string[]) => {
       const imagePositions: Record<string, Point> = {};

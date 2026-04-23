@@ -67,7 +67,7 @@ const mockState = vi.hoisted(() => {
     isVideoMode: true,
     isKlingVideoModel: false,
     isKlingV3VideoModel: false,
-    isKlingO1VideoModel: false,
+    isKlingO3VideoModel: false,
     isKlingV3ControlVideoModel: false,
     isHailuoVideoModel: false,
     isWanAnimateVideoModel: false,
@@ -86,9 +86,8 @@ const mockState = vi.hoisted(() => {
     isWan27ImageModel: false,
     isUpscaleModel: false,
     isKlingProVideoSelection: false,
-    isKlingO1EditMode: false,
-    isKlingO1RefV2VMode: false,
-    falImageSizeSelection: 'default',
+    isKlingO3EditMode: false,
+        falImageSizeSelection: 'default',
     falAspectRatioSelection: 'default',
     falResolutionSelection: '720p',
     falNumImages: 1,
@@ -105,8 +104,8 @@ const mockState = vi.hoisted(() => {
     klingV3MultiPrompt: '',
     klingV3Shot1Duration: '5',
     klingV3Shot2Duration: '5',
-    klingO1Variant: 'refI2V',
-    klingO1KeepAudio: false,
+    klingO3Variant: 'reference',
+    klingO3KeepAudio: true,
     klingV3ControlKeepSound: false,
     klingV3ControlOrientation: 'video',
     wanTargetResolution: '720p',
@@ -175,8 +174,8 @@ const mockState = vi.hoisted(() => {
   falState.handleKlingV3MultiPromptChange = vi.fn();
   falState.handleKlingV3Shot1DurationChange = vi.fn();
   falState.handleKlingV3Shot2DurationChange = vi.fn();
-  falState.handleKlingO1VariantChange = vi.fn();
-  falState.handleKlingO1KeepAudioChange = vi.fn();
+  falState.handleKlingO3VariantChange = vi.fn();
+  falState.handleKlingO3KeepAudioChange = vi.fn();
   falState.handleKlingV3ControlKeepSoundChange = vi.fn();
   falState.handleKlingV3ControlOrientationChange = vi.fn();
   falState.handleWanTargetResolutionChange = vi.fn();

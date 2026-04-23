@@ -102,6 +102,10 @@ export type GenerationFalOptions = Partial<{
   videoDuration: FalVideoDuration;
   hailuoVariant: 'standard' | 'pro';
   klingVariant: 'standard' | 'pro';
+  klingO3Variant: 'reference' | 'edit';
+  klingO3Duration: '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  klingO3GenerateAudio: boolean;
+  klingO3KeepAudio: boolean;
   klingO1Variant: 'refI2V' | 'edit' | 'fflf' | 'refV2V';
   klingO1KeepAudio: boolean;
   klingV3Duration: '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';

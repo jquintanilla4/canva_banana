@@ -57,3 +57,49 @@ describe('snapshotService (Sync v3 metadata)', () => {
     expect(metadata?.generation?.falOptions?.lipsyncSyncMode).toBe('remap');
   });
 });
+
+describe('snapshotService (Kling O3 metadata)', () => {
+  it('normalizes Kling O3 options from snapshots', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'kling prompt',
+        provider: 'fal',
+        modelId: 'fal-ai/kling-video/o3/pro/reference-to-video',
+        modelMode: 'video',
+        falOptions: {
+          klingO3Variant: 'edit',
+          klingO3Duration: '12',
+          klingO3GenerateAudio: true,
+          klingO3KeepAudio: false,
+        },
+      },
+    } as unknown as CanvasImageMetadata);
+
+    expect(metadata?.generation?.falOptions?.klingO3Variant).toBe('edit');
+    expect(metadata?.generation?.falOptions?.klingO3Duration).toBe('12');
+    expect(metadata?.generation?.falOptions?.klingO3GenerateAudio).toBe(true);
+    expect(metadata?.generation?.falOptions?.klingO3KeepAudio).toBe(false);
+  });
+
+  it('keeps legacy Kling O1 ref-v2v snapshots as video reference reruns', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'legacy kling prompt',
+        provider: 'fal',
+        modelId: 'fal-ai/kling-video/o1/video-to-video/reference',
+        modelMode: 'video',
+        falOptions: {
+          klingO1Variant: 'refV2V',
+          klingO1KeepAudio: false,
+        },
+      },
+    } as unknown as CanvasImageMetadata);
+
+    expect(metadata?.generation?.falOptions?.klingO1Variant).toBe('refV2V');
+    expect(metadata?.generation?.falOptions?.klingO3KeepAudio).toBe(false);
+  });
+});

@@ -10,6 +10,7 @@ import {
   INFINITALK_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
+  KLING_O3_VIDEO_EDIT_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
@@ -25,13 +26,15 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_27_EDIT_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   getFalModelLabel,
   getFalNumImageMaxForModel,
   getHailuoActualModelId,
   getKlingActualModelId,
-  getKlingO1VideoEndpoint,
+  getKlingO3VideoEndpoint,
   getNanoBananaTextToImageModelId,
   getWanAnimateVideoEndpoint,
   getMaxReferenceImages,
@@ -39,7 +42,9 @@ import {
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
-  isKlingO1VideoModelId,
+  isKlingO3AspectRatioSelectionValue,
+  isKlingO3DurationSelectionValue,
+  isKlingO3VideoModelId,
   isKlingV3CfgScaleSelectionValue,
   isKlingV3DurationSelectionValue,
   isKlingV3ShotDurationSelectionValue,
@@ -62,6 +67,7 @@ import {
   isFalVideoModelId,
   isSeedreamModelId,
   isSeedreamV5LiteModelId,
+  normalizeKlingO3Variant as normalizeLegacyKlingO3Variant,
   normalizeFalModelId,
   type FalAspectRatioSelectionValue,
   type FalImageModelId,
@@ -71,7 +77,8 @@ import {
   type FalResolutionSelectionValue,
   type FalVideoModelId,
   type HailuoVariant,
-  type KlingO1Variant,
+  type KlingO3Variant,
+  type KlingO3DurationSelectionValue,
   type KlingV3CfgScaleSelectionValue,
   type KlingV3DurationSelectionValue,
   type KlingV3ShotDurationSelectionValue,
@@ -164,6 +171,8 @@ type UseGenerationArgs = {
 };
 
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
+const LEGACY_KLING_O1_EDIT_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/edit'; // Removed Kling O1 edit endpoint.
+const LEGACY_KLING_O1_REF_V2V_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/reference'; // Removed Kling O1 ref-v2v endpoint.
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
   !!img && img.mediaType === 'image';
@@ -349,8 +358,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     klingV3MultiPrompt,
     klingV3Shot1Duration,
     klingV3Shot2Duration,
-    klingO1Variant,
-    klingO1KeepAudio,
+    klingO3Variant,
+    klingO3Duration,
+    klingO3GenerateAudio,
+    klingO3KeepAudio,
     klingV3ControlKeepSound,
     klingV3ControlOrientation,
     wanTargetResolution,
@@ -446,7 +457,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const trimmedPrompt = promptForRun.trim();
     const requestedProviderForRun = isGenerationProvider(generationOverride?.provider) ? generationOverride.provider : apiProvider;
     const apiProviderForRun: ApiProviderId = requestedProviderForRun === 'google' ? 'google' : 'fal';
-    const overrideModelId = normalizeFalModelId(generationOverride?.modelId); // Accept legacy saved model ids.
+    const rawOverrideModelId = generationOverride?.modelId;
+    const overrideModelId = normalizeFalModelId(rawOverrideModelId); // Accept legacy saved model ids.
     const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode : falModelMode;
     const falImageModelIdForRun = isFalImageModelId(overrideModelId) ? overrideModelId : falImageModelId;
     const falVideoModelIdForRun = isFalVideoModelId(overrideModelId) ? overrideModelId : falVideoModelId;
@@ -464,6 +476,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const falVideoDurationForRun = falOptionsOverride.videoDuration ?? falVideoDuration;
     const hailuoVariantForRun = falOptionsOverride.hailuoVariant ?? hailuoVariant;
     const klingVariantForRun = falOptionsOverride.klingVariant ?? klingVariant;
+    const legacyKlingOptions = falOptionsOverride as {
+      klingO1Variant?: unknown;
+      klingO1KeepAudio?: unknown;
+    }; // Read old saved Kling O1 options.
+    const isUnsupportedLegacyKlingO1RefV2VRerun = rawOverrideModelId === LEGACY_KLING_O1_REF_V2V_MODEL_ID
+      || legacyKlingOptions.klingO1Variant === 'refV2V'; // Removed model cannot be safely mapped to O3.
     const klingV3DurationForRun: KlingV3DurationSelectionValue = isKlingV3DurationSelectionValue(falOptionsOverride.klingV3Duration)
       ? falOptionsOverride.klingV3Duration
       : klingV3Duration;
@@ -481,7 +499,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const klingV3Shot2DurationForRun: KlingV3ShotDurationSelectionValue = isKlingV3ShotDurationSelectionValue(falOptionsOverride.klingV3Shot2Duration)
       ? falOptionsOverride.klingV3Shot2Duration
       : klingV3Shot2Duration;
-    const klingO1VariantForRun = falOptionsOverride.klingO1Variant ?? klingO1Variant;
+    const rawKlingModelImpliesEdit = rawOverrideModelId === KLING_O3_VIDEO_EDIT_MODEL_ID
+      || rawOverrideModelId === LEGACY_KLING_O1_EDIT_MODEL_ID; // Endpoint-only reruns still need edit mode.
+    const klingO3VariantForRun: KlingO3Variant = typeof falOptionsOverride.klingO3Variant === 'string'
+      ? normalizeLegacyKlingO3Variant(falOptionsOverride.klingO3Variant)
+      : rawKlingModelImpliesEdit
+        ? 'edit'
+        : normalizeLegacyKlingO3Variant(legacyKlingOptions.klingO1Variant ?? klingO3Variant);
+    const klingO3DurationForRun: KlingO3DurationSelectionValue = isKlingO3DurationSelectionValue(falOptionsOverride.klingO3Duration)
+      ? falOptionsOverride.klingO3Duration
+      : klingO3Duration;
+    const klingO3GenerateAudioForRun = typeof falOptionsOverride.klingO3GenerateAudio === 'boolean'
+      ? falOptionsOverride.klingO3GenerateAudio
+      : klingO3GenerateAudio;
     const videoNegativePromptForRun = falOptionsOverride.negativePrompt ?? videoNegativePrompt;
     const legacyWanOptions = falOptionsOverride as {
       wan26Resolution?: unknown;
@@ -506,9 +536,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : typeof legacyWanOptions.wan26PromptExpansion === 'boolean'
         ? legacyWanOptions.wan26PromptExpansion
         : wan27VideoPromptExpansion;
+    const rawWan27ModelVariant: Wan27VideoVariant | null = rawOverrideModelId === WAN_27_EDIT_VIDEO_MODEL_ID
+      ? 'edit'
+      : rawOverrideModelId === WAN_27_REFERENCE_TO_VIDEO_MODEL_ID
+        ? 'reference'
+        : null; // Endpoint-only reruns still need the matching Wan 2.7 mode.
     const wan27VideoVariantForRun: Wan27VideoVariant = isWan27VideoVariant(falOptionsOverride.wan27VideoVariant)
       ? falOptionsOverride.wan27VideoVariant
-      : generationOverride ? 'smart' : wan27VideoVariant;
+      : rawWan27ModelVariant ?? (generationOverride ? 'smart' : wan27VideoVariant);
     const wan27VideoAudioSettingOverride = falOptionsOverride.wan27VideoAudioSetting; // Saved reruns can explicitly choose either audio mode.
     const wan27VideoAudioSettingForRun: Wan27VideoAudioSettingSelectionValue = wan27VideoAudioSettingOverride === 'auto' || wan27VideoAudioSettingOverride === 'origin'
       ? wan27VideoAudioSettingOverride
@@ -630,7 +665,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const videoLastFrameImageIdForRun = generationOverride?.videoLastFrameImageId ?? videoLastFrameImageId;
     const sourceVideoIdForRun = generationOverride?.sourceVideoId ?? sourceVideoId;
     const sourceAudioIdForRun = generationOverride ? generationOverride.sourceAudioId ?? null : sourceAudioId;
-    const klingO1KeepAudioForRun = generationOverride?.falOptions?.klingO1KeepAudio ?? klingO1KeepAudio;
+    const klingO3KeepAudioForRun = typeof generationOverride?.falOptions?.klingO3KeepAudio === 'boolean'
+      ? generationOverride.falOptions.klingO3KeepAudio
+      : typeof legacyKlingOptions.klingO1KeepAudio === 'boolean'
+        ? legacyKlingOptions.klingO1KeepAudio
+        : klingO3KeepAudio;
     const generationProviderForRun: GenerationProviderId = apiProviderForRun === 'google'
       ? 'google'
       : falModelModeForRun === 'video' && falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID
@@ -661,10 +700,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const actualHailuoModelId = isHailuoVideoModel ? getHailuoActualModelId(hailuoVariantForRun) : null;
     const isKlingVideoModel = isVideoMode && falVideoModelIdForRun === KLING_VIDEO_MODEL_ID;
     const isKlingV3VideoModel = isVideoMode && falVideoModelIdForRun === KLING_V3_VIDEO_MODEL_ID;
-    const isKlingO1VideoModel = isVideoMode && isKlingO1VideoModelId(falVideoModelIdForRun);
-    const isKlingO1EditMode = isKlingO1VideoModel && klingO1VariantForRun === 'edit';
-    const isKlingO1RefV2VMode = isKlingO1VideoModel && klingO1VariantForRun === 'refV2V';
-    const isKlingO1VideoInputMode = isKlingO1EditMode || isKlingO1RefV2VMode;
+    const isKlingO3VideoModel = isVideoMode && isKlingO3VideoModelId(falVideoModelIdForRun);
+    const isKlingO3EditMode = isKlingO3VideoModel && klingO3VariantForRun === 'edit';
+    const isKlingO3ReferenceMode = isKlingO3VideoModel && klingO3VariantForRun === 'reference';
+    const isKlingO3VideoInputMode = isKlingO3EditMode;
     const isKlingV3ControlVideoModel = isVideoMode && falVideoModelIdForRun === KLING_V3_CONTROL_VIDEO_MODEL_ID;
     const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
     const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
@@ -691,10 +730,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
       || isScailVideoModel
       || isWan27EditModeForRun;
     const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
-    const actualKlingO1ModelId = isKlingO1VideoModel ? getKlingO1VideoEndpoint(klingO1VariantForRun) : null;
+    const actualKlingO3ModelId = isKlingO3VideoModel ? getKlingO3VideoEndpoint(klingO3VariantForRun) : null;
     const actualKlingV3ControlModelId = isKlingV3ControlVideoModel ? KLING_V3_CONTROL_VIDEO_MODEL_ID : null;
     const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
-    const isKlingO1FflfMode = isKlingO1VideoModel && klingO1VariantForRun === 'fflf';
     const isVeo31TailCapable = isVeo31VideoModelForRun && veo31VariantForRun === 'i2v-fflf';
     const isFalSeedance2VideoModelForRun = isVideoMode && falVideoModelIdForRun === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
     const isAnySeedance2VideoModelForRun = isVideoMode && (falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID || isFalSeedance2VideoModelForRun);
@@ -702,7 +740,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const wan27AudioIdForRun = isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun ? sourceAudioIdForRun : null; // Wan 2.7 Smart supports optional audio.
     const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
       ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
-      : (isKlingVideoModel || isKlingO1VideoModel)
+      : isKlingVideoModel
         ? (falVideoDurationForRun === '10' ? '10' : '5')
         : undefined;
     const normalizedVideoNegativePrompt =
@@ -715,10 +753,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isKlingV3ControlPromptOptional = usingFal && isVideoMode && isKlingV3ControlVideoModel; // Kling Control v3 prompt is optional.
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional));
-    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isAnySeedance2VideoModelForRun && !isWan27VideoModelForRun && !isKlingO1VideoInputMode && !isFalVideoInputMode
+    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isAnySeedance2VideoModelForRun && !isWan27VideoModelForRun && !isKlingO3VideoInputMode && !isFalVideoInputMode
       && !(isGrokImagineVideoModel && isGrokImagineVideoEditMode);
     const generationKind: GenerationKind = overrideKind
       ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
+
+    if (isUnsupportedLegacyKlingO1RefV2VRerun) {
+      setError('Kling O1 Ref-v2v is no longer available and cannot be regenerated. Create a new Kling O3 Reference or Edit generation instead.');
+      return;
+    }
 
     if (requiresPrompt && !trimmedUserPrompt) {
       setError(isVideoMode
@@ -780,18 +823,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
     if (isVideoMode) {
       const baseModelLabel = getFalModelLabel(falModelIdForRun);
-      const klingO1VariantLabel = klingO1VariantForRun === 'refI2V'
-        ? 'RefI2V'
-        : klingO1VariantForRun.toUpperCase();
+      const klingO3VariantLabel = klingO3VariantForRun === 'edit' ? 'Edit' : 'Reference';
       const veo31VariantLabel = veo31VariantForRun === 'extend' ? 'Extend' : 'i2v/FFLF';
       const jobModelLabel = isHailuoVideoModel
         ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
         : isKlingVideoModel
           ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
-          : isKlingV3VideoModel
-            ? `${baseModelLabel}${klingV3MultiPromptEnabledForRun ? ' Multi' : ' Smart'}`
-          : isKlingO1VideoModel
-            ? `${baseModelLabel} ${klingO1VariantLabel}`
+        : isKlingV3VideoModel
+          ? `${baseModelLabel}${klingV3MultiPromptEnabledForRun ? ' Multi' : ' Smart'}`
+          : isKlingO3VideoModel
+            ? `${baseModelLabel} ${klingO3VariantLabel}`
             : isKlingV3ControlVideoModel
               ? baseModelLabel
               : isVeo31VideoModelForRun
@@ -1199,10 +1240,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
       };
 
       try {
-        // In Ref-i2v, ensure a still image is selected (videos must be captured to images first)
+        // In Kling O3 reference mode, ensure a still image is selected before generation.
         const primarySelection = primaryImageIdForRun ? images.find(img => img.id === primaryImageIdForRun) : null;
-        if (isKlingO1VideoModel && !isKlingO1VideoInputMode && primarySelection?.mediaType === 'video') {
-          setError('Kling O1 Ref-i2v requires a still image. Capture a frame from the video and select that snapshot instead.');
+        if (isKlingO3ReferenceMode && primarySelection?.mediaType === 'video') {
+          setError('Kling O3 Reference requires a still image. Capture a frame from the video and select that snapshot instead.');
           return;
         }
         if (isWanAnimateVideoModel && primarySelection?.mediaType === 'video') {
@@ -1372,10 +1413,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
 
-        // For video-input modes (Kling O1 edit/refV2V, Grok edit-video, Wan modes), get source video URL; for other modes, require starting frame image
+        // For video-input modes (Kling O3 edit, Grok edit-video, Wan modes), get source video URL; other modes use a still first frame.
         let sourceVideo: CanvasImage | null = null;
         let sourceVideoUrlForRequest: string | undefined;
-        if (isKlingO1VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) {
+        if (isKlingO3VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) {
           sourceVideo = isGrokImagineVideoEditMode
             ? (primarySelection?.mediaType === 'video' ? primarySelection : null)
             : sourceVideoIdForRun
@@ -1400,7 +1441,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                           ? 'Select a video on the canvas to drive Infinitalk.'
                           : isGrokImagineVideoEditMode
                             ? 'Select a video on the canvas to edit.'
-                            : (isKlingO1EditMode ? 'Select a video on the canvas to edit.' : 'Select a video on the canvas as reference.'));
+                            : 'Select a video on the canvas to edit.');
           }
           if (isWanVisionEnhancerVideoModel) {
             const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
@@ -1470,7 +1511,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ? null
           : (isWanAnimateVideoModel || isOneToAllAnimateVideoModel || isKlingV3ControlVideoModel || isScailVideoModel)
             ? activePrimary?.element as HTMLImageElement
-            : (isKlingO1VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) ? null : (activePrimary?.element as HTMLImageElement | undefined) ?? null;
+            : (isKlingO3VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) ? null : (activePrimary?.element as HTMLImageElement | undefined) ?? null;
         const referenceImagesForRun = referenceImageIdsForRun
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia)
@@ -1498,7 +1539,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia)
           .map(img => img.element as HTMLImageElement);
-        if (isKlingO1VideoModel) {
+        if (isKlingO3VideoModel) {
           if (referenceImagesForRun.length !== referenceImageIdsForRun.length) {
             setError('Reference images must be still images.');
             return;
@@ -1507,16 +1548,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
             setError('Element images must be still images.');
             return;
           }
-          if (isKlingO1FflfMode && (referenceImagesForRun.length > 0 || elementImagesForRun.length > 0)) {
-            setError('Kling O1 FFLF only supports a start and end frame. Remove reference or element images.');
-            return;
-          }
-          const maxSupportImages = isKlingO1VideoInputMode ? 4 : getMaxReferenceImages(falModelIdForRun);
+          const maxSupportImages = getMaxReferenceImages(falModelIdForRun);
           const totalImageCount = referenceImagesForRun.length + elementImagesForRun.length;
           if (totalImageCount > maxSupportImages) {
-            setError(isKlingO1VideoInputMode
-              ? `Kling O1 Video ${isKlingO1EditMode ? 'Edit' : 'Ref-v2v'} supports up to 4 images total (references + elements).`
-              : 'Kling O1 Video supports up to 7 images total (start + references + elements).');
+            setError(`Kling O3 Video ${isKlingO3EditMode ? 'Edit' : 'Reference'} supports up to 4 images total (references + elements).`);
             return;
           }
         }
@@ -1539,7 +1574,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO1FflfMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart'); // Allow end-frame input for tail-capable variants.
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart'); // Allow end-frame input for tail-capable variants.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -1566,7 +1601,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           : null;
         const videoModelIdForRequest = actualHailuoModelId
           ?? actualKlingModelId
-          ?? actualKlingO1ModelId
+          ?? actualKlingO3ModelId
           ?? actualKlingV3ControlModelId
           ?? actualWanAnimateModelId
           ?? actualVeo31ModelId
@@ -1574,7 +1609,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ?? falVideoModelIdForRun;
         const shouldSendDuration = isHailuoVideoModel
           ? isHailuoStandardVideoModel
-          : (isKlingVideoModel || (isKlingO1VideoModel && !isKlingO1EditMode));
+          : isKlingVideoModel;
         const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
         const oneToAllNegativePromptForRequest = isOneToAllAnimateVideoModel ? videoNegativePromptForRun.trim() : undefined;
         const negativePromptForRequest =
@@ -1616,18 +1651,18 @@ export const useGeneration = (args: UseGenerationArgs) => {
             videoQuality: wanAnimateQualityForRun,
             useTurbo: wanAnimateUseTurboForRun,
           } : {}),
-          ...(isKlingO1VideoModel ? {
+          ...(isKlingO3VideoModel ? {
             referenceImages: referenceImagesForRun,
             elementImages: elementImagesForRun,
-            klingO1Variant: klingO1VariantForRun,
-            ...(isKlingO1VideoInputMode ? {
+            klingO3Variant: klingO3VariantForRun,
+            klingO3Duration: klingO3DurationForRun,
+            klingO3GenerateAudio: klingO3GenerateAudioForRun,
+            ...(isKlingO3VideoInputMode ? {
               sourceVideoUrl: sourceVideoUrlForRequest,
-              keepAudio: klingO1KeepAudioForRun,
-              ...(isKlingO1RefV2VMode ? {
-                duration: videoDurationForRun,
-                aspectRatio: falAspectRatioSelectionForRun === 'default' ? 'auto' : falAspectRatioSelectionForRun,
-              } : {}),
-            } : {}),
+              klingO3KeepAudio: klingO3KeepAudioForRun,
+            } : {
+              aspectRatio: isKlingO3AspectRatioSelectionValue(falAspectRatioSelectionForRun) ? falAspectRatioSelectionForRun : '16:9',
+            }),
           } : {}),
           ...(isKlingV3VideoModel ? {
             klingV3Duration: klingV3DurationForRun,
@@ -1827,7 +1862,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
                   : primaryImageIdForRun && !isWan27ReferenceModeForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameIdForMetadata ? { videoLastFrameImageId: videoLastFrameIdForMetadata } : {}),
-                ...((isKlingO1VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
+                ...((isKlingO3VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
                 ...(sourceAudioIdForMetadata ? { sourceAudioId: sourceAudioIdForMetadata } : {}),
                 falOptions: {
                   ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
@@ -1842,9 +1877,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     klingV3Shot1Duration: klingV3Shot1DurationForRun,
                     klingV3Shot2Duration: klingV3Shot2DurationForRun,
                   } : {}),
-                  ...(isKlingO1VideoModel ? { klingO1Variant: klingO1VariantForRun } : {}),
-                  ...(isKlingO1VideoInputMode ? { klingO1KeepAudio: klingO1KeepAudioForRun } : {}),
-                  ...(isKlingO1RefV2VMode ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
+                  ...(isKlingO3VideoModel ? {
+                    klingO3Variant: klingO3VariantForRun,
+                    klingO3Duration: klingO3DurationForRun,
+                    klingO3GenerateAudio: klingO3GenerateAudioForRun,
+                  } : {}),
+                  ...(isKlingO3EditMode ? { klingO3KeepAudio: klingO3KeepAudioForRun } : {}),
+                  ...(isKlingO3ReferenceMode ? {
+                    aspectRatioSelection: isKlingO3AspectRatioSelectionValue(falAspectRatioSelectionForRun) ? falAspectRatioSelectionForRun : '16:9',
+                  } : {}),
                   ...(hasVideoNegativePrompt ? { negativePrompt: normalizedVideoNegativePrompt } : {}),
                   ...(isWanVisionEnhancerVideoModel ? {
                     wanTargetResolution: wanTargetResolutionForRun,
@@ -2464,7 +2505,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     klingV3MultiPrompt,
     klingV3Shot1Duration,
     klingV3Shot2Duration,
-    klingO1Variant,
+    klingO3Variant,
+    klingO3Duration,
+    klingO3GenerateAudio,
+    klingO3KeepAudio,
     klingV3ControlKeepSound,
     klingV3ControlOrientation,
     videoNegativePrompt,
