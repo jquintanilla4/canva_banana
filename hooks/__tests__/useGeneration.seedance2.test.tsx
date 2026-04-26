@@ -7,6 +7,7 @@ import {
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   WAN_27_EDIT_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
@@ -352,6 +353,71 @@ describe('useGeneration (seedance 2)', () => {
         seedance2Resolution: '720p',
         seedance2Duration: '5',
         seedance2GenerateAudio: false,
+      }),
+    );
+  });
+
+  it('uses Seedance 1.5 Fal options from generation overrides', async () => {
+    const image = buildCanvasMedia('image-1', 'image');
+    const fal = createFalStub();
+    fal.falVideoModelId = SEEDANCE_15_VIDEO_MODEL_ID;
+    fal.isSeedance15VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.seedance15AspectRatio = '16:9';
+    fal.seedance15Resolution = '720p';
+    fal.seedance15Duration = '5';
+    fal.seedance15CameraFixed = false;
+    fal.seedance15Audio = false;
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so options can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [image],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'video',
+        prompt: 'A tailored Seedance 1.5 shot',
+        provider: 'fal',
+        modelId: SEEDANCE_15_VIDEO_MODEL_ID,
+        modelMode: 'video',
+        primaryImageId: image.id,
+        falOptions: {
+          seedance15AspectRatio: '9:16',
+          seedance15Resolution: '1080p',
+          seedance15Duration: '12',
+          seedance15CameraFixed: true,
+          seedance15Audio: true,
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'A tailored Seedance 1.5 shot',
+      image.element,
+      expect.objectContaining({
+        modelId: SEEDANCE_15_VIDEO_MODEL_ID,
+        seedance15AspectRatio: '9:16',
+        seedance15Resolution: '1080p',
+        seedance15Duration: '12',
+        seedance15CameraFixed: true,
+        seedance15Audio: true,
       }),
     );
   });

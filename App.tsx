@@ -19,23 +19,33 @@ import { DebugLogPanel } from './components/DebugLogPanel';
 import { clearDebugLogs } from './services/debugLog';
 import {
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
+  GROK_IMAGINE_VIDEO_MODEL_ID,
   isNanoBananaEditModelId,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
+  KLING_VIDEO_MODEL_ID,
+  KLING_V3_CONTROL_VIDEO_MODEL_ID,
+  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  HEYGEN_V3_LIPSYNC_MODEL_ID,
+  SYNC_LIPSYNC_MODEL_ID,
+  INFINITALK_VIDEO_MODEL_ID,
+  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
+  WAN_ANIMATE_MODEL_ID,
+  WAN_VISION_ENHANCER_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_VIDEO_MODEL_OPTIONS,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
-  getMaxReferenceImages,
   isKlingO3VideoModelId,
   isSeedreamModelId,
 } from './services/modelConfig';
 import {
-  buildKlingV3PromptBarControls,
-  buildSeedance2PromptBarControls,
   buildPromptBarModelControls,
   getPromptBarModelOptions,
 } from './services/promptBarConfig';
@@ -72,11 +82,12 @@ import {
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from './utils/seedanceReferences';
 import {
-  buildEmbeddedSeedanceAreaMembership,
-  buildEmbeddedSeedanceGenerationOverrides,
+  buildEmbeddedVideoGenerationOverrides,
   buildVideoPromptAreaMembership,
+  getEmbeddedVideoPromptBarModelId,
+  getVideoPromptAreaCapabilityProfile,
+  isUsableVideoPromptAreaModel,
   getAreaPromptBarRect,
-  SEEDANCE_2_VIDEO_PROMPT_PROFILE,
 } from './utils/videoPromptAreas';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
 import { PlusIcon } from './components/Icons';
@@ -94,6 +105,23 @@ type ApiProvider = ApiProviderId;
 const PROVIDER_ORDER: ReadonlyArray<ApiProviderId> = ['google', 'fal'];
 // Checks if an environment variable is a non-empty string
 const hasEnvValue = (value: string | undefined): boolean => typeof value === 'string' && value.trim().length > 0;
+const getEmbeddedBarFalOptions = (bar: CanvasVideoPromptBar) => ({
+  ...(bar.falOptions ?? {}),
+  negativePrompt: bar.negativePrompt,
+  seedance2Variant: bar.seedance2Variant,
+  seedance2AspectRatio: bar.seedance2AspectRatio,
+  seedance2Resolution: bar.seedance2Resolution,
+  seedance2Duration: bar.seedance2Duration,
+  seedance2GenerateAudio: bar.seedance2GenerateAudio,
+  seedance2CameraFixed: bar.seedance2CameraFixed,
+  klingV3MultiPrompt: bar.klingV3MultiPrompt ?? bar.falOptions?.klingV3MultiPrompt,
+  klingV3Duration: bar.klingV3Duration ?? bar.falOptions?.klingV3Duration,
+  klingV3GenerateAudio: bar.klingV3GenerateAudio ?? bar.falOptions?.klingV3GenerateAudio,
+  klingV3CfgScale: bar.klingV3CfgScale ?? bar.falOptions?.klingV3CfgScale,
+  klingV3MultiPromptEnabled: bar.klingV3MultiPromptEnabled ?? bar.falOptions?.klingV3MultiPromptEnabled,
+  klingV3Shot1Duration: bar.klingV3Shot1Duration ?? bar.falOptions?.klingV3Shot1Duration,
+  klingV3Shot2Duration: bar.klingV3Shot2Duration ?? bar.falOptions?.klingV3Shot2Duration,
+}); // Legacy top-level fields keep existing embedded bars compatible.
 
 // Detect which API providers are usable based on available API keys in env.
 const providerAvailability: Record<ApiProvider, boolean> = {
@@ -558,7 +586,7 @@ export default function App() {
     // Model mode changes can invalidate reference selections, so reset them.
     setReferenceImageIds([]);
   }, [fal.handleModelModeChange, setReferenceImageIds]);
-  const canCreateVideoPromptAreas = fal.isVideoMode;
+  const canCreateVideoPromptAreas = fal.isVideoMode && fal.falVideoModelId !== WAN_VISION_ENHANCER_MODEL_ID;
   const shouldShowVideoPromptBarAccessory = fal.isVideoMode && displayedVideoPromptAreas.length > 0;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1081,21 +1109,27 @@ export default function App() {
     includeTailFrame: false,
     tailImageId: videoLastFrameImageId,
   });
-  const videoPromptAreaVariantById = useMemo(() => (
-    displayedVideoPromptBars.reduce<Record<string, CanvasVideoPromptBar['seedance2Variant']>>((acc, bar) => {
+  const videoPromptAreaBarById = useMemo(() => (
+    displayedVideoPromptBars.reduce<Record<string, CanvasVideoPromptBar>>((acc, bar) => {
       if (bar.assignedAreaId) {
-        acc[bar.assignedAreaId] = bar.modelId === KLING_V3_VIDEO_MODEL_ID ? 'smart' : bar.seedance2Variant; // Kling v3 embedded bars use first/last-frame smart membership.
+        acc[bar.assignedAreaId] = bar;
       }
       return acc;
     }, {})
   ), [displayedVideoPromptBars]);
-  const videoPromptAreaMemberships = useMemo(() => (
-    displayedVideoPromptAreas.reduce<Record<string, VideoPromptAreaMembership>>((acc, area) => {
-      const baseMembership = buildVideoPromptAreaMembership(area, displayedImages, SEEDANCE_2_VIDEO_PROMPT_PROFILE);
-      acc[area.id] = buildEmbeddedSeedanceAreaMembership(baseMembership, videoPromptAreaVariantById[area.id] ?? 'reference'); // Smart areas only surface the media they can actually submit.
+  const videoPromptAreaProfiles = useMemo(() => (
+    displayedVideoPromptAreas.reduce<Record<string, ReturnType<typeof getVideoPromptAreaCapabilityProfile>>>((acc, area) => {
+      const bar = videoPromptAreaBarById[area.id];
+      acc[area.id] = getVideoPromptAreaCapabilityProfile(bar?.modelId, bar?.seedance2Variant, bar ? getEmbeddedBarFalOptions(bar) : undefined);
       return acc;
     }, {})
-  ), [displayedImages, displayedVideoPromptAreas, videoPromptAreaVariantById]);
+  ), [displayedVideoPromptAreas, videoPromptAreaBarById]);
+  const videoPromptAreaMemberships = useMemo(() => (
+    displayedVideoPromptAreas.reduce<Record<string, VideoPromptAreaMembership>>((acc, area) => {
+      acc[area.id] = buildVideoPromptAreaMembership(area, displayedImages, videoPromptAreaProfiles[area.id]);
+      return acc;
+    }, {})
+  ), [displayedImages, displayedVideoPromptAreas, videoPromptAreaProfiles]);
   const videoPromptAreaMembershipList = useMemo(() => (
     Object.values(videoPromptAreaMemberships) as VideoPromptAreaMembership[]
   ), [videoPromptAreaMemberships]);
@@ -1111,7 +1145,11 @@ export default function App() {
     videoPromptAreaMembershipList.flatMap(membership => membership.ignoredMediaIds)
   ), [videoPromptAreaMembershipList]);
   const acceptedVideoPromptImageIds = useMemo(() => (
-    videoPromptAreaMembershipList.flatMap(membership => membership.acceptedImageIds)
+    videoPromptAreaMembershipList.flatMap(membership => [
+      ...(membership.primaryImageId ? [membership.primaryImageId] : []),
+      ...membership.acceptedImageIds,
+      ...(membership.tailImageId ? [membership.tailImageId] : []),
+    ])
   ), [videoPromptAreaMembershipList]);
   const acceptedVideoPromptVideoIds = useMemo(() => (
     videoPromptAreaMembershipList.flatMap(membership => membership.acceptedVideoIds)
@@ -1119,11 +1157,18 @@ export default function App() {
   const acceptedVideoPromptAudioIds = useMemo(() => (
     videoPromptAreaMembershipList.flatMap(membership => membership.acceptedAudioIds)
   ), [videoPromptAreaMembershipList]);
+  const acceptedVideoPromptElementIds = useMemo(() => (
+    videoPromptAreaMembershipList.flatMap(membership => membership.elementImageIds)
+  ), [videoPromptAreaMembershipList]);
   const seedance2ReferenceAssetCount = effectiveSeedanceReferenceImageIds.length + effectiveSeedanceReferenceVideoIds.length + effectiveSeedanceReferenceAudioIds.length; // Seedance reference mode treats selected media as effective refs too.
   const canvasReferenceOrderLabels = useMemo(() => ({
     ...(klingReferenceOrderLabels ?? {}),
     ...videoPromptAreaLabelMap,
   }), [klingReferenceOrderLabels, videoPromptAreaLabelMap]); // Area labels should render on canvas without replacing the legacy reference flow.
+  const canvasElementOrderLabels = useMemo(() => ({
+    ...(klingElementOrderLabels ?? {}),
+    ...videoPromptAreaLabelMap,
+  }), [klingElementOrderLabels, videoPromptAreaLabelMap]); // Element labels share the same area role labels.
   const canvasReferenceImageIds = useMemo(() => (
     Array.from(new Set([...referenceImageIds, ...acceptedVideoPromptImageIds]))
   ), [acceptedVideoPromptImageIds, referenceImageIds]);
@@ -1133,6 +1178,7 @@ export default function App() {
   const canvasReferenceAudioIds = useMemo(() => (
     Array.from(new Set([...referenceAudioIds, ...acceptedVideoPromptAudioIds]))
   ), [acceptedVideoPromptAudioIds, referenceAudioIds]);
+
   const handleEmbeddedVideoPromptSubmit = useCallback((barId: string) => {
     const targetBar = displayedVideoPromptBars.find(bar => bar.id === barId);
     if (!targetBar || !targetBar.assignedAreaId) {
@@ -1142,28 +1188,9 @@ export default function App() {
     if (!membership) {
       return;
     }
-    const isKlingV3PromptBar = targetBar.modelId === KLING_V3_VIDEO_MODEL_ID;
-    const targetModelId = isKlingV3PromptBar
-      ? KLING_V3_VIDEO_MODEL_ID
-      : targetBar.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? FAL_SEEDANCE_2_VIDEO_MODEL_ID : SEEDANCE_2_VIDEO_MODEL_ID; // Missing ids are legacy Volcengine bars.
-    const generationOverrides = buildEmbeddedSeedanceGenerationOverrides(membership, isKlingV3PromptBar ? 'smart' : targetBar.seedance2Variant);
-    const seedanceOptions = {
-      seedance2Variant: targetBar.seedance2Variant,
-      seedance2AspectRatio: targetBar.seedance2AspectRatio,
-      seedance2Resolution: targetBar.seedance2Resolution,
-      seedance2Duration: targetBar.seedance2Duration,
-      seedance2GenerateAudio: targetBar.seedance2GenerateAudio,
-    };
-    const klingV3Options = {
-      negativePrompt: targetBar.negativePrompt,
-      klingV3Duration: targetBar.klingV3Duration ?? '5',
-      klingV3GenerateAudio: targetBar.klingV3GenerateAudio ?? true,
-      klingV3CfgScale: targetBar.klingV3CfgScale ?? '0.5',
-      klingV3MultiPromptEnabled: targetBar.klingV3MultiPromptEnabled ?? false,
-      klingV3MultiPrompt: targetBar.klingV3MultiPrompt ?? '',
-      klingV3Shot1Duration: targetBar.klingV3Shot1Duration ?? '5',
-      klingV3Shot2Duration: targetBar.klingV3Shot2Duration ?? '5',
-    };
+    const targetModelId = getEmbeddedVideoPromptBarModelId(targetBar.modelId);
+    const generationOverrides = buildEmbeddedVideoGenerationOverrides(membership);
+    const falOptions = getEmbeddedBarFalOptions(targetBar);
     void handleGenerate({
       kind: 'video',
       prompt: targetBar.prompt,
@@ -1171,11 +1198,16 @@ export default function App() {
       modelId: targetModelId,
       modelMode: 'video',
       ...generationOverrides,
-      ...(targetModelId === KLING_V3_VIDEO_MODEL_ID
-        ? { falOptions: klingV3Options }
-        : targetModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID
-        ? { falOptions: seedanceOptions }
-        : { volcengineOptions: { ...seedanceOptions, seedance2CameraFixed: targetBar.seedance2CameraFixed } }),
+      ...(targetModelId === SEEDANCE_2_VIDEO_MODEL_ID
+        ? { volcengineOptions: {
+          seedance2Variant: targetBar.seedance2Variant,
+          seedance2AspectRatio: targetBar.seedance2AspectRatio,
+          seedance2Resolution: targetBar.seedance2Resolution,
+          seedance2Duration: targetBar.seedance2Duration,
+          seedance2GenerateAudio: targetBar.seedance2GenerateAudio,
+          seedance2CameraFixed: targetBar.seedance2CameraFixed,
+        } }
+        : { falOptions }),
     });
   }, [displayedVideoPromptBars, handleGenerate, videoPromptAreaMemberships]);
 
@@ -1195,68 +1227,203 @@ export default function App() {
     hasSingleImageSelected,
     primarySelectionMediaType,
   });
-  const embeddedVideoPromptBarModelOptions = useMemo(() => ([
-    { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
-    { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' },
-    { value: KLING_V3_VIDEO_MODEL_ID, label: 'Kling 3.0 Pro' },
-  ]), []);
+  const embeddedVideoPromptBarModelOptions = useMemo(() => (
+    FAL_VIDEO_MODEL_OPTIONS
+      .filter(option => isUsableVideoPromptAreaModel(option.value))
+      .map(option => ({ value: option.value, label: option.label }))
+  ), []);
   const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => {
-    if (bar.modelId === KLING_V3_VIDEO_MODEL_ID) {
-      return buildKlingV3PromptBarControls({
-        idPrefix: bar.id,
-        klingV3Duration: bar.klingV3Duration ?? '5',
-        klingV3GenerateAudio: bar.klingV3GenerateAudio ?? true,
-        klingV3CfgScale: bar.klingV3CfgScale ?? '0.5',
-        klingV3MultiPromptEnabled: bar.klingV3MultiPromptEnabled ?? false,
-        klingV3Shot1Duration: bar.klingV3Shot1Duration ?? '5',
-        klingV3Shot2Duration: bar.klingV3Shot2Duration ?? '5',
-        isLoading,
-        onKlingV3DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3Duration: value })),
-        onKlingV3GenerateAudioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3GenerateAudio: value })),
-        onKlingV3CfgScaleChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3CfgScale: value })),
-        onKlingV3MultiPromptEnabledChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3MultiPromptEnabled: value })),
-        onKlingV3Shot1DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3Shot1Duration: value })),
-        onKlingV3Shot2DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3Shot2Duration: value })),
-      });
-    }
+    const modelId = getEmbeddedVideoPromptBarModelId(bar.modelId);
+    const options = bar.falOptions ?? {};
+    const updateFalOption = (key: keyof NonNullable<CanvasVideoPromptBar['falOptions']>, value: unknown) => {
+      handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        falOptions: { ...(currentBar.falOptions ?? {}), [key]: value },
+      }));
+    }; // Store embedded control edits with the bar.
+    const updateLegacyAndFal = (patch: Partial<CanvasVideoPromptBar>, key: keyof NonNullable<CanvasVideoPromptBar['falOptions']>, value: unknown) => {
+      handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
+        ...currentBar,
+        ...patch,
+        falOptions: { ...(currentBar.falOptions ?? {}), [key]: value },
+      }));
+    }; // Seedance/Kling legacy fields still drive existing snapshots/tests.
 
-    return buildSeedance2PromptBarControls({
-      idPrefix: bar.id,
+    return buildPromptBarModelControls({
+      apiProvider: 'fal',
+      falModelId: modelId,
+      falModelMode: 'video',
+      isVideoMode: true,
+      usingFal: true,
+      isSeedreamModel: false,
+      isNanoBananaModel: false,
+      isFlux2MaxModel: false,
+      isWan27ImageModel: false,
+      isUpscaleModel: false,
+      isKlingVideoModel: modelId === KLING_VIDEO_MODEL_ID,
+      isKlingV3VideoModel: modelId === KLING_V3_VIDEO_MODEL_ID,
+      isKlingO3VideoModel: isKlingO3VideoModelId(modelId),
+      isKlingV3ControlVideoModel: modelId === KLING_V3_CONTROL_VIDEO_MODEL_ID,
+      isHailuoVideoModel: modelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+      isWanAnimateVideoModel: modelId === WAN_ANIMATE_MODEL_ID,
+      isLipsyncVideoModel: modelId === SYNC_LIPSYNC_MODEL_ID,
+      isHeygenV3LipsyncVideoModel: modelId === HEYGEN_V3_LIPSYNC_MODEL_ID,
+      isInfinitalkVideoModel: modelId === INFINITALK_VIDEO_MODEL_ID,
+      isGrokImagineVideoModel: modelId === GROK_IMAGINE_VIDEO_MODEL_ID,
+      isVeo31VideoModel: modelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+      isWan27VideoModel: modelId === WAN_27_VIDEO_MODEL_ID,
+      isSeedance15VideoModel: modelId === SEEDANCE_15_VIDEO_MODEL_ID,
+      isSeedance2VideoModel: modelId === SEEDANCE_2_VIDEO_MODEL_ID || modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      isFalSeedance2VideoModel: modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      hailuoVariant: options.hailuoVariant ?? fal.hailuoVariant,
+      falVideoDuration: options.videoDuration ?? fal.falVideoDuration,
+      klingVariant: options.klingVariant ?? fal.klingVariant,
+      klingV3Duration: bar.klingV3Duration ?? options.klingV3Duration ?? '5',
+      klingV3GenerateAudio: bar.klingV3GenerateAudio ?? options.klingV3GenerateAudio ?? true,
+      klingV3CfgScale: bar.klingV3CfgScale ?? options.klingV3CfgScale ?? '0.5',
+      klingV3MultiPromptEnabled: bar.klingV3MultiPromptEnabled ?? options.klingV3MultiPromptEnabled ?? false,
+      klingV3Shot1Duration: bar.klingV3Shot1Duration ?? options.klingV3Shot1Duration ?? '5',
+      klingV3Shot2Duration: bar.klingV3Shot2Duration ?? options.klingV3Shot2Duration ?? '5',
+      klingO3Variant: options.klingO3Variant ?? fal.klingO3Variant,
+      klingO3Duration: options.klingO3Duration ?? fal.klingO3Duration,
+      klingO3GenerateAudio: options.klingO3GenerateAudio ?? fal.klingO3GenerateAudio,
+      klingO3KeepAudio: options.klingO3KeepAudio ?? fal.klingO3KeepAudio,
+      klingV3ControlKeepSound: options.klingV3ControlKeepSound ?? fal.klingV3ControlKeepSound,
+      klingV3ControlOrientation: options.klingV3ControlOrientation ?? fal.klingV3ControlOrientation,
+      wanTargetResolution: options.wanTargetResolution ?? fal.wanTargetResolution,
+      wanCreativity: options.wanCreativity ?? fal.wanCreativity,
+      wanAnimateVariant: options.wanAnimateVariant ?? fal.wanAnimateVariant,
+      wanAnimateSteps: options.wanAnimateSteps ?? fal.wanAnimateSteps,
+      wanAnimateResolution: options.wanAnimateResolution ?? fal.wanAnimateResolution,
+      oneToAllAnimateResolution: options.oneToAllAnimateResolution ?? fal.oneToAllAnimateResolution,
+      wanAnimateShift: options.wanAnimateShift ?? fal.wanAnimateShift,
+      wanAnimateQuality: options.wanAnimateQuality ?? fal.wanAnimateQuality,
+      wanAnimateUseTurbo: options.wanAnimateUseTurbo ?? fal.wanAnimateUseTurbo,
+      lipsyncSyncMode: options.lipsyncSyncMode ?? fal.lipsyncSyncMode,
+      heygenEnableCaption: options.heygenEnableCaption ?? fal.heygenEnableCaption,
+      heygenEnableDynamicDuration: options.heygenEnableDynamicDuration ?? fal.heygenEnableDynamicDuration,
+      heygenDisableMusicTrack: options.heygenDisableMusicTrack ?? fal.heygenDisableMusicTrack,
+      heygenEnableSpeechEnhancement: options.heygenEnableSpeechEnhancement ?? fal.heygenEnableSpeechEnhancement,
+      infinitalkResolution: options.infinitalkResolution ?? fal.infinitalkResolution,
+      infinitalkSeed: options.infinitalkSeed ?? fal.infinitalkSeed,
+      infinitalkAcceleration: options.infinitalkAcceleration ?? fal.infinitalkAcceleration,
+      infinitalkDuration: options.infinitalkDuration ?? fal.infinitalkDuration,
+      grokImagineVideoDuration: options.grokImagineVideoDuration ?? fal.grokImagineVideoDuration,
+      grokImagineVideoResolution: options.grokImagineVideoResolution ?? fal.grokImagineVideoResolution,
+      grokImagineVideoAspectRatio: options.grokImagineVideoAspectRatio ?? fal.grokImagineVideoAspectRatio,
+      veo31Variant: options.veo31Variant ?? fal.veo31Variant,
+      veo31Duration: options.veo31Duration ?? fal.veo31Duration,
+      veo31Resolution: options.veo31Resolution ?? fal.veo31Resolution,
+      veo31AspectRatio: options.veo31AspectRatio ?? fal.veo31AspectRatio,
+      veo31GenerateAudio: options.veo31GenerateAudio ?? fal.veo31GenerateAudio,
+      wan27VideoResolution: options.wan27VideoResolution ?? fal.wan27VideoResolution,
+      wan27VideoDuration: options.wan27VideoDuration ?? fal.wan27VideoDuration,
+      wan27VideoAspectRatio: options.wan27VideoAspectRatio ?? fal.wan27VideoAspectRatio,
+      wan27VideoPromptExpansion: options.wan27VideoPromptExpansion ?? fal.wan27VideoPromptExpansion,
+      wan27VideoVariant: options.wan27VideoVariant ?? fal.wan27VideoVariant,
+      wan27VideoAudioSetting: options.wan27VideoAudioSetting ?? fal.wan27VideoAudioSetting,
+      seedance15AspectRatio: options.seedance15AspectRatio ?? fal.seedance15AspectRatio,
+      seedance15Resolution: options.seedance15Resolution ?? fal.seedance15Resolution,
+      seedance15Duration: options.seedance15Duration ?? fal.seedance15Duration,
+      seedance15CameraFixed: options.seedance15CameraFixed ?? fal.seedance15CameraFixed,
+      seedance15Audio: options.seedance15Audio ?? fal.seedance15Audio,
       seedance2Variant: bar.seedance2Variant,
       seedance2AspectRatio: bar.seedance2AspectRatio ?? '16:9',
       seedance2Resolution: bar.seedance2Resolution ?? '720p',
       seedance2Duration: bar.seedance2Duration ?? '5',
       seedance2GenerateAudio: bar.seedance2GenerateAudio,
       seedance2CameraFixed: bar.seedance2CameraFixed,
-      showCameraFixed: bar.modelId !== FAL_SEEDANCE_2_VIDEO_MODEL_ID,
-      allowFullResolution: bar.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      flux2MaxImageSize: fal.flux2MaxImageSize,
+      wan27ImageAspectRatio: fal.wan27ImageAspectRatio,
+      wan27ImageMaxImages: fal.wan27ImageMaxImages,
+      recraftImageSize: fal.recraftImageSize,
+      recraftBackgroundColor: fal.recraftBackgroundColor,
+      recraftColors: fal.recraftColors,
+      falScaleFactor: fal.falScaleFactor,
+      falCreativity: fal.falCreativity,
+      falNoiseScale: fal.falNoiseScale,
+      falImageSizeSelection: fal.falImageSizeSelection,
+      falAspectRatioSelection: fal.falAspectRatioSelection,
+      falResolutionSelection: fal.falResolutionSelection,
+      falNumImages: fal.falNumImages,
       isLoading,
-      onSeedance2VariantChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2Variant: value,
-      })),
-      onSeedance2AspectRatioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2AspectRatio: value,
-      })),
-      onSeedance2ResolutionChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2Resolution: value,
-      })),
-      onSeedance2DurationChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2Duration: value,
-      })),
-      onSeedance2GenerateAudioChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2GenerateAudio: value,
-      })),
-      onSeedance2CameraFixedChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
-        ...currentBar,
-        seedance2CameraFixed: value,
-      })),
-    });
-  }, [handleEmbeddedPromptBarUpdate, isLoading]);
+      onHailuoVariantChange: value => updateFalOption('hailuoVariant', value),
+      onFalVideoDurationChange: value => updateFalOption('videoDuration', value),
+      onKlingVariantChange: value => updateFalOption('klingVariant', value),
+      onKlingV3DurationChange: value => updateLegacyAndFal({ klingV3Duration: value as CanvasVideoPromptBar['klingV3Duration'] }, 'klingV3Duration', value),
+      onKlingV3GenerateAudioChange: value => updateLegacyAndFal({ klingV3GenerateAudio: value }, 'klingV3GenerateAudio', value),
+      onKlingV3CfgScaleChange: value => updateLegacyAndFal({ klingV3CfgScale: value as CanvasVideoPromptBar['klingV3CfgScale'] }, 'klingV3CfgScale', value),
+      onKlingV3MultiPromptEnabledChange: value => updateLegacyAndFal({ klingV3MultiPromptEnabled: value }, 'klingV3MultiPromptEnabled', value),
+      onKlingV3Shot1DurationChange: value => updateLegacyAndFal({ klingV3Shot1Duration: value as CanvasVideoPromptBar['klingV3Shot1Duration'] }, 'klingV3Shot1Duration', value),
+      onKlingV3Shot2DurationChange: value => updateLegacyAndFal({ klingV3Shot2Duration: value as CanvasVideoPromptBar['klingV3Shot2Duration'] }, 'klingV3Shot2Duration', value),
+      onKlingO3VariantChange: value => updateFalOption('klingO3Variant', value),
+      onKlingO3DurationChange: value => updateFalOption('klingO3Duration', value),
+      onKlingO3GenerateAudioChange: value => updateFalOption('klingO3GenerateAudio', value),
+      onKlingO3KeepAudioChange: value => updateFalOption('klingO3KeepAudio', value),
+      onKlingV3ControlKeepSoundChange: value => updateFalOption('klingV3ControlKeepSound', value),
+      onKlingV3ControlOrientationChange: value => updateFalOption('klingV3ControlOrientation', value),
+      onWanTargetResolutionChange: value => updateFalOption('wanTargetResolution', value),
+      onWanCreativityChange: value => updateFalOption('wanCreativity', Number(value)),
+      onWanAnimateVariantChange: value => updateFalOption('wanAnimateVariant', value),
+      onWanAnimateStepsChange: value => updateFalOption('wanAnimateSteps', value),
+      onWanAnimateResolutionChange: value => updateFalOption('wanAnimateResolution', value),
+      onOneToAllAnimateResolutionChange: value => updateFalOption('oneToAllAnimateResolution', value),
+      onWanAnimateShiftChange: value => updateFalOption('wanAnimateShift', value),
+      onWanAnimateQualityChange: value => updateFalOption('wanAnimateQuality', value),
+      onWanAnimateTurboChange: value => updateFalOption('wanAnimateUseTurbo', value),
+      onLipsyncSyncModeChange: value => updateFalOption('lipsyncSyncMode', value),
+      onHeygenEnableCaptionChange: value => updateFalOption('heygenEnableCaption', value),
+      onHeygenEnableDynamicDurationChange: value => updateFalOption('heygenEnableDynamicDuration', value),
+      onHeygenDisableMusicTrackChange: value => updateFalOption('heygenDisableMusicTrack', value),
+      onHeygenEnableSpeechEnhancementChange: value => updateFalOption('heygenEnableSpeechEnhancement', value),
+      onInfinitalkResolutionChange: value => updateFalOption('infinitalkResolution', value),
+      onInfinitalkSeedChange: value => updateFalOption('infinitalkSeed', value),
+      onInfinitalkAccelerationChange: value => updateFalOption('infinitalkAcceleration', value),
+      onInfinitalkDurationChange: value => updateFalOption('infinitalkDuration', value),
+      onGrokImagineVideoDurationChange: value => updateFalOption('grokImagineVideoDuration', value),
+      onGrokImagineVideoResolutionChange: value => updateFalOption('grokImagineVideoResolution', value),
+      onGrokImagineVideoAspectRatioChange: value => updateFalOption('grokImagineVideoAspectRatio', value),
+      onVeo31VariantChange: value => updateFalOption('veo31Variant', value),
+      onVeo31DurationChange: value => updateFalOption('veo31Duration', value),
+      onVeo31ResolutionChange: value => updateFalOption('veo31Resolution', value),
+      onVeo31AspectRatioChange: value => updateFalOption('veo31AspectRatio', value),
+      onVeo31GenerateAudioChange: value => updateFalOption('veo31GenerateAudio', value),
+      onWan27VideoResolutionChange: value => updateFalOption('wan27VideoResolution', value),
+      onWan27VideoDurationChange: value => updateFalOption('wan27VideoDuration', value),
+      onWan27VideoAspectRatioChange: value => updateFalOption('wan27VideoAspectRatio', value),
+      onWan27VideoPromptExpansionChange: value => updateFalOption('wan27VideoPromptExpansion', value),
+      onWan27VideoVariantChange: value => updateFalOption('wan27VideoVariant', value),
+      onWan27VideoAudioSettingChange: value => updateFalOption('wan27VideoAudioSetting', value),
+      onSeedance15AspectRatioChange: value => updateFalOption('seedance15AspectRatio', value),
+      onSeedance15ResolutionChange: value => updateFalOption('seedance15Resolution', value),
+      onSeedance15DurationChange: value => updateFalOption('seedance15Duration', value),
+      onSeedance15CameraFixedChange: value => updateFalOption('seedance15CameraFixed', value),
+      onSeedance15AudioChange: value => updateFalOption('seedance15Audio', value),
+      onSeedance2VariantChange: value => updateLegacyAndFal({ seedance2Variant: value as CanvasVideoPromptBar['seedance2Variant'] }, 'seedance2Variant', value),
+      onSeedance2AspectRatioChange: value => updateLegacyAndFal({ seedance2AspectRatio: value as CanvasVideoPromptBar['seedance2AspectRatio'] }, 'seedance2AspectRatio', value),
+      onSeedance2ResolutionChange: value => updateLegacyAndFal({ seedance2Resolution: value as CanvasVideoPromptBar['seedance2Resolution'] }, 'seedance2Resolution', value),
+      onSeedance2DurationChange: value => updateLegacyAndFal({ seedance2Duration: value as CanvasVideoPromptBar['seedance2Duration'] }, 'seedance2Duration', value),
+      onSeedance2GenerateAudioChange: value => updateLegacyAndFal({ seedance2GenerateAudio: value }, 'seedance2GenerateAudio', value),
+      onSeedance2CameraFixedChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, seedance2CameraFixed: value })),
+      onFlux2MaxImageSizeChange: () => {},
+      onWan27ImageAspectRatioChange: () => {},
+      onWan27ImageMaxImagesChange: () => {},
+      onRecraftImageSizeChange: () => {},
+      onRecraftBackgroundColorChange: () => {},
+      onRecraftColorChange: () => {},
+      onRecraftAddColor: () => {},
+      onRecraftRemoveColor: () => {},
+      onFalScaleFactorChange: () => {},
+      onFalCreativityChange: () => {},
+      onFalNoiseScaleChange: () => {},
+      onFalImageSizeChange: () => {},
+      onFalAspectRatioChange: value => updateFalOption('aspectRatioSelection', value),
+      onFalResolutionChange: () => {},
+      onFalNumImagesChange: () => {},
+      shouldValidateFalOptions: false,
+      isNumImagesInvalid: false,
+    }) ?? [];
+  }, [fal, handleEmbeddedPromptBarUpdate, isLoading]);
 
   // Validation layer for prompt submission that enforces provider/model-specific rules.
   const {
@@ -1596,6 +1763,7 @@ export default function App() {
           selectedVideoPromptAreaId={selectedVideoPromptAreaId}
           onVideoPromptAreaSelect={setSelectedVideoPromptAreaId}
           videoPromptAreaMemberships={videoPromptAreaMemberships}
+          videoPromptAreaProfiles={videoPromptAreaProfiles}
           tool={tool}
           canCreateVideoPromptAreas={canCreateVideoPromptAreas}
           appMode={appMode}
@@ -1611,8 +1779,8 @@ export default function App() {
           referenceAudioIds={canvasReferenceAudioIds}
           referenceImageOrderLabels={canvasReferenceOrderLabels}
           disabledMediaIds={ignoredVideoPromptMediaIds}
-          elementImageIds={elementImageIds}
-          elementImageOrderLabels={klingElementOrderLabels}
+          elementImageIds={Array.from(new Set([...elementImageIds, ...acceptedVideoPromptElementIds]))}
+          elementImageOrderLabels={canvasElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
           tailSelectionEnabled={supportsTailFrameSelection}

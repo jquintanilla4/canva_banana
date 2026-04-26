@@ -366,6 +366,68 @@ describe('Canvas video prompt area tool', () => {
     expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('does not gate Kling Control embedded submission on Kling v3 multi-prompt text', () => {
+    const videoPromptArea: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 40,
+      y: 60,
+      width: 720,
+      height: 360,
+      promptBarId: 'bar-1',
+      orderedMediaIds: [],
+    };
+    const videoPromptBar: CanvasVideoPromptBar = {
+      id: 'bar-1',
+      assignedAreaId: 'area-1',
+      modelId: 'fal-ai/kling-video/v3/pro/motion-control',
+      x: 0,
+      y: 0,
+      width: 720,
+      height: 190,
+      prompt: 'A guided motion shot',
+      negativePrompt: '',
+      seedance2Variant: 'reference',
+      seedance2AspectRatio: '16:9',
+      seedance2Resolution: '720p',
+      seedance2Duration: '5',
+      seedance2GenerateAudio: false,
+      seedance2CameraFixed: false,
+      klingV3MultiPrompt: '',
+      klingV3Duration: '5',
+      klingV3GenerateAudio: true,
+      klingV3CfgScale: '0.5',
+      klingV3MultiPromptEnabled: true,
+      klingV3Shot1Duration: '5',
+      klingV3Shot2Duration: '5',
+    };
+
+    render(
+      <Canvas
+        {...buildCanvasProps({
+          videoPromptAreas: [videoPromptArea],
+          videoPromptBars: [videoPromptBar],
+          videoPromptAreaMemberships: {
+            'area-1': {
+              orderedMediaIds: [],
+              acceptedImageIds: [],
+              acceptedVideoIds: [],
+              acceptedAudioIds: [],
+              ignoredMediaIds: [],
+              orderLabels: {},
+            },
+          },
+          embeddedVideoPromptBarModelOptions: [
+            { value: 'fal-ai/kling-video/v3/pro/motion-control', label: 'Kling 3.0 Control' },
+          ],
+        })}
+      />,
+    );
+
+    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('shows resize handles only after the area is selected in selection mode', async () => {
     const Harness = () => {
       const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);

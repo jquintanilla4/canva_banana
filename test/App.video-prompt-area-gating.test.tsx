@@ -661,11 +661,16 @@ describe('App video prompt area gating', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
 
-    expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual([
+    expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual(expect.arrayContaining([
       { value: 'volcengine/seedance-2', label: 'Seedance 2' },
       { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
       { value: 'fal-ai/kling-video/v3/pro', label: 'Kling 3.0 Pro' },
-    ]);
+      { value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine' },
+    ]));
+    expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).not.toContainEqual({
+      value: 'fal-ai/wan-vision-enhancer',
+      label: 'Wan Vision Enhancer',
+    });
     expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'video',
       provider: 'fal',
@@ -829,18 +834,20 @@ describe('App video prompt area gating', () => {
       referenceAudioIds: [],
       referenceImageOrderLabels: {
         [image1.id]: '@Image1',
-        [image2.id]: '@Image2',
+        [image2.id]: '@LastFrame',
       },
       disabledMediaIds: [video1.id, audio1.id, image3.id],
       videoPromptAreaMemberships: {
         'area-1': expect.objectContaining({
-          acceptedImageIds: [image1.id, image2.id],
+          primaryImageId: image1.id,
+          acceptedImageIds: [],
+          tailImageId: image2.id,
           acceptedVideoIds: [],
           acceptedAudioIds: [],
           ignoredMediaIds: [video1.id, audio1.id, image3.id],
           orderLabels: {
             [image1.id]: '@Image1',
-            [image2.id]: '@Image2',
+            [image2.id]: '@LastFrame',
           },
         }),
       },

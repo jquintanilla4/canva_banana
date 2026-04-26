@@ -17,6 +17,7 @@ import {
   isFalAspectRatioSelectionValue,
   isFalImageSizeSelectionValue,
   isFalModelMode,
+  isFalVideoModelId,
   isFalResolutionSelectionValue,
   isGenerationProvider,
   isGrokImagineVideoAspectRatioSelectionValue,
@@ -57,6 +58,14 @@ import {
 } from './mediaService';
 import { generateWaveformImage, loadAudioFromBlob } from './audioService';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../utils/canvasColorOptions';
+
+const isVideoPromptAreaMediaRole = (value: unknown): value is CanvasVideoPromptArea['mediaRoles'][string] =>
+  value === 'primary'
+  || value === 'reference'
+  || value === 'element'
+  || value === 'tail'
+  || value === 'sourceVideo'
+  || value === 'sourceAudio'; // Snapshot role guard.
 
 // Handles snapshot serialization/deserialization so canvases can be saved/restored across sessions.
 export type SnapshotImageManifest = {
@@ -735,18 +744,29 @@ export const restoreSnapshotFromFile = async (
     };
   });
 
-  const sanitizedVideoPromptAreas: CanvasVideoPromptArea[] = snapshotVideoPromptAreas.map((area, index) => ({
-    id: typeof area?.id === 'string' && area.id.length > 0 ? area.id : crypto.randomUUID(),
-    sequence: typeof area?.sequence === 'number' && Number.isFinite(area.sequence) ? area.sequence : index + 1,
-    label: typeof area?.label === 'string' && area.label.length > 0 ? area.label : `Video prompt area ${String(index + 1).padStart(2, '0')}`,
-    borderColor: typeof area?.borderColor === 'string' && area.borderColor.length > 0 ? area.borderColor : DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR,
-    x: typeof area?.x === 'number' ? area.x : 0,
-    y: typeof area?.y === 'number' ? area.y : 0,
-    width: typeof area?.width === 'number' ? area.width : 280,
-    height: typeof area?.height === 'number' ? area.height : 220,
-    promptBarId: typeof area?.promptBarId === 'string' ? area.promptBarId : null,
-    orderedMediaIds: Array.isArray(area?.orderedMediaIds) ? area.orderedMediaIds.filter((id): id is string => typeof id === 'string') : [],
-  }));
+  const sanitizedVideoPromptAreas: CanvasVideoPromptArea[] = snapshotVideoPromptAreas.map((area, index) => {
+    const orderedMediaIds = Array.isArray(area?.orderedMediaIds) ? area.orderedMediaIds.filter((id): id is string => typeof id === 'string') : [];
+    const rawMediaRoles = area?.mediaRoles && typeof area.mediaRoles === 'object' ? area.mediaRoles : {};
+    const mediaRoles = Object.entries(rawMediaRoles).reduce<NonNullable<CanvasVideoPromptArea['mediaRoles']>>((acc, [mediaId, role]) => {
+      if (orderedMediaIds.includes(mediaId) && isVideoPromptAreaMediaRole(role)) {
+        acc[mediaId] = role;
+      }
+      return acc;
+    }, {}); // Keep only roles for media still in the area.
+    return {
+      id: typeof area?.id === 'string' && area.id.length > 0 ? area.id : crypto.randomUUID(),
+      sequence: typeof area?.sequence === 'number' && Number.isFinite(area.sequence) ? area.sequence : index + 1,
+      label: typeof area?.label === 'string' && area.label.length > 0 ? area.label : `Video prompt area ${String(index + 1).padStart(2, '0')}`,
+      borderColor: typeof area?.borderColor === 'string' && area.borderColor.length > 0 ? area.borderColor : DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR,
+      x: typeof area?.x === 'number' ? area.x : 0,
+      y: typeof area?.y === 'number' ? area.y : 0,
+      width: typeof area?.width === 'number' ? area.width : 280,
+      height: typeof area?.height === 'number' ? area.height : 220,
+      promptBarId: typeof area?.promptBarId === 'string' ? area.promptBarId : null,
+      orderedMediaIds,
+      mediaRoles,
+    };
+  });
   const sanitizedVideoPromptBars: CanvasVideoPromptBar[] = snapshotVideoPromptBars.map(bar => ({
     id: typeof bar?.id === 'string' && bar.id.length > 0 ? bar.id : crypto.randomUUID(),
     assignedAreaId: typeof bar?.assignedAreaId === 'string' ? bar.assignedAreaId : null,
@@ -756,9 +776,8 @@ export const restoreSnapshotFromFile = async (
     height: typeof bar?.height === 'number' ? bar.height : 190,
     prompt: typeof bar?.prompt === 'string' ? bar.prompt : '',
     negativePrompt: typeof bar?.negativePrompt === 'string' ? bar.negativePrompt : '',
-    modelId: bar?.modelId === KLING_V3_VIDEO_MODEL_ID
-      ? KLING_V3_VIDEO_MODEL_ID
-      : bar?.modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID ? FAL_SEEDANCE_2_VIDEO_MODEL_ID : SEEDANCE_2_VIDEO_MODEL_ID,
+    modelId: typeof bar?.modelId === 'string' && isFalVideoModelId(bar.modelId) ? bar.modelId : SEEDANCE_2_VIDEO_MODEL_ID,
+    falOptions: bar?.falOptions && typeof bar.falOptions === 'object' ? { ...bar.falOptions } : undefined,
     klingV3MultiPrompt: typeof bar?.klingV3MultiPrompt === 'string' ? bar.klingV3MultiPrompt : '',
     klingV3Duration: isKlingV3DurationSelectionValue(bar?.klingV3Duration) ? bar.klingV3Duration : '5',
     klingV3GenerateAudio: typeof bar?.klingV3GenerateAudio === 'boolean' ? bar.klingV3GenerateAudio : true,

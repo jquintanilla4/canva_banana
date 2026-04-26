@@ -7,6 +7,7 @@ import {
   getAreaPromptBarRect,
   getEmbeddedVideoPromptBarRenderWidth,
   getEmbeddedVideoPromptBarSizeMode,
+  getVideoPromptAreaCapabilityProfile,
   getVideoPromptBarVisualScale,
   MINI_VIDEO_PROMPT_BAR_SIZE,
   syncVideoPromptAreaMembership,
@@ -71,6 +72,7 @@ describe('video prompt area helpers', () => {
       acceptedImageIds: ['image-1', 'image-2', 'image-3'],
       acceptedVideoIds: ['video-1'],
       acceptedAudioIds: ['audio-1'],
+      elementImageIds: [],
       ignoredMediaIds: [],
       orderLabels: {
         'image-1': '@Image1',
@@ -113,6 +115,193 @@ describe('video prompt area helpers', () => {
     image1.x = 10; // Move image-1 back into the area.
     const afterReturn = syncVideoPromptAreaMembership(afterLeave, [image1, image2]);
     expect(afterReturn[0].orderedMediaIds).toEqual(['image-2', 'image-1']);
+  });
+
+  it('assigns Grok embedded image drops as primary inputs', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      orderedMediaIds: [],
+      promptBarId: null,
+    };
+    const image = buildCanvasMedia('image-1', 'image');
+
+    const [syncedArea] = syncVideoPromptAreaMembership([area], [image], {
+      profileByAreaId: { 'area-1': getVideoPromptAreaCapabilityProfile('xai/grok-imagine-video/image-to-video') },
+    });
+    const membership = buildVideoPromptAreaMembership(syncedArea, [image], getVideoPromptAreaCapabilityProfile('xai/grok-imagine-video/image-to-video'));
+
+    expect(syncedArea.mediaRoles).toEqual({ 'image-1': 'primary' });
+    expect(membership.primaryImageId).toBe('image-1');
+  });
+
+  it('normalizes stale reference image roles after switching to image-to-video models', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      orderedMediaIds: ['image-1'],
+      mediaRoles: { 'image-1': 'reference' },
+      promptBarId: null,
+    };
+    const image = buildCanvasMedia('image-1', 'image');
+    const profile = getVideoPromptAreaCapabilityProfile('xai/grok-imagine-video/image-to-video');
+
+    const [syncedArea] = syncVideoPromptAreaMembership([area], [image], {
+      profileByAreaId: { 'area-1': profile },
+    });
+    const membership = buildVideoPromptAreaMembership(syncedArea, [image], profile);
+
+    expect(syncedArea.mediaRoles).toEqual({ 'image-1': 'primary' });
+    expect(membership.primaryImageId).toBe('image-1');
+    expect(membership.acceptedImageIds).toEqual([]);
+  });
+
+  it('assigns Kling O3 option drops as elements and shift drops as references', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      orderedMediaIds: [],
+      promptBarId: null,
+    };
+    const elementImage = buildCanvasMedia('element-1', 'image');
+    const referenceImage = buildCanvasMedia('reference-1', 'image');
+    referenceImage.x = 120;
+    const profile = getVideoPromptAreaCapabilityProfile('fal-ai/kling-video/o3/pro/reference-to-video');
+
+    const [afterElement] = syncVideoPromptAreaMembership([area], [elementImage], {
+      profileByAreaId: { 'area-1': profile },
+      modifiers: { altKey: true },
+    });
+    const [afterReference] = syncVideoPromptAreaMembership([afterElement], [elementImage, referenceImage], {
+      profileByAreaId: { 'area-1': profile },
+      modifiers: { shiftKey: true },
+    });
+    const membership = buildVideoPromptAreaMembership(afterReference, [elementImage, referenceImage], profile);
+
+    expect(afterReference.mediaRoles).toEqual({ 'element-1': 'element', 'reference-1': 'reference' });
+    expect(membership.elementImageIds).toEqual(['element-1']);
+    expect(membership.acceptedImageIds).toEqual(['reference-1']);
+  });
+
+  it('limits Kling O3 references without counting the primary image', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      orderedMediaIds: ['primary-1', 'reference-1', 'reference-2', 'reference-3', 'reference-4', 'reference-5'],
+      mediaRoles: {
+        'primary-1': 'primary',
+        'reference-1': 'reference',
+        'reference-2': 'reference',
+        'reference-3': 'reference',
+        'reference-4': 'reference',
+        'reference-5': 'reference',
+      },
+      promptBarId: null,
+    };
+    const images = area.orderedMediaIds.map(id => buildCanvasMedia(id, 'image'));
+    const profile = getVideoPromptAreaCapabilityProfile('fal-ai/kling-video/o3/pro/reference-to-video');
+
+    const membership = buildVideoPromptAreaMembership(area, images, profile);
+
+    expect(membership.primaryImageId).toBe('primary-1');
+    expect(membership.acceptedImageIds).toEqual(['reference-1', 'reference-2', 'reference-3', 'reference-4']);
+    expect(membership.ignoredMediaIds).toEqual(['reference-5']);
+  });
+
+  it('assigns Wan 2.7 Reference videos as reference videos', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      orderedMediaIds: [],
+      promptBarId: null,
+    };
+    const video = buildCanvasMedia('video-1', 'video');
+    const profile = getVideoPromptAreaCapabilityProfile('fal-ai/wan/v2.7', undefined, { wan27VideoVariant: 'reference' });
+
+    const [syncedArea] = syncVideoPromptAreaMembership([area], [video], {
+      profileByAreaId: { 'area-1': profile },
+    });
+    const membership = buildVideoPromptAreaMembership(syncedArea, [video], profile);
+
+    expect(syncedArea.mediaRoles).toEqual({ 'video-1': 'reference' });
+    expect(membership.acceptedVideoIds).toEqual(['video-1']);
+  });
+
+  it('assigns Veo 3.1 Extend videos as source videos', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      orderedMediaIds: [],
+      promptBarId: null,
+    };
+    const video = buildCanvasMedia('video-1', 'video');
+    const profile = getVideoPromptAreaCapabilityProfile('fal-ai/veo3.1/image-to-video', undefined, { veo31Variant: 'extend' });
+
+    const [syncedArea] = syncVideoPromptAreaMembership([area], [video], {
+      profileByAreaId: { 'area-1': profile },
+    });
+    const membership = buildVideoPromptAreaMembership(syncedArea, [video], profile);
+
+    expect(syncedArea.mediaRoles).toEqual({ 'video-1': 'sourceVideo' });
+    expect(membership.sourceVideoId).toBe('video-1');
+    expect(membership.ignoredMediaIds).toEqual([]);
+  });
+
+  it('assigns video and audio input models to source roles', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      orderedMediaIds: [],
+      promptBarId: null,
+    };
+    const video = buildCanvasMedia('video-1', 'video');
+    const audio = buildCanvasMedia('audio-1', 'audio');
+    audio.x = 120;
+    const profile = getVideoPromptAreaCapabilityProfile('fal-ai/sync-lipsync/v3');
+
+    const [syncedArea] = syncVideoPromptAreaMembership([area], [video, audio], {
+      profileByAreaId: { 'area-1': profile },
+    });
+    const membership = buildVideoPromptAreaMembership(syncedArea, [video, audio], profile);
+
+    expect(syncedArea.mediaRoles).toEqual({ 'video-1': 'sourceVideo', 'audio-1': 'sourceAudio' });
+    expect(membership.sourceVideoId).toBe('video-1');
+    expect(membership.sourceAudioId).toBe('audio-1');
   });
 
   it('keeps video prompt bars readable when the canvas is zoomed far out', () => {

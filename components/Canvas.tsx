@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership } from '../types';
+import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
+import { KLING_V3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, FontSizeDownIcon, FontSizeUpIcon, MinusIcon } from './Icons';
 import {
   DEFAULT_NOTE_FONT_SIZE,
@@ -54,6 +55,7 @@ interface CanvasProps {
   selectedVideoPromptAreaId: string | null;
   onVideoPromptAreaSelect: (id: string | null) => void;
   videoPromptAreaMemberships: Record<string, VideoPromptAreaMembership>;
+  videoPromptAreaProfiles?: Record<string, VideoModelCapabilityProfile>;
   tool: Tool;
   canCreateVideoPromptAreas?: boolean;
   appMode: AppMode;
@@ -153,6 +155,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   selectedVideoPromptAreaId,
   onVideoPromptAreaSelect,
   videoPromptAreaMemberships,
+  videoPromptAreaProfiles,
   tool,
   canCreateVideoPromptAreas = true,
   appMode,
@@ -346,6 +349,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     images,
     notes,
     videoPromptAreas,
+    videoPromptAreaProfiles,
     paths,
     isNoteEditing: Boolean(editingNoteId),
     pan,
@@ -1340,8 +1344,23 @@ export const Canvas: React.FC<CanvasProps> = ({
             width: bar.width,
             height: bar.height,
           };
-        const selectedEmbeddedModelId = bar.modelId ?? embeddedVideoPromptBarModelOptions[0]?.value ?? 'volcengine/seedance-2'; // Legacy bars default to Volcengine Seedance 2.
+        const selectedEmbeddedModelId = bar.modelId ?? SEEDANCE_2_VIDEO_MODEL_ID; // Legacy bars default to Volcengine Seedance 2.
         const selectedEmbeddedModelLabel = embeddedVideoPromptBarModelOptions.find(option => option.value === selectedEmbeddedModelId)?.label ?? 'Seedance 2';
+        const embeddedMediaCount = barMembership
+          ? Number(Boolean(barMembership.primaryImageId))
+            + barMembership.acceptedImageIds.length
+            + barMembership.acceptedVideoIds.length
+            + barMembership.acceptedAudioIds.length
+            + (barMembership.elementImageIds?.length ?? 0)
+            + Number(Boolean(barMembership.tailImageId))
+            + Number(Boolean(barMembership.sourceVideoId))
+            + Number(Boolean(barMembership.sourceAudioId))
+          : 0; // Counts all usable staged media roles.
+        const isKlingV3EmbeddedModel = selectedEmbeddedModelId === KLING_V3_VIDEO_MODEL_ID;
+        const showEmbeddedNegativePrompt = isKlingV3EmbeddedModel
+          || selectedEmbeddedModelId.includes('/wan/v2.7')
+          || selectedEmbeddedModelId.includes('/veo3.1')
+          || selectedEmbeddedModelId.includes('/kling-video/v2.5-turbo');
 
         if (!isAssigned) {
           return (
@@ -1417,11 +1436,11 @@ export const Canvas: React.FC<CanvasProps> = ({
                   isLoading={isLoading}
                   inputDisabled={false}
                   submitDisabled={!barMembership || (
-                    !selectedEmbeddedModelId.includes('/kling-video/v3/pro')
+                    selectedEmbeddedModelId.includes('seedance-2')
                       && bar.seedance2Variant === 'reference'
-                      && (barMembership.acceptedImageIds.length + barMembership.acceptedVideoIds.length + barMembership.acceptedAudioIds.length) === 0
+                      && embeddedMediaCount === 0
                   ) || (
-                    selectedEmbeddedModelId.includes('/kling-video/v3/pro')
+                    isKlingV3EmbeddedModel
                       && Boolean(bar.klingV3MultiPromptEnabled)
                       && (!bar.prompt.trim() || !bar.klingV3MultiPrompt?.trim())
                   )}
@@ -1434,17 +1453,17 @@ export const Canvas: React.FC<CanvasProps> = ({
                   modelModeDisabled
                   showModeSwitch={false}
                   modelControls={buildVideoPromptBarControls(bar)}
-                  promptPlaceholder={selectedEmbeddedModelId.includes('/kling-video/v3/pro') ? 'Describe the first Kling 3.0 Pro shot using the first two still images as start/end frames... (Cmd/Ctrl + Enter to generate)' : 'Describe the Seedance 2 video using the ordered media in this area... (Cmd/Ctrl + Enter to generate)'}
-                  showMultiPrompt={selectedEmbeddedModelId.includes('/kling-video/v3/pro') && Boolean(bar.klingV3MultiPromptEnabled)}
+                  promptPlaceholder={isKlingV3EmbeddedModel ? 'Describe the first Kling 3.0 Pro shot using staged media... (Cmd/Ctrl + Enter to generate)' : `Describe the ${selectedEmbeddedModelLabel} video using staged media... (Cmd/Ctrl + Enter to generate)`}
+                  showMultiPrompt={isKlingV3EmbeddedModel && Boolean(bar.klingV3MultiPromptEnabled)}
                   multiPrompt={bar.klingV3MultiPrompt ?? ''}
                   onMultiPromptChange={(nextPrompt) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, klingV3MultiPrompt: nextPrompt }))}
                   multiPromptPlaceholder="Describe the second Kling 3.0 Pro shot..."
-                  multiPromptOutlineColor={selectedEmbeddedModelId.includes('/kling-video/v3/pro') && bar.klingV3MultiPromptEnabled ? '#38bdf8' : undefined}
-                  showNegativePrompt={selectedEmbeddedModelId.includes('/kling-video/v3/pro')}
+                  multiPromptOutlineColor={isKlingV3EmbeddedModel && bar.klingV3MultiPromptEnabled ? '#38bdf8' : undefined}
+                  showNegativePrompt={showEmbeddedNegativePrompt}
                   negativePrompt={bar.negativePrompt}
                   onNegativePromptChange={(nextPrompt) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, negativePrompt: nextPrompt }))}
                   negativePromptPlaceholder="Describe what the video should avoid... (optional)"
-                  negativePromptOutlineColor={selectedEmbeddedModelId.includes('/kling-video/v3/pro') ? '#f87171' : undefined}
+                  negativePromptOutlineColor={showEmbeddedNegativePrompt ? '#f87171' : undefined}
                   klingSuggestionsEnabled
                   klingReferenceCount={barMembership ? Object.keys(barMembership.orderLabels).length : 0}
                   klingSuggestionOptions={barMembership ? getMentionOptionsFromMembership(barMembership) : []}

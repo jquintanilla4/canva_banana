@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type React from 'react';
-import { type AppMode, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type Path, type Point, Tool } from '../../../types';
+import { type AppMode, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type Path, type Point, Tool, type VideoModelCapabilityProfile } from '../../../types';
 import { MIN_NOTE_HEIGHT, MIN_NOTE_WIDTH, RESIZE_HANDLE_SIZE } from '../constants';
 import { getImageBounds, getImageRotation, worldToImageLocal } from '../geometry';
 import {
@@ -28,6 +28,7 @@ type UseCanvasInteractionsArgs = {
   images: CanvasImage[];
   notes: CanvasNote[];
   videoPromptAreas: CanvasVideoPromptArea[];
+  videoPromptAreaProfiles?: Record<string, VideoModelCapabilityProfile>;
   paths: Path[];
   isNoteEditing: boolean;
   pan: Point;
@@ -85,6 +86,7 @@ export function useCanvasInteractions({
   images,
   notes,
   videoPromptAreas,
+  videoPromptAreaProfiles,
   paths,
   isNoteEditing,
   pan,
@@ -1026,7 +1028,10 @@ export function useCanvasInteractions({
 
     if (wasActive) {
       if (draggedImageIds.length > 0) {
-        const nextAreas = syncVideoPromptAreaMembership(videoPromptAreas, images);
+        const nextAreas = syncVideoPromptAreaMembership(videoPromptAreas, images, {
+          profileByAreaId: videoPromptAreaProfiles,
+          modifiers: { shiftKey: e.shiftKey, altKey: e.altKey },
+        });
         onVideoPromptAreasChange(nextAreas);
         onCommit({ images, videoPromptAreas: nextAreas });
         return;

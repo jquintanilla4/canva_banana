@@ -197,6 +197,14 @@ export interface GenerationInputs {
   volcengineOptions?: GenerationVolcengineOptions;
 }
 
+export type VideoPromptAreaMediaRole =
+  | 'primary'
+  | 'reference'
+  | 'element'
+  | 'tail'
+  | 'sourceVideo'
+  | 'sourceAudio';
+
 export interface CanvasImage {
   id: string;
   element: HTMLImageElement | HTMLVideoElement;
@@ -243,6 +251,7 @@ export interface CanvasVideoPromptArea extends CanvasRect {
   label: string;
   borderColor?: string; // Hex border color for the prompt area shell.
   orderedMediaIds: string[]; // Preserves entry order even when some items are ignored.
+  mediaRoles?: Record<string, VideoPromptAreaMediaRole>; // Optional per-media role chosen by modifier keys.
   promptBarId: string | null; // Each area can own at most one embedded prompt bar.
 }
 
@@ -252,6 +261,7 @@ export interface CanvasVideoPromptBar extends CanvasRect {
   modelId?: string; // Missing means the legacy Volcengine Seedance 2 bar.
   prompt: string;
   negativePrompt: string;
+  falOptions?: GenerationFalOptions; // Embedded bars store model-specific FAL controls here.
   klingV3MultiPrompt?: string;
   klingV3Duration?: '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   klingV3GenerateAudio?: boolean;
@@ -269,19 +279,31 @@ export interface CanvasVideoPromptBar extends CanvasRect {
 
 export interface VideoPromptAreaMembership {
   orderedMediaIds: string[];
+  primaryImageId?: string;
   acceptedImageIds: string[];
   acceptedVideoIds: string[];
   acceptedAudioIds: string[];
+  elementImageIds: string[];
+  tailImageId?: string;
+  sourceVideoId?: string;
+  sourceAudioId?: string;
   ignoredMediaIds: string[];
   orderLabels: Record<string, string>;
 }
 
 export interface VideoModelCapabilityProfile {
   id: string;
+  defaultImageRole: VideoPromptAreaMediaRole | null;
+  defaultVideoRole: VideoPromptAreaMediaRole | null;
+  defaultAudioRole: VideoPromptAreaMediaRole | null;
+  shiftImageRole: VideoPromptAreaMediaRole | null;
+  altImageRole: VideoPromptAreaMediaRole | null;
   supportedMediaTypes: ReadonlyArray<CanvasMediaType>;
   maxImages: number;
   maxVideos: number;
   maxAudios: number;
+  maxElements: number;
+  supportsTextOnly?: boolean;
 }
 
 export type FalJobStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';

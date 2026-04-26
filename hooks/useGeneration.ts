@@ -57,6 +57,9 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isSeedance15AspectRatioSelectionValue,
+  isSeedance15DurationSelectionValue,
+  isSeedance15ResolutionSelectionValue,
   isWan27VideoAspectRatioSelectionValue,
   isWan27VideoDurationSelectionValue,
   isWan27VideoResolutionSelectionValue,
@@ -588,6 +591,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const veo31ResolutionForRun = falOptionsOverride.veo31Resolution ?? veo31Resolution;
     const veo31AspectRatioForRun = falOptionsOverride.veo31AspectRatio ?? veo31AspectRatio;
     const veo31GenerateAudioForRun = falOptionsOverride.veo31GenerateAudio ?? veo31GenerateAudio;
+    const seedance15AspectRatioForRun = isSeedance15AspectRatioSelectionValue(falOptionsOverride.seedance15AspectRatio)
+      ? falOptionsOverride.seedance15AspectRatio
+      : seedance15AspectRatio;
+    const seedance15ResolutionForRun = isSeedance15ResolutionSelectionValue(falOptionsOverride.seedance15Resolution)
+      ? falOptionsOverride.seedance15Resolution
+      : seedance15Resolution;
+    const seedance15DurationForRun = isSeedance15DurationSelectionValue(falOptionsOverride.seedance15Duration)
+      ? falOptionsOverride.seedance15Duration
+      : seedance15Duration;
+    const seedance15CameraFixedForRun = typeof falOptionsOverride.seedance15CameraFixed === 'boolean'
+      ? falOptionsOverride.seedance15CameraFixed
+      : seedance15CameraFixed;
+    const seedance15AudioForRun = typeof falOptionsOverride.seedance15Audio === 'boolean'
+      ? falOptionsOverride.seedance15Audio
+      : seedance15Audio;
     const recraftImageSizeForRun = isRecraftV4ProImageSizeSelectionValue(falOptionsOverride.recraftImageSize)
       ? falOptionsOverride.recraftImageSize
       : recraftImageSize;
@@ -1726,11 +1744,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(wan27AudioIdForRun && sourceAudioUrlForRequest ? { sourceAudioUrl: sourceAudioUrlForRequest } : {}),
           } : {}),
           ...(isSeedance15VideoModel ? {
-            seedance15AspectRatio: seedance15AspectRatio,
-            seedance15Resolution: seedance15Resolution,
-            seedance15Duration: seedance15Duration,
-            seedance15CameraFixed: seedance15CameraFixed,
-            seedance15Audio: seedance15Audio,
+            seedance15AspectRatio: seedance15AspectRatioForRun,
+            seedance15Resolution: seedance15ResolutionForRun,
+            seedance15Duration: seedance15DurationForRun,
+            seedance15CameraFixed: seedance15CameraFixedForRun,
+            seedance15Audio: seedance15AudioForRun,
             ...(videoTailImageElement ? { tailImage: videoTailImageElement } : {}),
           } : {}),
           ...(isFalSeedance2VideoModelForRun ? {
@@ -1940,11 +1958,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     ...(!isWan27ReferenceModeForRun && !isWan27EditModeForRun ? { wan27VideoPromptExpansion: wan27VideoPromptExpansionForRun } : {}),
                   } : {}),
                   ...(isSeedance15VideoModel ? {
-                    seedance15AspectRatio: seedance15AspectRatio,
-                    seedance15Resolution: seedance15Resolution,
-                    seedance15Duration: seedance15Duration,
-                    seedance15CameraFixed: seedance15CameraFixed,
-                    seedance15Audio: seedance15Audio,
+                    seedance15AspectRatio: seedance15AspectRatioForRun,
+                    seedance15Resolution: seedance15ResolutionForRun,
+                    seedance15Duration: seedance15DurationForRun,
+                    seedance15CameraFixed: seedance15CameraFixedForRun,
+                    seedance15Audio: seedance15AudioForRun,
                   } : {}),
                   ...(isFalSeedance2VideoModelForRun ? {
                     seedance2Variant: seedance2VariantForRun,
