@@ -6,13 +6,21 @@ import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue no
 import { logFalEvent } from './logging'; // Fal debug logging.
 import { extractInlineData } from './responses'; // Response parsing helper.
 import { createRandomSeed } from './random'; // Seed helper.
+import { uploadImageElementToFal } from './media'; // Media upload helper.
 import { isSeedreamTextToImageModelId, normalizeModelId, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
 import {
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
+  isGptImage2TextToImageModelId,
+  isKrea2AspectRatioSelectionValue,
+  isKrea2CreativitySelectionValue,
   isNanoBananaTextToImageModelId,
   isRecraftV4ProModel,
+  KREA_2_DEFAULT_ASPECT_RATIO,
+  KREA_2_DEFAULT_CREATIVITY,
+  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+  KREA_2_MAX_STYLE_REFERENCES,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
@@ -20,6 +28,11 @@ import {
   normalizeRecraftRgbColor,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
+
+const normalizeKreaStyleReferenceStrength = (value: number): number => {
+  const rounded = Number.isFinite(value) ? Math.round(value * 10) / 10 : 1; // Fal accepts tenths in the UI.
+  return Math.min(2, Math.max(-2, rounded));
+};
 
 export const generateImage = async (
   prompt: string,
@@ -30,6 +43,8 @@ export const generateImage = async (
   const modelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
   const isNanoBananaTextToImage = isNanoBananaTextToImageModelId(modelId);
+  const isGptImage2TextToImage = isGptImage2TextToImageModelId(modelId);
+  const isKrea2TextToImage = modelId === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan27ImageTextToImage = modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isRecraftV4ProTextToImage = isRecraftV4ProModel(modelId);
@@ -54,6 +69,9 @@ export const generateImage = async (
     num_images?: number;
     aspect_ratio?: string;
     image_size?: { width: number; height: number } | string;
+    quality?: 'low' | 'medium' | 'high';
+    creativity?: 'raw' | 'low' | 'medium' | 'high';
+    image_style_references?: Array<{ image_url: string; strength: number }>;
     seed?: number;
     resolution?: FalResolutionOption;
     safety_tolerance?: '5';
@@ -62,10 +80,23 @@ export const generateImage = async (
     enable_safety_checker?: boolean;
   } = {
     prompt,
-    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isRecraftV4ProTextToImage, // Keep Nano Banana history visible.
+    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isGptImage2TextToImage && !isKrea2TextToImage && !isRecraftV4ProTextToImage, // Keep queue history visible for async models.
   };
 
-  if (isRecraftV4ProTextToImage) {
+  if (isKrea2TextToImage) {
+    body.aspect_ratio = isKrea2AspectRatioSelectionValue(aspectRatioOption) ? aspectRatioOption : KREA_2_DEFAULT_ASPECT_RATIO;
+    body.creativity = isKrea2CreativitySelectionValue(options.krea2Creativity) ? options.krea2Creativity : KREA_2_DEFAULT_CREATIVITY;
+    const styleReferences = Array.isArray(options.imageStyleReferences)
+      ? options.imageStyleReferences.slice(0, KREA_2_MAX_STYLE_REFERENCES)
+      : [];
+    if (styleReferences.length > 0) {
+      body.image_style_references = await Promise.all(styleReferences.map(async reference => ({
+        image_url: await uploadImageElementToFal(reference.image),
+        strength: normalizeKreaStyleReferenceStrength(reference.strength),
+      })));
+    }
+    delete body.sync_mode;
+  } else if (isRecraftV4ProTextToImage) {
     body.image_size = options.recraftImageSize ?? RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE;
     body.background_color = normalizeRecraftRgbColor(options.recraftBackgroundColor) ?? RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR;
     body.colors = Array.isArray(options.recraftColors)
@@ -97,7 +128,12 @@ export const generateImage = async (
     delete wan27Body.sync_mode;
   }
 
-  if (!isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (isGptImage2TextToImage) {
+    body.quality = options.gptImage2Quality ?? 'medium'; // App default overrides Fal high default.
+    body.image_size = imageSizeOption === 'default' ? 'auto' : imageSizeOption; // Use one size control for t2i/edit.
+  }
+
+  if (!isKrea2TextToImage && !isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {
@@ -120,6 +156,8 @@ export const generateImage = async (
     if (supportsResolution) {
       body.resolution = resolutionOption;
     }
+  } else if (isGptImage2TextToImage) {
+    // GPT Image 2 uses image_size instead of aspect_ratio/resolution.
   } else if (supportsAspectRatio && aspectRatioOption !== 'default') {
     body.aspect_ratio = aspectRatioOption;
   }

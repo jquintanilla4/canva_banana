@@ -20,12 +20,14 @@ import {
   isFalVideoModelId,
   isFalResolutionSelectionValue,
   isGenerationProvider,
+  isGptImage2QualitySelectionValue,
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
+  isKrea2CreativitySelectionValue,
   isKlingO3DurationSelectionValue,
   isKlingV3CfgScaleSelectionValue,
   isKlingV3DurationSelectionValue,
@@ -856,6 +858,12 @@ export const normalizeSnapshotImageMetadata = (
       if (isFalResolutionSelectionValue((typed as { resolutionSelection?: unknown }).resolutionSelection)) {
         normalizedOptions.resolutionSelection = typed.resolutionSelection;
       }
+      if (isGptImage2QualitySelectionValue((typed as { gptImage2Quality?: unknown }).gptImage2Quality)) {
+        normalizedOptions.gptImage2Quality = typed.gptImage2Quality;
+      }
+      if (isKrea2CreativitySelectionValue((typed as { krea2Creativity?: unknown }).krea2Creativity)) {
+        normalizedOptions.krea2Creativity = typed.krea2Creativity;
+      }
       const normalizeNumberOption = (value: unknown, min: number, max: number) => {
         const parsed = typeof value === 'number' ? value : Number(value);
         if (!Number.isFinite(parsed)) {
@@ -863,6 +871,17 @@ export const normalizeSnapshotImageMetadata = (
         }
         return Math.min(max, Math.max(min, parsed));
       };
+      const krea2StyleReferenceStrengths = (typed as { krea2StyleReferenceStrengths?: unknown }).krea2StyleReferenceStrengths;
+      if (krea2StyleReferenceStrengths && typeof krea2StyleReferenceStrengths === 'object' && !Array.isArray(krea2StyleReferenceStrengths)) {
+        const normalizedStrengths = Object.fromEntries(Object.entries(krea2StyleReferenceStrengths)
+          .filter((entry): entry is [string, unknown] => typeof entry[0] === 'string')
+          .map(([id, value]) => [id, normalizeNumberOption(value, -2, 2)])
+          .filter((entry): entry is [string, number] => entry[1] !== undefined)
+          .map(([id, value]) => [id, Math.round(value * 10) / 10])); // Krea strength slider uses tenths.
+        if (Object.keys(normalizedStrengths).length > 0) {
+          normalizedOptions.krea2StyleReferenceStrengths = normalizedStrengths;
+        }
+      }
       const maxFalNumImages = getFalNumImageMaxForModel(modelId); // Resolve output cap from stored model id.
       const numImages = normalizeNumberOption((typed as { numImages?: unknown }).numImages, 1, maxFalNumImages);
       if (numImages !== undefined) {

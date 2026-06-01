@@ -77,6 +77,39 @@ test('Fal proxy forwards allowed Fal targets with the server key', async () => {
   }
 });
 
+test('Fal proxy strips upstream CORS headers before responding to the browser', async () => {
+  const server = createSecureBackendServer({
+    env: { MOONSHOT_API_KEY: 'moonshot-secret', FAL_API_KEY: 'fal-secret' },
+    fetchImpl: async () => new Response(JSON.stringify({ request_id: 'abc123' }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': 'https://fal.ai',
+        'Access-Control-Allow-Credentials': 'true',
+        Connection: 'keep-alive',
+      },
+    }),
+  });
+  const baseUrl = await listenOnRandomPort(server);
+  try {
+    const response = await fetch(`${baseUrl}/api/fal/proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: TRUSTED_ORIGIN,
+        'x-fal-target-url': 'https://queue.fal.run/fal-ai/example',
+      },
+      body: '{}',
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('access-control-allow-origin'), TRUSTED_ORIGIN);
+    assert.equal(response.headers.get('access-control-allow-credentials'), null);
+  } finally {
+    server.close();
+  }
+});
+
 test('Fal proxy rejects non-Fal targets', async () => {
   const server = createSecureBackendServer({
     env: { MOONSHOT_API_KEY: 'moonshot-secret', FAL_API_KEY: 'fal-secret' },

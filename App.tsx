@@ -20,6 +20,7 @@ import { clearDebugLogs } from './services/debugLog';
 import {
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
+  isGptImage2EditModelId,
   isNanoBananaEditModelId,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
@@ -43,6 +44,7 @@ import {
   WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
   isKlingO3VideoModelId,
+  KREA_2_MAX_STYLE_REFERENCES,
   isSeedreamModelId,
 } from './services/modelConfig';
 import {
@@ -134,6 +136,16 @@ const AVAILABLE_PROVIDERS = PROVIDER_ORDER.filter(provider => providerAvailabili
 const PROVIDER_LABELS: Record<ApiProvider, string> = { google: 'Google', fal: 'FAL' }; // Mapping of provider IDs to display names
 const DEFAULT_API_PROVIDER: ApiProvider = AVAILABLE_PROVIDERS[0] ?? 'google'; // Default provider (first available or fallback)
 const clampStrokeSize = (value: number) => Math.min(MAX_STROKE_SIZE, Math.max(MIN_STROKE_SIZE, value));
+const normalizeKrea2StyleStrength = (value: unknown): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  const rounded = Number.isFinite(parsed) ? Math.round(parsed * 10) / 10 : 1; // Krea sliders move by tenths.
+  return Math.min(2, Math.max(-2, rounded));
+};
+const areKrea2StrengthMapsEqual = (left: Record<string, number>, right: Record<string, number>): boolean => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every(key => left[key] === right[key]);
+};
 const formatZoomPercentage = (scale: number): string => {
   const percentage = scale * 100;
   if (percentage < 10) {
@@ -305,36 +317,51 @@ export default function App() {
   // Shows a toast when the reference image limit is reached for the current model.
   const isKlingO3VideoInputMode = fal.isKlingO3EditMode;
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
-    if (isKlingO3VideoModelId(fal.falModelId)) {
+    const usingFalProvider = apiProvider === 'fal'; // Fal-only messages require active Fal provider.
+    if (usingFalProvider && isKlingO3VideoModelId(fal.falModelId)) {
       const variantLabel = fal.isKlingO3EditMode ? 'Kling O3 Edit' : 'Kling O3 Reference';
       setToastMessage(`${variantLabel} supports up to 5 images total (source + references + elements). Slots remaining: ${Math.max(0, maxReferenceImages)} for references/elements.`);
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
-    if (fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
+    if (usingFalProvider && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
       setToastMessage('Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.');
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
-    if (fal.falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID && maxReferenceImages === 0) {
+    if (usingFalProvider && fal.falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID && maxReferenceImages === 0) {
       setToastMessage('Tip: Shift-click toggles reference selection. For One-to-All Animation, click the pose video, then click the image to animate (Cmd/Ctrl+click for multi-select).');
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
-    if (fal.falModelId === SEEDREAM_V45_MODEL_ID && maxReferenceImages >= 10) {
+    if (usingFalProvider && fal.falModelId === SEEDREAM_V45_MODEL_ID && maxReferenceImages >= 10) {
       setToastMessage('Seedream 4.5 only accepts up to 10 reference images.');
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
-    if (fal.falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
+    if (usingFalProvider && fal.falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
       setToastMessage('Wan 2.7 Pro Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.');
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
+    if (usingFalProvider && isGptImage2EditModelId(fal.falModelId)) {
+      const message = maxReferenceImages <= 8
+        ? 'GPT Image 2 annotate supports up to 8 references because the annotation canvas counts as an input.'
+        : 'GPT Image 2 supports up to 10 images total (1 primary + 9 references).';
+      setToastMessage(message);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+    if (usingFalProvider && fal.isKrea2LargeModel) {
+      setToastMessage(`Krea 2 Large supports up to ${KREA_2_MAX_STYLE_REFERENCES} style references.`);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
     const totalLimit = maxReferenceImages + 1;
-    setToastMessage(`${getFalModelLabel(fal.falModelId)} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
+    const referenceLimitLabel = usingFalProvider ? getFalModelLabel(fal.falModelId) : PROVIDER_LABELS.google; // Match label to active provider.
+    setToastMessage(`${referenceLimitLabel} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [fal.falModelId, fal.isKlingO3EditMode, setToastMessage]);
+  }, [apiProvider, fal.falModelId, fal.isKlingO3EditMode, fal.isKrea2LargeModel, setToastMessage]);
 
   const isKlingO3ReferenceMode = fal.isKlingO3VideoModel && fal.klingO3Variant === 'reference';
   const isVeo31TailCapable = fal.isVeo31VideoModel && fal.veo31Variant === 'i2v-fflf';
@@ -349,12 +376,15 @@ export default function App() {
     || (fal.isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode)
     || fal.isSeedance15VideoModel
     || (fal.isSeedance2VideoModel && fal.seedance2Variant === 'smart'); // End-frame capable modes.
+  const referenceImageSlotOffset = isGptImage2EditModelId(fal.falModelId) && tool === Tool.ANNOTATE ? 1 : 0; // Annotate uploads one extra input image.
+  const isActiveKrea2LargeModel = apiProvider === 'fal' && fal.isKrea2LargeModel; // Krea behavior only applies while Fal is active.
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const selection = useSelectionState({
     images,
     apiProvider,
     fal,
+    referenceImageSlotOffset,
     onError: setError,
     onReferenceLimit: showReferenceLimitToast,
   });
@@ -386,6 +416,22 @@ export default function App() {
     handleImageSelection,
     handleNoteSelection,
   } = selection;
+
+  const [krea2StyleReferenceStrengths, setKrea2StyleReferenceStrengths] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!isActiveKrea2LargeModel) {
+      setKrea2StyleReferenceStrengths(prev => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+    const activeReferenceIds = referenceImageIds.slice(0, KREA_2_MAX_STYLE_REFERENCES);
+    setKrea2StyleReferenceStrengths(prev => {
+      const next = Object.fromEntries(activeReferenceIds.map(id => [id, normalizeKrea2StyleStrength(prev[id] ?? 1)]));
+      return areKrea2StrengthMapsEqual(prev, next) ? prev : next;
+    });
+  }, [isActiveKrea2LargeModel, referenceImageIds]);
+  const handleKrea2StyleReferenceStrengthChange = useCallback((imageId: string, value: number) => {
+    setKrea2StyleReferenceStrengths(prev => ({ ...prev, [imageId]: normalizeKrea2StyleStrength(value) }));
+  }, []);
 
   const requestZoomToSelection = useCallback(() => {
     if (selectedImageIds.length === 0 && selectedNoteIds.length === 0) {
@@ -910,6 +956,7 @@ export default function App() {
     selection,
     images,
     paths,
+    krea2StyleReferenceStrengths,
     videoNegativePrompt: generationNegativePrompt,
     setError,
     setIsLoading,
@@ -1068,6 +1115,8 @@ export default function App() {
   const usingFal = apiProvider === 'fal';
   const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
   const isNanoBananaModel = !fal.isVideoMode && isNanoBananaEditModelId(fal.falModelId);
+  const isGptImage2Model = !fal.isVideoMode && isGptImage2EditModelId(fal.falModelId);
+  const isKrea2LargeModel = isActiveKrea2LargeModel;
   const isGrokModel = !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
   const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || fal.isFlux2MaxModel || fal.isUpscaleModel;
 
@@ -1445,6 +1494,8 @@ export default function App() {
     isUpscaleModel: fal.isUpscaleModel,
     isSeedreamModel,
     isNanoBananaModel,
+    isGptImage2Model,
+    isKrea2LargeModel,
     isGrokModel, // Grok validation flag.
     isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
     isKlingVideoModel: fal.isKlingVideoModel,
@@ -1475,6 +1526,8 @@ export default function App() {
     usingFal,
     isSeedreamModel,
     isNanoBananaModel,
+    isGptImage2Model,
+    isKrea2LargeModel,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isUpscaleModel: fal.isUpscaleModel,
     isKlingVideoModel: fal.isKlingVideoModel,
@@ -1557,6 +1610,9 @@ export default function App() {
     recraftImageSize: fal.recraftImageSize,
     recraftBackgroundColor: fal.recraftBackgroundColor,
     recraftColors: fal.recraftColors,
+    gptImage2Quality: fal.gptImage2Quality,
+    krea2AspectRatio: fal.krea2AspectRatio,
+    krea2Creativity: fal.krea2Creativity,
     falScaleFactor: fal.falScaleFactor,
     falCreativity: fal.falCreativity,
     falNoiseScale: fal.falNoiseScale,
@@ -1631,6 +1687,9 @@ export default function App() {
     onRecraftColorChange: fal.handleRecraftColorChange,
     onRecraftAddColor: fal.handleRecraftAddColor,
     onRecraftRemoveColor: fal.handleRecraftRemoveColor,
+    onGptImage2QualityChange: fal.handleGptImage2QualityChange,
+    onKrea2AspectRatioChange: fal.handleKrea2AspectRatioChange,
+    onKrea2CreativityChange: fal.handleKrea2CreativityChange,
     onFalScaleFactorChange: fal.handleFalScaleFactorChange,
     onFalCreativityChange: fal.handleFalCreativityChange,
     onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
@@ -1778,6 +1837,10 @@ export default function App() {
           referenceVideoIds={canvasReferenceVideoIds}
           referenceAudioIds={canvasReferenceAudioIds}
           referenceImageOrderLabels={canvasReferenceOrderLabels}
+          isKrea2StyleReferenceMode={isActiveKrea2LargeModel}
+          krea2StyleReferenceImageIds={referenceImageIds}
+          krea2StyleReferenceStrengths={krea2StyleReferenceStrengths}
+          onKrea2StyleReferenceStrengthChange={handleKrea2StyleReferenceStrengthChange}
           disabledMediaIds={ignoredVideoPromptMediaIds}
           elementImageIds={Array.from(new Set([...elementImageIds, ...acceptedVideoPromptElementIds]))}
           elementImageOrderLabels={canvasElementOrderLabels}

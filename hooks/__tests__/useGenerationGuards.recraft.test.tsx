@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID } from '../../services/modelConfig';
+import { KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID } from '../../services/modelConfig';
 import { Tool } from '../../types';
 import { useGenerationGuards } from '../useGenerationGuards';
 
@@ -75,5 +75,43 @@ describe('useGenerationGuards (Recraft v4 Pro)', () => {
     expect(result.current.isTextToImage).toBe(false);
     expect(result.current.submitDisabled).toBe(true);
     expect(result.current.promptPlaceholderText).toContain('Describe your edit');
+  });
+
+  it('keeps Krea 2 Large in text-to-image mode when style references are selected', () => {
+    const { result } = renderHook(() => useGenerationGuards({
+      apiProvider: 'fal',
+      appMode: 'CANVAS',
+      tool: Tool.BRUSH,
+      prompt: 'Generate a styled editorial image',
+      isKlingO3EditMode: false,
+      hasSourceVideo: false,
+      hasSourceAudio: false,
+      isVideoMode: false,
+      isUpscaleModel: false,
+      isSeedreamModel: false,
+      isNanoBananaModel: false,
+      isGptImage2Model: false,
+      isKrea2LargeModel: true,
+      isGrokModel: false,
+      isGrokImagineVideoModel: false,
+      isKlingVideoModel: false,
+      isKlingO3VideoModel: false,
+      isKlingV3ControlVideoModel: false,
+      isHailuoVideoModel: false,
+      isVeo31VideoModel: false,
+      isSeedance2VideoModel: false,
+      seedance2Variant: 'smart',
+      seedance2ReferenceAssetCount: 0,
+      veo31Variant: 'i2v-fflf',
+      falModelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+      falNumImages: 1,
+      activePrimaryImage: { id: 'style-reference' },
+      primarySelectionMediaType: 'image',
+      hasSelectedStillImage: true,
+    }));
+
+    expect(result.current.isTextToImage).toBe(true);
+    expect(result.current.submitDisabled).toBe(false);
+    expect(result.current.promptPlaceholderText).toContain('style references');
   });
 });

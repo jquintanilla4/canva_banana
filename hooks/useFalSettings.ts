@@ -6,7 +6,9 @@ import {
   DEFAULT_FAL_VIDEO_MODEL_ID,
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
+  GPT_IMAGE_2_IMAGE_SIZE_OPTIONS,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  GPT_IMAGE_2_EDIT_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
@@ -28,9 +30,14 @@ import {
   SEEDVR_UPSCALER_MODEL_ID,
   getFalNumImageMaxForModel,
   isFlux2MaxImageSizeSelectionValue,
+  isGptImage2Model,
+  isGptImage2QualitySelectionValue,
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
+  isKrea2AspectRatioSelectionValue,
+  isKrea2CreativitySelectionValue,
+  isKrea2LargeModel as isKrea2LargeModelId,
   isKlingO3DurationSelectionValue,
   isKlingO3VideoModelId,
   isKlingV3CfgScaleSelectionValue,
@@ -55,6 +62,8 @@ import {
   isSeedance2VideoModel as isSeedance2VideoModelId,
   isVolcengineSeedance2VideoModel,
   isRecraftV4ProImageSizeSelectionValue,
+  KREA_2_DEFAULT_ASPECT_RATIO,
+  KREA_2_DEFAULT_CREATIVITY,
   isWan27ImageAspectRatioSelectionValue,
   isWan27ImageMaxImagesSelectionValue,
   isWan27VideoAspectRatioSelectionValue,
@@ -68,6 +77,7 @@ import {
 } from '../services/modelConfig';
 import type {
   FalAspectRatioSelectionValue,
+  FalGptImage2QualitySelectionValue,
   FalImageModelId,
   FalImageSizeSelectionValue,
   FalModelId,
@@ -83,6 +93,8 @@ import type {
   KlingV3DurationSelectionValue,
   KlingV3ShotDurationSelectionValue,
   KlingVariant,
+  Krea2AspectRatioSelectionValue,
+  Krea2CreativitySelectionValue,
   InfinitalkAccelerationSelectionValue,
   InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
@@ -146,6 +158,8 @@ type FalDerivedState = {
   isVeo31VideoModel: boolean;
   isFlux2MaxModel: boolean;
   isWan27ImageModel: boolean;
+  isGptImage2Model: boolean;
+  isKrea2LargeModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO3EditMode: boolean;
@@ -221,6 +235,9 @@ type FalHandlers = {
   handleRecraftColorChange: (index: number, value: string) => void;
   handleRecraftAddColor: () => void;
   handleRecraftRemoveColor: () => void;
+  handleGptImage2QualityChange: (value: string) => void;
+  handleKrea2AspectRatioChange: (value: string) => void;
+  handleKrea2CreativityChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -299,6 +316,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
+  gptImage2Quality: FalGptImage2QualitySelectionValue;
+  krea2AspectRatio: Krea2AspectRatioSelectionValue;
+  krea2Creativity: Krea2CreativitySelectionValue;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -374,6 +394,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setRecraftImageSize: Dispatch<SetStateAction<RecraftV4ProImageSizeSelectionValue>>;
   setRecraftBackgroundColor: Dispatch<SetStateAction<RecraftRgbColor>>;
   setRecraftColors: Dispatch<SetStateAction<RecraftRgbColor[]>>;
+  setGptImage2Quality: Dispatch<SetStateAction<FalGptImage2QualitySelectionValue>>;
+  setKrea2AspectRatio: Dispatch<SetStateAction<Krea2AspectRatioSelectionValue>>;
+  setKrea2Creativity: Dispatch<SetStateAction<Krea2CreativitySelectionValue>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -453,6 +476,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [recraftImageSize, setRecraftImageSize] = useState<RecraftV4ProImageSizeSelectionValue>(RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE);
   const [recraftBackgroundColor, setRecraftBackgroundColor] = useState<RecraftRgbColor>(RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR);
   const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
+  const [gptImage2Quality, setGptImage2Quality] = useState<FalGptImage2QualitySelectionValue>('medium');
+  const [krea2AspectRatio, setKrea2AspectRatio] = useState<Krea2AspectRatioSelectionValue>(KREA_2_DEFAULT_ASPECT_RATIO);
+  const [krea2Creativity, setKrea2Creativity] = useState<Krea2CreativitySelectionValue>(KREA_2_DEFAULT_CREATIVITY);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
@@ -485,6 +511,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan27ImageModel = !isVideoMode && falImageModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  const isGptImage2ModelSelection = !isVideoMode && isGptImage2Model(falImageModelId);
+  const isKrea2LargeModelSelection = !isVideoMode && isKrea2LargeModelId(falImageModelId);
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO3EditMode = isKlingO3VideoModel && klingO3Variant === 'edit';
@@ -628,6 +656,13 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
 
   useEffect(() => {
     if (falModelMode === 'video') {
+      return;
+    }
+    if (falModelId === GPT_IMAGE_2_EDIT_MODEL_ID) {
+      const validImageSizeOptions = GPT_IMAGE_2_IMAGE_SIZE_OPTIONS.map(option => option.value);
+      if (!validImageSizeOptions.includes(falImageSizeSelection)) {
+        setFalImageSizeSelection('auto'); // GPT Image 2 defaults to auto size in the UI.
+      }
       return;
     }
     if (!isSeedreamModel) {
@@ -1034,6 +1069,24 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setRecraftColors(prev => prev.slice(0, Math.max(0, prev.length - 1)));
   }, []);
 
+  const handleGptImage2QualityChange = useCallback((value: string) => {
+    if (isGptImage2QualitySelectionValue(value)) {
+      setGptImage2Quality(value);
+    }
+  }, []);
+
+  const handleKrea2AspectRatioChange = useCallback((value: string) => {
+    if (isKrea2AspectRatioSelectionValue(value)) {
+      setKrea2AspectRatio(value);
+    }
+  }, []);
+
+  const handleKrea2CreativityChange = useCallback((value: string) => {
+    if (isKrea2CreativitySelectionValue(value)) {
+      setKrea2Creativity(value);
+    }
+  }, []);
+
   const handleFalImageSizeChange = useCallback((value: string) => {
     setFalImageSizeSelection(value as FalImageSizeSelectionValue);
   }, []);
@@ -1158,8 +1211,13 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
+    gptImage2Quality,
+    krea2AspectRatio,
+    krea2Creativity,
     isFlux2MaxModel,
     isWan27ImageModel,
+    isGptImage2Model: isGptImage2ModelSelection,
+    isKrea2LargeModel: isKrea2LargeModelSelection,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -1257,6 +1315,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleRecraftColorChange,
     handleRecraftAddColor,
     handleRecraftRemoveColor,
+    handleGptImage2QualityChange,
+    handleKrea2AspectRatioChange,
+    handleKrea2CreativityChange,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -1332,6 +1393,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setRecraftImageSize,
     setRecraftBackgroundColor,
     setRecraftColors,
+    setGptImage2Quality,
+    setKrea2AspectRatio,
+    setKrea2Creativity,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

@@ -11,6 +11,7 @@ import {
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_EDIT_MODEL_ID,
+  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
@@ -32,6 +33,7 @@ import {
   WAN_27_VIDEO_MODEL_ID,
   getFalModelLabel,
   getFalNumImageMaxForModel,
+  getGptImage2TextToImageModelId,
   getHailuoActualModelId,
   getKlingActualModelId,
   getKlingO3VideoEndpoint,
@@ -42,6 +44,11 @@ import {
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
+  isGptImage2EditModelId,
+  isGptImage2QualitySelectionValue,
+  isKrea2AspectRatioSelectionValue,
+  isKrea2CreativitySelectionValue,
+  isKrea2LargeModel,
   isKlingO3AspectRatioSelectionValue,
   isKlingO3DurationSelectionValue,
   isKlingO3VideoModelId,
@@ -73,6 +80,7 @@ import {
   normalizeKlingO3Variant as normalizeLegacyKlingO3Variant,
   normalizeFalModelId,
   type FalAspectRatioSelectionValue,
+  type FalGptImage2QualitySelectionValue,
   type FalImageModelId,
   type FalImageSizeSelectionValue,
   type FalModelId,
@@ -86,6 +94,8 @@ import {
   type KlingV3DurationSelectionValue,
   type KlingV3ShotDurationSelectionValue,
   type KlingVariant,
+  type Krea2AspectRatioSelectionValue,
+  type Krea2CreativitySelectionValue,
   type WanAnimateQualitySelectionValue,
   type WanAnimateResolutionSelectionValue,
   type WanAnimateShiftSelectionValue,
@@ -163,6 +173,7 @@ type UseGenerationArgs = {
   selection: SelectionStateResult;
   images: CanvasImage[];
   paths: Path[];
+  krea2StyleReferenceStrengths?: Record<string, number>;
   videoNegativePrompt: string;
   setError: (message: string | null) => void;
   setIsLoading: (value: boolean) => void;
@@ -179,6 +190,12 @@ const LEGACY_KLING_O1_REF_V2V_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/r
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
   !!img && img.mediaType === 'image';
+
+const normalizeKrea2StyleStrength = (value: unknown): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  const rounded = Number.isFinite(parsed) ? Math.round(parsed * 10) / 10 : 1; // UI exposes tenths.
+  return Math.min(2, Math.max(-2, rounded));
+};
 
 const extractDataUrlBase64 = (dataUrl: string): string | null => {
   const commaIndex = dataUrl.indexOf(',');
@@ -314,6 +331,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     selection,
     images,
     paths,
+    krea2StyleReferenceStrengths = {},
     videoNegativePrompt,
     setError,
     setIsLoading,
@@ -420,6 +438,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
+    gptImage2Quality,
+    krea2AspectRatio,
+    krea2Creativity,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -613,6 +634,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const recraftColorsForRun = Array.isArray(falOptionsOverride.recraftColors)
       ? falOptionsOverride.recraftColors.map(normalizeRecraftRgbColor).filter((color): color is NonNullable<typeof color> => Boolean(color)).slice(0, RECRAFT_V4_PRO_MAX_COLORS)
       : recraftColors.slice(0, RECRAFT_V4_PRO_MAX_COLORS);
+    const gptImage2QualityForRun: FalGptImage2QualitySelectionValue = isGptImage2QualitySelectionValue(falOptionsOverride.gptImage2Quality)
+      ? falOptionsOverride.gptImage2Quality
+      : gptImage2Quality; // Saved runs can override the active quality picker.
+    const krea2AspectRatioForRun: Krea2AspectRatioSelectionValue = isKrea2AspectRatioSelectionValue(falOptionsOverride.aspectRatioSelection)
+      ? falOptionsOverride.aspectRatioSelection
+      : krea2AspectRatio;
+    const krea2CreativityForRun: Krea2CreativitySelectionValue = isKrea2CreativitySelectionValue(falOptionsOverride.krea2Creativity)
+      ? falOptionsOverride.krea2Creativity
+      : krea2Creativity;
+    const krea2StrengthsForRun = falOptionsOverride.krea2StyleReferenceStrengths ?? krea2StyleReferenceStrengths;
     const klingV3ControlKeepSoundForRun = falOptionsOverride.klingV3ControlKeepSound ?? klingV3ControlKeepSound;
     const klingV3ControlOrientationForRun = falOptionsOverride.klingV3ControlOrientation === 'image'
       || falOptionsOverride.klingV3ControlOrientation === 'video'
@@ -703,6 +734,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ? 'auto_2K'
       : falImageSizeSelectionForRun; // Seedream 5 Lite defaults to auto_2K instead of source-matching.
     const isNanoBananaModel = !isVideoMode && isNanoBananaEditModelId(falModelIdForRun);
+    const isGptImage2ModelForRun = !isVideoMode && isGptImage2EditModelId(falModelIdForRun);
+    const isKrea2LargeModelForRun = usingFal && !isVideoMode && isKrea2LargeModel(falModelIdForRun);
     const isGrokImagineModel = !isVideoMode && falModelIdForRun === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
     const grokAspectRatioForRun = (isGrokImagineModel && falAspectRatioSelectionForRun === 'default')
       ? '1:1'
@@ -766,7 +799,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? videoNegativePromptForRun.trim()
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
-    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun;
+    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun || isKrea2LargeModelForRun;
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun && Boolean(activePrimary)));
     const isKlingV3ControlPromptOptional = usingFal && isVideoMode && isKlingV3ControlVideoModel; // Kling Control v3 prompt is optional.
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
@@ -2146,15 +2179,35 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ? getSeedreamTextToImageModelId(falModelIdForRun)
             : isGrokImagineModel
               ? GROK_IMAGINE_IMAGE_MODEL_ID // Grok text-to-image endpoint.
-              : isFlux2MaxModelForRun
-                ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
-                : isWan27ImageModelForRun
-                  ? WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID
-                  : isRecraftV4ProModelForRun
-                    ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
-                    : isNanoBananaModel
-                      ? getNanoBananaTextToImageModelId(falModelIdForRun)
-                      : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+              : isKrea2LargeModelForRun
+                ? KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID
+                : isFlux2MaxModelForRun
+                  ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
+                  : isWan27ImageModelForRun
+                    ? WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID
+                    : isRecraftV4ProModelForRun
+                      ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
+                      : isGptImage2ModelForRun
+                        ? getGptImage2TextToImageModelId(falModelIdForRun)
+                        : isNanoBananaModel
+                          ? getNanoBananaTextToImageModelId(falModelIdForRun)
+                          : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+          const krea2AllReferenceCanvasImages = isKrea2LargeModelForRun
+            ? referenceImageIdsForRun
+              .map(id => images.find(img => img.id === id))
+              .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
+            : [];
+          if (isKrea2LargeModelForRun && krea2AllReferenceCanvasImages.length !== referenceImageIdsForRun.length) {
+            throw new Error('Krea 2 Large style references must be still images.');
+          }
+          const krea2ReferenceCanvasImages = krea2AllReferenceCanvasImages.slice(0, getMaxReferenceImages(falModelIdForRun));
+          const krea2StyleReferences = krea2ReferenceCanvasImages.map(img => ({
+            image: img.element,
+            strength: normalizeKrea2StyleStrength(krea2StrengthsForRun[img.id]),
+          }));
+          if (isKrea2LargeModelForRun) {
+            referenceIdsUsed = krea2ReferenceCanvasImages.map(img => img.id);
+          }
 
           const falResult = await generateFalImage(trimmedPrompt, {
             onQueueUpdate: (update) => {
@@ -2166,10 +2219,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: (isNanoBananaModel || isSeedreamModel || isGrokImagineModel)
+            aspectRatio: isKrea2LargeModelForRun
+              ? krea2AspectRatioForRun
+              : (isNanoBananaModel || isSeedreamModel || isGrokImagineModel)
               ? (isGrokImagineModel ? grokAspectRatioForRun : falAspectRatioSelectionForRun)
               : 'default', // Include Grok aspect ratios.
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
+            ...(isGptImage2ModelForRun ? { imageSize: normalizedFalImageSizeSelectionForRun, gptImage2Quality: gptImage2QualityForRun } : {}),
+            ...(isKrea2LargeModelForRun ? { krea2Creativity: krea2CreativityForRun, imageStyleReferences: krea2StyleReferences } : {}),
             ...(isSeedreamModel ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
             ...(isFlux2MaxModelForRun ? { flux2MaxImageSize } : {}),
             ...(isWan27ImageModelForRun ? {
@@ -2182,7 +2239,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               recraftBackgroundColor: recraftBackgroundColorForRun,
               recraftColors: recraftColorsForRun,
             } : {}),
-            numImages: normalizedFalNumImages,
+            ...(!isKrea2LargeModelForRun ? { numImages: normalizedFalNumImages } : {}),
           });
 
           generationResult = falResult;
@@ -2276,10 +2333,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
           } else {
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isFlux2MaxModelForRun || isWan27ImageModelForRun;
+            const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isFlux2MaxModelForRun || isWan27ImageModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
-              const maxReferenceImages = getMaxReferenceImages(falModelIdForRun);
+              const maxReferenceImages = Math.max(0, getMaxReferenceImages(falModelIdForRun) - (isGptImage2ModelForRun && tool === Tool.ANNOTATE ? 1 : 0)); // Annotate uploads an extra canvas.
               const referenceCanvasImages = referenceImageIdsForRun
                 .filter(id => id !== primaryImageIdForRun)
                 .map(id => images.find(img => img.id === id))
@@ -2312,6 +2369,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
               ...(normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
               ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
+              ...(isGptImage2ModelForRun ? { gptImage2Quality: gptImage2QualityForRun } : {}),
               ...(isWan27ImageModelForRun ? {
                 wan27ImageSize: wan27ImageAspectRatio,
                 wan27ImageMaxImages: wan27ImageMaxImages,
@@ -2419,9 +2477,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 ...(videoLastFrameImageIdForRun ? { videoLastFrameImageId: videoLastFrameImageIdForRun } : {}),
                 ...(primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 falOptions: {
-                  ...(falAspectRatioSelectionForRun ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
+                  ...(isKrea2LargeModelForRun ? { aspectRatioSelection: krea2AspectRatioForRun } : falAspectRatioSelectionForRun ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
                   ...(normalizedFalImageSizeSelectionForRun ? { imageSizeSelection: normalizedFalImageSizeSelectionForRun } : {}),
                   ...(falResolutionSelectionForRun ? { resolutionSelection: falResolutionSelectionForRun } : {}),
+                  ...(isGptImage2ModelForRun ? { gptImage2Quality: gptImage2QualityForRun } : {}),
+                  ...(isKrea2LargeModelForRun ? {
+                    krea2Creativity: krea2CreativityForRun,
+                    krea2StyleReferenceStrengths: Object.fromEntries(referenceIdsUsed.map(id => [id, normalizeKrea2StyleStrength(krea2StrengthsForRun[id])])),
+                  } : {}),
                   ...(generationKind === 'upscale' ? { scaleFactor: falScaleFactorForRun } : {}),
                   ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
                   ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
@@ -2571,6 +2634,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
+    gptImage2Quality,
+    krea2AspectRatio,
+    krea2Creativity,
+    krea2StyleReferenceStrengths,
     images,
     paths,
     referenceImageIds,

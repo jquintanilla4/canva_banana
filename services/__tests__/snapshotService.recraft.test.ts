@@ -58,6 +58,38 @@ describe('snapshotService (Sync v3 metadata)', () => {
   });
 });
 
+describe('snapshotService (Krea 2 Large metadata)', () => {
+  it('preserves Krea creativity and normalized style reference strengths', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'text_to_image',
+        prompt: 'krea prompt',
+        provider: 'fal',
+        modelId: 'krea/v2/large/text-to-image',
+        modelMode: 'image',
+        referenceImageIds: ['ref-1', 'ref-2'],
+        falOptions: {
+          aspectRatioSelection: '2.35:1',
+          krea2Creativity: 'high',
+          krea2StyleReferenceStrengths: {
+            'ref-1': -3,
+            'ref-2': '0.14',
+            'ref-bad': 'not-a-number',
+          },
+        },
+      },
+    } as unknown as CanvasImageMetadata);
+
+    expect(metadata?.generation?.falOptions?.aspectRatioSelection).toBe('2.35:1');
+    expect(metadata?.generation?.falOptions?.krea2Creativity).toBe('high');
+    expect(metadata?.generation?.falOptions?.krea2StyleReferenceStrengths).toEqual({
+      'ref-1': -2,
+      'ref-2': 0.1,
+    });
+  });
+});
+
 describe('snapshotService (Kling O3 metadata)', () => {
   it('normalizes Kling O3 options from snapshots', () => {
     const metadata = normalizeSnapshotImageMetadata({

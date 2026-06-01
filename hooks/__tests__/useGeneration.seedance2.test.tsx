@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  GPT_IMAGE_2_EDIT_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
+  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -13,7 +15,7 @@ import {
   WAN_27_VIDEO_MODEL_ID,
 } from '../../services/modelConfig';
 import { Tool, type CanvasImage, type FalQueueJob } from '../../types';
-import { generateImageToVideo, uploadVideoToFal } from '../../services/falService';
+import { generateImage as generateFalImage, generateImageEdit as generateFalImageEdit, generateImageToVideo, uploadVideoToFal } from '../../services/falService';
 import { generateImage as generateGoogleImage, generateImageEdit as generateGoogleImageEdit } from '../../services/geminiService';
 import { loadMediaFromBlob } from '../../services/mediaService';
 import { generateSeedanceVideo } from '../../services/volcengineService';
@@ -25,6 +27,8 @@ vi.mock('../../services/falService', async () => {
   const actual = await vi.importActual<typeof import('../../services/falService')>('../../services/falService');
   return {
     ...actual,
+    generateImage: vi.fn(),
+    generateImageEdit: vi.fn(),
     generateImageToVideo: vi.fn(),
     uploadVideoToFal: vi.fn(),
   };
@@ -1040,6 +1044,108 @@ describe('useGeneration (seedance 2)', () => {
       tool: Tool.FREE_SELECTION,
     }));
     expect(vi.mocked(generateGoogleImage)).not.toHaveBeenCalled();
+  });
+
+  it('caps saved Krea style references without rejecting valid still images', async () => {
+    const images = Array.from({ length: 11 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const setError = vi.fn();
+    const fal = createFalStub();
+    fal.falModelMode = 'image';
+    fal.falImageModelId = KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
+    vi.mocked(generateFalImage).mockImplementation(() => new Promise(() => {})); // Keep pending so request options can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images,
+      paths: [],
+      krea2StyleReferenceStrengths: {},
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'text_to_image',
+        prompt: 'A styled editorial image',
+        provider: 'fal',
+        modelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+        modelMode: 'image',
+        referenceImageIds: images.map(image => image.id),
+        falOptions: {
+          aspectRatioSelection: '16:9',
+          krea2Creativity: 'medium',
+          krea2StyleReferenceStrengths: Object.fromEntries(images.map(image => [image.id, 1])),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(setError).not.toHaveBeenCalledWith('Krea 2 Large style references must be still images.');
+    expect(vi.mocked(generateFalImage)).toHaveBeenCalledWith('A styled editorial image', expect.objectContaining({
+      modelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+      imageStyleReferences: expect.arrayContaining(images.slice(0, 10).map(image => expect.objectContaining({ image: image.element }))),
+    }));
+    expect(vi.mocked(generateFalImage).mock.calls[0]?.[1]?.imageStyleReferences).toHaveLength(10);
+  });
+
+  it('caps GPT Image 2 annotate references at 8 because the annotation canvas is an input', async () => {
+    const primary = buildCanvasMedia('primary', 'image') as CanvasImage & { element: HTMLImageElement };
+    const references = Array.from({ length: 9 }, (_, index) => buildCanvasMedia(`ref-${index + 1}`, 'image'));
+    const fal = createFalStub();
+    fal.falModelMode = 'image';
+    fal.falImageModelId = GPT_IMAGE_2_EDIT_MODEL_ID;
+    vi.mocked(generateFalImageEdit).mockImplementation(() => new Promise(() => {})); // Keep pending so request options can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'ANNOTATE',
+      tool: Tool.ANNOTATE,
+      prompt: 'Edit with annotated guidance',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        primaryImageId: primary.id,
+        primaryImage: primary,
+        activePrimaryImage: primary,
+        selectedImageIds: [primary.id],
+        primarySelectionMediaType: 'image',
+      }),
+      images: [primary, ...references],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'image_edit',
+        prompt: 'Edit with annotated guidance',
+        provider: 'fal',
+        modelId: GPT_IMAGE_2_EDIT_MODEL_ID,
+        modelMode: 'image',
+        primaryImageId: primary.id,
+        referenceImageIds: references.map(image => image.id),
+      });
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0]?.referenceImages).toHaveLength(8);
   });
 
   it('blocks Seedance reference submissions when reference videos total more than 15 seconds', async () => {

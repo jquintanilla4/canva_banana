@@ -33,6 +33,8 @@ type Args = {
   isUpscaleModel: boolean;
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
+  isGptImage2Model?: boolean;
+  isKrea2LargeModel?: boolean;
   isGrokModel: boolean; // Grok text-to-image flag.
   isGrokImagineVideoModel: boolean;
   isKlingVideoModel: boolean;
@@ -76,6 +78,8 @@ export function useGenerationGuards({
   isUpscaleModel,
   isSeedreamModel,
   isNanoBananaModel,
+  isGptImage2Model = false,
+  isKrea2LargeModel = false,
   isGrokModel, // Grok text-to-image flag.
   isGrokImagineVideoModel,
   isKlingVideoModel,
@@ -151,13 +155,14 @@ export function useGenerationGuards({
     const hasScailStillImage = isScailVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const hasKlingV3ControlStillImage = isKlingV3ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const isRecraftTextToImage = usingFal && !isVideoMode && isRecraftV4ProModel(falModelId); // Recraft t2i is Fal-only.
-    const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage) && !(isVideoMode && (
+    const isKrea2TextToImage = usingFal && !isVideoMode && isKrea2LargeModel; // Krea refs are style inputs, not edits.
+    const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage || isKrea2TextToImage) && !(isVideoMode && (
       (isVideoInputMode && hasSourceVideo) || isGrokImagineVideoEditMode
     ));
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
-      && (isSeedreamModel || isNanoBananaModel || isGrokModel); // Include Grok validation.
+      && (isSeedreamModel || isNanoBananaModel || isGrokModel || isGptImage2Model); // Include GPT Image 2 validation.
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
@@ -326,6 +331,9 @@ export function useGenerationGuards({
       if (usingFal && isUpscaleModel) {
         return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select an image and scale factor.`;
       }
+      if (usingFal && isKrea2LargeModel) {
+        return 'Describe the image to create, or shift-click up to 10 canvas images as style references...';
+      }
       return isTextToImage
         ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
         : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
@@ -356,6 +364,8 @@ export function useGenerationGuards({
     primarySelectionMediaType,
     isGrokImagineVideoModel,
     isHeygenV3LipsyncVideoModel,
+    isGptImage2Model,
+    isKrea2LargeModel,
     isNanoBananaModel,
     isHailuoVideoModel,
     isKlingV3ControlVideoModel,

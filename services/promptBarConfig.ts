@@ -1,5 +1,6 @@
 import type {
   FalAspectRatioSelectionValue,
+  FalGptImage2QualitySelectionValue,
   FalImageSizeSelectionValue,
   FalModelOption,
   FalModelMode,
@@ -25,6 +26,8 @@ import type {
   KlingV3DurationSelectionValue,
   KlingV3ShotDurationSelectionValue,
   KlingVariant,
+  Krea2AspectRatioSelectionValue,
+  Krea2CreativitySelectionValue,
   LipsyncSyncMode,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
@@ -55,10 +58,14 @@ import {
   FAL_CRYSTAL_CREATIVITY_OPTIONS,
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
+  GPT_IMAGE_2_IMAGE_SIZE_OPTIONS,
+  GPT_IMAGE_2_QUALITY_OPTIONS,
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_RESOLUTION_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
+  KREA_2_ASPECT_RATIO_OPTIONS,
+  KREA_2_CREATIVITY_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
   FLUX2_MAX_IMAGE_SIZE_OPTIONS,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
@@ -397,8 +404,10 @@ export type PromptBarControlsInput = {
   usingFal: boolean;
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
+  isKrea2LargeModel?: boolean;
   isFlux2MaxModel: boolean;
   isWan27ImageModel: boolean;
+  isGptImage2Model?: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
   isKlingV3VideoModel: boolean;
@@ -479,6 +488,9 @@ export type PromptBarControlsInput = {
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
+  gptImage2Quality?: FalGptImage2QualitySelectionValue;
+  krea2AspectRatio?: Krea2AspectRatioSelectionValue;
+  krea2Creativity?: Krea2CreativitySelectionValue;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -553,6 +565,9 @@ export type PromptBarControlsInput = {
   onRecraftColorChange: (index: number, value: string) => void;
   onRecraftAddColor: () => void;
   onRecraftRemoveColor: () => void;
+  onGptImage2QualityChange?: (value: string) => void;
+  onKrea2AspectRatioChange?: (value: string) => void;
+  onKrea2CreativityChange?: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -574,8 +589,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     usingFal,
     isSeedreamModel,
     isNanoBananaModel,
+    isKrea2LargeModel = false,
     isFlux2MaxModel,
     isWan27ImageModel,
+    isGptImage2Model = false,
     isUpscaleModel,
     isKlingVideoModel,
     isKlingV3VideoModel,
@@ -656,6 +673,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
+    gptImage2Quality = 'medium',
+    krea2AspectRatio = '16:9',
+    krea2Creativity = 'medium',
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -730,6 +750,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onRecraftColorChange,
     onRecraftAddColor,
     onRecraftRemoveColor,
+    onGptImage2QualityChange = () => undefined,
+    onKrea2AspectRatioChange = () => undefined,
+    onKrea2CreativityChange = () => undefined,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -1482,6 +1505,50 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
+  const shouldShowGptImage2ImageControls = apiProvider === 'fal' && isGptImage2Model;
+  if (shouldShowGptImage2ImageControls) {
+    controls.push({
+      id: 'fal-gpt-image-2-size-select',
+      prefixLabel: 'Size',
+      ariaLabel: 'Select GPT Image 2 image size',
+      options: GPT_IMAGE_2_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: falImageSizeSelection,
+      onChange: onFalImageSizeChange,
+      disabled: isLoading,
+    });
+    controls.push({
+      id: 'fal-gpt-image-2-quality-select',
+      prefixLabel: 'Quality',
+      ariaLabel: 'Select GPT Image 2 quality',
+      options: GPT_IMAGE_2_QUALITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: gptImage2Quality,
+      onChange: onGptImage2QualityChange,
+      disabled: isLoading,
+    });
+  }
+
+  const shouldShowKrea2Controls = apiProvider === 'fal' && isKrea2LargeModel;
+  if (shouldShowKrea2Controls) {
+    controls.push({
+      id: 'fal-krea-2-aspect-ratio-select',
+      prefixLabel: 'AR',
+      ariaLabel: 'Select Krea 2 Large aspect ratio',
+      options: KREA_2_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: krea2AspectRatio,
+      onChange: onKrea2AspectRatioChange,
+      disabled: isLoading,
+    });
+    controls.push({
+      id: 'fal-krea-2-creativity-select',
+      prefixLabel: 'Creativity',
+      ariaLabel: 'Select Krea 2 Large creativity',
+      options: KREA_2_CREATIVITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: krea2Creativity,
+      onChange: onKrea2CreativityChange,
+      disabled: isLoading,
+    });
+  }
+
   const supportsAspectRatioControl = isNanoBananaModel
     || isGrokImagineModel // Grok aspect ratio support.
     || (isSeedreamModel && !shouldShowSeedreamImageSizeControl); // Include Grok for AR control.
@@ -1517,7 +1584,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel); // Include Grok for Num control.
+    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2Model); // Include GPT Image 2 for Num control.
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.

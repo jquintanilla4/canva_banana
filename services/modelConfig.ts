@@ -1,7 +1,9 @@
 import type {
   ApiProviderId,
   FalAspectRatioOption,
+  FalGptImage2QualityOption,
   FalImageSizePreset,
+  FalKrea2CreativityOption,
   FalResolutionOption,
   FalVideoDuration,
   GenerationProviderId,
@@ -13,6 +15,9 @@ export const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit' as co
 export const NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-pro' as const;
 export const NANO_BANANA_2_EDIT_MODEL_ID = 'fal-ai/nano-banana-2/edit' as const; // Nano Banana 2 edit endpoint.
 export const NANO_BANANA_2_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-2' as const; // Nano Banana 2 t2i endpoint.
+export const GPT_IMAGE_2_EDIT_MODEL_ID = 'openai/gpt-image-2/edit' as const; // GPT Image 2 edit endpoint.
+export const GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID = 'openai/gpt-image-2' as const; // GPT Image 2 t2i endpoint.
+export const KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID = 'krea/v2/large/text-to-image' as const; // Krea 2 Large t2i endpoint.
 export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
 export const SEEDREAM_V5_LITE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/edit' as const;
@@ -115,7 +120,9 @@ const sortModelOptionsByLabel = <T extends { label: string }>(options: readonly 
 const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux2 Max' },
+  { value: GPT_IMAGE_2_EDIT_MODEL_ID, label: 'GPT Image 2' }, // Selector uses edit id.
   { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine' }, // Grok model option.
+  { value: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Krea 2 Large' },
   { value: NANO_BANANA_2_EDIT_MODEL_ID, label: 'NanoBanana 2' }, // Selector uses edit id.
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4 Pro' }, // Direct text-to-image endpoint.
@@ -700,6 +707,46 @@ export const WAN_27_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan27ImageM
   { value: '5', label: '5' },
 ] as const;
 
+export const GPT_IMAGE_2_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
+  { value: 'auto', label: 'Auto (default)' },
+  { value: 'landscape_4_3', label: 'Landscape 4:3' },
+  { value: 'landscape_16_9', label: 'Landscape 16:9' },
+  { value: 'portrait_4_3', label: 'Portrait 3:4' },
+  { value: 'portrait_16_9', label: 'Portrait 9:16' },
+  { value: 'square', label: 'Square' },
+  { value: 'square_hd', label: 'Square HD' },
+] as const;
+
+export const GPT_IMAGE_2_QUALITY_OPTIONS: ReadonlyArray<{ value: FalGptImage2QualitySelectionValue; label: string }> = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+] as const;
+
+export type Krea2AspectRatioSelectionValue = '1:1' | '4:3' | '3:2' | '16:9' | '2.35:1' | '4:5' | '2:3' | '9:16';
+export type Krea2CreativitySelectionValue = FalKrea2CreativityOption;
+export const KREA_2_DEFAULT_ASPECT_RATIO: Krea2AspectRatioSelectionValue = '16:9';
+export const KREA_2_DEFAULT_CREATIVITY: Krea2CreativitySelectionValue = 'medium';
+export const KREA_2_MAX_STYLE_REFERENCES = 10;
+
+export const KREA_2_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Krea2AspectRatioSelectionValue; label: string }> = [
+  { value: '16:9', label: '16:9' },
+  { value: '1:1', label: '1:1' },
+  { value: '4:3', label: '4:3' },
+  { value: '3:2', label: '3:2' },
+  { value: '2.35:1', label: '2.35:1' },
+  { value: '4:5', label: '4:5' },
+  { value: '2:3', label: '2:3' },
+  { value: '9:16', label: '9:16' },
+] as const;
+
+export const KREA_2_CREATIVITY_OPTIONS: ReadonlyArray<{ value: Krea2CreativitySelectionValue; label: string }> = [
+  { value: 'raw', label: 'Raw' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+] as const;
+
 export const RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: RecraftV4ProImageSizeSelectionValue; label: string }> = [
   { value: 'square_hd', label: 'Square HD' },
   { value: 'square', label: 'Square' },
@@ -712,6 +759,12 @@ export const RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: RecraftV4
 export const isWan27ImageModel = (modelId: string | undefined): boolean =>
   modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
 
+export const isGptImage2Model = (modelId: string | undefined): boolean =>
+  modelId === GPT_IMAGE_2_EDIT_MODEL_ID; // Selector id for GPT Image 2.
+
+export const isKrea2LargeModel = (modelId: string | undefined): boolean =>
+  modelId === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
+
 export const isRecraftV4ProModel = (modelId: string | undefined): boolean =>
   modelId === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID;
 
@@ -720,6 +773,15 @@ export const isWan27ImageAspectRatioSelectionValue = (value: unknown): value is 
 
 export const isWan27ImageMaxImagesSelectionValue = (value: unknown): value is Wan27ImageMaxImagesSelectionValue =>
   value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
+
+export const isGptImage2QualitySelectionValue = (value: unknown): value is FalGptImage2QualitySelectionValue =>
+  value === 'low' || value === 'medium' || value === 'high';
+
+export const isKrea2AspectRatioSelectionValue = (value: unknown): value is Krea2AspectRatioSelectionValue =>
+  value === '1:1' || value === '4:3' || value === '3:2' || value === '16:9' || value === '2.35:1' || value === '4:5' || value === '2:3' || value === '9:16';
+
+export const isKrea2CreativitySelectionValue = (value: unknown): value is Krea2CreativitySelectionValue =>
+  value === 'raw' || value === 'low' || value === 'medium' || value === 'high';
 
 export const isRecraftV4ProImageSizeSelectionValue = (value: unknown): value is RecraftV4ProImageSizeSelectionValue =>
   value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
@@ -785,17 +847,30 @@ export const NANO_BANANA_TEXT_TO_IMAGE_MODEL_IDS = [
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID, // Pro t2i id.
   NANO_BANANA_2_TEXT_TO_IMAGE_MODEL_ID, // V2 t2i id.
 ] as const; // T2I ids accepted by Fal generation.
+export const GPT_IMAGE_2_EDIT_MODEL_IDS = [GPT_IMAGE_2_EDIT_MODEL_ID] as const; // Edit ids shown in selector.
+export type GptImage2EditModelId = typeof GPT_IMAGE_2_EDIT_MODEL_IDS[number]; // GPT Image 2 edit id union.
+export const GPT_IMAGE_2_TEXT_TO_IMAGE_MAP: Record<GptImage2EditModelId, string> = {
+  [GPT_IMAGE_2_EDIT_MODEL_ID]: GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, // Edit to t2i.
+};
+export const GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_IDS = [GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID] as const; // T2I ids accepted by Fal generation.
 export const isNanoBananaEditModelId = (value: string | undefined): value is NanoBananaEditModelId =>
   !!value && (NANO_BANANA_EDIT_MODEL_IDS as readonly string[]).includes(value); // Match Nano Banana edit endpoints.
 export const isNanoBananaTextToImageModelId = (value: string | undefined): boolean =>
   !!value && (NANO_BANANA_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(value); // Match Nano Banana t2i endpoints.
 export const getNanoBananaTextToImageModelId = (modelId: NanoBananaEditModelId): string =>
   NANO_BANANA_TEXT_TO_IMAGE_MAP[modelId]; // Resolve matching Nano Banana t2i endpoint.
+export const isGptImage2EditModelId = (value: string | undefined): value is GptImage2EditModelId =>
+  !!value && (GPT_IMAGE_2_EDIT_MODEL_IDS as readonly string[]).includes(value); // Match GPT Image 2 edit endpoint.
+export const isGptImage2TextToImageModelId = (value: string | undefined): boolean =>
+  !!value && (GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(value); // Match GPT Image 2 t2i endpoint.
+export const getGptImage2TextToImageModelId = (modelId: GptImage2EditModelId): string =>
+  GPT_IMAGE_2_TEXT_TO_IMAGE_MAP[modelId]; // Resolve matching GPT Image 2 t2i endpoint.
 
 export type FalModelMode = 'image' | 'video';
 export type FalImageSizeSelectionValue = 'placeholder' | 'default' | FalImageSizePreset;
 export type FalAspectRatioSelectionValue = 'placeholder' | FalAspectRatioOption;
 export type FalResolutionSelectionValue = FalResolutionOption;
+export type FalGptImage2QualitySelectionValue = FalGptImage2QualityOption;
 
 export type FalImageModelId = typeof FAL_IMAGE_MODEL_OPTIONS_BASE[number]['value'];
 export type FalVideoModelId = typeof FAL_VIDEO_MODEL_OPTIONS_BASE[number]['value'];
@@ -1045,6 +1120,7 @@ export const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...FAL_GROK_ASPECT_RATIO_OPTIONS.map(option => option.value), // Grok ratio values.
   ...FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.map(option => option.value),
+  ...KREA_2_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
 
 export const FAL_IMAGE_SIZE_DEFAULT_OPTION = 'default';
@@ -1052,6 +1128,8 @@ export const DEFAULT_MAX_REFERENCE_IMAGES = 13;
 export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KLING_O3_VIDEO_EDIT_MODEL_ID | typeof SEEDANCE_15_VIDEO_MODEL_ID, number>> = {
   [NANO_BANANA_PRO_EDIT_MODEL_ID]: 14,
   [NANO_BANANA_2_EDIT_MODEL_ID]: 14, // Same reference cap as Pro.
+  [GPT_IMAGE_2_EDIT_MODEL_ID]: 9, // GPT Image 2 supports 10 total input images.
+  [KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID]: KREA_2_MAX_STYLE_REFERENCES,
   [SEEDREAM_MODEL_ID]: 7,
   [SEEDREAM_V45_MODEL_ID]: 10,
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.

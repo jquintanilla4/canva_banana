@@ -24,6 +24,7 @@ import {
   GROK_IMAGINE_IMAGE_EDIT_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
+  isGptImage2EditModelId,
   isNanoBananaEditModelId,
   WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
@@ -384,6 +385,11 @@ export const generateImageEdit = async (
   const numImagesOption = options.numImages;
   const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
   const isNanoBananaModel = isNanoBananaEditModelId(modelId);
+  const isGptImage2Model = isGptImage2EditModelId(modelId);
+
+  if (isGptImage2Model && imageUrls.length > 10) {
+    throw new Error('GPT Image 2 supports up to 10 total input images. Please reduce the number of selected images.');
+  }
 
   const body: {
     prompt: string;
@@ -391,13 +397,14 @@ export const generateImageEdit = async (
     output_format?: 'png';
     sync_mode: boolean;
     image_size?: { width: number; height: number } | string;
+    quality?: 'low' | 'medium' | 'high';
     num_images?: number;
     aspect_ratio?: string;
     resolution?: FalResolutionOption;
   } = {
     prompt,
     image_urls: imageUrls,
-    sync_mode: !isSeedreamModel && !isNanoBananaModel, // Keep Nano Banana history visible.
+    sync_mode: !isSeedreamModel && !isNanoBananaModel && !isGptImage2Model, // Keep queue history visible for async models.
   };
 
   if (!isSeedreamModel) {
@@ -422,6 +429,9 @@ export const generateImageEdit = async (
       body.aspect_ratio = aspectRatioOption;
     }
     body.resolution = resolutionOption;
+  } else if (isGptImage2Model) {
+    body.image_size = imageSizeOption === 'default' ? 'auto' : imageSizeOption; // GPT Image 2 supports auto in edit mode.
+    body.quality = options.gptImage2Quality ?? 'medium'; // App default overrides Fal high default.
   }
 
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {

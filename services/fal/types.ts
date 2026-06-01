@@ -2,8 +2,10 @@ import type {
   Tool,
   Path,
   ImageDimensions,
+  FalGptImage2QualityOption,
   FalImageSizeOption,
   FalAspectRatioOption,
+  FalKrea2CreativityOption,
   FalResolutionOption,
   FalVideoDuration,
 } from '../../types'; // Shared app types.
@@ -54,6 +56,7 @@ export interface GenerateImageEditOptions {
   aspectRatio?: FalAspectRatioOption;
   numImages?: number;
   resolution?: FalResolutionOption;
+  gptImage2Quality?: FalGptImage2QualityOption;
   wan27ImageSize?: string;
   wan27ImageMaxImages?: string;
   negativePrompt?: string;
@@ -68,6 +71,9 @@ export interface GenerateImageOptions {
   seed?: number;
   resolution?: FalResolutionOption;
   referenceImages?: HTMLImageElement[];
+  gptImage2Quality?: FalGptImage2QualityOption;
+  krea2Creativity?: FalKrea2CreativityOption;
+  imageStyleReferences?: Array<{ image: HTMLImageElement; strength: number }>;
   flux2MaxImageSize?: string;
   wan27ImageSize?: string;
   wan27ImageMaxImages?: string;

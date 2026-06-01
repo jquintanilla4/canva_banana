@@ -67,6 +67,7 @@ export type FalAspectRatioPreset =
   | '3:2'
   | '2:3'
   | '2:1' // Grok aspect ratio.
+  | '2.35:1'
   | '20:9' // Grok aspect ratio.
   | '19.5:9' // Grok aspect ratio.
   | '5:4'
@@ -83,6 +84,8 @@ export type FalAspectRatioPreset =
 export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
 
 export type FalResolutionOption = '1K' | '2K' | '4K';
+export type FalGptImage2QualityOption = 'low' | 'medium' | 'high';
+export type FalKrea2CreativityOption = 'raw' | 'low' | 'medium' | 'high';
 
 export type FalVideoDuration = '5' | '6' | '10';
 
@@ -95,6 +98,9 @@ export type GenerationFalOptions = Partial<{
   imageSizeSelection: FalImageSizeOption;
   aspectRatioSelection: FalAspectRatioOption;
   resolutionSelection: FalResolutionOption;
+  gptImage2Quality: FalGptImage2QualityOption;
+  krea2Creativity: FalKrea2CreativityOption;
+  krea2StyleReferenceStrengths: Record<string, number>;
   numImages: number;
   scaleFactor: number;
   noiseScale: number;

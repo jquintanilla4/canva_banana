@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import {
+  DEFAULT_MAX_REFERENCE_IMAGES,
   getMaxReferenceImages,
   KLING_VIDEO_MODEL_ID,
   ONE_TO_ALL_ANIMATE_MODEL_ID,
@@ -41,12 +42,14 @@ type SelectionFalSettings = Pick<
 > & {
   wan27VideoVariant?: UseFalSettingsResult['wan27VideoVariant']; // Missing values fall back to Smart.
   isKlingV3VideoModel?: UseFalSettingsResult['isKlingV3VideoModel']; // Older test stubs and snapshots do not carry this flag.
+  isKrea2LargeModel?: UseFalSettingsResult['isKrea2LargeModel']; // Older test stubs do not carry this image flag.
 };
 
 type SelectionOptions = {
   images: CanvasImage[];
   apiProvider: ApiProviderId;
   fal: SelectionFalSettings;
+  referenceImageSlotOffset?: number;
   onError: (message: string) => void;
   onReferenceLimit: (maxReferenceImages: number) => void;
 };
@@ -90,7 +93,7 @@ const WAN_27_EDIT_IMAGE_LIMIT = 1; // Wan edit accepts one optional reference im
 const NO_REFERENCE_LIMIT = 0; // Non-reference modes should not keep video/audio refs.
 
 export const useSelectionState = (options: SelectionOptions): SelectionStateResult => {
-  const { images, apiProvider, fal, onError, onReferenceLimit } = options;
+  const { images, apiProvider, fal, referenceImageSlotOffset = 0, onError, onReferenceLimit } = options;
   const {
     falModelId,
     falModelMode,
@@ -106,6 +109,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
     isWan27VideoModel,
+    isKrea2LargeModel,
     wan27VideoVariant,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
@@ -113,6 +117,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isVeo31VideoModel,
     veo31Variant,
   } = fal;
+  const isFalProvider = apiProvider === 'fal'; // Fal-only caps should not affect Google selection.
+  const isActiveKrea2LargeModel = apiProvider === 'fal' && Boolean(isKrea2LargeModel); // Krea rules apply only while Fal is active.
 
   const isKlingO3VideoInputMode = isKlingO3EditMode;
   const isWanVideoInputMode =
@@ -239,12 +245,14 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         audios: NO_REFERENCE_LIMIT,
       };
     }
+    const maxReferenceImages = isFalProvider ? getMaxReferenceImages(falModelId) : DEFAULT_MAX_REFERENCE_IMAGES; // Google keeps the app default cap.
+    const slotOffset = isFalProvider ? referenceImageSlotOffset : 0; // Reserved input slots are model-specific.
     return {
-      images: getMaxReferenceImages(falModelId),
+      images: Math.max(0, maxReferenceImages - slotOffset), // Reserve slots used by extra generated inputs.
       videos: NO_REFERENCE_LIMIT,
       audios: NO_REFERENCE_LIMIT,
     };
-  }, [falModelId, isSeedance2ReferenceMode, isWan27EditMode, isWan27ReferenceMode]);
+  }, [falModelId, isFalProvider, isSeedance2ReferenceMode, isWan27EditMode, isWan27ReferenceMode, referenceImageSlotOffset]);
 
   useEffect(() => {
     if (referenceVideoIds.length > referenceLimits.videos) {
@@ -267,6 +275,13 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       setReferenceImageIds(prevIds => prevIds.slice(0, referenceLimits.images));
     }
   }, [isKlingO3VideoModel, isSeedance2ReferenceMode, onError, onReferenceLimit, referenceAudioIds.length, referenceImageIds.length, referenceLimits, referenceVideoIds.length]);
+
+  useEffect(() => {
+    if (isActiveKrea2LargeModel || !primaryImageId) {
+      return;
+    }
+    setReferenceImageIds(prevIds => prevIds.filter(id => id !== primaryImageId)); // Only Krea can reuse the primary as a style ref.
+  }, [isActiveKrea2LargeModel, primaryImageId]);
 
   useEffect(() => {
     const effectiveSeedanceReferenceIds = isSeedance2ReferenceMode
@@ -424,6 +439,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return;
     }
 
+    if (reference && isActiveKrea2LargeModel && targetImage?.mediaType !== 'image') {
+      onError('Krea 2 Large style references must be still images.');
+      return;
+    }
+
     if (reference && targetImage?.mediaType === 'video') {
       if (isOneToAllVideoSelection) {
         onReferenceLimit(0);
@@ -500,7 +520,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (reference) {
-      if (primaryImageId && imageId === primaryImageId && !isSeedance2ReferenceMode && !isWan27ReferenceMode) {
+      if (primaryImageId && imageId === primaryImageId && !isSeedance2ReferenceMode && !isWan27ReferenceMode && !isActiveKrea2LargeModel) {
         return;
       }
       if (!imageId) {
@@ -547,10 +567,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         return;
       }
       // Reference images power Kling prompts; enforce per-model limits.
-      const baseMaxReferenceImages = getMaxReferenceImages(falModelId);
+      const baseMaxReferenceImages = isFalProvider ? getMaxReferenceImages(falModelId) : DEFAULT_MAX_REFERENCE_IMAGES; // Google should not inherit Fal model caps.
+      const slotOffset = isFalProvider ? referenceImageSlotOffset : 0; // Annotate input reservation only applies to Fal.
       const maxReferenceImages = isKlingO3VideoSelection
         ? Math.max(0, baseMaxReferenceImages - elementImageIds.length)
-        : baseMaxReferenceImages;
+        : Math.max(0, baseMaxReferenceImages - slotOffset);
       const isAlreadyReference = referenceImageIds.includes(imageId);
       if (!isAlreadyReference) {
         setElementImageIds(prev => prev.filter(id => id !== imageId));
@@ -707,6 +728,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     sourceAudioId,
     isSeedance2ReferenceMode,
     isWan27ReferenceMode,
+    isActiveKrea2LargeModel,
+    referenceImageSlotOffset,
   ]);
 
   const handleNoteSelection = useCallback((

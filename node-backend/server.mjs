@@ -159,7 +159,19 @@ const responseHeadersFromFetch = (upstreamResponse, corsHeaders) => {
   const headers = { ...corsHeaders };
   for (const [name, value] of upstreamResponse.headers.entries()) {
     const lowerName = name.toLowerCase();
-    if (lowerName === 'content-length' || lowerName === 'content-encoding' || lowerName === 'transfer-encoding') {
+    if (
+      lowerName === 'content-length' ||
+      lowerName === 'content-encoding' ||
+      lowerName === 'transfer-encoding' ||
+      lowerName === 'connection' ||
+      lowerName === 'keep-alive' ||
+      lowerName === 'proxy-authenticate' ||
+      lowerName === 'proxy-authorization' ||
+      lowerName === 'te' ||
+      lowerName === 'trailer' ||
+      lowerName === 'upgrade' ||
+      lowerName.startsWith('access-control-')
+    ) {
       continue;
     }
     headers[name] = value;

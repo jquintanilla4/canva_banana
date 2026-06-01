@@ -219,4 +219,39 @@ describe('Canvas selection temporary pan', () => {
 
     expect(onImageSelect).toHaveBeenCalledWith('image-1', { reference: true });
   });
+
+  it('renders Krea style reference sliders for tagged references', () => {
+    const onStrengthChange = vi.fn();
+    const { getByTestId, getByLabelText } = render(<Canvas {...buildCanvasProps({
+      images: [buildImage()],
+      referenceImageIds: ['image-1'],
+      isKrea2StyleReferenceMode: true,
+      krea2StyleReferenceStrengths: { 'image-1': 1.2 },
+      onKrea2StyleReferenceStrengthChange: onStrengthChange,
+    })} />);
+
+    expect(getByTestId('krea-style-reference-slider-image-1')).toBeTruthy();
+
+    const slider = getByLabelText('Krea style reference strength') as HTMLInputElement;
+    expect(slider.min).toBe('-2');
+    expect(slider.max).toBe('2');
+    expect(slider.step).toBe('0.1');
+    expect(slider.value).toBe('1.2');
+
+    fireEvent.change(slider, { target: { value: '-0.4' } });
+
+    expect(onStrengthChange).toHaveBeenCalledWith('image-1', -0.4);
+  });
+
+  it('renders Krea sliders only for submitted style references when provided', () => {
+    const { queryByTestId } = render(<Canvas {...buildCanvasProps({
+      images: [buildImage('style-ref'), buildImage('area-ref')],
+      referenceImageIds: ['style-ref', 'area-ref'],
+      isKrea2StyleReferenceMode: true,
+      krea2StyleReferenceImageIds: ['style-ref'],
+    })} />);
+
+    expect(queryByTestId('krea-style-reference-slider-style-ref')).toBeTruthy();
+    expect(queryByTestId('krea-style-reference-slider-area-ref')).toBeNull();
+  });
 });

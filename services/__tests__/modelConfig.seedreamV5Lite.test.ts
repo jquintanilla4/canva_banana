@@ -8,7 +8,11 @@ import {
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   isFalVideoModelId,
   isFalModelId,
+  getMaxReferenceImages,
+  isKrea2AspectRatioSelectionValue,
+  isKrea2CreativitySelectionValue,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
+  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   isRecraftV4ProModel,
   normalizeFalModelId,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
@@ -83,5 +87,17 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(option?.label).toBe('Recraft v4 Pro');
     expect(isFalModelId(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
     expect(isRecraftV4ProModel(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
+  });
+
+  it('exposes Krea 2 Large with Krea-specific guards and reference cap', () => {
+    const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID);
+
+    expect(option?.label).toBe('Krea 2 Large');
+    expect(isFalModelId(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
+    expect(getMaxReferenceImages(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID)).toBe(10);
+    expect(isKrea2AspectRatioSelectionValue('16:9')).toBe(true);
+    expect(isKrea2AspectRatioSelectionValue('21:9')).toBe(false);
+    expect(isKrea2CreativitySelectionValue('medium')).toBe(true);
+    expect(isKrea2CreativitySelectionValue('maximum')).toBe(false);
   });
 });
