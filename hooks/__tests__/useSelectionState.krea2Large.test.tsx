@@ -93,6 +93,66 @@ describe('useSelectionState (Krea 2 Large)', () => {
     expect(onReferenceLimit).toHaveBeenCalledWith(10);
   });
 
+  it('auto-includes the primary still-image as a style reference on a plain selection', () => {
+    const images = [buildCanvasMedia('image-1'), buildCanvasMedia('image-2')];
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal: buildFal(),
+      onError: vi.fn(),
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      result.current.handleImageSelection('image-1');
+    });
+
+    expect(result.current.selectedImageIds).toEqual(['image-1']);
+    expect(result.current.referenceImageIds).toEqual(['image-1']);
+  });
+
+  it('restores the primary style reference after multi-select clears references', () => {
+    const images = [buildCanvasMedia('image-1'), buildCanvasMedia('image-2')];
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal: buildFal(),
+      onError: vi.fn(),
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      result.current.handleImageSelection('image-1');
+    });
+
+    expect(result.current.referenceImageIds).toEqual(['image-1']);
+
+    act(() => {
+      result.current.handleImageSelection('image-2', { multi: true });
+    });
+
+    expect(result.current.selectedImageIds).toEqual(['image-1', 'image-2']);
+    expect(result.current.referenceImageIds).toEqual(['image-1']);
+  });
+
+  it('does not auto-include a non-image primary as a style reference', () => {
+    const images = [buildCanvasMedia('video-1', 'video')];
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal: buildFal(),
+      onError: vi.fn(),
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      result.current.handleImageSelection('video-1');
+    });
+
+    expect(result.current.selectedImageIds).toEqual(['video-1']);
+    expect(result.current.referenceImageIds).toEqual([]);
+  });
+
   it('rejects non-image style references', () => {
     const video = buildCanvasMedia('video-1', 'video');
     const onError = vi.fn();

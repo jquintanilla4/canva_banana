@@ -91,6 +91,25 @@ export const useCanvasHistory = (
     });
   }, [maxHistory]);
 
+  const replaceState = useCallback((updater: (prevState: AppState) => AppState) => {
+    setHistoryState(current => {
+      const prevState = current.history[current.index];
+      const nextState = updater(prevState);
+
+      if (getStateSignature(nextState) === getStateSignature(prevState)) {
+        return current;
+      }
+
+      const newHistory = [...current.history]; // Keep undo depth unchanged.
+      newHistory[current.index] = nextState; // Replace current snapshot only.
+
+      return {
+        ...current,
+        history: newHistory,
+      };
+    });
+  }, []);
+
   // Merge any optimistic/live edits into history and clear the staging buffers.
   // Optional overrides are used when a caller already has the next slice handy (e.g., video play toggles)
   // and wants to snapshot that immediately without waiting for live state to sync.
@@ -239,6 +258,7 @@ export const useCanvasHistory = (
     setLiveVideoPromptAreas,
     setLiveVideoPromptBars,
     commit,
+    replaceState,
     undo,
     redo,
     canUndo,

@@ -193,6 +193,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const activePrimaryImage = useMemo(() => (
     isImageCanvasMedia(primaryImage) ? primaryImage : null
   ), [primaryImage]);
+  const activePrimaryImageId = activePrimaryImage?.id ?? null; // Null means the primary cannot be a Krea style ref.
+  const hasActivePrimaryReference = activePrimaryImageId ? referenceImageIds.includes(activePrimaryImageId) : false; // Detect ref clears without primary changes.
 
   // Ensure selections stay valid when images are deleted or imported.
   useEffect(() => {
@@ -282,6 +284,15 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
     setReferenceImageIds(prevIds => prevIds.filter(id => id !== primaryImageId)); // Only Krea can reuse the primary as a style ref.
   }, [isActiveKrea2LargeModel, primaryImageId]);
+
+  useEffect(() => {
+    if (!isActiveKrea2LargeModel || !activePrimaryImageId || hasActivePrimaryReference) {
+      return; // Only still images can be Krea style references.
+    }
+    setReferenceImageIds(prevIds =>
+      prevIds.includes(activePrimaryImageId) ? prevIds : [activePrimaryImageId, ...prevIds],
+    ); // Krea treats the primary image as a style reference like every other.
+  }, [activePrimaryImageId, hasActivePrimaryReference, isActiveKrea2LargeModel]);
 
   useEffect(() => {
     const effectiveSeedanceReferenceIds = isSeedance2ReferenceMode

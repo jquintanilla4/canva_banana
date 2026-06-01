@@ -21,6 +21,7 @@ type DrawCanvasArgs = {
   selectedNoteIds: string[];
   primarySelectedNoteId: string | null;
   referenceImageIds: string[];
+  krea2StyleReferenceImageIds?: string[];
   referenceVideoIds: string[];
   referenceAudioIds: string[];
   referenceImageOrderLabels?: Record<string, string> | null;
@@ -36,6 +37,7 @@ type DrawCanvasArgs = {
   isVeo31ExtendMode: boolean;
   isWanAnimateVideoInputMode: boolean;
   isWan27VideoMode: boolean;
+  isKrea2StyleReferenceMode: boolean;
   showMetadataOverlay: boolean;
   cropMode: CropModeState | null;
   transformMode: TransformModeState | null;
@@ -53,6 +55,7 @@ export function drawCanvas({
   selectedNoteIds,
   primarySelectedNoteId,
   referenceImageIds,
+  krea2StyleReferenceImageIds,
   referenceVideoIds,
   referenceAudioIds,
   referenceImageOrderLabels,
@@ -68,6 +71,7 @@ export function drawCanvas({
   isVeo31ExtendMode,
   isWanAnimateVideoInputMode,
   isWan27VideoMode,
+  isKrea2StyleReferenceMode,
   showMetadataOverlay,
   cropMode,
   transformMode,
@@ -208,6 +212,8 @@ export function drawCanvas({
     const isReferenceTagged = referenceImageIds.includes(image.id)
       || referenceVideoIds.includes(image.id)
       || referenceAudioIds.includes(image.id); // Seedance reference mode can tag non-image media.
+    const krea2StyleReferenceIds = krea2StyleReferenceImageIds ?? referenceImageIds; // Fall back for older callers.
+    const isKrea2StyleReferenceTagged = krea2StyleReferenceIds.includes(image.id); // Only actual Krea style inputs.
 
     if (elementImageIds.includes(image.id)) {
       ctx.strokeStyle = '#a855f7'; // purple-500 for elements
@@ -272,6 +278,12 @@ export function drawCanvas({
       }
     } else if (isWan27VideoMode && selectedImageIds.includes(image.id) && image.mediaType === 'image') {
       ctx.strokeStyle = '#3b82f6'; // blue-500 for images in Wan 2.7 mode
+      ctx.lineWidth = 4 / scale;
+      ctx.setLineDash([6 / scale, 4 / scale]);
+      ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
+      ctx.setLineDash([]);
+    } else if (isKrea2StyleReferenceMode && isKrea2StyleReferenceTagged) {
+      ctx.strokeStyle = '#10b981'; // emerald-500 — Krea treats every reference (incl. the primary) equally
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);

@@ -10,6 +10,7 @@ import {
   AppMode,
   ApiProviderId,
   type CanvasNote,
+  type CanvasImage,
   type CanvasVideoPromptArea,
   type CanvasVideoPromptBar,
   type VideoPromptAreaMembership,
@@ -91,6 +92,7 @@ import {
   isUsableVideoPromptAreaModel,
   getAreaPromptBarRect,
 } from './utils/videoPromptAreas';
+import { markCanvasMediaStoppedByIds, stopCanvasMediaPlaybackByIds } from './utils/canvasMediaPlayback';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
 import { PlusIcon } from './components/Icons';
 import {
@@ -187,6 +189,7 @@ export default function App() {
     setLiveVideoPromptAreas, // Stage in-progress area edits
     setLiveVideoPromptBars, // Stage in-progress prompt bar edits
     commit: handleCommit,  // Commit staged (live) edits as a new history entry
+    replaceState,          // Replace current snapshot without adding undo depth
     undo,                  // Undo last committed action
     redo,                  // Redo last undone action
     canUndo,               // Whether undo is currently possible
@@ -660,6 +663,8 @@ export default function App() {
       return;
     }
 
+    stopCanvasMediaPlaybackByIds(images, selectedImageIds); // Stop videos/audio before their canvas nodes disappear.
+
     // Remove selected images/notes while keeping other canvas content untouched.
     setState(prevState => ({
       ...prevState,
@@ -684,7 +689,17 @@ export default function App() {
     if (selectedNoteIds.length) {
       setSelectedNoteIds([]);
     }
-  }, [selectedImageIds, selectedNoteIds, setState]);
+  }, [images, selectedImageIds, selectedNoteIds, setState]);
+
+  const handleMediaPlaybackRejected = useCallback((imageId: string) => {
+    setLiveImages((currentImages: CanvasImage[] | null) =>
+      currentImages ? markCanvasMediaStoppedByIds(currentImages, [imageId]) : currentImages
+    ); // Keep any staged image slice consistent with the paused DOM element.
+    replaceState(prevState => ({
+      ...prevState,
+      images: markCanvasMediaStoppedByIds(prevState.images, [imageId]),
+    })); // Repair the active history snapshot without creating an undo step.
+  }, [replaceState, setLiveImages]);
 
   const handleZoomToFit = useCallback(() => {
     setZoomToFitTrigger(c => c + 1);
@@ -1855,6 +1870,7 @@ export default function App() {
           isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel || isScailVideoModel}
           isWan27VideoMode={fal.isWan27VideoModel}
           onError={setError}
+          onMediaPlaybackRejected={handleMediaPlaybackRejected}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}
           onCommit={handleCommit}

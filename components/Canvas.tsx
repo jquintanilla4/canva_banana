@@ -40,6 +40,7 @@ import {
   getVideoPromptBarVisualScale,
   syncVideoPromptAreaMembership,
 } from '../utils/videoPromptAreas';
+import { stopCanvasMediaPlayback, syncCanvasMediaElementPlayback } from '../utils/canvasMediaPlayback';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -88,6 +89,7 @@ interface CanvasProps {
   isWanAnimateVideoInputMode: boolean;
   isWan27VideoMode: boolean;
   onError?: (message: string) => void;
+  onMediaPlaybackRejected?: (imageId: string) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
   zoomToFitTrigger: number;
@@ -192,6 +194,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   isWanAnimateVideoInputMode,
   isWan27VideoMode,
   onError,
+  onMediaPlaybackRejected,
   onImageSelect,
   onNoteSelect,
   onCommit,
@@ -263,6 +266,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const prevZoomInTrigger = useRef(zoomInTrigger);
   const prevZoomOutTrigger = useRef(zoomOutTrigger);
   const prevImagesLength = useRef(images.length);
+  const previousMediaImagesRef = useRef<CanvasImage[]>([]);
+  const playbackAttemptIdsRef = useRef<Record<string, number>>({});
   const scaleRef = useRef(scale);
   const panRef = useRef(pan);
 
@@ -272,6 +277,12 @@ export const Canvas: React.FC<CanvasProps> = ({
   const areaLabelFontSize = Math.max(11, Math.min(16, 11 / Math.max(scale, 0.7))); // Keep area titles readable even when the canvas is zoomed far out.
 
   const getCanvasContext = () => canvasRef.current?.getContext('2d');
+
+  const getNextPlaybackAttemptId = useCallback((mediaId: string) => {
+    const nextAttemptId = (playbackAttemptIdsRef.current[mediaId] ?? 0) + 1; // Make older play failures harmless.
+    playbackAttemptIdsRef.current[mediaId] = nextAttemptId;
+    return nextAttemptId;
+  }, []);
 
   const toggleMediaPlayback = useCallback((mediaId: string) => {
     const target = images.find(img => img.id === mediaId);
@@ -285,11 +296,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       videoElement.playsInline = true;
 
       if (nextIsPlaying) {
+        const attemptId = getNextPlaybackAttemptId(mediaId);
         const playPromise = videoElement.play();
         if (playPromise && typeof playPromise.catch === 'function') {
-          playPromise.catch(err => console.error('Failed to play video', err));
+          playPromise.catch(err => {
+            console.error('Failed to play video', err);
+            if (playbackAttemptIdsRef.current[mediaId] === attemptId) {
+              onMediaPlaybackRejected?.(mediaId); // Repair optimistic state if the browser blocks playback.
+            }
+          });
         }
       } else {
+        getNextPlaybackAttemptId(mediaId);
         videoElement.pause();
       }
 
@@ -309,8 +327,15 @@ export const Canvas: React.FC<CanvasProps> = ({
       audioElement.loop = true;
 
       if (nextIsPlaying) {
-        audioElement.play().catch(err => console.error('Failed to play audio', err));
+        const attemptId = getNextPlaybackAttemptId(mediaId);
+        audioElement.play().catch(err => {
+          console.error('Failed to play audio', err);
+          if (playbackAttemptIdsRef.current[mediaId] === attemptId) {
+            onMediaPlaybackRejected?.(mediaId); // Repair optimistic state if the browser blocks playback.
+          }
+        });
       } else {
+        getNextPlaybackAttemptId(mediaId);
         audioElement.pause();
       }
 
@@ -321,7 +346,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       onImagesChange(updatedImages);
       onCommit({ images: updatedImages });
     }
-  }, [images, isVideoImage, isAudioImage, onCommit, onImagesChange]);
+  }, [getNextPlaybackAttemptId, images, isVideoImage, isAudioImage, onCommit, onImagesChange, onMediaPlaybackRejected]);
 
 
   const setPanSmoothly = useCallback((nextPan: Point) => {
@@ -426,6 +451,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       selectedNoteIds,
       primarySelectedNoteId,
       referenceImageIds,
+      krea2StyleReferenceImageIds,
       referenceVideoIds,
       referenceAudioIds,
       referenceImageOrderLabels,
@@ -441,11 +467,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       isVeo31ExtendMode,
       isWanAnimateVideoInputMode,
       isWan27VideoMode,
+      isKrea2StyleReferenceMode,
       showMetadataOverlay,
       cropMode,
       transformMode,
     });
-  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
+  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {
@@ -632,6 +659,34 @@ export const Canvas: React.FC<CanvasProps> = ({
   useEffect(() => {
     draw();
   }, [draw]);
+
+  useEffect(() => {
+    const currentImageIds = new Set(images.map(img => img.id)); // Track media that still exists on the canvas.
+    previousMediaImagesRef.current.forEach(img => {
+      if (!currentImageIds.has(img.id)) {
+        stopCanvasMediaPlayback(img); // Stop detached media even when removal bypasses delete.
+      }
+    });
+    previousMediaImagesRef.current = images.filter(img => img.mediaType === 'video' || img.mediaType === 'audio');
+  }, [images]);
+
+  useEffect(() => () => {
+    previousMediaImagesRef.current.forEach(stopCanvasMediaPlayback); // Stop playback when the canvas unmounts.
+  }, []);
+
+  useEffect(() => {
+    let isCurrentSync = true; // Ignore stale autoplay failures after history moves again.
+    images.forEach(image => {
+      syncCanvasMediaElementPlayback(image, failedImage => {
+        if (isCurrentSync) {
+          onMediaPlaybackRejected?.(failedImage.id); // Keep restored history state honest when autoplay fails.
+        }
+      });
+    }); // Reconcile restored history state with paused DOM media.
+    return () => {
+      isCurrentSync = false;
+    };
+  }, [images, onMediaPlaybackRejected]);
 
   useEffect(() => {
     const hasPlayingMedia = images.some(img =>

@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
@@ -45,6 +45,7 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   isWanAnimateVideoInputMode: false,
   isWan27VideoMode: false,
   onError: vi.fn(),
+  onMediaPlaybackRejected: vi.fn(),
   onImageSelect: vi.fn(),
   onNoteSelect: vi.fn(),
   zoomToFitTrigger: 0,
@@ -106,6 +107,56 @@ const buildImage = (id = 'image-1'): CanvasImage => ({
   naturalHeight: 80,
   file: new File(['image'], `${id}.png`, { type: 'image/png' }),
 });
+
+const buildVideo = (id = 'video-1'): CanvasImage => {
+  const video = document.createElement('video');
+  video.play = vi.fn().mockResolvedValue(undefined); // Let the test verify restored playback without real browser media.
+  video.pause = vi.fn(); // Let the test verify cleanup without real browser playback.
+  video.muted = false;
+  video.volume = 1;
+
+  return {
+    id,
+    element: video,
+    mediaType: 'video',
+    x: 10,
+    y: 10,
+    width: 100,
+    height: 80,
+    rotation: 0,
+    naturalWidth: 100,
+    naturalHeight: 80,
+    file: new File(['video'], `${id}.mp4`, { type: 'video/mp4' }),
+    isPlaying: true,
+    hasAudio: true,
+  };
+};
+
+const buildAudio = (id = 'audio-1'): CanvasImage => {
+  const waveform = document.createElement('img');
+  const audio = document.createElement('audio');
+  audio.play = vi.fn().mockResolvedValue(undefined); // Let tests control browser playback policy.
+  audio.pause = vi.fn(); // Let tests verify cleanup without real browser playback.
+
+  return {
+    id,
+    element: waveform,
+    mediaType: 'audio',
+    x: 10,
+    y: 10,
+    width: 100,
+    height: 40,
+    rotation: 0,
+    naturalWidth: 100,
+    naturalHeight: 40,
+    file: new File(['audio'], `${id}.wav`, { type: 'audio/wav' }),
+    isPlaying: true,
+    hasAudio: true,
+    audioElement: audio,
+    audioDuration: 1,
+    currentPlaybackTime: 0,
+  };
+};
 
 describe('Canvas selection temporary pan', () => {
   it('temporarily pans while space is held and returns to selection on keyup', () => {
@@ -203,6 +254,76 @@ describe('Canvas selection temporary pan', () => {
     dragCanvas(root, { x: 120, y: 150 }, { x: 180, y: 230 }, 1);
 
     expect(root.style.backgroundPosition).toBe('60px 80px');
+  });
+
+  it('stops video playback without changing audio settings when a video is removed from the canvas', async () => {
+    const videoImage = buildVideo();
+    const videoElement = videoImage.element as HTMLVideoElement;
+    const { rerender } = render(<Canvas {...buildCanvasProps({ images: [videoImage] })} />);
+    videoElement.muted = false; // Simulate a hovered video that was playing with sound.
+    videoElement.volume = 0.75; // Preserve the audible volume for undo restore.
+
+    rerender(<Canvas {...buildCanvasProps({ images: [] })} />);
+
+    await waitFor(() => {
+      expect(videoElement.pause).toHaveBeenCalled();
+    });
+    expect(videoElement.muted).toBe(false);
+    expect(videoElement.volume).toBe(0.75);
+  });
+
+  it('resumes a restored playing video muted after removal cleanup paused the DOM element', async () => {
+    const videoImage = buildVideo();
+    const videoElement = videoImage.element as HTMLVideoElement;
+    const { rerender } = render(<Canvas {...buildCanvasProps({ images: [videoImage] })} />);
+
+    await waitFor(() => {
+      expect(videoElement.play).toHaveBeenCalled();
+    });
+    vi.mocked(videoElement.play).mockClear();
+    vi.mocked(videoElement.play).mockImplementation(() => {
+      expect(videoElement.muted).toBe(true); // Verify autoplay starts muted before browser policy checks.
+      return Promise.resolve();
+    });
+
+    rerender(<Canvas {...buildCanvasProps({ images: [] })} />);
+
+    await waitFor(() => {
+      expect(videoElement.pause).toHaveBeenCalled();
+    });
+    videoElement.muted = false; // Simulate undoing a video that had been audible on hover.
+
+    rerender(<Canvas {...buildCanvasProps({ images: [videoImage] })} />);
+
+    await waitFor(() => {
+      expect(videoElement.play).toHaveBeenCalled();
+    });
+    expect(videoElement.muted).toBe(true);
+  });
+
+  it('reports restored audio autoplay rejection so history can replace the playing state', async () => {
+    const audioImage = buildAudio();
+    const audioElement = audioImage.audioElement as HTMLAudioElement;
+    const onMediaPlaybackRejected = vi.fn();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const requestAnimationFrameSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
+    const cancelAnimationFrameSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    vi.mocked(audioElement.play).mockRejectedValue(new DOMException('Autoplay blocked', 'NotAllowedError'));
+
+    try {
+      const props = buildCanvasProps({ images: [], onMediaPlaybackRejected });
+      const { rerender } = render(<Canvas {...props} />);
+
+      rerender(<Canvas {...props} images={[audioImage]} />);
+
+      await waitFor(() => {
+        expect(onMediaPlaybackRejected).toHaveBeenCalledWith(audioImage.id);
+      });
+    } finally {
+      consoleErrorSpy.mockRestore();
+      requestAnimationFrameSpy.mockRestore();
+      cancelAnimationFrameSpy.mockRestore();
+    }
   });
 
   it('uses option-shift click as a reference toggle when shift marks an end frame', () => {
