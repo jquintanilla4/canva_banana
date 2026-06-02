@@ -8,6 +8,37 @@ import { fitTextWithinBox, wrapText } from './text';
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
 type TransformModeState = { imageId: string; };
+type CanvasBadgeColors = { fill: string; stroke: string; text: string };
+
+const drawCanvasBadge = (
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  x: number,
+  y: number,
+  scale: number,
+  colors: CanvasBadgeColors,
+): void => {
+  const badgePaddingX = 8 / scale;
+  const badgePaddingY = 6 / scale;
+  const badgeFontSize = 24 / scale;
+  ctx.font = `${badgeFontSize}px sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  const textWidth = ctx.measureText(label).width;
+  const badgeWidth = textWidth + badgePaddingX * 2;
+  const badgeHeight = badgeFontSize + badgePaddingY * 2;
+
+  ctx.fillStyle = colors.fill;
+  ctx.strokeStyle = colors.stroke;
+  ctx.lineWidth = 1 / scale;
+  ctx.beginPath();
+  ctx.rect(x, y, badgeWidth, badgeHeight);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = colors.text;
+  ctx.fillText(label, x + badgePaddingX, y + badgeHeight / 2);
+};
 
 type DrawCanvasArgs = {
   canvas: HTMLCanvasElement;
@@ -29,6 +60,7 @@ type DrawCanvasArgs = {
   elementImageIds: string[];
   elementImageOrderLabels?: Record<string, string> | null;
   videoLastFrameImageId: string | null;
+  tailSelectionEnabled: boolean;
   sourceVideoId: string | null;
   isKlingO3VideoInputMode: boolean;
   isKlingO3ReferenceMode: boolean;
@@ -63,6 +95,7 @@ export function drawCanvas({
   elementImageIds,
   elementImageOrderLabels,
   videoLastFrameImageId,
+  tailSelectionEnabled,
   sourceVideoId,
   isKlingO3VideoInputMode,
   isKlingO3ReferenceMode,
@@ -309,68 +342,50 @@ export function drawCanvas({
     }
 
     const isKlingSourceVideo = isKlingO3VideoInputMode && sourceVideoId === image.id;
-    const referenceOrderLabel = isKlingSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id];
+    const frameRoleLabel = tailSelectionEnabled && image.mediaType === 'image'
+      ? selectedImageIds[0] === image.id
+        ? 'First frame'
+        : videoLastFrameImageId === image.id
+          ? 'Last frame'
+          : null
+      : null; // Only video first/last-frame modes should label selected stills this way.
+    const referenceOrderLabel = frameRoleLabel ?? (isKlingSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id]);
     const shouldShowReferenceBadge = !!referenceOrderLabel;
     if (shouldShowReferenceBadge) {
-      const badgePaddingX = 8 / scale;
-      const badgePaddingY = 6 / scale;
-      const badgeFontSize = 24 / scale;
-      ctx.font = `${badgeFontSize}px sans-serif`;
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'left';
-      const textWidth = ctx.measureText(referenceOrderLabel).width;
-      const badgeWidth = textWidth + badgePaddingX * 2;
-      const badgeHeight = badgeFontSize + badgePaddingY * 2;
       const badgeX = baseX - padding;
-      const badgeY = baseY - padding - badgeHeight - 2 / scale;
+      const badgeY = baseY - padding - ((24 / scale) + (6 / scale) * 2) - 2 / scale;
 
       const isPrimaryReference = selectedImageIds[0] === image.id;
-      const badgeFillColor = isKlingSourceVideo
+      const badgeFillColor = frameRoleLabel === 'Last frame'
+        ? 'rgba(249, 115, 22, 0.95)'
+        : isKlingSourceVideo
         ? 'rgba(249, 115, 22, 0.95)'
         : isPrimaryReference
           ? 'rgba(14, 165, 233, 0.95)'
           : 'rgba(16, 185, 129, 0.92)';
-      const badgeStrokeColor = isKlingSourceVideo
+      const badgeStrokeColor = frameRoleLabel === 'Last frame'
+        ? '#c2410c'
+        : isKlingSourceVideo
         ? '#c2410c'
         : isPrimaryReference
           ? '#0ea5e9'
           : '#064e3b';
-      ctx.fillStyle = badgeFillColor;
-      ctx.strokeStyle = badgeStrokeColor;
-      ctx.lineWidth = 1 / scale;
-      ctx.beginPath();
-      ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = '#ecfdf3';
-      ctx.fillText(referenceOrderLabel, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
+      drawCanvasBadge(ctx, referenceOrderLabel, badgeX, badgeY, scale, {
+        fill: badgeFillColor,
+        stroke: badgeStrokeColor,
+        text: '#ecfdf3',
+      });
     }
 
     const elementOrderLabel = elementImageOrderLabels?.[image.id];
     if (elementOrderLabel) {
-      const badgePaddingX = 8 / scale;
-      const badgePaddingY = 6 / scale;
-      const badgeFontSize = 24 / scale;
-      ctx.font = `${badgeFontSize}px sans-serif`;
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'left';
-      const textWidth = ctx.measureText(elementOrderLabel).width;
-      const badgeWidth = textWidth + badgePaddingX * 2;
-      const badgeHeight = badgeFontSize + badgePaddingY * 2;
       const badgeX = baseX - padding;
-      const badgeY = baseY - padding - badgeHeight - 2 / scale;
-
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.95)';
-      ctx.strokeStyle = '#5b21b6';
-      ctx.lineWidth = 1 / scale;
-      ctx.beginPath();
-      ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = '#f5f3ff';
-      ctx.fillText(elementOrderLabel, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
+      const badgeY = baseY - padding - ((24 / scale) + (6 / scale) * 2) - 2 / scale;
+      drawCanvasBadge(ctx, elementOrderLabel, badgeX, badgeY, scale, {
+        fill: 'rgba(139, 92, 246, 0.95)',
+        stroke: '#5b21b6',
+        text: '#f5f3ff',
+      });
     }
 
     ctx.restore();

@@ -1234,14 +1234,23 @@ export default function App() {
     ...videoPromptAreaLabelMap,
   }), [klingElementOrderLabels, videoPromptAreaLabelMap]); // Element labels share the same area role labels.
   const canvasReferenceImageIds = useMemo(() => (
-    Array.from(new Set([...referenceImageIds, ...acceptedVideoPromptImageIds]))
-  ), [acceptedVideoPromptImageIds, referenceImageIds]);
+    Array.from(new Set([
+      ...(isSeedance2ReferenceMode ? effectiveSeedanceReferenceImageIds : referenceImageIds),
+      ...acceptedVideoPromptImageIds,
+    ]))
+  ), [acceptedVideoPromptImageIds, effectiveSeedanceReferenceImageIds, isSeedance2ReferenceMode, referenceImageIds]);
   const canvasReferenceVideoIds = useMemo(() => (
-    Array.from(new Set([...referenceVideoIds, ...acceptedVideoPromptVideoIds]))
-  ), [acceptedVideoPromptVideoIds, referenceVideoIds]);
+    Array.from(new Set([
+      ...(isSeedance2ReferenceMode ? effectiveSeedanceReferenceVideoIds : referenceVideoIds),
+      ...acceptedVideoPromptVideoIds,
+    ]))
+  ), [acceptedVideoPromptVideoIds, effectiveSeedanceReferenceVideoIds, isSeedance2ReferenceMode, referenceVideoIds]);
   const canvasReferenceAudioIds = useMemo(() => (
-    Array.from(new Set([...referenceAudioIds, ...acceptedVideoPromptAudioIds]))
-  ), [acceptedVideoPromptAudioIds, referenceAudioIds]);
+    Array.from(new Set([
+      ...(isSeedance2ReferenceMode ? effectiveSeedanceReferenceAudioIds : referenceAudioIds),
+      ...acceptedVideoPromptAudioIds,
+    ]))
+  ), [acceptedVideoPromptAudioIds, effectiveSeedanceReferenceAudioIds, isSeedance2ReferenceMode, referenceAudioIds]);
 
   const handleEmbeddedVideoPromptSubmit = useCallback((barId: string) => {
     const targetBar = displayedVideoPromptBars.find(bar => bar.id === barId);

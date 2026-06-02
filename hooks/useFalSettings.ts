@@ -464,7 +464,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
   const [seedance15CameraFixed, setSeedance15CameraFixed] = useState<boolean>(false);
   const [seedance15Audio, setSeedance15Audio] = useState<boolean>(false);
-  const [seedance2Variant, setSeedance2Variant] = useState<Seedance2Variant>('smart');
+  const [seedance2Variant, setSeedance2Variant] = useState<Seedance2Variant>('reference');
   const [seedance2AspectRatio, setSeedance2AspectRatio] = useState<Seedance2AspectRatioSelectionValue>('16:9');
   const [seedance2Resolution, setSeedance2Resolution] = useState<Seedance2ResolutionSelectionValue>('720p');
   const [seedance2Duration, setSeedance2Duration] = useState<Seedance2DurationSelectionValue>('5');

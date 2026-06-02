@@ -459,6 +459,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       elementImageIds,
       elementImageOrderLabels,
       videoLastFrameImageId,
+      tailSelectionEnabled,
       sourceVideoId,
       isKlingO3VideoInputMode,
       isKlingO3ReferenceMode,
@@ -472,7 +473,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       cropMode,
       transformMode,
     });
-  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, transformMode, videoLastFrameImageId]);
+  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, transformMode, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {

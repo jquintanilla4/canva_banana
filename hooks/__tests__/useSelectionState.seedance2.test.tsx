@@ -182,4 +182,29 @@ describe('useSelectionState (seedance 2 reference)', () => {
 
     expect(result.current.seedanceReferenceOrderIds).toEqual(['image-1', 'image-2', 'video-1', 'audio-1']);
   });
+
+  it('keeps multi-selected images ordered for Seedance reference labels', () => {
+    const images = [
+      buildCanvasMedia('image-1', 'image'),
+      buildCanvasMedia('image-2', 'image'),
+      buildCanvasMedia('image-3', 'image'),
+    ];
+    const fal = createFalStub();
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal,
+      onError: vi.fn(),
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      result.current.handleImageSelection('image-2', { multi: true });
+      result.current.handleImageSelection('image-1', { multi: true });
+      result.current.handleImageSelection('image-3', { multi: true });
+    });
+
+    expect(result.current.selectedImageIds).toEqual(['image-2', 'image-1', 'image-3']);
+    expect(result.current.seedanceReferenceOrderIds).toEqual(['image-2', 'image-1', 'image-3']);
+  });
 });

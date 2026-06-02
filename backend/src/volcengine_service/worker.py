@@ -126,6 +126,7 @@ def _build_content(job_id: str, payload: SeedanceJobPayload, settings: Settings)
         content.append({
             "type": "audio_url",
             "audio_url": {"url": media_to_data_url(reference_audio)},
+            "role": "reference_audio",
         })
 
     return content
