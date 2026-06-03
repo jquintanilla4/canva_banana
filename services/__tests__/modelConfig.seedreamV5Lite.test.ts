@@ -14,6 +14,7 @@ import {
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   isRecraftV4ProModel,
+  JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   normalizeFalModelId,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -99,5 +100,9 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(isKrea2AspectRatioSelectionValue('21:9')).toBe(false);
     expect(isKrea2CreativitySelectionValue('medium')).toBe(true);
     expect(isKrea2CreativitySelectionValue('maximum')).toBe(false);
+  });
+
+  it('reports Jimeng Seedance 2 reference image capacity', () => {
+    expect(getMaxReferenceImages(JIMENG_SEEDANCE_2_VIDEO_MODEL_ID)).toBe(9);
   });
 });

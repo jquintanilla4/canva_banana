@@ -205,6 +205,9 @@ describe('volcengineService', () => {
     }));
     await flushPromises();
 
+    expect(global.fetch).toHaveBeenNthCalledWith(2, `${DEFAULT_BASE_URL}/api/volcengine/jobs`, expect.objectContaining({
+      headers: { 'X-Canva-Banana-Local-Action': 'volcengine-submit' },
+    }));
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(MockWebSocket.instances[0]?.url).toBe('ws://localhost:8000/api/volcengine/jobs/job-1/ws');
 

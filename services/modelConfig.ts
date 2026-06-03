@@ -8,6 +8,7 @@ import type {
   FalVideoDuration,
   GenerationProviderId,
   GenerationKind,
+  JimengSeedance2ModelVersion,
 } from '../types';
 
 // Central registry of supported model IDs plus helpers for validation/labeling in the UI.
@@ -68,6 +69,7 @@ export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0' as const; 
 export const FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/text-to-video' as const; // Fal t2v endpoint.
 export const FAL_SEEDANCE_2_IMAGE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/image-to-video' as const; // Fal i2v endpoint.
 export const FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/reference-to-video' as const; // Fal reference endpoint.
+export const JIMENG_SEEDANCE_2_VIDEO_MODEL_ID = 'jimeng-cli/seedance-2' as const; // Local Dreamina CLI Seedance 2 selector.
 export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as const;
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video' as const;
@@ -147,8 +149,9 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: KLING_O3_VIDEO_MODEL_ID, label: 'Kling O3 Video' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
-  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2' },
+  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (VE)' }, // VE-backed Seedance 2 selector label.
   { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' }, // Fal-backed Seedance 2.
+  { value: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (JM CLI)' }, // Jimeng CLI-backed Seedance 2.
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync 3 Lipsync' },
   { value: VEO_31_IMAGE_TO_VIDEO_MODEL_ID, label: 'Veo 3.1' },
   { value: WAN_27_VIDEO_MODEL_ID, label: 'Wan 2.7' },
@@ -234,6 +237,7 @@ export type Seedance2AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1'
 export type Seedance2ResolutionSelectionValue = '480p' | '720p' | '1080p';
 export type Seedance2DurationSelectionValue = '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
 export type Seedance2BooleanSelectionValue = 'true' | 'false';
+export type JimengSeedance2ModelVersionSelectionValue = JimengSeedance2ModelVersion;
 
 export const SEEDANCE2_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant; label: string }> = [
   { value: 'smart', label: 'Smart' },
@@ -279,6 +283,13 @@ export const SEEDANCE2_AUDIO_OPTIONS: ReadonlyArray<{ value: Seedance2BooleanSel
 export const SEEDANCE2_CAMERA_FIXED_OPTIONS: ReadonlyArray<{ value: Seedance2BooleanSelectionValue; label: string }> = [
   { value: 'false', label: 'Free' },
   { value: 'true', label: 'Fixed' },
+] as const;
+
+export const JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS: ReadonlyArray<{ value: JimengSeedance2ModelVersionSelectionValue; label: string; supports1080p: boolean; tooltip: string }> = [
+  { value: 'seedance2.0fast', label: 'Standard Fast', supports1080p: false, tooltip: 'Default non-VIP Seedance 2.0 fast channel; 720p only.' },
+  { value: 'seedance2.0', label: 'Standard', supports1080p: false, tooltip: 'Non-VIP Seedance 2.0 channel; 720p only.' },
+  { value: 'seedance2.0_vip', label: 'VIP', supports1080p: true, tooltip: 'VIP Seedance 2.0 channel; supports 720p and 1080p.' },
+  { value: 'seedance2.0fast_vip', label: 'VIP Fast', supports1080p: false, tooltip: 'VIP accelerated Seedance 2.0 fast channel; 720p only.' },
 ] as const;
 
 export const KLING_V3_CONTROL_SOUND_OPTIONS: ReadonlyArray<{ value: KlingV3ControlSoundSelectionValue; label: string }> = [
@@ -647,8 +658,11 @@ export const isVolcengineSeedance2VideoModel = (modelId: string | undefined): bo
 export const isFalSeedance2VideoModel = (modelId: string | undefined): boolean =>
   modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID; // Fal selector guard.
 
+export const isJimengSeedance2VideoModel = (modelId: string | undefined): boolean =>
+  modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID; // Jimeng CLI selector guard.
+
 export const isSeedance2VideoModel = (modelId: string | undefined): boolean =>
-  isVolcengineSeedance2VideoModel(modelId) || isFalSeedance2VideoModel(modelId); // Shared Seedance 2 UI guard.
+  isVolcengineSeedance2VideoModel(modelId) || isFalSeedance2VideoModel(modelId) || isJimengSeedance2VideoModel(modelId); // Shared Seedance 2 UI guard.
 
 export const isSeedance2Variant = (value: unknown): value is Seedance2Variant =>
   value === 'smart' || value === 'reference';
@@ -661,6 +675,9 @@ export const isSeedance2ResolutionSelectionValue = (value: unknown): value is Se
 
 export const isSeedance2DurationSelectionValue = (value: unknown): value is Seedance2DurationSelectionValue =>
   value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
+
+export const isJimengSeedance2ModelVersion = (value: unknown): value is JimengSeedance2ModelVersionSelectionValue =>
+  value === 'seedance2.0fast' || value === 'seedance2.0' || value === 'seedance2.0_vip' || value === 'seedance2.0fast_vip';
 
 // Flux2 Max image size options
 export type Flux2MaxImageSizeSelectionValue = 'landscape_4_3' | 'landscape_16_9' | 'portrait_4_3' | 'portrait_16_9' | 'square' | 'square_hd';
@@ -963,7 +980,7 @@ export const isWan27VideoVariant = (value: unknown): value is Wan27VideoVariant 
 export const isApiProvider = (value: unknown): value is ApiProviderId =>
   value === 'google' || value === 'fal';
 export const isGenerationProvider = (value: unknown): value is GenerationProviderId =>
-  value === 'google' || value === 'fal' || value === 'volcengine';
+  value === 'google' || value === 'fal' || value === 'volcengine' || value === 'jimeng';
 export const isFalModelMode = (value: unknown): value is FalModelMode =>
   value === 'image' || value === 'video';
 export const isGenerationKind = (value: unknown): value is GenerationKind =>
@@ -1152,6 +1169,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Seedance 2 reference mode supports up to 9 image refs.
   [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Fal Seedance 2 reference mode supports up to 9 image refs.
+  [JIMENG_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Jimeng Seedance Reference supports up to 9 image refs.
   [KLING_V3_VIDEO_MODEL_ID]: 0,
   [SCAIL_VIDEO_MODEL_ID]: 0,
 };

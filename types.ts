@@ -30,7 +30,7 @@ export interface ImageDimensions {
 
 export type CanvasImageSource = 'generated' | 'imported' | 'snapshot' | 'derived';
 export type ApiProviderId = 'google' | 'fal';
-export type GenerationProviderId = ApiProviderId | 'volcengine';
+export type GenerationProviderId = ApiProviderId | 'volcengine' | 'jimeng';
 
 export interface CanvasImageMetadata {
   source: CanvasImageSource;
@@ -91,6 +91,7 @@ export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
 export type Seedance2Variant = 'smart' | 'reference';
+export type JimengSeedance2ModelVersion = 'seedance2.0fast' | 'seedance2.0' | 'seedance2.0_vip' | 'seedance2.0fast_vip';
 export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
 export type RecraftRgbColor = { r: number; g: number; b: number };
 
@@ -168,6 +169,7 @@ export type GenerationFalOptions = Partial<{
   seedance2Resolution: '480p' | '720p' | '1080p';
   seedance2Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   seedance2GenerateAudio: boolean;
+  seedance2JimengModelVersion: JimengSeedance2ModelVersion;
   recraftImageSize: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
@@ -181,6 +183,10 @@ export type GenerationVolcengineOptions = Partial<{
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
 }>;
+
+export type GenerationJimengOptions = GenerationVolcengineOptions & Partial<{
+  seedance2JimengModelVersion: JimengSeedance2ModelVersion;
+}>; // Jimeng reuses Seedance 2 controls plus the CLI model_version channel.
 
 export interface GenerationInputs {
   kind: GenerationKind;
@@ -201,6 +207,7 @@ export interface GenerationInputs {
   url?: string;
   falOptions?: GenerationFalOptions;
   volcengineOptions?: GenerationVolcengineOptions;
+  jimengOptions?: GenerationJimengOptions;
 }
 
 export type VideoPromptAreaMediaRole =
@@ -276,6 +283,7 @@ export interface CanvasVideoPromptBar extends CanvasRect {
   klingV3Shot1Duration?: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   klingV3Shot2Duration?: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   seedance2Variant: Seedance2Variant;
+  seedance2JimengModelVersion?: JimengSeedance2ModelVersion;
   seedance2AspectRatio: GenerationVolcengineOptions['seedance2AspectRatio'];
   seedance2Resolution: GenerationVolcengineOptions['seedance2Resolution'];
   seedance2Duration: GenerationVolcengineOptions['seedance2Duration'];

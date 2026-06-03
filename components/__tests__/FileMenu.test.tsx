@@ -21,6 +21,8 @@ describe('FileMenu', () => {
         showZoomLevelBadge
         onToggleZoomLevelBadge={vi.fn()}
         onOpenDebugLog={vi.fn()}
+        onClearJimengCache={vi.fn()}
+        isClearingJimengCache={false}
       />
     );
 
@@ -52,6 +54,8 @@ describe('FileMenu', () => {
         showZoomLevelBadge
         onToggleZoomLevelBadge={vi.fn()}
         onOpenDebugLog={vi.fn()}
+        onClearJimengCache={vi.fn()}
+        isClearingJimengCache={false}
       />
     );
 
@@ -77,6 +81,8 @@ describe('FileMenu', () => {
         showZoomLevelBadge={false}
         onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
         onOpenDebugLog={vi.fn()}
+        onClearJimengCache={vi.fn()}
+        isClearingJimengCache={false}
       />
     );
 
@@ -87,5 +93,53 @@ describe('FileMenu', () => {
     expect(handleToggleZoomLevelBadge).toHaveBeenCalledTimes(1);
     expect(zoomToggle.getAttribute('aria-checked')).toBe('false');
     expect(zoomToggle.textContent).toContain('Off');
+  });
+
+  it('fires the Jimeng cache clear callback from the menu', () => {
+    const handleClearJimengCache = vi.fn();
+
+    render(
+      <FileMenu
+        isOpen
+        onToggle={vi.fn()}
+        onClose={vi.fn()}
+        onImportSnapshot={vi.fn()}
+        onExportSnapshot={vi.fn()}
+        onOpenBackups={vi.fn()}
+        autosaveEnabled
+        onToggleAutosave={vi.fn()}
+        showZoomLevelBadge
+        onToggleZoomLevelBadge={vi.fn()}
+        onOpenDebugLog={vi.fn()}
+        onClearJimengCache={handleClearJimengCache}
+        isClearingJimengCache={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /clear jimeng cache/i }));
+
+    expect(handleClearJimengCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the Jimeng cache clear button while clearing', () => {
+    render(
+      <FileMenu
+        isOpen
+        onToggle={vi.fn()}
+        onClose={vi.fn()}
+        onImportSnapshot={vi.fn()}
+        onExportSnapshot={vi.fn()}
+        onOpenBackups={vi.fn()}
+        autosaveEnabled
+        onToggleAutosave={vi.fn()}
+        showZoomLevelBadge
+        onToggleZoomLevelBadge={vi.fn()}
+        onOpenDebugLog={vi.fn()}
+        onClearJimengCache={vi.fn()}
+        isClearingJimengCache
+      />
+    );
+
+    expect(screen.getByRole('menuitem', { name: /clearing jimeng cache/i }).hasAttribute('disabled')).toBe(true);
   });
 });

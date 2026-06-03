@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 backend/.venv
+backend/.jimeng-work/
 backend/.pytest_cache
 backend/__pycache__
 backend/src/**/__pycache__

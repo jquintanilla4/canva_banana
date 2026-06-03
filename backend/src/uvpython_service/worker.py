@@ -8,15 +8,15 @@ from uuid import uuid4
 
 from volcenginesdkarkruntime import Ark
 
-from volcengine_service.config import Settings, get_settings
-from volcengine_service.media import media_to_data_url, upload_video_to_tos
-from volcengine_service.models import (
+from uvpython_service.config import Settings, get_settings
+from uvpython_service.media import media_to_data_url, upload_video_to_tos
+from uvpython_service.models import (
     MediaInput,
     MODEL_LABELS,
     JobState,
     SeedanceJobPayload,
 )
-from volcengine_service.store import job_store
+from uvpython_service.store import job_store
 
 SEEDANCE_REFERENCE_IMAGE_LIMIT = 9  # Seedance 2 docs allow up to 9 image refs.
 SEEDANCE_REFERENCE_VIDEO_LIMIT = 3  # Seedance 2 docs allow up to 3 video refs.

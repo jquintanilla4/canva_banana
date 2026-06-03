@@ -25,6 +25,7 @@ import {
   WAN_27_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
@@ -57,9 +58,11 @@ import {
   getSeedreamImageSizeOptions,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
+  isJimengSeedance2ModelVersion,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
   isSeedance2VideoModel as isSeedance2VideoModelId,
+  isJimengSeedance2VideoModel,
   isVolcengineSeedance2VideoModel,
   isRecraftV4ProImageSizeSelectionValue,
   KREA_2_DEFAULT_ASPECT_RATIO,
@@ -130,6 +133,7 @@ import type {
   WanAnimateVariant,
   WanCreativity,
   WanTargetResolution,
+  JimengSeedance2ModelVersionSelectionValue,
 } from '../services/modelConfig';
 
 type UseFalSettingsArgs = {
@@ -155,6 +159,7 @@ type FalDerivedState = {
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
   isVolcengineSeedance2VideoModel: boolean;
+  isJimengSeedance2VideoModel: boolean;
   isVeo31VideoModel: boolean;
   isFlux2MaxModel: boolean;
   isWan27ImageModel: boolean;
@@ -222,6 +227,7 @@ type FalHandlers = {
   handleSeedance15CameraFixedChange: (value: boolean) => void;
   handleSeedance15AudioChange: (value: boolean) => void;
   handleSeedance2VariantChange: (value: string) => void;
+  handleSeedance2JimengModelVersionChange: (value: string) => void;
   handleSeedance2AspectRatioChange: (value: string) => void;
   handleSeedance2ResolutionChange: (value: string) => void;
   handleSeedance2DurationChange: (value: string) => void;
@@ -305,6 +311,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
   seedance2Variant: Seedance2Variant;
+  seedance2JimengModelVersion: JimengSeedance2ModelVersionSelectionValue;
   seedance2AspectRatio: Seedance2AspectRatioSelectionValue;
   seedance2Resolution: Seedance2ResolutionSelectionValue;
   seedance2Duration: Seedance2DurationSelectionValue;
@@ -465,6 +472,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [seedance15CameraFixed, setSeedance15CameraFixed] = useState<boolean>(false);
   const [seedance15Audio, setSeedance15Audio] = useState<boolean>(false);
   const [seedance2Variant, setSeedance2Variant] = useState<Seedance2Variant>('reference');
+  const [seedance2JimengModelVersion, setSeedance2JimengModelVersion] = useState<JimengSeedance2ModelVersionSelectionValue>('seedance2.0fast');
   const [seedance2AspectRatio, setSeedance2AspectRatio] = useState<Seedance2AspectRatioSelectionValue>('16:9');
   const [seedance2Resolution, setSeedance2Resolution] = useState<Seedance2ResolutionSelectionValue>('720p');
   const [seedance2Duration, setSeedance2Duration] = useState<Seedance2DurationSelectionValue>('5');
@@ -508,6 +516,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isSeedance2VideoModel = isVideoMode && isSeedance2VideoModelId(falVideoModelId);
   const isFalSeedance2VideoModel = isVideoMode && falVideoModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
   const isVolcengineSeedance2VideoModelSelection = isVideoMode && isVolcengineSeedance2VideoModel(falVideoModelId);
+  const isJimengSeedance2VideoModelSelection = isVideoMode && isJimengSeedance2VideoModel(falVideoModelId);
   const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isWan27ImageModel = !isVideoMode && falImageModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
@@ -538,6 +547,15 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       setFalVideoDuration('5');
     }
   }, [falVideoModelId]);
+
+  useEffect(() => {
+    if (falVideoModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID && seedance2JimengModelVersion !== 'seedance2.0_vip' && seedance2Resolution === '1080p') {
+      setSeedance2Resolution('720p');
+    }
+    if (falVideoModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID && seedance2AspectRatio === 'adaptive') {
+      setSeedance2AspectRatio('16:9');
+    }
+  }, [falVideoModelId, seedance2AspectRatio, seedance2JimengModelVersion, seedance2Resolution]);
 
   useEffect(() => {
     if (!isWan27VideoModel) {
@@ -996,6 +1014,15 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleSeedance2JimengModelVersionChange = useCallback((value: string) => {
+    if (isJimengSeedance2ModelVersion(value)) {
+      setSeedance2JimengModelVersion(value);
+      if (value !== 'seedance2.0_vip') {
+        setSeedance2Resolution(current => (current === '1080p' ? '720p' : current));
+      }
+    }
+  }, []);
+
   const handleSeedance2AspectRatioChange = useCallback((value: string) => {
     if (isSeedance2AspectRatioSelectionValue(value)) {
       setSeedance2AspectRatio(value);
@@ -1200,6 +1227,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     seedance15CameraFixed,
     seedance15Audio,
     seedance2Variant,
+    seedance2JimengModelVersion,
     seedance2AspectRatio,
     seedance2Resolution,
     seedance2Duration,
@@ -1243,6 +1271,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
     isVolcengineSeedance2VideoModel: isVolcengineSeedance2VideoModelSelection,
+    isJimengSeedance2VideoModel: isJimengSeedance2VideoModelSelection,
     isUpscaleModel,
     isKlingProVideoSelection,
     isKlingO3EditMode,
@@ -1302,6 +1331,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSeedance15CameraFixedChange,
     handleSeedance15AudioChange,
     handleSeedance2VariantChange,
+    handleSeedance2JimengModelVersionChange,
     handleSeedance2AspectRatioChange,
     handleSeedance2ResolutionChange,
     handleSeedance2DurationChange,

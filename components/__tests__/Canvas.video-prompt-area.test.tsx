@@ -1206,6 +1206,87 @@ describe('Canvas video prompt area tool', () => {
     expect(screen.getByTestId('seedance2-camera-state').textContent).toBe('true');
   });
 
+  it('normalizes hidden Jimeng-incompatible Seedance 2 values when switching embedded models', () => {
+    const Harness = () => {
+      const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        prompt: 'Area prompt',
+        negativePrompt: '',
+        modelId: 'volcengine/seedance-2',
+        seedance2Variant: 'reference',
+        seedance2JimengModelVersion: 'seedance2.0fast',
+        seedance2AspectRatio: 'adaptive',
+        seedance2Resolution: '1080p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        falOptions: {
+          seedance2JimengModelVersion: 'seedance2.0fast',
+          seedance2AspectRatio: 'adaptive',
+          seedance2Resolution: '1080p',
+        },
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }]);
+      const handleVideoPromptBarUpdate = (barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => {
+        setBars(currentBars => currentBars.map(bar => (bar.id === barId ? updater(bar) : bar)));
+      };
+
+      return (
+        <>
+          <output data-testid="bar-state">{JSON.stringify(bars[0])}</output>
+          <Canvas
+            {...buildCanvasProps({
+              videoPromptAreas: [{
+                id: 'area-1',
+                sequence: 1,
+                label: 'Video prompt area 01',
+                x: 40,
+                y: 60,
+                width: 900,
+                height: 520,
+                promptBarId: 'bar-1',
+                orderedMediaIds: ['image-1'],
+              }],
+              videoPromptBars: bars,
+              onVideoPromptBarsChange: setBars,
+              videoPromptAreaMemberships: {
+                'area-1': {
+                  orderedMediaIds: ['image-1'],
+                  acceptedImageIds: ['image-1'],
+                  acceptedVideoIds: [],
+                  acceptedAudioIds: [],
+                  ignoredMediaIds: [],
+                  orderLabels: { 'image-1': '@Image1' },
+                },
+              },
+              onVideoPromptBarUpdate: handleVideoPromptBarUpdate,
+              buildVideoPromptBarControls: () => [],
+              embeddedVideoPromptBarModelOptions: [
+                { value: 'volcengine/seedance-2', label: 'Seedance 2 (VE)' },
+                { value: 'jimeng-cli/seedance-2', label: 'Seedance 2 (JM CLI)' },
+              ],
+            })}
+          />
+        </>
+      );
+    };
+
+    render(<Harness />);
+
+    fireEvent.change(screen.getByLabelText('Select video model'), { target: { value: 'jimeng-cli/seedance-2' } });
+
+    const state = JSON.parse(screen.getByTestId('bar-state').textContent ?? '{}') as CanvasVideoPromptBar;
+    expect(state.modelId).toBe('jimeng-cli/seedance-2');
+    expect(state.seedance2AspectRatio).toBe('16:9');
+    expect(state.seedance2Resolution).toBe('720p');
+    expect(state.falOptions?.seedance2AspectRatio).toBe('16:9');
+    expect(state.falOptions?.seedance2Resolution).toBe('720p');
+  });
+
   it('keeps Smart embedded submits enabled with no accepted area media but blocks empty Reference submits', () => {
     const buildCanvas = (seedance2Variant: 'smart' | 'reference') => (
       <Canvas

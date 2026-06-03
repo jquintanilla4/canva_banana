@@ -26,6 +26,16 @@ const statusLabels: Record<FalQueueJob['status'], string> = {
   FAILED: 'Failed',
 };
 
+const getProviderLabel = (provider: FalQueueJob['provider']): string => {
+  if (provider === 'volcengine') {
+    return 'VOLCENGINE';
+  }
+  if (provider === 'jimeng') {
+    return 'JIMENG';
+  }
+  return 'FAL'; // Google jobs do not use this queue today, but keep the fallback readable.
+};
+
 export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
   jobs,
   onDismiss,
@@ -81,7 +91,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                       </p>
                     )}
                     <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">
-                      {job.provider === 'volcengine' ? 'VOLCENGINE' : 'FAL'}
+                      {getProviderLabel(job.provider)}
                     </p>
                   </div>
                   <span className={`text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${statusStyles[job.status]}`}>

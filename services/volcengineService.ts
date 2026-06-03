@@ -63,6 +63,7 @@ type VolcengineSocketResult =
   | { kind: 'disconnected'; reason: string }; // Keep reconnect decisions explicit after each socket attempt.
 
 const DEFAULT_VOLCENGINE_API_BASE_URL = 'http://localhost:8000'; // Local backend default.
+const VOLCENGINE_LOCAL_ACTION_HEADERS = { 'X-Canva-Banana-Local-Action': 'volcengine-submit' }; // Forces browser submits through backend origin checks.
 const SOCKET_RECONNECT_BASE_DELAY_MS = 1000; // First reconnect waits one second.
 const SOCKET_RECONNECT_MAX_DELAY_MS = 5000; // Cap retries so recovery stays responsive.
 const VOLCENGINE_BACKEND_UNREACHABLE_MESSAGE_SUFFIX = 'Run `uv sync --project backend` once, then `npm run backend:dev`.'; // Point local setup failures at the expected commands.
@@ -400,6 +401,7 @@ export const generateSeedanceVideo = async (
 
   const submitResponse = await fetchVolcengine(baseUrl, '/api/volcengine/jobs', 'submit', {
     method: 'POST',
+    headers: VOLCENGINE_LOCAL_ACTION_HEADERS,
     body: formData,
   });
   let job = await parseJobResponse(submitResponse, baseUrl);

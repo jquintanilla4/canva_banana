@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, vi } from 'vitest';
 
-const originalGetContext = HTMLCanvasElement.prototype.getContext;
+const hasCanvasElement = typeof HTMLCanvasElement !== 'undefined';
+const originalGetContext = hasCanvasElement ? HTMLCanvasElement.prototype.getContext : null;
 
 beforeAll(() => {
+  if (!hasCanvasElement) {
+    return; // Node-only tests do not provide canvas globals.
+  }
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
     clearRect: vi.fn(),
     save: vi.fn(),
@@ -40,5 +44,8 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  if (!hasCanvasElement || !originalGetContext) {
+    return; // Nothing was patched in Node-only tests.
+  }
   HTMLCanvasElement.prototype.getContext = originalGetContext;
 });

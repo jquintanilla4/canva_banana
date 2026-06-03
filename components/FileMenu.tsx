@@ -13,6 +13,8 @@ type FileMenuProps = {
   showZoomLevelBadge: boolean;
   onToggleZoomLevelBadge: () => void;
   onOpenDebugLog: () => void;
+  onClearJimengCache: () => void;
+  isClearingJimengCache: boolean;
 };
 
 export const FileMenu: React.FC<FileMenuProps> = ({
@@ -27,6 +29,8 @@ export const FileMenu: React.FC<FileMenuProps> = ({
   showZoomLevelBadge,
   onToggleZoomLevelBadge,
   onOpenDebugLog,
+  onClearJimengCache,
+  isClearingJimengCache,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -126,6 +130,15 @@ export const FileMenu: React.FC<FileMenuProps> = ({
             className="px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
           >
             Debug Log
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={onClearJimengCache}
+            disabled={isClearingJimengCache}
+            className="px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 disabled:cursor-wait disabled:text-gray-500 disabled:hover:bg-transparent transition-colors"
+          >
+            {isClearingJimengCache ? 'Clearing Jimeng Cache...' : 'Clear Jimeng Cache'}
           </button>
         </div>
       )}

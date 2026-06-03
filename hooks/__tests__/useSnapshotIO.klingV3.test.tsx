@@ -30,6 +30,7 @@ const buildMeta = (): SnapshotMetaState => ({
   klingV3MultiPrompt: 'Second saved shot',
   klingV3Shot1Duration: '4',
   klingV3Shot2Duration: '6',
+  seedance2JimengModelVersion: 'seedance2.0_vip',
   selectedImageIds: [],
   selectedNoteIds: [],
   referenceImageIds: [],
@@ -65,6 +66,7 @@ describe('useSnapshotIO (Kling v3)', () => {
       setKlingV3MultiPrompt: vi.fn(),
       setKlingV3Shot1Duration: vi.fn(),
       setKlingV3Shot2Duration: vi.fn(),
+      handleSeedance2JimengModelVersionChange: vi.fn(),
     };
     const selectionSetters = {
       setSelectedImageIds: vi.fn(),
@@ -148,5 +150,6 @@ describe('useSnapshotIO (Kling v3)', () => {
     expect(falSetters.setKlingV3MultiPrompt).toHaveBeenCalledWith('Second saved shot');
     expect(falSetters.setKlingV3Shot1Duration).toHaveBeenCalledWith('4');
     expect(falSetters.setKlingV3Shot2Duration).toHaveBeenCalledWith('6');
+    expect(falSetters.handleSeedance2JimengModelVersionChange).toHaveBeenCalledWith('seedance2.0_vip');
   });
 });

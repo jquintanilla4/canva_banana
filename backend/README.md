@@ -1,6 +1,6 @@
-# Volcengine Service
+# UV Python Service
 
-Local FastAPI service that runs Seedance 2 generations for Canva Banana.
+Local FastAPI backend that runs Seedance 2 generations for Canva Banana. It supports Volcengine Ark directly and Jimeng through the `dreamina` CLI.
 
 ## Setup
 
@@ -13,14 +13,16 @@ uv sync --project backend
 ## Run
 
 ```bash
-uv run --project backend uvicorn volcengine_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000
+uv run --project backend uvicorn uvpython_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000
 ```
 
-## Required env
+## Volcengine env
 
 - `ARK_API_KEY`
 - `VOLCENGINE_ACCESS_KEY`
 - `VOLCENGINE_SECRET_KEY`
+
+These are required for the direct Volcengine Seedance 2 provider path. Jimeng CLI jobs do not need these credentials.
 
 The backend reads repo-root `.env.local` first and falls back to `.env`, while still letting exported shell variables win. 
 
@@ -33,6 +35,30 @@ The backend reads repo-root `.env.local` first and falls back to `.env`, while s
 - `VOLCENGINE_MAX_TERMINAL_JOBS`
 - `VOLCENGINE_MAX_LOGS_PER_JOB`
 - `VOLCENGINE_FFPROBE_PATH`
+- `JIMENG_CLI_PATH` (optional path to the `dreamina` executable)
+- `JIMENG_WORK_DIR` (default: `backend/.jimeng-work`)
+- `JIMENG_SUBMIT_POLL_SECONDS` (default: `30`)
+- `JIMENG_RESULT_TIMEOUT_SECONDS` (default: `900`)
+- `JIMENG_QUERY_INTERVAL_SECONDS` (default: `10`)
+
+## Jimeng CLI
+
+The app can handle Jimeng setup from the UI. Start the backend and frontend, select `Seedance 2 (JM CLI)`, then use the setup panel to install/update the CLI, start login, and recheck account status.
+
+Manual fallback: install or update the CLI with the official command:
+
+```bash
+curl -fsSL https://jimeng.jianying.com/cli | bash
+```
+
+Then log in and verify the account:
+
+```bash
+dreamina login
+dreamina user_credit
+```
+
+Use `dreamina login --debug` if browser login stalls. The CLI stores config and logs under `~/.dreamina_cli/`, including `~/.dreamina_cli/logs/` for troubleshooting.
 
 ## ffprobe Checks
 

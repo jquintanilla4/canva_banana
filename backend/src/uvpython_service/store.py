@@ -5,8 +5,8 @@ from collections.abc import Callable
 from dataclasses import replace
 from threading import Lock
 
-from volcengine_service.config import get_settings
-from volcengine_service.models import JobState
+from uvpython_service.config import get_settings
+from uvpython_service.models import JobState
 
 JobSubscriber = Callable[[JobState], None]  # Subscribers receive immutable job snapshots.
 
@@ -66,6 +66,11 @@ class JobStore:
             self._trim_locked()
             job = self._jobs.get(job_id)
             return replace(job) if job else None
+
+    def list_jobs(self) -> tuple[JobState, ...]:
+        with self._lock:
+            self._trim_locked()
+            return tuple(replace(job) for job in self._jobs.values())  # Snapshot all visible jobs for cache guards.
 
     def subscribe(self, job_id: str, subscriber: JobSubscriber) -> tuple[JobState, Callable[[], None]] | None:
         with self._lock:

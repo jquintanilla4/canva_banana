@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
-import { KLING_V3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
+import { JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, FontSizeDownIcon, FontSizeUpIcon, MinusIcon } from './Icons';
 import {
   DEFAULT_NOTE_FONT_SIZE,
@@ -131,6 +131,25 @@ interface CanvasProps {
   embeddedVideoPromptBarModelOptions: ReadonlyArray<{ value: string; label: string }>;
   onScaleChange?: (scale: number) => void;
 }
+
+const normalizeEmbeddedPromptBarForModel = (bar: CanvasVideoPromptBar, modelId: string): CanvasVideoPromptBar => {
+  if (modelId !== JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {
+    return { ...bar, modelId };
+  }
+  const modelVersion = bar.seedance2JimengModelVersion ?? bar.falOptions?.seedance2JimengModelVersion ?? 'seedance2.0fast'; // Default JM CLI channel is 720p-only.
+  const seedance2AspectRatio = bar.seedance2AspectRatio === 'adaptive' ? '16:9' : bar.seedance2AspectRatio; // Jimeng rejects adaptive AR.
+  const seedance2Resolution = modelVersion === 'seedance2.0_vip' || bar.seedance2Resolution !== '1080p' ? bar.seedance2Resolution : '720p'; // 1080p requires VIP.
+  return {
+    ...bar,
+    modelId,
+    seedance2JimengModelVersion: modelVersion,
+    seedance2AspectRatio,
+    seedance2Resolution,
+    falOptions: bar.falOptions
+      ? { ...bar.falOptions, seedance2JimengModelVersion: modelVersion, seedance2AspectRatio, seedance2Resolution }
+      : bar.falOptions,
+  };
+};
 
 const ActionButton: React.FC<{
   onClick: () => void;
@@ -1526,7 +1545,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   )}
                   modelOptions={embeddedVideoPromptBarModelOptions}
                   selectedModel={selectedEmbeddedModelId}
-                  onModelChange={(modelId) => onVideoPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, modelId }))}
+                  onModelChange={(modelId) => onVideoPromptBarUpdate(bar.id, currentBar => normalizeEmbeddedPromptBarForModel(currentBar, modelId))}
                   modelSelectDisabled={isLoading}
                   modelMode="video"
                   onModelModeChange={() => {}}
@@ -1752,6 +1771,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           onMouseDown={event => event.stopPropagation()}
           onPointerDown={event => event.stopPropagation()}
           onClick={event => event.stopPropagation()}
+          onKeyDown={event => event.stopPropagation()}
           style={{
             position: 'absolute',
             left: `${((control.bounds.minX + control.bounds.maxX) / 2) * scale + pan.x}px`,

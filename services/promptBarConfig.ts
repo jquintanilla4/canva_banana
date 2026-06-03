@@ -36,6 +36,7 @@ import type {
   Seedance15DurationSelectionValue,
   Seedance2AspectRatioSelectionValue,
   Seedance2BooleanSelectionValue,
+  JimengSeedance2ModelVersionSelectionValue,
   Seedance2ResolutionSelectionValue,
   Seedance2DurationSelectionValue,
   Seedance2Variant,
@@ -124,6 +125,7 @@ import {
   SEEDANCE2_DURATION_OPTIONS,
   SEEDANCE2_AUDIO_OPTIONS,
   SEEDANCE2_CAMERA_FIXED_OPTIONS,
+  JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS,
   WAN_ANIMATE_MODEL_ID,
   WAN_ANIMATE_QUALITY_OPTIONS,
   WAN_ANIMATE_RESOLUTION_OPTIONS,
@@ -188,15 +190,19 @@ export type PromptBarModelControl = PromptBarSelectControl | PromptBarColorContr
 type Seedance2PromptBarControlsInput = {
   idPrefix?: string;
   seedance2Variant: Seedance2Variant;
+  seedance2JimengModelVersion?: JimengSeedance2ModelVersionSelectionValue;
   seedance2AspectRatio: Seedance2AspectRatioSelectionValue;
   seedance2Resolution: Seedance2ResolutionSelectionValue;
   seedance2Duration: Seedance2DurationSelectionValue;
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
   showCameraFixed?: boolean;
+  showJimengModelVersion?: boolean;
+  showAudio?: boolean;
   allowFullResolution?: boolean;
   isLoading: boolean;
   onSeedance2VariantChange: (value: Seedance2Variant) => void;
+  onSeedance2JimengModelVersionChange?: (value: JimengSeedance2ModelVersionSelectionValue) => void;
   onSeedance2AspectRatioChange: (value: Seedance2AspectRatioSelectionValue) => void;
   onSeedance2ResolutionChange: (value: Seedance2ResolutionSelectionValue) => void;
   onSeedance2DurationChange: (value: Seedance2DurationSelectionValue) => void;
@@ -214,26 +220,41 @@ const getSeedance2BooleanSelectionValue = (value: boolean): Seedance2BooleanSele
 export const buildSeedance2PromptBarControls = ({
   idPrefix,
   seedance2Variant,
+  seedance2JimengModelVersion = 'seedance2.0fast',
   seedance2AspectRatio,
   seedance2Resolution,
   seedance2Duration,
   seedance2GenerateAudio,
   seedance2CameraFixed,
   showCameraFixed = true,
+  showJimengModelVersion = false,
+  showAudio = true,
   allowFullResolution = false,
   isLoading,
   onSeedance2VariantChange,
+  onSeedance2JimengModelVersionChange,
   onSeedance2AspectRatioChange,
   onSeedance2ResolutionChange,
   onSeedance2DurationChange,
   onSeedance2GenerateAudioChange,
   onSeedance2CameraFixedChange,
 }: Seedance2PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => {
+  const selectedJimengModelVersion = JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS.find(option => option.value === seedance2JimengModelVersion);
+  const supportsJimeng1080p = Boolean(showJimengModelVersion && selectedJimengModelVersion?.supports1080p);
+  const seedance2ResolutionValue = showJimengModelVersion && !supportsJimeng1080p && seedance2Resolution === '1080p'
+    ? '720p'
+    : seedance2Resolution; // Jimeng 1080p is only valid for seedance2.0_vip.
   const resolutionOptions = SEEDANCE2_RESOLUTION_OPTIONS.map(option => ({
     value: option.value,
-    label: allowFullResolution && option.value === '1080p' ? '1080p' : option.label,
-    disabled: allowFullResolution ? false : option.disabled,
-  })); // Fal supports 1080p, while Volcengine keeps the provisional disabled state.
+    label: (allowFullResolution || supportsJimeng1080p) && option.value === '1080p' ? '1080p' : option.label,
+    disabled: option.value === '1080p' ? !(allowFullResolution || supportsJimeng1080p) : option.disabled,
+  })); // Jimeng 1080p is only valid for seedance2.0_vip.
+  const aspectRatioOptions = SEEDANCE2_ASPECT_RATIO_OPTIONS
+    .filter(option => !showJimengModelVersion || option.value !== 'adaptive')
+    .map(option => ({ value: option.value, label: option.label })); // Jimeng rejects adaptive, so do not offer it.
+  const seedance2AspectRatioValue = showJimengModelVersion && seedance2AspectRatio === 'adaptive'
+    ? '16:9'
+    : seedance2AspectRatio; // Keep hidden Jimeng-invalid state from reaching the select.
   const controls: PromptBarModelControl[] = [{
     id: buildSeedance2ControlId('variant', idPrefix),
     ariaLabel: 'Select Seedance 2 variant',
@@ -241,13 +262,36 @@ export const buildSeedance2PromptBarControls = ({
     value: seedance2Variant,
     onChange: (value: string) => onSeedance2VariantChange(value as Seedance2Variant),
     disabled: isLoading,
-  },
-  {
+  }];
+
+  if (showJimengModelVersion) {
+    controls.push({
+      id: buildSeedance2ControlId('jimeng-channel', idPrefix),
+      prefixLabel: 'Channel',
+      ariaLabel: 'Select Jimeng Seedance 2 channel',
+      options: JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS.map(option => ({
+        value: option.value,
+        label: option.label,
+        tooltip: option.tooltip,
+      })),
+      value: seedance2JimengModelVersion,
+      onChange: (value: string) => {
+        onSeedance2JimengModelVersionChange?.(value as JimengSeedance2ModelVersionSelectionValue);
+        if (value !== 'seedance2.0_vip' && seedance2Resolution === '1080p') {
+          onSeedance2ResolutionChange('720p');
+        }
+      },
+      disabled: isLoading,
+      tooltip: selectedJimengModelVersion?.tooltip,
+    });
+  }
+
+  controls.push({
     id: buildSeedance2ControlId('aspect-ratio', idPrefix),
     prefixLabel: 'AR',
     ariaLabel: 'Select Seedance 2 aspect ratio',
-    options: SEEDANCE2_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-    value: seedance2AspectRatio,
+    options: aspectRatioOptions,
+    value: seedance2AspectRatioValue,
     onChange: (value: string) => onSeedance2AspectRatioChange(value as Seedance2AspectRatioSelectionValue),
     disabled: isLoading,
   },
@@ -264,10 +308,10 @@ export const buildSeedance2PromptBarControls = ({
     prefixLabel: 'Resolution',
     ariaLabel: 'Select Seedance 2 resolution',
     options: resolutionOptions,
-    value: seedance2Resolution,
+    value: seedance2ResolutionValue,
     onChange: (value: string) => onSeedance2ResolutionChange(value as Seedance2ResolutionSelectionValue),
     disabled: isLoading,
-  }];
+  });
 
   if (showCameraFixed) {
     controls.push({
@@ -281,15 +325,17 @@ export const buildSeedance2PromptBarControls = ({
     });
   }
 
-  controls.push({
-    id: buildSeedance2ControlId('audio', idPrefix),
-    prefixLabel: 'Audio',
-    ariaLabel: 'Toggle Seedance 2 audio generation',
-    options: SEEDANCE2_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-    value: getSeedance2BooleanSelectionValue(seedance2GenerateAudio),
-    onChange: (value: string) => onSeedance2GenerateAudioChange(value === 'true'),
-    disabled: isLoading,
-  });
+  if (showAudio) {
+    controls.push({
+      id: buildSeedance2ControlId('audio', idPrefix),
+      prefixLabel: 'Audio',
+      ariaLabel: 'Toggle Seedance 2 audio generation',
+      options: SEEDANCE2_AUDIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: getSeedance2BooleanSelectionValue(seedance2GenerateAudio),
+      onChange: (value: string) => onSeedance2GenerateAudioChange(value === 'true'),
+      disabled: isLoading,
+    });
+  }
 
   return controls;
 };
@@ -424,6 +470,7 @@ export type PromptBarControlsInput = {
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
+  isJimengSeedance2VideoModel?: boolean;
   hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
@@ -477,6 +524,7 @@ export type PromptBarControlsInput = {
   seedance15CameraFixed: boolean;
   seedance15Audio: boolean;
   seedance2Variant: Seedance2Variant;
+  seedance2JimengModelVersion?: JimengSeedance2ModelVersionSelectionValue;
   seedance2AspectRatio: Seedance2AspectRatioSelectionValue;
   seedance2Resolution: Seedance2ResolutionSelectionValue;
   seedance2Duration: Seedance2DurationSelectionValue;
@@ -552,6 +600,7 @@ export type PromptBarControlsInput = {
   onSeedance15CameraFixedChange: (value: boolean) => void;
   onSeedance15AudioChange: (value: boolean) => void;
   onSeedance2VariantChange: (value: string) => void;
+  onSeedance2JimengModelVersionChange: (value: string) => void;
   onSeedance2AspectRatioChange: (value: string) => void;
   onSeedance2ResolutionChange: (value: string) => void;
   onSeedance2DurationChange: (value: string) => void;
@@ -609,6 +658,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
+    isJimengSeedance2VideoModel = false,
     hailuoVariant,
     falVideoDuration,
     klingVariant,
@@ -662,6 +712,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     seedance15CameraFixed,
     seedance15Audio,
     seedance2Variant,
+    seedance2JimengModelVersion = 'seedance2.0fast',
     seedance2AspectRatio,
     seedance2Resolution,
     seedance2Duration,
@@ -737,6 +788,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onSeedance15CameraFixedChange,
     onSeedance15AudioChange,
     onSeedance2VariantChange,
+    onSeedance2JimengModelVersionChange,
     onSeedance2AspectRatioChange,
     onSeedance2ResolutionChange,
     onSeedance2DurationChange,
@@ -1326,15 +1378,19 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   if (isSeedance2VideoModel) {
     controls.push(...buildSeedance2PromptBarControls({
       seedance2Variant,
+      seedance2JimengModelVersion,
       seedance2AspectRatio,
       seedance2Resolution,
       seedance2Duration,
       seedance2GenerateAudio,
       seedance2CameraFixed,
-      showCameraFixed: !isFalSeedance2VideoModel,
+      showCameraFixed: !isFalSeedance2VideoModel && !isJimengSeedance2VideoModel,
+      showJimengModelVersion: isJimengSeedance2VideoModel,
+      showAudio: !isJimengSeedance2VideoModel,
       allowFullResolution: isFalSeedance2VideoModel,
       isLoading,
       onSeedance2VariantChange: value => onSeedance2VariantChange(value),
+      onSeedance2JimengModelVersionChange: value => onSeedance2JimengModelVersionChange(value),
       onSeedance2AspectRatioChange: value => onSeedance2AspectRatioChange(value),
       onSeedance2ResolutionChange: value => onSeedance2ResolutionChange(value),
       onSeedance2DurationChange: value => onSeedance2DurationChange(value),

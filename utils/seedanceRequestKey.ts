@@ -5,6 +5,7 @@ type Seedance2RequestKeyArgs = {
   modelId?: string; // Model id separates FAL and Volcengine.
   prompt: string;
   variant: Seedance2Variant;
+  jimengModelVersion?: string; // Jimeng CLI channel changes backend behavior.
   aspectRatio: string;
   resolution: string;
   duration: string;
@@ -53,6 +54,7 @@ export const buildSeedance2RequestKey = ({
   modelId,
   prompt,
   variant,
+  jimengModelVersion,
   aspectRatio,
   resolution,
   duration,
@@ -69,6 +71,7 @@ export const buildSeedance2RequestKey = ({
   modelId: modelId ?? 'unknown', // Missing older calls still get a stable key.
   prompt: prompt.trim(),
   variant,
+  jimengModelVersion: jimengModelVersion ?? null,
   aspectRatio,
   resolution,
   duration,

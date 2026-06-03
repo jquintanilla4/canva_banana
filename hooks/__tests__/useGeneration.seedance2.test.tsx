@@ -4,6 +4,7 @@ import {
   HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
+  JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
@@ -19,6 +20,7 @@ import { generateImage as generateFalImage, generateImageEdit as generateFalImag
 import { generateImage as generateGoogleImage, generateImageEdit as generateGoogleImageEdit } from '../../services/geminiService';
 import { loadMediaFromBlob } from '../../services/mediaService';
 import { generateSeedanceVideo } from '../../services/volcengineService';
+import { generateJimengSeedanceVideo } from '../../services/jimengService';
 import type { UseFalSettingsResult } from '../useFalSettings';
 import type { SelectionStateResult } from '../useSelectionState';
 import { useGeneration } from '../useGeneration';
@@ -39,6 +41,14 @@ vi.mock('../../services/volcengineService', async () => {
   return {
     ...actual,
     generateSeedanceVideo: vi.fn(),
+  };
+});
+
+vi.mock('../../services/jimengService', async () => {
+  const actual = await vi.importActual<typeof import('../../services/jimengService')>('../../services/jimengService');
+  return {
+    ...actual,
+    generateJimengSeedanceVideo: vi.fn(),
   };
 });
 
@@ -118,6 +128,7 @@ const createFalStub = (): UseFalSettingsResult => ({
   seedance15CameraFixed: false,
   seedance15Audio: false,
   seedance2Variant: 'smart',
+  seedance2JimengModelVersion: 'seedance2.0fast',
   seedance2AspectRatio: '16:9',
   seedance2Resolution: '720p',
   seedance2Duration: '5',
@@ -125,6 +136,7 @@ const createFalStub = (): UseFalSettingsResult => ({
   seedance2CameraFixed: false,
   isFalSeedance2VideoModel: false,
   isVolcengineSeedance2VideoModel: true,
+  isJimengSeedance2VideoModel: false,
   isSeedance15VideoModel: false,
   flux2MaxImageSize: 'landscape_16_9',
   isFlux2MaxModel: false,
@@ -359,6 +371,259 @@ describe('useGeneration (seedance 2)', () => {
         seedance2GenerateAudio: false,
       }),
     );
+  });
+
+  it('routes Seedance 2 (JM CLI) Smart text-to-video through Jimeng', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = false;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isJimengSeedance2VideoModel = true;
+    fal.seedance2Variant = 'smart';
+    fal.seedance2GenerateAudio = true;
+    fal.seedance2CameraFixed = true;
+    vi.mocked(generateJimengSeedanceVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A crane shot over a busy Shanghai street',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateJimengSeedanceVideo)).toHaveBeenCalledWith(
+      'A crane shot over a busy Shanghai street',
+      expect.objectContaining({
+        modelId: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+        variant: 'smart',
+        aspectRatio: '16:9',
+        duration: '5',
+        resolution: '720p',
+        generateAudio: false,
+        cameraFixed: false,
+      }),
+    );
+  });
+
+  it('honors saved Jimeng provider metadata when rerunning without a model id', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isJimengSeedance2VideoModel = false;
+    vi.mocked(generateJimengSeedanceVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Current prompt should not be used',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'video',
+        provider: 'jimeng',
+        modelMode: 'video',
+        prompt: 'Saved Jimeng rerun',
+        jimengOptions: {
+          seedance2Variant: 'smart',
+          seedance2JimengModelVersion: 'seedance2.0_vip',
+          seedance2AspectRatio: '16:9',
+          seedance2Resolution: '1080p',
+          seedance2Duration: '5',
+          seedance2GenerateAudio: true,
+          seedance2CameraFixed: true,
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateJimengSeedanceVideo)).toHaveBeenCalledWith(
+      'Saved Jimeng rerun',
+      expect.objectContaining({
+        modelId: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+        variant: 'smart',
+        modelVersion: 'seedance2.0_vip',
+        resolution: '1080p',
+        generateAudio: false,
+        cameraFixed: false,
+      }),
+    );
+  });
+
+  it('stores Jimeng outputs without audio when the shared Seedance audio toggle was enabled', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = false;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isJimengSeedance2VideoModel = true;
+    fal.seedance2Variant = 'smart';
+    fal.seedance2GenerateAudio = true;
+    const setState = vi.fn();
+    const videoElement = document.createElement('video');
+    Object.defineProperty(videoElement, 'videoWidth', { configurable: true, value: 640 });
+    Object.defineProperty(videoElement, 'videoHeight', { configurable: true, value: 360 });
+    Object.defineProperty(videoElement, 'play', { configurable: true, value: vi.fn().mockResolvedValue(undefined) });
+    Object.defineProperty(videoElement, 'pause', { configurable: true, value: vi.fn() });
+    vi.mocked(generateJimengSeedanceVideo).mockResolvedValue({ videoUrl: 'http://localhost:8000/api/jimeng/jobs/job-1/output', requestId: 'job-1' });
+    vi.mocked(loadMediaFromBlob).mockResolvedValue(videoElement);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['video'], { type: 'video/mp4' })),
+    }));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A quiet sunrise timelapse',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState,
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    const stateUpdater = setState.mock.calls.find(([value]) => typeof value === 'function')?.[0] as ((prev: { images: CanvasImage[] }) => { images: CanvasImage[] }) | undefined;
+    const nextState = stateUpdater?.({ images: [] });
+    expect(nextState?.images[0]?.hasAudio).toBe(false);
+    expect(nextState?.images[0]?.metadata.generation?.jimengOptions?.seedance2GenerateAudio).toBe(false);
+    expect(vi.mocked(generateJimengSeedanceVideo).mock.calls[0]?.[1].generateAudio).toBe(false);
+  });
+
+  it('routes Seedance 2 (JM CLI) Reference through Jimeng multimodal inputs', async () => {
+    const image = buildCanvasMedia('image-1', 'image');
+    const fal = createFalStub();
+    fal.falVideoModelId = JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = false;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isJimengSeedance2VideoModel = true;
+    fal.seedance2Variant = 'reference';
+    vi.mocked(generateJimengSeedanceVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Use @Image1 as the character',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({ selectedImageIds: [image.id] }),
+      images: [image],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateJimengSeedanceVideo)).toHaveBeenCalledWith(
+      'Use @Image1 as the character',
+      expect.objectContaining({
+        modelId: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+        variant: 'reference',
+        modelVersion: 'seedance2.0fast',
+        referenceImageFiles: expect.any(Array),
+      }),
+    );
+    const submittedOptions = vi.mocked(generateJimengSeedanceVideo).mock.calls[0]?.[1];
+    expect(submittedOptions?.primaryImageFile).toBeUndefined();
+    expect(submittedOptions?.referenceImageFiles).toHaveLength(1);
+  });
+
+  it('blocks Seedance 2 (JM CLI) Reference audio-only submits with a toast hint', async () => {
+    const audio = buildCanvasMedia('audio-1', 'audio', 5);
+    const fal = createFalStub();
+    fal.falVideoModelId = JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = false;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isJimengSeedance2VideoModel = true;
+    fal.seedance2Variant = 'reference';
+    const setToastMessage = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Use @Audio1 as the rhythm',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        referenceAudioIds: [audio.id],
+      }),
+      images: [audio],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage,
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(setToastMessage).toHaveBeenCalledWith('Seedance 2 (JM CLI) needs an image or video reference too. Add one, then generate again.');
+    expect(vi.mocked(generateJimengSeedanceVideo)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
   });
 
   it('uses Seedance 1.5 Fal options from generation overrides', async () => {

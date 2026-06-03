@@ -15,6 +15,7 @@ import {
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
@@ -102,6 +103,13 @@ export const getVideoPromptAreaCapabilityProfile = (
       return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: resolvedModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID });
     }
     return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId };
+  }
+
+  if (resolvedModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {
+    if (variant === 'smart') {
+      return imageOnlyProfile(resolvedModelId, { supportsTextOnly: true });
+    }
+    return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId }; // CLI multimodal2video exposes all-around references.
   }
 
   if (isKlingO3VideoModelId(resolvedModelId)) {

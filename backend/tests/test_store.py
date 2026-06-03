@@ -7,8 +7,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]  # Reach the repo root from backend/tests.
 sys.path.insert(0, str(PROJECT_ROOT / "backend" / "src"))  # Import the backend package without installing it.
 
-from volcengine_service.models import JobState
-from volcengine_service.store import JobStore
+from uvpython_service.models import JobState
+from uvpython_service.store import JobStore
 
 
 def build_job_state(**overrides: object) -> JobState:

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { getJimengSetupStatus } from '../services/jimengService';
 import { Tool, type CanvasImage } from '../types';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
 
@@ -46,6 +47,7 @@ const mockState = vi.hoisted(() => {
     negativePrompt: '',
     modelId: undefined as string | undefined,
     seedance2Variant: 'reference',
+    seedance2JimengModelVersion: 'seedance2.0fast',
     seedance2AspectRatio: '16:9',
     seedance2Resolution: '720p',
     seedance2Duration: '5',
@@ -81,6 +83,7 @@ const mockState = vi.hoisted(() => {
     isSeedance2VideoModel: true,
     isFalSeedance2VideoModel: false,
     isVolcengineSeedance2VideoModel: true,
+    isJimengSeedance2VideoModel: false,
     isVeo31VideoModel: false,
     isFlux2MaxModel: false,
     isWan27ImageModel: false,
@@ -145,6 +148,7 @@ const mockState = vi.hoisted(() => {
     seedance15CameraFixed: false,
     seedance15Audio: false,
     seedance2Variant: 'reference',
+    seedance2JimengModelVersion: 'seedance2.0fast',
     seedance2AspectRatio: '16:9',
     seedance2Resolution: '720p',
     seedance2Duration: '5',
@@ -215,6 +219,7 @@ const mockState = vi.hoisted(() => {
   falState.handleSeedance15CameraFixedChange = vi.fn();
   falState.handleSeedance15AudioChange = vi.fn();
   falState.handleSeedance2VariantChange = vi.fn();
+  falState.handleSeedance2JimengModelVersionChange = vi.fn();
   falState.handleSeedance2AspectRatioChange = vi.fn();
   falState.handleSeedance2ResolutionChange = vi.fn();
   falState.handleSeedance2DurationChange = vi.fn();
@@ -238,6 +243,7 @@ const mockState = vi.hoisted(() => {
     images: [] as CanvasImage[],
     displayedImages: [] as CanvasImage[],
     lastCanvasProps: null as Record<string, unknown> | null,
+    keyboardShortcuts: null as { onGenerate: () => void } | null,
     baseVideoPromptArea,
     baseVideoPromptBar,
     videoPromptAreas: [{ ...baseVideoPromptArea }],
@@ -260,8 +266,11 @@ vi.mock('../components/Toolbar', () => ({
 }));
 
 vi.mock('../components/PromptBar', () => ({
-  PromptBar: ({ onModelModeChange, leadingAccessory }: { onModelModeChange: (mode: 'image' | 'video') => void; leadingAccessory?: ReactNode }) => (
+  PromptBar: ({ onSubmit, onModelModeChange, submitDisabled, leadingAccessory }: { onSubmit: () => void; onModelModeChange: (mode: 'image' | 'video') => void; submitDisabled?: boolean; leadingAccessory?: ReactNode }) => (
     <div>
+      <button type="button" onClick={onSubmit} disabled={submitDisabled}>
+        Generate
+      </button>
       <button type="button" onClick={() => onModelModeChange('image')}>
         Switch To Image
       </button>
@@ -293,7 +302,13 @@ vi.mock('../components/FileMenu', () => ({
   ),
 }));
 vi.mock('../components/ViewToolbar', () => ({ ViewToolbar: () => null }));
-vi.mock('../components/ProviderSwitcher', () => ({ ProviderSwitcher: () => null }));
+vi.mock('../components/ProviderSwitcher', () => ({
+  ProviderSwitcher: ({ onSelect }: { onSelect: (provider: 'fal') => void }) => (
+    <button type="button" onClick={() => onSelect('fal')}>
+      Switch To Fal
+    </button>
+  ),
+}));
 vi.mock('../components/StatusBanner', () => ({ StatusBanner: () => null }));
 vi.mock('../components/ImageResizeToast', () => ({ ImageResizeToast: () => null }));
 
@@ -392,7 +407,9 @@ vi.mock('../hooks/useCanvasMediaActions', () => ({
 }));
 
 vi.mock('../hooks/useKeyboardShortcuts', () => ({
-  useKeyboardShortcuts: () => undefined,
+  useKeyboardShortcuts: (args: { onGenerate: () => void }) => {
+    mockState.keyboardShortcuts = args;
+  },
 }));
 
 vi.mock('../hooks/useAudioRecording', () => ({
@@ -495,6 +512,19 @@ vi.mock('../services/debugLog', () => ({
   clearDebugLogs: vi.fn(),
 }));
 
+vi.mock('../services/jimengService', () => ({
+  clearJimengCache: vi.fn(async () => ({ status: 'ok', deletedFiles: 0, bytesFreed: 0, errors: [] })),
+  getJimengSetupStatus: vi.fn(async () => ({
+    ready: false,
+    backendReachable: true,
+    cliAvailable: false,
+    authenticated: false,
+    message: 'Jimeng setup is required.',
+  })),
+  installJimengCli: vi.fn(),
+  startJimengLogin: vi.fn(async () => ({ message: 'Login started.' })),
+}));
+
 afterEach(() => {
   cleanup();
   mockState.handleGenerate.mockClear();
@@ -502,10 +532,18 @@ afterEach(() => {
   mockState.images = [];
   mockState.displayedImages = [];
   mockState.lastCanvasProps = null;
+  mockState.keyboardShortcuts = null;
   mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
   mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar }];
   mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
   mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar }];
+  vi.mocked(getJimengSetupStatus).mockResolvedValue({
+    ready: false,
+    backendReachable: true,
+    cliAvailable: false,
+    authenticated: false,
+    message: 'Jimeng setup is required.',
+  });
   Object.assign(mockState.falState, {
     falModelMode: 'video',
     falModelId: 'volcengine/seedance-2',
@@ -514,8 +552,10 @@ afterEach(() => {
     isSeedance2VideoModel: true,
     isFalSeedance2VideoModel: false,
     isVolcengineSeedance2VideoModel: true,
+    isJimengSeedance2VideoModel: false,
     isWan27VideoModel: false,
     wan27VideoVariant: 'smart',
+    seedance2JimengModelVersion: 'seedance2.0fast',
   });
   mockState.falState.handleModelModeChange.mockClear();
 });
@@ -597,6 +637,157 @@ describe('App video prompt area gating', () => {
     expect(mockState.lastCanvasProps?.tailSelectionEnabled).toBe(false);
   });
 
+  it('keeps Jimeng setup recoverable after dismissing the panel', async () => {
+    Object.assign(mockState.falState, {
+      falModelId: 'jimeng-cli/seedance-2',
+      falVideoModelId: 'jimeng-cli/seedance-2',
+      isFalSeedance2VideoModel: false,
+      isJimengSeedance2VideoModel: true,
+      isVolcengineSeedance2VideoModel: false,
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch To Fal' }));
+
+    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    expect(screen.queryByRole('region', { name: 'Jimeng setup' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Reopen Jimeng setup' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen Jimeng setup' }));
+
+    expect(screen.getByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
+  });
+
+  it('blocks global Jimeng submit and shortcut until setup is ready', async () => {
+    Object.assign(mockState.falState, {
+      falModelId: 'jimeng-cli/seedance-2',
+      falVideoModelId: 'jimeng-cli/seedance-2',
+      isFalSeedance2VideoModel: false,
+      isJimengSeedance2VideoModel: true,
+      isVolcengineSeedance2VideoModel: false,
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch To Fal' }));
+
+    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(true);
+
+    mockState.keyboardShortcuts?.onGenerate();
+
+    expect(mockState.handleGenerate).not.toHaveBeenCalled();
+  });
+
+  it('blocks embedded Jimeng prompt bars until setup is ready', async () => {
+    mockState.videoPromptBars = [{
+      ...mockState.baseVideoPromptBar,
+      modelId: 'jimeng-cli/seedance-2',
+      seedance2JimengModelVersion: 'seedance2.0_vip',
+      seedance2Resolution: '1080p',
+    }];
+    mockState.displayedVideoPromptBars = [...mockState.videoPromptBars];
+
+    render(<App />);
+
+    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).not.toHaveBeenCalled();
+  });
+
+  it('keeps footer generation available when only an embedded Jimeng bar needs setup', async () => {
+    mockState.videoPromptBars = [{
+      ...mockState.baseVideoPromptBar,
+      modelId: 'jimeng-cli/seedance-2',
+    }];
+    mockState.displayedVideoPromptBars = [...mockState.videoPromptBars];
+
+    render(<App />);
+
+    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith();
+  });
+
+  it('submits ready embedded Jimeng prompt bars through Jimeng options', async () => {
+    vi.mocked(getJimengSetupStatus).mockResolvedValue({
+      ready: true,
+      backendReachable: true,
+      cliAvailable: true,
+      authenticated: true,
+      message: 'Jimeng setup is ready.',
+    });
+    mockState.videoPromptBars = [{
+      ...mockState.baseVideoPromptBar,
+      modelId: 'jimeng-cli/seedance-2',
+      seedance2JimengModelVersion: 'seedance2.0fast',
+      seedance2Resolution: '1080p',
+      seedance2GenerateAudio: true,
+    }];
+    mockState.displayedVideoPromptBars = [...mockState.videoPromptBars];
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Jimeng setup' })).toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    await waitFor(() => {
+      expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'video',
+        provider: 'jimeng',
+        modelId: 'jimeng-cli/seedance-2',
+        modelMode: 'video',
+        jimengOptions: expect.objectContaining({
+          seedance2JimengModelVersion: 'seedance2.0fast',
+          seedance2Resolution: '720p',
+          seedance2GenerateAudio: true,
+        }),
+      }));
+    });
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.not.objectContaining({
+      falOptions: expect.anything(),
+    }));
+  });
+
+  it('opens Jimeng setup instead of rerunning saved Jimeng generations before setup is ready', async () => {
+    mockState.images = [{
+      ...buildCanvasMedia('jimeng-output', 'video'),
+      metadata: {
+        source: 'generated',
+        generation: {
+          kind: 'video',
+          prompt: 'Rerun the saved Jimeng job',
+          provider: 'jimeng',
+          modelId: 'jimeng-cli/seedance-2',
+          modelMode: 'video',
+          jimengOptions: { seedance2JimengModelVersion: 'seedance2.0fast' },
+        },
+      },
+    }];
+    mockState.displayedImages = [...mockState.images];
+
+    render(<App />);
+
+    await act(async () => {
+      (mockState.lastCanvasProps?.onRerunGeneration as ((imageId: string) => void) | undefined)?.('jimeng-output');
+    });
+
+    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
+    expect(mockState.handleGenerate).not.toHaveBeenCalled();
+  });
+
   it('hides the footer add button after switching away from video mode even when areas still exist', async () => {
     const { rerender } = render(<App />);
 
@@ -662,7 +853,7 @@ describe('App video prompt area gating', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
 
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual(expect.arrayContaining([
-      { value: 'volcengine/seedance-2', label: 'Seedance 2' },
+      { value: 'volcengine/seedance-2', label: 'Seedance 2 (VE)' },
       { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
       { value: 'fal-ai/kling-video/v3/pro', label: 'Kling 3.0 Pro' },
       { value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine' },

@@ -20,8 +20,8 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore", SyntaxWarning)
     import tos
 
-from volcengine_service.config import Settings
-from volcengine_service.models import MediaInput
+from uvpython_service.config import Settings
+from uvpython_service.models import MediaInput
 
 @dataclass(frozen=True)
 class FfprobeStatus:

@@ -40,7 +40,8 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
    - Set `GEMINI_API_KEY` in [.env.local](.env.local) for Google Gemini.
    - Set `FAL_API_KEY` in [.env.local](.env.local) for the secure Node backend's Fal.ai proxy.
    - Set `MOONSHOT_API_KEY` in [.env.local](.env.local) for the secure Node backend's Kimi K2.6 intent parsing.
-   - Set `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` in [.env.local](.env.local) for Seedance 2.
+   - Set `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` in [.env.local](.env.local) for Volcengine Seedance 2.
+   - For `Seedance 2 (JM CLI)`, start the UV Python service and complete Jimeng CLI setup from the in-app panel.
    - Optional: `SECURE_BACKEND_API_BASE_URL` to point the frontend at a different Node backend.
    - Optional: `SECURE_BACKEND_ALLOWED_ORIGINS` to comma-separate trusted browser origins for the Node backend.
    - Optional: `NODE_BACKEND_HOST` and `NODE_BACKEND_PORT` to override the Node backend bind address.
@@ -49,7 +50,7 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
    
    Fal and Moonshot keys are only read by the Node backend. They are not injected into the Vite browser bundle.
 
-3. **Sync the Seedance backend dependencies:**
+3. **Sync the UV Python backend dependencies:**
    ```bash
    uv sync --project backend
    ```
@@ -62,7 +63,7 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
    This starts:
    - The Vite dev server on `http://localhost:3000`
    - The secure Node backend on `http://localhost:8787`
-   - The Seedance backend on `http://localhost:8000`
+   - The UV Python backend for Volcengine and Jimeng on `http://localhost:8000`
 
    If you only need one side of the app, these fallback commands still work:
    ```bash
@@ -90,7 +91,7 @@ Seedance 2 uses the local FastAPI backend in [backend/README.md](backend/README.
 
 ```bash
 uv sync --project backend
-uv run --project backend uvicorn volcengine_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000
+uv run --project backend uvicorn uvpython_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000
 ```
 
 - `uv sync --project backend` installs a bundled `ffprobe` fallback for reference audio/video validation.

@@ -9,8 +9,8 @@ from unittest.mock import patch
 PROJECT_ROOT = Path(__file__).resolve().parents[2]  # Reach the repo root from backend/tests.
 sys.path.insert(0, str(PROJECT_ROOT / "backend" / "src"))  # Import the backend package without installing it.
 
-from volcengine_service.models import MediaInput, SeedanceJobPayload
-from volcengine_service.worker import _build_content
+from uvpython_service.models import MediaInput, SeedanceJobPayload
+from uvpython_service.worker import _build_content
 
 
 def build_media_input(path: Path, content_type: str) -> MediaInput:
@@ -42,8 +42,8 @@ class WorkerContentTests(unittest.TestCase):
                 reference_audios=[reference_audio],
             )
 
-            with patch("volcengine_service.worker.media_to_data_url", side_effect=lambda media: f"data:{media.file_name}"):
-                with patch("volcengine_service.worker.upload_video_to_tos", return_value="https://example.com/ref.mp4"):
+            with patch("uvpython_service.worker.media_to_data_url", side_effect=lambda media: f"data:{media.file_name}"):
+                with patch("uvpython_service.worker.upload_video_to_tos", return_value="https://example.com/ref.mp4"):
                     content = _build_content("job-1", payload, settings=object())  # Settings are only needed by the patched upload helper.
 
         self.assertEqual(content[1]["role"], "reference_image")

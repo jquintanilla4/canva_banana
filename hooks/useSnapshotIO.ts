@@ -36,6 +36,7 @@ import {
   isGrokImagineVideoResolutionSelectionValue,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
+  isJimengSeedance2ModelVersion,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
   isVeo31AspectRatioSelectionValue,
@@ -185,6 +186,7 @@ export function useSnapshotIO({
     wan27VideoVariant,
     wan27VideoAudioSetting,
     seedance2Variant,
+    seedance2JimengModelVersion,
     seedance2AspectRatio,
     seedance2Resolution,
     seedance2Duration,
@@ -238,6 +240,7 @@ export function useSnapshotIO({
     setWan27VideoVariant,
     setWan27VideoAudioSetting,
     setSeedance2Variant,
+    handleSeedance2JimengModelVersionChange,
     setSeedance2AspectRatio,
     setSeedance2Resolution,
     setSeedance2Duration,
@@ -326,6 +329,7 @@ export function useSnapshotIO({
       wan27VideoVariant,
       wan27VideoAudioSetting,
       seedance2Variant,
+      seedance2JimengModelVersion,
       seedance2AspectRatio,
       seedance2Resolution,
       seedance2Duration,
@@ -400,6 +404,7 @@ export function useSnapshotIO({
     wan27VideoVariant,
     wan27VideoAudioSetting,
     seedance2Variant,
+    seedance2JimengModelVersion,
     seedance2AspectRatio,
     seedance2Resolution,
     seedance2Duration,
@@ -780,6 +785,9 @@ export function useSnapshotIO({
         if (isSeedance2Variant(meta.seedance2Variant)) {
           setSeedance2Variant(meta.seedance2Variant);
         }
+        if (isJimengSeedance2ModelVersion(meta.seedance2JimengModelVersion)) {
+          handleSeedance2JimengModelVersionChange(meta.seedance2JimengModelVersion);
+        }
         if (isSeedance2AspectRatioSelectionValue(meta.seedance2AspectRatio)) {
           setSeedance2AspectRatio(meta.seedance2AspectRatio);
         }
@@ -859,6 +867,7 @@ export function useSnapshotIO({
     eraserSize,
     providerAvailability,
     resetHistory,
+    handleSeedance2JimengModelVersionChange,
     setApiProvider,
     setAppMode,
     setBrushColor,
