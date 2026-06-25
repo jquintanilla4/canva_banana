@@ -101,6 +101,28 @@ npm run make:mac
 - `npm run make:mac` creates distributable macOS artifacts.
 - `npm -w @canva-banana/desktop run start:built` intentionally builds first, then launches the built desktop app.
 
+Internal macOS builds that are shared with another Mac must be signed with an Apple Developer ID certificate and notarized. Without release signing, the local `npm run make:mac` output is only ad-hoc signed and macOS Gatekeeper can show the malware warning after the artifact is downloaded or transferred.
+
+To create a shareable internal macOS build, install the `Developer ID Application` certificate in the build machine's keychain, then set:
+
+```bash
+export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Company Name (TEAMID)"
+export APPLE_NOTARIZE_KEYCHAIN_PROFILE="the-institute-notary"
+```
+
+Create that keychain profile once with:
+
+```bash
+xcrun notarytool store-credentials "the-institute-notary" --apple-id "you@example.com" --team-id "TEAMID" --password "app-specific-password"
+```
+
+CI can also notarize without a stored keychain profile by setting `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` alongside `APPLE_SIGNING_IDENTITY`. The package scripts verify the generated app's code signature, architecture, and minimum macOS version before creating distributables. After `npm run make:mac`, verify the notarized app with:
+
+```bash
+spctl --assess --type execute --verbose "out/The Institute-darwin-arm64/The Institute.app"
+xcrun stapler validate "out/The Institute-darwin-arm64/The Institute.app"
+```
+
 Packaged desktop launches use the managed secure backend by default, even if `SECURE_BACKEND_API_BASE_URL` is set. QA can opt into an external secure backend by setting both `SECURE_BACKEND_API_BASE_URL` and `CANVA_BANANA_ALLOW_EXTERNAL_SECURE_BACKEND=1`; in that mode the app does not send the managed desktop auth token to the external backend. If the external backend requires desktop-origin auth, set the same shared value in `CANVA_BANANA_EXTERNAL_SECURE_BACKEND_AUTH_TOKEN` for the app and `CANVA_BANANA_DESKTOP_AUTH_TOKEN` for the external backend.
 
 ### Secure Node Backend
