@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  DESKTOP_SETTING_KEYS,
+  REQUIRED_DESKTOP_SETTING_KEYS,
   applyDesktopSettings,
   parseDotenvEntry,
   writeDesktopSettingsFileAtomic,
@@ -20,6 +22,11 @@ describe('settings-env', () => {
     expect(parseDotenvEntry('FAL_API_KEY="fal secret"')).toEqual({ key: 'FAL_API_KEY', value: 'fal secret' });
     expect(parseDotenvEntry("TOS_REGION='cn-beijing'")).toEqual({ key: 'TOS_REGION', value: 'cn-beijing' });
     expect(parseDotenvEntry('MOONSHOT_API_KEY=')).toEqual({ key: 'MOONSHOT_API_KEY', value: '' });
+  });
+
+  it('manages OpenRouter as an optional desktop key', () => {
+    expect(DESKTOP_SETTING_KEYS).toContain('OPENROUTER_API_KEY');
+    expect(REQUIRED_DESKTOP_SETTING_KEYS).not.toContain('OPENROUTER_API_KEY');
   });
 
   it('preserves unmanaged lines while updating managed settings', () => {

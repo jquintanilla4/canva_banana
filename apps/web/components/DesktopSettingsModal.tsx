@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CancelIcon, ConfirmIcon, DeleteIcon, RerunIcon } from './Icons';
 import type { DesktopSettingsKey, DesktopSettingsPayload, DesktopSettingsStatus } from '../services/runtimeConfig';
+import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
 
 type DesktopSettingsModalProps = {
   isOpen: boolean;
@@ -21,6 +22,7 @@ const PRIMARY_SETTING_FIELDS: SettingField[] = [
   { key: 'GEMINI_API_KEY', label: 'Gemini API Key', secret: true, placeholder: 'AIza...' },
   { key: 'FAL_API_KEY', label: 'FAL API Key', secret: true, placeholder: 'fal-key...' },
   { key: 'MOONSHOT_API_KEY', label: 'Moonshot API Key', secret: true, placeholder: 'sk-...' },
+  { key: 'OPENROUTER_API_KEY', label: 'OpenRouter API Key', secret: true, placeholder: 'sk-or-...' },
   { key: 'ARK_API_KEY', label: 'Ark API Key', secret: true, placeholder: 'ark-key...' },
   { key: 'VOLCENGINE_ACCESS_KEY', label: 'Volcengine Access Key', secret: true, placeholder: 'AK...' },
   { key: 'VOLCENGINE_SECRET_KEY', label: 'Volcengine Secret Key', secret: true, placeholder: 'SK...' },
@@ -190,7 +192,7 @@ export const DesktopSettingsModal: React.FC<DesktopSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-sm" role="presentation">
+    <div className={`fixed inset-0 ${OVERLAY_LAYER_CLASS_NAMES.blockingModal} flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-sm`} role="presentation">
       <div
         role="dialog"
         aria-modal="true"

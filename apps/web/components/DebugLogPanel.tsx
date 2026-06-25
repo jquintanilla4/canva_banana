@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { DebugLogEntry } from '../services/debugLog';
+import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
 
 interface DebugLogPanelProps {
   entries: DebugLogEntry[];
@@ -65,7 +66,7 @@ export const DebugLogPanel: React.FC<DebugLogPanelProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+      className={`fixed inset-0 ${OVERLAY_LAYER_CLASS_NAMES.blockingModal} flex items-center justify-center bg-black/70 px-4`}
     >
       <button
         type="button"

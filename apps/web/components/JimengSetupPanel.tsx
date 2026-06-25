@@ -1,6 +1,7 @@
 import React from 'react';
 import { ConfirmIcon, DownloadIcon, RerunIcon, UploadIcon } from './Icons';
 import type { JimengSetupStatus } from '../services/jimengService';
+import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
 
 type JimengSetupPanelProps = {
   status: JimengSetupStatus | null;
@@ -37,7 +38,7 @@ export const JimengSetupPanel: React.FC<JimengSetupPanelProps> = ({
 
   return (
     <section
-      className="fixed right-4 top-20 z-40 w-[22rem] max-w-[calc(100vw-2rem)] rounded-lg border border-cyan-300/25 bg-gray-950/92 p-4 text-gray-100 shadow-2xl shadow-black/40 backdrop-blur-md"
+      className={`fixed right-4 top-20 ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} w-[22rem] max-w-[calc(100vw-2rem)] rounded-lg border border-cyan-300/25 bg-gray-950/92 p-4 text-gray-100 shadow-2xl shadow-black/40 backdrop-blur-md`}
       aria-label="Jimeng setup"
     >
       <div className="mb-3 flex items-start justify-between gap-3">

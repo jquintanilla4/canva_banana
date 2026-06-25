@@ -39,6 +39,7 @@ export type DesktopSettingsKey =
   | 'GEMINI_API_KEY'
   | 'FAL_API_KEY'
   | 'MOONSHOT_API_KEY'
+  | 'OPENROUTER_API_KEY'
   | 'ARK_API_KEY'
   | 'VOLCENGINE_ACCESS_KEY'
   | 'VOLCENGINE_SECRET_KEY'

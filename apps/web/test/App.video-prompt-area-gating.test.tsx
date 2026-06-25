@@ -11,6 +11,7 @@ const desktopSettingsKeys: DesktopSettingsKey[] = [
   'GEMINI_API_KEY',
   'FAL_API_KEY',
   'MOONSHOT_API_KEY',
+  'OPENROUTER_API_KEY',
   'ARK_API_KEY',
   'VOLCENGINE_ACCESS_KEY',
   'VOLCENGINE_SECRET_KEY',
@@ -23,10 +24,10 @@ const buildDesktopSettingsStatus = (presentKeys: DesktopSettingsKey[] = desktopS
   configPath: '/Users/qa/Library/Application Support/The Institute/.env.local',
   fields: Object.fromEntries(desktopSettingsKeys.map(key => [key, {
     present: presentKeys.includes(key),
-    required: key !== 'JIMENG_CLI_PATH',
+    required: key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY',
     secret: key.endsWith('_KEY') || key.includes('API_KEY'),
   }])) as DesktopSettingsStatus['fields'],
-  missingKeys: desktopSettingsKeys.filter(key => key !== 'JIMENG_CLI_PATH' && !presentKeys.includes(key)),
+  missingKeys: desktopSettingsKeys.filter(key => key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY' && !presentKeys.includes(key)),
   isPackaged: true,
   serviceStatus: {
     secureBackend: { state: 'ready', url: 'http://localhost:8787' },
@@ -323,10 +324,13 @@ vi.mock('../components/BackupsModal', () => ({ BackupsModal: () => null }));
 vi.mock('../components/FalQueuePanel', () => ({ FalQueuePanel: () => null }));
 vi.mock('../components/DebugLogPanel', () => ({ DebugLogPanel: () => null }));
 vi.mock('../components/FileMenu', () => ({
-  FileMenu: () => (
-    <button type="button" aria-label="Snapshot menu">
-      Menu
-    </button>
+  FileMenu: ({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) => (
+    <div>
+      <button type="button" aria-label="Snapshot menu" onClick={onToggle}>
+        Menu
+      </button>
+      {isOpen && <div role="menu">Snapshot actions</div>}
+    </div>
   ),
 }));
 vi.mock('../components/ViewToolbar', () => ({ ViewToolbar: () => null }));
@@ -602,12 +606,14 @@ describe('App video prompt area gating', () => {
     render(<App />);
 
     await waitFor(() => expect(onOpenManageKeys).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Open prompt chat' })).toBeTruthy();
 
     await act(async () => {
       openManageKeys?.();
     });
 
     expect(await screen.findByRole('dialog', { name: /manage keys/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open prompt chat' })).toBeNull();
     await waitFor(() => expect(getSettingsStatus).toHaveBeenCalledTimes(2));
     expect(screen.getByLabelText('Jimeng CLI Path', { selector: 'input' })).toBeTruthy();
   });
@@ -647,6 +653,22 @@ describe('App video prompt area gating', () => {
     expect(rail.style.paddingInline).toBe(FLOATING_EDGE_CONTROL_SIDE_OFFSET);
     expect(screen.getByLabelText('Snapshot menu').closest('[data-testid="top-control-rail"]')).toBe(rail);
     expect(screen.getByLabelText('Canvas zoom 100%').closest('[data-testid="top-control-rail"]')).toBe(rail);
+  });
+
+  it('suppresses prompt chat while the snapshot menu is open', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open prompt chat' }));
+    expect(screen.getByRole('button', { name: 'Close prompt chat' })).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('Snapshot menu'));
+
+    expect(screen.queryByRole('button', { name: 'Close prompt chat' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open prompt chat' })).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Snapshot menu'));
+
+    expect(screen.getByRole('button', { name: 'Close prompt chat' })).toBeTruthy();
   });
 
   it('hides the footer add button when video mode has no video prompt areas', () => {

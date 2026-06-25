@@ -1,21 +1,65 @@
 import http from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
+import { timingSafeEqual } from 'node:crypto';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_PORT = 8787;
 const DEFAULT_HOST = '127.0.0.1';
-const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'file://', 'null']; // Include local desktop renderer origins.
+export const SECURE_BACKEND_SERVICE_NAME = 'canva-banana-secure-backend';
+export const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'file://', 'null']; // Include local desktop renderer origins.
 const TARGET_URL_HEADER = 'x-fal-target-url';
 const DESKTOP_AUTH_TOKEN_HEADER = 'x-canva-banana-desktop-token';
+const DEV_SERVICE_HEALTH_PROBE_HEADER = 'x-canva-banana-dev-service-probe'; // Dev launcher asks for reuse identity.
+const DEV_SERVICE_HEALTH_PROBE_VALUE = 'canva-banana-dev-service-health'; // Keep probe header out of browser CORS allowlist.
+const DEV_SERVICE_HEALTH_TOKEN_HEADER = 'x-canva-banana-dev-service-token'; // Secret token unlocks detailed dev health.
+const DEV_SERVICE_HEALTH_TOKEN_ENV = 'CANVA_BANANA_DEV_SERVICE_HEALTH_TOKEN'; // Env key used only for local dev probing.
+export const DEV_SERVICE_HEALTH_PROTOCOL_VERSION = 2; // Bump when probe payload shape changes.
 const MOONSHOT_CHAT_COMPLETIONS_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const MOONSHOT_INTENT_PATH = '/api/moonshot/intent';
 const MOONSHOT_INTENT_MODEL = 'kimi-k2.6';
+const OPENROUTER_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_CHAT_PATH = '/api/openrouter/chat';
+const OPENROUTER_CHAT_MODELS = new Set([
+  'google/gemini-3.5-flash',
+  'anthropic/claude-sonnet-4.6',
+  'openai/gpt-5.5',
+]);
+const OPENROUTER_MAX_CHAT_MESSAGES = 40;
+const OPENROUTER_MAX_MESSAGE_CHARS = 12000;
+const OPENROUTER_SYSTEM_PROMPT = [
+  'You help users improve prompts for image and video generation workflows.',
+  'Ask concise clarifying questions when required, otherwise produce sharper prompt options.',
+  'Preserve the user intent, include concrete visual details when useful, and avoid claiming to run tools.',
+].join(' ');
 const JSON_CONTENT_TYPE = 'application/json; charset=utf-8';
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const CORS_ALLOWED_METHODS = 'GET,POST,PUT,DELETE,OPTIONS';
 const CORS_ALLOWED_HEADERS = `Content-Type, Authorization, x-fal-target-url, x-fal-queue-priority, x-fal-runner-hint, ${DESKTOP_AUTH_TOKEN_HEADER}`;
+export const SECURE_BACKEND_CAPABILITIES = {
+  falProxy: true,
+  falAssetFetch: true,
+  moonshotIntent: true,
+  openrouterChat: true,
+};
+export const SECURE_BACKEND_REQUIRED_CAPABILITIES = Object.keys(SECURE_BACKEND_CAPABILITIES); // Routes the desktop app needs from a reused backend.
+export const SECURE_BACKEND_REQUIRED_READINESS_KEYS = [
+  'falProxy',
+  'falAssetFetch',
+  'moonshotIntent',
+  'openrouterChat',
+]; // Key-backed routes must match current launch config.
+const SECURE_BACKEND_SECRET_CONFIG_ENV_KEYS = [
+  'FAL_API_KEY',
+  'MOONSHOT_API_KEY',
+  'OPENROUTER_API_KEY',
+]; // Secret values cannot be safely compared from shell env.
+export const SECURE_BACKEND_REUSE_CONFIG_ENV_KEYS = [
+  ...SECURE_BACKEND_SECRET_CONFIG_ENV_KEYS,
+  'SECURE_BACKEND_ALLOWED_ORIGINS',
+  'CANVA_BANANA_DESKTOP_AUTH_TOKEN',
+]; // Every env key that changes renderer/backend compatibility.
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const nodeBackendDir = dirname(currentFilePath);
@@ -29,9 +73,17 @@ const findRepoRoot = (startDir) => {
   }
   return resolve(startDir, '../../..'); // Fallback matches apps/secure-backend/src.
 };
-const repoRoot = findRepoRoot(nodeBackendDir);
+export const canonicalWorkspaceRoot = (pathValue) => {
+  const resolvedPath = resolve(pathValue); // Normalize trailing slashes and dot segments.
+  try {
+    return realpathSync.native(resolvedPath); // Match symlinked checkouts by their real path.
+  } catch {
+    return resolvedPath;
+  }
+};
+const repoRoot = canonicalWorkspaceRoot(findRepoRoot(nodeBackendDir));
 
-const parseAllowedOrigins = (env) => {
+export const parseAllowedOrigins = (env) => {
   const rawOrigins = env.SECURE_BACKEND_ALLOWED_ORIGINS?.trim();
   if (!rawOrigins) {
     return DEFAULT_ALLOWED_ORIGINS;
@@ -76,10 +128,23 @@ const hasValidDesktopAuthToken = (request, env) => {
 
 const hasConfiguredDesktopAuthToken = (env) => Boolean(env.CANVA_BANANA_DESKTOP_AUTH_TOKEN?.trim());
 
+const hasValidStaticToken = (actualToken, expectedToken) => {
+  const actualBuffer = Buffer.from(actualToken);
+  const expectedBuffer = Buffer.from(expectedToken);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer); // Avoid leaking token prefix matches.
+};
+
+const hasValidDevServiceHealthToken = (request, env) => {
+  const expectedToken = env[DEV_SERVICE_HEALTH_TOKEN_ENV]?.trim();
+  const headerToken = getHeaderValue(request, DEV_SERVICE_HEALTH_TOKEN_HEADER)?.trim();
+  return Boolean(expectedToken && headerToken && hasValidStaticToken(headerToken, expectedToken)); // Static probe marker is not auth.
+};
+
 const shouldRequireDesktopAuth = (request, env) => hasConfiguredDesktopAuthToken(env) || isDesktopOrigin(getRequestOrigin(request)); // Tokened desktop backends gate every key route.
 
 const isKeyBearingPath = (requestUrl) => (
   requestUrl.pathname === MOONSHOT_INTENT_PATH ||
+  requestUrl.pathname === OPENROUTER_CHAT_PATH ||
   requestUrl.pathname === '/api/fal/proxy' ||
   requestUrl.pathname === '/api/fal/fetch-asset'
 );
@@ -121,6 +186,97 @@ export const loadEnvFiles = (rootDir = repoRoot) => {
       }
     }
   }
+};
+
+const readDotenvValues = (rootDir) => {
+  const values = {};
+  for (const fileName of ['.env.local', '.env']) {
+    const envPath = join(rootDir, fileName);
+    if (!existsSync(envPath)) {
+      continue;
+    }
+    for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const parsed = parseDotenvLine(line);
+      if (parsed && values[parsed[0]] === undefined) {
+        values[parsed[0]] = parsed[1]; // First dotenv file wins like loadEnvFiles.
+      }
+    }
+  }
+  return values;
+};
+
+const getEnvFileMetadata = (rootDir) => ['.env.local', '.env'].map(fileName => {
+  const envPath = join(rootDir, fileName);
+  if (!existsSync(envPath)) {
+    return { fileName, exists: false };
+  }
+  const stats = statSync(envPath, { bigint: true });
+  return {
+    fileName,
+    exists: true,
+    size: Number(stats.size),
+    mtimeNs: stats.mtimeNs.toString(),
+    ctimeNs: stats.ctimeNs.toString(),
+  };
+});
+
+const buildEffectiveSecureBackendEnv = (rootDir, env) => {
+  const dotenvValues = readDotenvValues(rootDir);
+  const effectiveEnv = {};
+  for (const key of SECURE_BACKEND_REUSE_CONFIG_ENV_KEYS) {
+    effectiveEnv[key] = env[key] === undefined ? dotenvValues[key] : env[key]; // Shell env overrides dotenv files.
+  }
+  return effectiveEnv;
+};
+
+export const buildSecureBackendReadiness = (env) => ({
+  falProxy: Boolean(env.FAL_API_KEY?.trim()),
+  falAssetFetch: Boolean(env.FAL_API_KEY?.trim()),
+  moonshotIntent: Boolean(env.MOONSHOT_API_KEY?.trim()),
+  openrouterChat: Boolean(env.OPENROUTER_API_KEY?.trim()),
+});
+
+const buildSecureBackendReuseConfig = (env) => {
+  const config = {
+    FAL_API_KEY: { present: Boolean(env.FAL_API_KEY?.trim()) },
+    MOONSHOT_API_KEY: { present: Boolean(env.MOONSHOT_API_KEY?.trim()) },
+    OPENROUTER_API_KEY: { present: Boolean(env.OPENROUTER_API_KEY?.trim()) },
+    SECURE_BACKEND_ALLOWED_ORIGINS: parseAllowedOrigins(env),
+    CANVA_BANANA_DESKTOP_AUTH_TOKEN: { present: Boolean(env.CANVA_BANANA_DESKTOP_AUTH_TOKEN?.trim()) },
+  }; // Registry-backed compatibility values; secrets expose only presence.
+  const missingKeys = SECURE_BACKEND_REUSE_CONFIG_ENV_KEYS.filter(key => !Object.prototype.hasOwnProperty.call(config, key));
+  if (missingKeys.length > 0) {
+    throw new Error(`Secure backend reuse config is missing keys: ${missingKeys.join(', ')}`);
+  }
+  return config;
+};
+
+export const buildSecureBackendReuseContract = (rootDir, env = process.env) => {
+  const effectiveEnv = buildEffectiveSecureBackendEnv(rootDir, env);
+  return {
+    version: 1,
+    workspaceRoot: canonicalWorkspaceRoot(rootDir),
+    capabilities: SECURE_BACKEND_CAPABILITIES,
+    readiness: buildSecureBackendReadiness(effectiveEnv),
+    config: buildSecureBackendReuseConfig(effectiveEnv),
+    envFiles: getEnvFileMetadata(rootDir),
+  };
+};
+
+export const buildSecureBackendConfigState = (rootDir, env = process.env, shellEnv = env) => {
+  const effectiveEnv = buildEffectiveSecureBackendEnv(rootDir, env);
+  const shellProvidedKeys = SECURE_BACKEND_REUSE_CONFIG_ENV_KEYS.filter(key => shellEnv[key] !== undefined);
+  const shellProvidedUnverifiableKeys = SECURE_BACKEND_SECRET_CONFIG_ENV_KEYS.filter(key => shellEnv[key] !== undefined);
+  return {
+    verifiable: shellProvidedUnverifiableKeys.length === 0,
+    shellProvidedKeys,
+    shellProvidedUnverifiableKeys,
+    envFiles: getEnvFileMetadata(rootDir),
+    readiness: buildSecureBackendReadiness(effectiveEnv),
+    allowedOrigins: parseAllowedOrigins(effectiveEnv),
+    auth: { desktopTokenRequired: Boolean(effectiveEnv.CANVA_BANANA_DESKTOP_AUTH_TOKEN?.trim()) },
+    reuseContract: buildSecureBackendReuseContract(rootDir, env),
+  };
 };
 
 const sendJson = (response, statusCode, payload, corsHeaders) => {
@@ -360,6 +516,121 @@ const handleMoonshotIntent = async (request, response, env, fetchImpl, corsHeade
   }
 };
 
+const normalizeOpenRouterMessage = (rawMessage, index) => {
+  if (!rawMessage || typeof rawMessage !== 'object' || Array.isArray(rawMessage)) {
+    throw new Error(`messages[${index}] must be an object`);
+  }
+  const role = rawMessage.role;
+  if (role !== 'user' && role !== 'assistant') {
+    throw new Error(`messages[${index}].role must be user or assistant`);
+  }
+  const content = typeof rawMessage.content === 'string' ? rawMessage.content.trim() : '';
+  if (!content) {
+    throw new Error(`messages[${index}].content must be a non-empty string`);
+  }
+  if (content.length > OPENROUTER_MAX_MESSAGE_CHARS) {
+    throw new Error(`messages[${index}].content must be ${OPENROUTER_MAX_MESSAGE_CHARS} characters or fewer`);
+  }
+  return { role, content };
+};
+
+const normalizeOpenRouterMessages = (rawMessages) => {
+  if (!Array.isArray(rawMessages)) {
+    throw new Error('messages must be an array');
+  }
+  if (rawMessages.length === 0) {
+    throw new Error('messages must include at least one message');
+  }
+  if (rawMessages.length > OPENROUTER_MAX_CHAT_MESSAGES) {
+    throw new Error(`messages must include ${OPENROUTER_MAX_CHAT_MESSAGES} messages or fewer`);
+  }
+  return rawMessages.map(normalizeOpenRouterMessage);
+};
+
+const getOpenRouterErrorDetail = (responseText, fallback) => {
+  try {
+    const payload = JSON.parse(responseText);
+    const detail = payload?.error?.message ?? payload?.detail;
+    return typeof detail === 'string' && detail.trim() ? detail : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const handleOpenRouterChat = async (request, response, env, fetchImpl, corsHeaders) => {
+  if (!env.OPENROUTER_API_KEY?.trim()) {
+    sendJson(response, 503, { detail: 'OPENROUTER_API_KEY must be set on the Node backend.' }, corsHeaders);
+    return;
+  }
+  let payload;
+  try {
+    payload = await readJsonBody(request);
+  } catch (error) {
+    sendJson(response, 400, { detail: error instanceof SyntaxError ? 'Request body must be valid JSON.' : error.message }, corsHeaders);
+    return;
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    sendJson(response, 400, { detail: 'Request body must be a JSON object.' }, corsHeaders);
+    return;
+  }
+  const model = typeof payload.model === 'string' ? payload.model.trim() : '';
+  if (!OPENROUTER_CHAT_MODELS.has(model)) {
+    sendJson(response, 400, { detail: 'OpenRouter model is not supported by this chatbox.' }, corsHeaders);
+    return;
+  }
+  let messages;
+  try {
+    messages = normalizeOpenRouterMessages(payload.messages);
+  } catch (error) {
+    sendJson(response, 400, { detail: error instanceof Error ? error.message : String(error) }, corsHeaders);
+    return;
+  }
+  let upstreamResponse;
+  try {
+    upstreamResponse = await fetchImpl(OPENROUTER_CHAT_COMPLETIONS_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'X-Title': 'Canva Banana',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: OPENROUTER_SYSTEM_PROMPT },
+          ...messages,
+        ],
+        temperature: 0.4,
+        max_tokens: 1600,
+        stream: false,
+      }),
+    });
+  } catch (error) {
+    sendJson(response, 502, { detail: `OpenRouter request failed: ${error instanceof Error ? error.message : String(error)}` }, corsHeaders);
+    return;
+  }
+  const responseText = await upstreamResponse.text();
+  if (!upstreamResponse.ok) {
+    const detail = getOpenRouterErrorDetail(responseText, `OpenRouter request failed with HTTP ${upstreamResponse.status}.`);
+    sendJson(response, 502, { detail }, corsHeaders);
+    return;
+  }
+  try {
+    const responsePayload = JSON.parse(responseText);
+    const content = responsePayload?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string' || !content.trim()) {
+      throw new Error('OpenRouter returned an empty message');
+    }
+    sendJson(response, 200, {
+      message: { role: 'assistant', content },
+      model: typeof responsePayload.model === 'string' ? responsePayload.model : model,
+      usage: responsePayload.usage ?? null,
+    }, corsHeaders);
+  } catch (error) {
+    sendJson(response, 502, { detail: `OpenRouter returned invalid chat output: ${error instanceof Error ? error.message : String(error)}` }, corsHeaders);
+  }
+};
+
 const handleFalProxy = async (request, response, env, fetchImpl, corsHeaders) => {
   if (!env.FAL_API_KEY?.trim()) {
     sendJson(response, 503, { detail: 'FAL_API_KEY must be set on the Node backend.' }, corsHeaders);
@@ -438,7 +709,7 @@ const handleFalAssetFetch = async (requestUrl, response, env, fetchImpl, corsHea
   await pipeFetchResponse(response, upstreamResponse, corsHeaders);
 };
 
-export const createSecureBackendServer = ({ env = process.env, fetchImpl = fetch } = {}) => http.createServer(async (request, response) => {
+export const createSecureBackendServer = ({ env = process.env, fetchImpl = fetch, devConfigState = buildSecureBackendConfigState(repoRoot, env) } = {}) => http.createServer(async (request, response) => {
   const { headers: corsHeaders, originAllowed } = resolveCors(request, env);
   if (!originAllowed) {
     sendJson(response, 403, { detail: 'Origin is not allowed for the secure backend.' }, corsHeaders);
@@ -455,15 +726,26 @@ export const createSecureBackendServer = ({ env = process.env, fetchImpl = fetch
   }
   try {
     if (requestUrl.pathname === '/health' && request.method === 'GET') {
-      sendJson(response, 200, {
+      const isDevServiceProbe = getHeaderValue(request, DEV_SERVICE_HEALTH_PROBE_HEADER) === DEV_SERVICE_HEALTH_PROBE_VALUE && hasValidDevServiceHealthToken(request, env);
+      sendJson(response, 200, isDevServiceProbe ? {
+        protocolVersion: DEV_SERVICE_HEALTH_PROTOCOL_VERSION,
         status: 'ok',
-        falConfigured: Boolean(env.FAL_API_KEY?.trim()),
-        moonshotConfigured: Boolean(env.MOONSHOT_API_KEY?.trim()),
-      }, corsHeaders);
+        service: SECURE_BACKEND_SERVICE_NAME,
+        workspaceRoot: repoRoot,
+        capabilities: SECURE_BACKEND_CAPABILITIES,
+        readiness: devConfigState.readiness,
+        auth: { desktopTokenRequired: hasConfiguredDesktopAuthToken(env) },
+        configState: devConfigState,
+        reuseContract: devConfigState.reuseContract,
+      } : { status: 'ok' }, corsHeaders);
       return;
     }
     if (requestUrl.pathname === MOONSHOT_INTENT_PATH && request.method === 'POST') {
       await handleMoonshotIntent(request, response, env, fetchImpl, corsHeaders);
+      return;
+    }
+    if (requestUrl.pathname === OPENROUTER_CHAT_PATH && request.method === 'POST') {
+      await handleOpenRouterChat(request, response, env, fetchImpl, corsHeaders);
       return;
     }
     if (requestUrl.pathname === '/api/fal/proxy') {
@@ -481,9 +763,11 @@ export const createSecureBackendServer = ({ env = process.env, fetchImpl = fetch
 });
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  const shellEnv = { ...process.env };
   loadEnvFiles();
   const { port, host } = getSecureBackendListenOptions();
-  const server = createSecureBackendServer();
+  const devConfigState = buildSecureBackendConfigState(repoRoot, process.env, shellEnv);
+  const server = createSecureBackendServer({ devConfigState });
   server.listen(port, host, () => {
     const displayHost = host === '127.0.0.1' ? 'localhost' : host;
     console.log(`Secure Node backend listening on http://${displayHost}:${port}`);

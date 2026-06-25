@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus, FaRobot } from 'react-icons/fa';
 import { RiCameraLensLine } from 'react-icons/ri';
 import { PiSelectionBold } from 'react-icons/pi';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
@@ -50,6 +50,7 @@ export const CrosshairIcon = FaCrosshairs as React.FC<IconProps>;
 export const VideoPromptAreaIcon = PiSelectionBold as React.FC<IconProps>;
 export const PlusIcon = FaPlus as React.FC<IconProps>;
 export const MinusIcon = FaMinus as React.FC<IconProps>;
+export const RobotIcon = FaRobot as React.FC<IconProps>;
 export const FontSizeIcon = RxFontSize as React.FC<IconProps>;
 export const FontSizeDownIcon: React.FC<IconProps> = ({ className }) => (
   <svg className={className} viewBox="0 0 16 16" fill="currentColor">

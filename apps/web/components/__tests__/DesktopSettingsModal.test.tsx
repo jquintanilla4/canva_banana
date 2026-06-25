@@ -7,6 +7,7 @@ const keys: DesktopSettingsKey[] = [
   'GEMINI_API_KEY',
   'FAL_API_KEY',
   'MOONSHOT_API_KEY',
+  'OPENROUTER_API_KEY',
   'ARK_API_KEY',
   'VOLCENGINE_ACCESS_KEY',
   'VOLCENGINE_SECRET_KEY',
@@ -19,10 +20,10 @@ const buildStatus = (presentKeys: DesktopSettingsKey[] = []): DesktopSettingsSta
   configPath: '/Users/qa/Library/Application Support/The Institute/.env.local',
   fields: Object.fromEntries(keys.map(key => [key, {
     present: presentKeys.includes(key),
-    required: key !== 'JIMENG_CLI_PATH',
+    required: key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY',
     secret: key.endsWith('_KEY') || key.includes('API_KEY'),
   }])) as DesktopSettingsStatus['fields'],
-  missingKeys: keys.filter(key => key !== 'JIMENG_CLI_PATH' && !presentKeys.includes(key)),
+  missingKeys: keys.filter(key => key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY' && !presentKeys.includes(key)),
   isPackaged: true,
   serviceStatus: {
     secureBackend: { state: 'ready', url: 'http://localhost:8787' },

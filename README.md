@@ -40,6 +40,7 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
    - Set `GEMINI_API_KEY` in [.env.local](.env.local) for Google Gemini.
    - Set `FAL_API_KEY` in [.env.local](.env.local) for the secure Node backend's Fal.ai proxy.
    - Set `MOONSHOT_API_KEY` in [.env.local](.env.local) for the secure Node backend's Kimi K2.6 intent parsing.
+   - Set `OPENROUTER_API_KEY` in [.env.local](.env.local) for the optional prompt chatbox.
    - Set `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` in [.env.local](.env.local) for Volcengine Seedance 2.
    - For `Seedance 2 (JM CLI)`, start the UV Python service and complete Jimeng CLI setup from the in-app panel.
    - Optional for web/dev: `SECURE_BACKEND_API_BASE_URL` to point the frontend at a different Node backend.
@@ -127,7 +128,7 @@ Packaged desktop launches use the managed secure backend by default, even if `SE
 
 ### Secure Node Backend
 
-Fal.ai and Moonshot calls use the local Node backend so API keys stay out of browser-side JavaScript.
+Fal.ai, Moonshot, and OpenRouter calls use the local Node backend so API keys stay out of browser-side JavaScript.
 
 ```bash
 npm run secure-backend:dev
@@ -135,6 +136,7 @@ npm run secure-backend:dev
 
 - `FAL_API_KEY` is used server-side for the Fal SDK proxy and Fal asset downloads.
 - `MOONSHOT_API_KEY` is used server-side for HeyGen prompt timing intent extraction with `kimi-k2.6`.
+- `OPENROUTER_API_KEY` is used server-side for the prompt chatbox.
 - The backend listens on `127.0.0.1:8787` by default and allows local web and desktop renderer origins.
 - The backend reads repo-root `.env.local` first and falls back to `.env`, while exported shell variables still win.
 

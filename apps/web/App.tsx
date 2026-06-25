@@ -20,6 +20,7 @@ import { DebugLogPanel } from './components/DebugLogPanel';
 import { clearDebugLogs } from './services/debugLog';
 import { JimengSetupPanel } from './components/JimengSetupPanel';
 import { DesktopSettingsModal } from './components/DesktopSettingsModal';
+import { PromptChatPanel } from './components/PromptChatPanel';
 import {
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
@@ -103,6 +104,7 @@ import {
 } from './utils/embeddedVideoRouting';
 import { markCanvasMediaStoppedByIds, stopCanvasMediaPlaybackByIds } from './utils/canvasMediaPlayback';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
+import { OVERLAY_LAYER_CLASS_NAMES } from './utils/overlayLayers';
 import { PlusIcon } from './components/Icons';
 import {
   EMPTY_CAMERA_SELECTION,
@@ -216,6 +218,7 @@ export default function App() {
 
   // State for transient toast message notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isPromptChatOpen, setIsPromptChatOpen] = useState(false);
 
   // State for currently selected API provider (e.g., 'google', 'fal')
   const [apiProvider, setApiProvider] = useState<ApiProvider>(DEFAULT_API_PROVIDER);
@@ -305,6 +308,7 @@ export default function App() {
   } = useDebugLogState({
     onOpen: () => setIsFileMenuOpen(false),
   });
+  const hasBlockingOverlay = isFileMenuOpen || isBackupsOpen || isDesktopSettingsOpen || isDebugLogOpen; // Overlays own focus and pointer input.
 
   // Callbacks to programmatically trigger zoom in/out from controls
   const requestZoomIn = useCallback(() => {
@@ -1840,7 +1844,7 @@ export default function App() {
       {isMacDesktop && (
         <div
           aria-hidden="true"
-          className="fixed inset-x-0 top-0 z-20 h-10"
+          className={`fixed inset-x-0 top-0 ${OVERLAY_LAYER_CLASS_NAMES.appBar} h-10`}
           data-testid="window-drag-region"
           style={windowDragRegionStyle}
         />
@@ -2026,6 +2030,13 @@ export default function App() {
         />
       </main>
 
+      <PromptChatPanel
+        isOpen={isPromptChatOpen}
+        isSuppressed={hasBlockingOverlay}
+        currentPrompt={prompt}
+        onToggle={() => setIsPromptChatOpen(prev => !prev)}
+      />
+
       {/* Error/status banners */}
       {error && (
         <StatusBanner message={error} variant="error" onClose={() => setError(null)} />
@@ -2088,7 +2099,7 @@ export default function App() {
         <button
           type="button"
           onClick={jimengSetup.reopen}
-          className="fixed right-4 top-20 z-40 rounded-md border border-cyan-300/25 bg-gray-950/92 px-3 py-2 text-xs font-semibold text-cyan-100 shadow-2xl shadow-black/40 backdrop-blur-md transition-colors hover:bg-cyan-300/12"
+          className={`fixed right-4 top-20 ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} rounded-md border border-cyan-300/25 bg-gray-950/92 px-3 py-2 text-xs font-semibold text-cyan-100 shadow-2xl shadow-black/40 backdrop-blur-md transition-colors hover:bg-cyan-300/12`}
           aria-label="Reopen Jimeng setup"
         >
           Jimeng Setup

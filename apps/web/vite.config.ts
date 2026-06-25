@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
       base: './', // Keep packaged Electron file:// assets relative to index.html.
       server: {
         port: 3000,
+        strictPort: true, // Electron always opens this exact dev URL.
         host: '0.0.0.0',
       },
       plugins: [react(), tailwindcss()],

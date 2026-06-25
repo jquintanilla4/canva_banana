@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import type { BackupSessionSummary } from '../services/backupService';
+import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
 
 type BackupsModalProps = {
   isOpen: boolean;
@@ -71,7 +72,7 @@ export const BackupsModal: React.FC<BackupsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+      className={`fixed inset-0 ${OVERLAY_LAYER_CLASS_NAMES.blockingModal} flex items-center justify-center bg-black/60 px-4`}
       // Close when clicking outside the modal panel.
       onClick={handleBackdropClick}
       onKeyDown={handleBackdropKeyDown}
