@@ -10,7 +10,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default [
   {
-    ignores: ['dist/**', 'build/**', 'node_modules/**'],
+    ignores: ['**/dist/**', '**/build/**', 'apps/desktop/resources/**', 'out/**', 'node_modules/**'],
   },
   {
     files: ['**/*.{ts,tsx,js,jsx}'],

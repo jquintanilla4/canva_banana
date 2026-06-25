@@ -42,7 +42,7 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
    - Set `MOONSHOT_API_KEY` in [.env.local](.env.local) for the secure Node backend's Kimi K2.6 intent parsing.
    - Set `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` in [.env.local](.env.local) for Volcengine Seedance 2.
    - For `Seedance 2 (JM CLI)`, start the UV Python service and complete Jimeng CLI setup from the in-app panel.
-   - Optional: `SECURE_BACKEND_API_BASE_URL` to point the frontend at a different Node backend.
+   - Optional for web/dev: `SECURE_BACKEND_API_BASE_URL` to point the frontend at a different Node backend.
    - Optional: `SECURE_BACKEND_ALLOWED_ORIGINS` to comma-separate trusted browser origins for the Node backend.
    - Optional: `NODE_BACKEND_HOST` and `NODE_BACKEND_PORT` to override the Node backend bind address.
    - Optional: `FAL_API_URL` to point the Fal SDK at a different proxy endpoint.
@@ -52,25 +52,56 @@ Infinite canvas for AI image/video generation and editing with Fal.ai + Google G
 
 3. **Sync the UV Python backend dependencies:**
    ```bash
-   uv sync --project backend
+   npm -w @canva-banana/python-backend run sync
    ```
 
-4. **Start all local services:**
+4. **Start the web app:**
    ```bash
    make dev
    ```
 
+   This starts the Vite dev server on `http://localhost:3000`.
+
+5. **Start the local backends in another terminal when generation providers need them:**
+   ```bash
+   make dev-backends
+   ```
+
    This starts:
-   - The Vite dev server on `http://localhost:3000`
    - The secure Node backend on `http://localhost:8787`
    - The UV Python backend for Volcengine and Jimeng on `http://localhost:8000`
 
    If you only need one side of the app, these fallback commands still work:
    ```bash
-   make frontend-dev
+   make web-dev
    make secure-backend-dev
    make backend-dev
    ```
+
+### Mac Desktop App
+
+For local Electron development, run:
+
+```bash
+npm run dev:desktop
+```
+
+This starts the web renderer, the secure Node backend, the UV Python backend, waits for health checks, then opens the Electron mac app.
+
+For non-interactive desktop build and packaging flows, run:
+
+```bash
+npm run build:desktop
+npm run package:mac
+npm run make:mac
+```
+
+- `npm run build:desktop` prepares packaged resources and exits without launching Electron.
+- `npm run package:mac` creates the packaged macOS app output.
+- `npm run make:mac` creates distributable macOS artifacts.
+- `npm -w @canva-banana/desktop run start:built` intentionally builds first, then launches the built desktop app.
+
+Packaged desktop launches use the managed secure backend by default, even if `SECURE_BACKEND_API_BASE_URL` is set. QA can opt into an external secure backend by setting both `SECURE_BACKEND_API_BASE_URL` and `CANVA_BANANA_ALLOW_EXTERNAL_SECURE_BACKEND=1`; in that mode the app does not send the managed desktop auth token to the external backend. If the external backend requires desktop-origin auth, set the same shared value in `CANVA_BANANA_EXTERNAL_SECURE_BACKEND_AUTH_TOKEN` for the app and `CANVA_BANANA_DESKTOP_AUTH_TOKEN` for the external backend.
 
 ### Secure Node Backend
 
@@ -82,21 +113,21 @@ npm run secure-backend:dev
 
 - `FAL_API_KEY` is used server-side for the Fal SDK proxy and Fal asset downloads.
 - `MOONSHOT_API_KEY` is used server-side for HeyGen prompt timing intent extraction with `kimi-k2.6`.
-- The backend listens on `127.0.0.1:8787` by default and only allows `http://localhost:3000` or `http://127.0.0.1:3000` browser origins.
+- The backend listens on `127.0.0.1:8787` by default and allows local web and desktop renderer origins.
 - The backend reads repo-root `.env.local` first and falls back to `.env`, while exported shell variables still win.
 
 ### Seedance 2 Backend
 
-Seedance 2 uses the local FastAPI backend in [backend/README.md](backend/README.md).
+Seedance 2 uses the local FastAPI backend in [apps/python-backend/backend/README.md](apps/python-backend/backend/README.md).
 
 ```bash
-uv sync --project backend
-uv run --project backend uvicorn uvpython_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000
+npm -w @canva-banana/python-backend run sync
+npm run backend:dev
 ```
 
-- `uv sync --project backend` installs a bundled `ffprobe` fallback for reference audio/video validation.
+- `npm -w @canva-banana/python-backend run sync` installs a bundled `ffprobe` fallback for reference audio/video validation.
 - The backend now reads `.env.local` first and falls back to `.env`, so the same repo-root env file works for Vite and FastAPI.
-- If you already onboarded before this dependency was added, rerun `uv sync --project backend` after pulling the latest changes.
+- If you already onboarded before this dependency was added, rerun `npm -w @canva-banana/python-backend run sync` after pulling the latest changes.
 - You can override the binary location with `VOLCENGINE_FFPROBE_PATH` if your machine already has a preferred `ffprobe` install.
 
 ### Other Commands
@@ -105,8 +136,17 @@ uv run --project backend uvicorn uvpython_service.main:app --app-dir backend/src
 npm run build
 npm run preview
 npm run typecheck
-npm run test -- --run
+npm run test
+npm run test:watch
 ```
+
+- `npm run test` runs every workspace test suite once.
+- `npm run test:watch` starts the web Vitest watcher for iterative local work.
+- `npm run test:web`, `npm run test:desktop`, `npm run test:secure-backend`, and `npm run test:python-backend` run individual suites.
+
+### Dependency Maintenance Notes
+
+- `npm audit` may still report Electron Forge dev-tooling advisories through `@electron/rebuild`, `@electron/node-gyp`, `tar`, `tmp`, and `@inquirer/prompts`. As of this cleanup, latest stable Electron Forge was still `7.11.2`, and npm's suggested fix was not a safe forward upgrade. Recheck in a month or two with `npm view @electron-forge/cli version` and `npm audit`.
 
 ### Troubleshooting
 

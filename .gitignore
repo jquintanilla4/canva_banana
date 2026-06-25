@@ -17,6 +17,17 @@ backend/.pytest_cache
 backend/__pycache__
 backend/src/**/__pycache__
 backend/tests/**/__pycache__
+apps/python-backend/backend/.venv
+apps/python-backend/backend/.jimeng-work/
+apps/python-backend/backend/.pytest_cache
+apps/python-backend/backend/__pycache__
+apps/python-backend/backend/src/**/__pycache__
+apps/python-backend/backend/tests/**/__pycache__
+apps/python-backend/dist/
+apps/python-backend/build/
+apps/desktop/resources/
+apps/desktop/generated/
+out/
 
 # Editor directories and files
 .vscode/*

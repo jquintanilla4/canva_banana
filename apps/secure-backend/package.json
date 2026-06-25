@@ -1,0 +1,10 @@
+{
+  "name": "@canva-banana/secure-backend",
+  "private": true,
+  "version": "0.0.3",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.mjs",
+    "test": "node --test src/*.node-test.mjs"
+  }
+}

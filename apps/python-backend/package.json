@@ -1,0 +1,15 @@
+{
+  "name": "@canva-banana/python-backend",
+  "private": true,
+  "version": "0.0.3",
+  "type": "module",
+  "scripts": {
+    "sync": "uv sync --project backend",
+    "ensure-venv": "node scripts/ensure-venv.mjs",
+    "predev": "node scripts/ensure-venv.mjs",
+    "pretest": "node scripts/ensure-venv.mjs",
+    "dev": "uv run --project backend uvicorn uvpython_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000",
+    "build:packaged-backend": "PYTHONWARNINGS='ignore:invalid escape sequence:SyntaxWarning' uv run --project backend --with pyinstaller pyinstaller --noconfirm --clean --onedir --name canva-banana-python-backend --paths backend/src --distpath dist --workpath build/pyinstaller --specpath build/pyinstaller --collect-submodules uvicorn --collect-submodules fastapi --collect-submodules starlette --collect-submodules websockets --collect-submodules httptools --collect-submodules watchfiles backend/src/uvpython_service/packaged_launcher.py",
+    "test": "uv run --project backend --with pytest python -m pytest backend/tests"
+  }
+}

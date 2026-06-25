@@ -1,25 +1,32 @@
 {
-  "name": "canva-banana-🍌",
+  "name": "canva-banana",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.3",
   "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "vite --clearScreen false",
-    "backend:dev": "uv run --project backend uvicorn uvpython_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000",
-    "secure-backend:dev": "node node-backend/server.mjs",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test:secure-backend": "node --test node-backend/*.node-test.mjs",
-    "test": "vitest",
+    "dev": "npm run dev:web",
+    "dev:web": "npm -w @canva-banana/web run dev",
+    "dev:desktop": "npm -w @canva-banana/desktop run dev",
+    "dev:backends": "make dev-backends",
+    "backend:dev": "npm -w @canva-banana/python-backend run dev",
+    "secure-backend:dev": "npm -w @canva-banana/secure-backend run dev",
+    "build": "npm run build:web",
+    "build:web": "npm -w @canva-banana/web run build",
+    "build:desktop": "npm -w @canva-banana/desktop run build",
+    "package:mac": "npm -w @canva-banana/desktop run package",
+    "make:mac": "npm -w @canva-banana/desktop run make",
+    "preview": "npm -w @canva-banana/web run preview",
+    "test:web": "npm -w @canva-banana/web run test",
+    "test:desktop": "npm -w @canva-banana/desktop run test",
+    "test:secure-backend": "npm -w @canva-banana/secure-backend run test",
+    "test:python-backend": "npm -w @canva-banana/python-backend run test",
+    "test:watch": "npm -w @canva-banana/web run test:watch",
+    "test": "npm run test --workspaces --if-present",
     "lint": "eslint \"**/*.{ts,tsx,js,jsx}\" --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
-  "dependencies": {
-    "@fal-ai/client": "^1.6.2",
-    "@google/genai": "^1.20.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "react-icons": "^5.2.1"
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -36,7 +43,15 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "jsdom": "^26.1.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "vitest": "^3.2.4"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
+  },
+  "allowScripts": {
+    "esbuild@0.25.10": true,
+    "fsevents@2.3.3": true,
+    "fs-xattr@0.3.1": true,
+    "macos-alias@0.2.12": true,
+    "@google/genai@2.10.0": true,
+    "protobufjs@7.6.4": true
   }
 }

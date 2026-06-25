@@ -1,3 +1,0 @@
-:root {
-  font-size: var(--app-root-font-size, 16px); /* Shrinks rem-based chrome without touching canvas math. */
-}
