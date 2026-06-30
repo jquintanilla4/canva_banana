@@ -7,9 +7,9 @@ const PROMPT_BAR_BASE_MAX_WIDTH_REM = 69.1; // Keeps the existing desktop prompt
 const PROMPT_BAR_MINI_MAX_WIDTH_REM = 31.5; // Mini mode mirrors the compact bar from the design reference.
 const PROMPT_BAR_HORIZONTAL_GUTTER_REM = 1.5; // Leaves a little space from the viewport edges on narrow screens.
 const PROMPT_TEXTAREA_MIN_HEIGHT_REM = 5.75; // Keeps the textarea tall enough for 3 rows.
-const PROMPT_TEXTAREA_MAX_HEIGHT_REM = 16.8125; // Caps textarea growth before it scrolls.
+const PROMPT_TEXTAREA_MAX_HEIGHT_REM = 23; // Lets medium prompts grow to ~4x the resting height before scrolling.
 const PROMPT_TEXTAREA_MINI_HEIGHT_REM = 2.85; // Mini mode collapses to a one-line editing affordance.
-const PROMPT_TEXTAREA_MINI_MAX_HEIGHT_REM = 6.75; // Mini mode still allows modest multiline growth.
+const PROMPT_TEXTAREA_MINI_MAX_HEIGHT_REM = 11.4; // Mini mode grows to ~4x its resting height before scrolling.
 
 const getPromptBarHorizontalGutterPx = (): number => PROMPT_BAR_HORIZONTAL_GUTTER_REM * getRootFontSizePx();
 
@@ -571,7 +571,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const submitButtonAccentClassName = cameraThemeActive ? 'bg-amber-500 hover:bg-amber-400' : 'bg-green-600 hover:bg-green-500';
   const isMiniMode = resolvedSizeMode === 'mini';
   const textareaPaintStyle: React.CSSProperties = { backgroundColor: 'transparent', colorScheme: 'dark' }; // Keep native textarea paint dark before CSS settles.
-  const promptTextareaClassName = `flex-1 appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed ${
+  const promptTextareaClassName = `w-full appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed ${
     cameraThemeActive ? 'caret-amber-400' : ''
   }`;
 
@@ -616,7 +616,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 placeholder={resolvedMultiPromptPlaceholder}
                 disabled={isLoading || !onMultiPromptChange}
                 rows={3}
-                className="flex-1 appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+                className="w-full appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
                 style={{ minHeight: `${PROMPT_TEXTAREA_MIN_HEIGHT_REM}rem`, maxHeight: `${PROMPT_TEXTAREA_MAX_HEIGHT_REM}rem`, ...textareaPaintStyle }}
                 aria-label="Multi prompt input"
               />
@@ -637,7 +637,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 placeholder={resolvedNegativePromptPlaceholder}
                 disabled={isLoading || !onNegativePromptChange}
                 rows={3}
-                className="flex-1 appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
+                className="w-full appearance-none border-0 bg-transparent text-white shadow-none placeholder-gray-400 focus:outline-none px-[0.79rem] pb-[0.34rem] resize-none overflow-y-auto disabled:text-gray-400 disabled:placeholder-gray-500 disabled:cursor-not-allowed"
                 style={{ minHeight: `${PROMPT_TEXTAREA_MIN_HEIGHT_REM}rem`, maxHeight: `${PROMPT_TEXTAREA_MAX_HEIGHT_REM}rem`, ...textareaPaintStyle }}
                 aria-label="Negative prompt input"
               />

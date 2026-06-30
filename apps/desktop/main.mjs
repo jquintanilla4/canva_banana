@@ -1,10 +1,10 @@
-import { app, BrowserWindow, ipcMain, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -16,10 +16,18 @@ import {
   readDesktopSettingsFile,
   writeDesktopSettingsFileAtomic,
 } from './settings-env.mjs';
+import { APPLICATION_MENU_ITEM_IDS, FILE_MENU_COMMANDS, buildApplicationMenuTemplate } from './application-menu.mjs';
+import { createChatHistoryStore } from './chat-history-store.mjs';
+import { assertSnapshotDataCanBeWritten, readSnapshotFileCapped, sanitizeSnapshotFileName } from './file-menu-utils.mjs';
 import { resolveSecureBackendRuntime, shouldUseExternalSecureBackend } from './secure-backend-runtime.mjs';
 import { getDevRendererUrl, isAllowedAudioPermissionRequest } from './security.mjs';
 
 app.setName('The Institute');
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock(); // One main process owns userData files and managed services.
+if (!hasSingleInstanceLock) {
+  app.quit(); // A running instance already owns the chat history file.
+}
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const desktopDir = dirname(currentFilePath);
@@ -27,7 +35,8 @@ const repoRoot = resolve(desktopDir, '../..');
 const webDistDir = resolve(repoRoot, 'apps/web/dist');
 const preloadPath = join(desktopDir, 'preload.cjs');
 const devRendererUrl = getDevRendererUrl(process.env, app.isPackaged);
-const openManageKeysChannel = 'canva-banana:open-manage-keys';
+const fileMenuCommandChannel = 'canva-banana:file-menu-command';
+const chatHistoryClearedChannel = 'canva-banana:chat-history-cleared';
 const desktopAuthToken = randomBytes(32).toString('base64url'); // Per-launch secret for desktop-only backend calls.
 const serviceStatus = {
   secureBackend: { state: 'stopped' },
@@ -36,7 +45,14 @@ const serviceStatus = {
 const managedChildren = new Set();
 let managedSecureBackendServer = null;
 let mainWindow = null;
+let mainWindowPromise = null;
 let runtimeConfig = null;
+let startupPromise = null;
+let fileMenuState = {
+  autosaveEnabled: true,
+  showZoomLevelBadge: true,
+  isClearingJimengCache: false,
+};
 
 const normalizeBaseUrl = (value) => value.replace(/\/+$/, ''); // Renderer URL builders expect no trailing slash.
 
@@ -59,6 +75,40 @@ const setServiceStatus = (serviceName, patch) => {
 const getServiceStatusSnapshot = () => JSON.parse(JSON.stringify(serviceStatus)); // Avoid leaking mutable main-process objects.
 
 const getDesktopSettingsPath = () => join(app.getPath('userData'), '.env.local'); // QA-managed settings live in App Support.
+
+const getChatHistoryPath = () => join(app.getPath('userData'), 'chat-history.json'); // App-level prompt chat history lives in App Support.
+
+const chatHistoryStore = createChatHistoryStore({ getHistoryPath: getChatHistoryPath });
+const snapshotAutosaveTargets = new Map();
+const maxSnapshotAutosaveTargets = 20;
+
+const toBinaryBuffer = (data) => {
+  assertSnapshotDataCanBeWritten(data);
+  return data instanceof ArrayBuffer
+    ? Buffer.from(data)
+    : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+};
+
+const writeFileAtomic = async (filePath, data) => {
+  const tempPath = join(dirname(filePath), `.${basename(filePath)}.${randomBytes(6).toString('hex')}.tmp`); // Same directory keeps rename atomic.
+  try {
+    await writeFile(tempPath, data);
+    await rename(tempPath, filePath); // Replace the target only after the temp file is complete.
+  } catch (error) {
+    await rm(tempPath, { force: true }); // Avoid leaving failed partial writes behind.
+    throw error;
+  }
+};
+
+const rememberSnapshotAutosaveTarget = (filePath) => {
+  const autosaveId = randomBytes(18).toString('base64url');
+  snapshotAutosaveTargets.set(autosaveId, filePath);
+  while (snapshotAutosaveTargets.size > maxSnapshotAutosaveTargets) {
+    const oldestId = snapshotAutosaveTargets.keys().next().value;
+    snapshotAutosaveTargets.delete(oldestId);
+  }
+  return autosaveId;
+};
 
 const migrateLegacyDesktopSettings = async () => {
   if (!app.isPackaged) {
@@ -429,57 +479,100 @@ const restartManagedServices = async () => {
   return getServiceStatusSnapshot();
 };
 
-const sendOpenManageKeys = (targetWindow) => {
+const focusMainWindowForMenuCommand = async () => {
+  const targetWindow = await ensureMainWindow();
+  if (targetWindow.isMinimized()) {
+    targetWindow.restore(); // Native menu commands should work after the app is minimized.
+  }
+  targetWindow.show();
+  targetWindow.focus();
+  return targetWindow;
+};
+
+const sendFileMenuCommand = async (command) => {
+  const targetWindow = await focusMainWindowForMenuCommand();
   const send = () => {
     if (!targetWindow.isDestroyed() && !targetWindow.webContents.isDestroyed()) {
-      targetWindow.webContents.send(openManageKeysChannel); // Ask React to open the existing styled modal.
+      targetWindow.webContents.send(fileMenuCommandChannel, command); // React owns the actual app behavior.
     }
   };
   if (targetWindow.webContents.isLoading()) {
-    targetWindow.webContents.once('did-finish-load', () => setTimeout(send, 100).unref()); // Let renderer effects subscribe.
+    targetWindow.webContents.once('did-finish-load', () => setTimeout(send, 100).unref()); // Wait for preload subscriptions.
     return;
   }
   send();
 };
 
-const openManageKeysFromMenu = async () => {
-  const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : await createMainWindow();
-  if (targetWindow.isMinimized()) {
-    targetWindow.restore(); // Bring hidden/minimized windows back before opening the modal.
+const updateFileMenuItems = () => {
+  if (process.platform !== 'darwin') {
+    return; // Only the macOS menu bar has these native items.
   }
-  targetWindow.show();
-  targetWindow.focus();
-  sendOpenManageKeys(targetWindow);
+  const menu = Menu.getApplicationMenu();
+  const autosaveItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.AUTOSAVE);
+  const zoomItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE);
+  const clearCacheItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.CLEAR_JIMENG_CACHE);
+  if (autosaveItem) {
+    autosaveItem.checked = fileMenuState.autosaveEnabled;
+  }
+  if (zoomItem) {
+    zoomItem.checked = fileMenuState.showZoomLevelBadge;
+  }
+  if (clearCacheItem) {
+    clearCacheItem.enabled = !fileMenuState.isClearingJimengCache;
+    clearCacheItem.label = fileMenuState.isClearingJimengCache ? 'Clearing Jimeng Cache...' : 'Clear Jimeng Cache';
+  }
+};
+
+const sendChatHistoryCleared = (targetWindow, revision) => {
+  if (targetWindow && !targetWindow.isDestroyed() && !targetWindow.webContents.isDestroyed()) {
+    targetWindow.webContents.send(chatHistoryClearedChannel, { revision }); // Let the open panel drop its cached list immediately.
+  }
+};
+
+const clearChatHistoryFromMenu = async () => {
+  const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  const dialogOptions = {
+    type: 'warning',
+    buttons: ['Clear History', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    message: 'Clear all prompt chat history?',
+    detail: 'This permanently deletes every saved prompt chat conversation. This cannot be undone.',
+  };
+  const { response } = targetWindow
+    ? await dialog.showMessageBox(targetWindow, dialogOptions)
+    : await dialog.showMessageBox(dialogOptions);
+  if (response !== 0) {
+    return; // Destructive action stays opt-in.
+  }
+  const { revision } = await chatHistoryStore.clear();
+  sendChatHistoryCleared(targetWindow, revision);
 };
 
 const installApplicationMenu = () => {
   if (process.platform !== 'darwin') {
     return; // Only macOS has the application menu.
   }
-  const template = [
-    {
-      label: app.name,
-      submenu: [
-        { label: 'Manage Keys...', click: () => void openManageKeysFromMenu() },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' },
-      ],
+  const template = buildApplicationMenuTemplate({
+    appName: app.name,
+    fileMenuState,
+    handlers: {
+      importSnapshot: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.IMPORT_SNAPSHOT),
+      exportSnapshot: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.EXPORT_SNAPSHOT),
+      openBackups: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_BACKUPS),
+      toggleAutosave: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_AUTOSAVE),
+      toggleZoomLevelBadge: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_ZOOM_LEVEL_BADGE),
+      openDebugLog: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_DEBUG_LOG),
+      openManageKeys: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_MANAGE_KEYS),
+      clearJimengCache: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.CLEAR_JIMENG_CACHE),
+      clearChatHistory: () => void clearChatHistoryFromMenu(),
     },
-    { role: 'editMenu' },
-    { role: 'viewMenu' },
-    { role: 'windowMenu' },
-  ];
+  });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template)); // Replace Electron's default with the QA key entry.
 };
 
 const createMainWindow = async () => {
-  mainWindow = new BrowserWindow({
+  const createdWindow = new BrowserWindow({
     width: 1440,
     height: 960,
     minWidth: 1024,
@@ -498,28 +591,43 @@ const createMainWindow = async () => {
       additionalArguments: [encodeRuntimeConfigArgument()],
     },
   });
+  mainWindow = createdWindow;
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  createdWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternalOpenUrl(url)) {
       void shell.openExternal(url); // External auth/help links should leave the app sandbox.
     }
     return { action: 'deny' };
   });
 
-  mainWindow.webContents.on('will-navigate', (event, url) => {
+  createdWindow.webContents.on('will-navigate', (event, url) => {
     if (!isAllowedNavigationUrl(url)) {
       event.preventDefault(); // Prevent unexpected renderer-initiated top-level navigation.
     }
   });
 
-  await mainWindow.loadURL(getRendererUrl());
-  mainWindow.on('closed', () => {
-    mainWindow = null; // Avoid sending menu events to a stale BrowserWindow.
+  await createdWindow.loadURL(getRendererUrl());
+  createdWindow.on('closed', () => {
+    if (mainWindow === createdWindow) {
+      mainWindow = null; // Avoid clearing a newer window if an older one closes late.
+    }
   });
-  return mainWindow;
+  return createdWindow;
 };
 
-app.whenReady().then(async () => {
+const ensureMainWindow = async () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow; // Reuse the existing renderer instead of opening duplicates.
+  }
+  if (!mainWindowPromise) {
+    mainWindowPromise = createMainWindow().finally(() => {
+      mainWindowPromise = null; // Let a later reopen retry after success or failure.
+    });
+  }
+  return mainWindowPromise;
+};
+
+const startDesktopApp = async () => {
   await migrateLegacyDesktopSettings();
   loadDesktopEnv();
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -528,20 +636,104 @@ app.whenReady().then(async () => {
 
   refreshRuntimeConfig(await startManagedServices());
   installApplicationMenu();
-  await createMainWindow();
+  await ensureMainWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createMainWindow(); // macOS reopens a window when the dock icon is clicked.
+      void ensureMainWindow(); // macOS reopens a window after startup has initialized runtime config.
     }
   });
-});
+};
+
+const focusMainWindowAfterStartup = async () => {
+  await startupPromise;
+  return focusMainWindowForMenuCommand(); // Second launches wait for the initialized owner instance.
+};
+
+if (hasSingleInstanceLock) {
+  app.on('second-instance', () => {
+    void focusMainWindowAfterStartup(); // Bring the file-owning instance forward without racing startup.
+  });
+
+  startupPromise = app.whenReady().then(startDesktopApp);
+}
 
 ipcMain.on('canva-banana:get-runtime-config', event => {
   event.returnValue = runtimeConfig ?? {}; // Preload needs a synchronous snapshot during renderer startup.
 });
 
 ipcMain.handle('canva-banana:get-service-status', () => getServiceStatusSnapshot());
+
+ipcMain.handle('canva-banana:file-menu-set-state', (event, nextState) => {
+  fileMenuState = {
+    autosaveEnabled: typeof nextState?.autosaveEnabled === 'boolean' ? nextState.autosaveEnabled : fileMenuState.autosaveEnabled,
+    showZoomLevelBadge: typeof nextState?.showZoomLevelBadge === 'boolean' ? nextState.showZoomLevelBadge : fileMenuState.showZoomLevelBadge,
+    isClearingJimengCache: typeof nextState?.isClearingJimengCache === 'boolean' ? nextState.isClearingJimengCache : fileMenuState.isClearingJimengCache,
+  };
+  updateFileMenuItems();
+  return true;
+});
+
+ipcMain.handle('canva-banana:file-menu-open-snapshot', async () => {
+  const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+  const dialogOptions = {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Canvas Snapshot', extensions: ['bcsnap', 'json'] },
+    ],
+  };
+  const result = targetWindow
+    ? await dialog.showOpenDialog(targetWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions);
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true };
+  }
+  const filePath = result.filePaths[0];
+  const data = await readSnapshotFileCapped(filePath);
+  return {
+    canceled: false,
+    fileName: basename(filePath),
+    data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+  };
+});
+
+ipcMain.handle('canva-banana:file-menu-save-snapshot', async (event, payload) => {
+  const suggestedName = sanitizeSnapshotFileName(payload?.suggestedName);
+  const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+  const dialogOptions = {
+    defaultPath: join(app.getPath('documents'), suggestedName),
+    filters: [{ name: 'Canvas Snapshot', extensions: ['bcsnap'] }],
+  };
+  const result = targetWindow
+    ? await dialog.showSaveDialog(targetWindow, dialogOptions)
+    : await dialog.showSaveDialog(dialogOptions);
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+  const binary = toBinaryBuffer(payload?.data);
+  await writeFileAtomic(result.filePath, binary);
+  return {
+    canceled: false,
+    fileName: basename(result.filePath),
+    autosaveId: rememberSnapshotAutosaveTarget(result.filePath),
+  };
+});
+
+ipcMain.handle('canva-banana:file-menu-write-snapshot', async (event, payload) => {
+  const autosaveId = typeof payload?.autosaveId === 'string' ? payload.autosaveId : '';
+  const filePath = snapshotAutosaveTargets.get(autosaveId);
+  if (!filePath) {
+    throw new Error('Snapshot autosave target is no longer available. Export the snapshot again.');
+  }
+  await writeFileAtomic(filePath, toBinaryBuffer(payload?.data));
+  return { saved: true };
+});
+
+ipcMain.handle('canva-banana:load-chat-history', () => chatHistoryStore.read());
+
+ipcMain.handle('canva-banana:save-chat-history', async (event, snapshot) => {
+  return chatHistoryStore.save(snapshot ?? { revision: -1, conversations: [], folders: [] });
+});
 
 ipcMain.handle('canva-banana:get-settings-status', () => buildSettingsStatus());
 

@@ -1,11 +1,16 @@
-import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Tool } from '../../types';
 import type { SnapshotMetaState } from '../../services/snapshotService';
 import { KLING_V3_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import { useSnapshotIO } from '../useSnapshotIO';
 import type { SelectionStateResult } from '../useSelectionState';
 import type { UseFalSettingsResult } from '../useFalSettings';
+
+vi.mock('../../services/backupService', () => ({
+  pruneBackupSessions: vi.fn(async () => {}),
+  saveBackupSession: vi.fn(async () => {}),
+}));
 
 const buildMeta = (): SnapshotMetaState => ({
   appMode: 'CANVAS',
@@ -34,6 +39,11 @@ const buildMeta = (): SnapshotMetaState => ({
   selectedImageIds: [],
   selectedNoteIds: [],
   referenceImageIds: [],
+});
+
+afterEach(() => {
+  delete window.canvaBananaDesktop;
+  vi.restoreAllMocks();
 });
 
 describe('useSnapshotIO (Kling v3)', () => {
@@ -151,5 +161,96 @@ describe('useSnapshotIO (Kling v3)', () => {
     expect(falSetters.setKlingV3Shot1Duration).toHaveBeenCalledWith('4');
     expect(falSetters.setKlingV3Shot2Duration).toHaveBeenCalledWith('6');
     expect(falSetters.handleSeedance2JimengModelVersionChange).toHaveBeenCalledWith('seedance2.0_vip');
+  });
+
+  it('autosaves desktop exports through the native autosave target', async () => {
+    const saveSnapshotFile = vi.fn(async () => ({
+      canceled: false as const,
+      fileName: 'scene.bcsnap',
+      autosaveId: 'desktop-target-1',
+    }));
+    const writeSnapshotFile = vi.fn(async () => ({ saved: true }));
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-1111-4111-8111-111111111111');
+    window.canvaBananaDesktop = {
+      fileMenu: {
+        saveSnapshotFile,
+        writeSnapshotFile,
+      },
+    };
+
+    const { result } = renderHook(() => useSnapshotIO({
+      ui: {
+        appMode: 'CANVAS',
+        tool: Tool.PAN,
+        brushSize: 20,
+        eraserSize: 20,
+        brushColor: '#ff0000',
+        prompt: '',
+        apiProvider: 'fal',
+        setAppMode: vi.fn(),
+        setTool: vi.fn(),
+        setBrushSize: vi.fn(),
+        setEraserSize: vi.fn(),
+        setBrushColor: vi.fn(),
+        setPrompt: vi.fn(),
+        setApiProvider: vi.fn(),
+        setError: vi.fn(),
+        setToastMessage: vi.fn(),
+        setIsFileMenuOpen: vi.fn(),
+      },
+      fal: {
+        falModelId: KLING_V3_VIDEO_MODEL_ID,
+        falImageSizeSelection: 'default',
+        falAspectRatioSelection: 'default',
+        falResolutionSelection: '720p',
+        falNumImages: 1,
+        falScaleFactor: 2,
+        falNoiseScale: 0.1,
+        falCreativity: 0,
+        klingV3Duration: '5',
+        klingV3GenerateAudio: true,
+        klingV3CfgScale: '0.5',
+        klingV3MultiPromptEnabled: false,
+        klingV3MultiPrompt: '',
+        klingV3Shot1Duration: '5',
+        klingV3Shot2Duration: '5',
+      } as unknown as UseFalSettingsResult,
+      selection: {
+        selectedImageIds: [],
+        selectedNoteIds: [],
+        referenceImageIds: [],
+        referenceVideoIds: [],
+        referenceAudioIds: [],
+        seedanceReferenceOrderIds: [],
+        elementImageIds: [],
+        videoLastFrameImageId: null,
+      } as unknown as SelectionStateResult,
+      displayedImages: [],
+      displayedNotes: [],
+      displayedPaths: [],
+      displayedVideoPromptAreas: [],
+      displayedVideoPromptBars: [],
+      resetHistory: vi.fn(),
+      providerAvailability: { google: true, fal: true },
+      availableProviders: ['google', 'fal'],
+      autosaveEnabled: true,
+    }));
+
+    await act(async () => {
+      await result.current.exportSnapshot();
+    });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+
+    await waitFor(() => expect(writeSnapshotFile).toHaveBeenCalledTimes(1));
+    expect(saveSnapshotFile).toHaveBeenCalledWith({
+      suggestedName: expect.stringMatching(/^banana-canvas-snapshot-.*\.bcsnap$/),
+      data: expect.any(ArrayBuffer),
+    });
+    expect(writeSnapshotFile).toHaveBeenCalledWith({
+      autosaveId: 'desktop-target-1',
+      data: expect.any(ArrayBuffer),
+    });
   });
 });

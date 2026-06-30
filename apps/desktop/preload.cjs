@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const openManageKeysChannel = 'canva-banana:open-manage-keys';
+const fileMenuCommandChannel = 'canva-banana:file-menu-command';
+const chatHistoryClearedChannel = 'canva-banana:chat-history-cleared';
+const maxSnapshotWriteBytes = 512 * 1024 * 1024; // Mirror main's snapshot write safety cap.
+const arrayBufferByteLengthGetter = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')?.get; // Requires a real ArrayBuffer receiver.
+const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'byteLength')?.get; // Requires a real typed-array receiver.
+const dataViewByteLengthGetter = Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength')?.get; // Requires a real DataView receiver.
 
 const normalizeBaseUrl = (value, fallback) => {
   const raw = typeof value === 'string' && value.trim() ? value.trim() : fallback;
@@ -18,6 +24,49 @@ const parseRuntimeConfigArgument = () => {
   } catch {
     return {}; // Fall back to process env if the main-process argument is malformed.
   }
+};
+
+const subscribeToMainChannel = (channel, callback) => {
+  if (typeof callback !== 'function') {
+    return () => {}; // Ignore invalid renderer subscriptions.
+  }
+  const handler = (_event, ...args) => callback(...args);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler); // Let React clean up the listener.
+};
+
+const getSnapshotBinaryByteLength = (data) => {
+  if (ArrayBuffer.isView(data)) {
+    try {
+      return typedArrayByteLengthGetter?.call(data) ?? null;
+    } catch {
+      try {
+        return dataViewByteLengthGetter?.call(data) ?? null;
+      } catch {
+        return null;
+      }
+    }
+  }
+  try {
+    return arrayBufferByteLengthGetter?.call(data) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const assertSnapshotWritePayload = (payload) => {
+  const data = payload?.data;
+  const byteLength = getSnapshotBinaryByteLength(data);
+  if (byteLength === null) {
+    throw new Error('Snapshot data must be binary.');
+  }
+  if (!Number.isFinite(byteLength) || byteLength < 0) {
+    throw new Error('Snapshot data size is invalid.');
+  }
+  if (byteLength > maxSnapshotWriteBytes) {
+    throw new Error('Snapshot data is too large to write safely.');
+  }
+  return payload;
 };
 
 const mainRuntimeConfig = parseRuntimeConfigArgument();
@@ -44,12 +93,17 @@ contextBridge.exposeInMainWorld('canvaBananaDesktop', {
   saveSettings: payload => ipcRenderer.invoke('canva-banana:save-settings', payload), // Main process owns secret writes.
   clearSettings: keys => ipcRenderer.invoke('canva-banana:clear-settings', keys), // Remove selected managed keys.
   restartServices: () => ipcRenderer.invoke('canva-banana:restart-services'), // QA can retry local services after edits.
-  onOpenManageKeys: callback => {
-    if (typeof callback !== 'function') {
-      return () => {}; // Ignore invalid renderer subscriptions.
-    }
-    const handler = () => callback();
-    ipcRenderer.on(openManageKeysChannel, handler);
-    return () => ipcRenderer.removeListener(openManageKeysChannel, handler); // Let React clean up the listener.
+  onOpenManageKeys: callback => subscribeToMainChannel(openManageKeysChannel, callback),
+  fileMenu: {
+    onCommand: callback => subscribeToMainChannel(fileMenuCommandChannel, callback),
+    setState: state => ipcRenderer.invoke('canva-banana:file-menu-set-state', state), // Sync checked/disabled native items.
+    openSnapshotFile: () => ipcRenderer.invoke('canva-banana:file-menu-open-snapshot'), // Native picker keeps macOS menu commands reliable.
+    saveSnapshotFile: payload => ipcRenderer.invoke('canva-banana:file-menu-save-snapshot', assertSnapshotWritePayload(payload)), // Main owns filesystem writes.
+    writeSnapshotFile: payload => ipcRenderer.invoke('canva-banana:file-menu-write-snapshot', assertSnapshotWritePayload(payload)), // Main writes only previously exported paths.
+  },
+  chatHistory: {
+    load: () => ipcRenderer.invoke('canva-banana:load-chat-history'), // App-level prompt chat history persists in main.
+    save: snapshot => ipcRenderer.invoke('canva-banana:save-chat-history', snapshot), // Main owns the on-disk cache ({ conversations, folders }).
+    onCleared: callback => subscribeToMainChannel(chatHistoryClearedChannel, callback),
   },
 });

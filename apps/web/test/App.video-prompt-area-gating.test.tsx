@@ -3,9 +3,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { getJimengSetupStatus } from '../services/jimengService';
-import type { DesktopSettingsKey, DesktopSettingsStatus } from '../services/runtimeConfig';
+import type { DesktopFileMenuCommand, DesktopSettingsKey, DesktopSettingsStatus } from '../services/runtimeConfig';
 import { Tool, type CanvasImage } from '../types';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
+
+const originalNavigatorPlatform = navigator.platform;
 
 const desktopSettingsKeys: DesktopSettingsKey[] = [
   'GEMINI_API_KEY',
@@ -53,6 +55,7 @@ const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType']): Canv
 
 const mockState = vi.hoisted(() => {
   const handleGenerate = vi.fn();
+  const importSnapshotWithPicker = vi.fn((callback: () => void) => callback());
   const setReferenceImageIds = vi.fn();
   const baseVideoPromptArea = {
     id: 'area-1',
@@ -267,6 +270,7 @@ const mockState = vi.hoisted(() => {
 
   return {
     handleGenerate,
+    importSnapshotWithPicker,
     setReferenceImageIds,
     falState,
     images: [] as CanvasImage[],
@@ -279,6 +283,15 @@ const mockState = vi.hoisted(() => {
     videoPromptBars: [{ ...baseVideoPromptBar }],
     displayedVideoPromptAreas: [{ ...baseVideoPromptArea }],
     displayedVideoPromptBars: [{ ...baseVideoPromptBar }],
+    runtimeConfig: { isDesktop: false },
+  };
+});
+
+vi.mock('../services/runtimeConfig', async () => {
+  const actual = await vi.importActual<typeof import('../services/runtimeConfig')>('../services/runtimeConfig');
+  return {
+    ...actual,
+    getRuntimeConfig: () => mockState.runtimeConfig,
   };
 });
 
@@ -324,12 +337,19 @@ vi.mock('../components/BackupsModal', () => ({ BackupsModal: () => null }));
 vi.mock('../components/FalQueuePanel', () => ({ FalQueuePanel: () => null }));
 vi.mock('../components/DebugLogPanel', () => ({ DebugLogPanel: () => null }));
 vi.mock('../components/FileMenu', () => ({
-  FileMenu: ({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) => (
+  FileMenu: ({ isOpen, onToggle, onImportSnapshot }: { isOpen: boolean; onToggle: () => void; onImportSnapshot: () => void }) => (
     <div>
       <button type="button" aria-label="Snapshot menu" onClick={onToggle}>
         Menu
       </button>
-      {isOpen && <div role="menu">Snapshot actions</div>}
+      {isOpen && (
+        <div role="menu">
+          <span>Snapshot actions</span>
+          <button type="button" onClick={onImportSnapshot}>
+            Import Snapshot
+          </button>
+        </div>
+      )}
     </div>
   ),
 }));
@@ -415,7 +435,7 @@ vi.mock('../hooks/useSnapshotIO', () => ({
   useSnapshotIO: () => ({
     exportSnapshot: vi.fn(),
     importSnapshotFromFile: vi.fn(),
-    importSnapshotWithPicker: (callback: () => void) => callback(),
+    importSnapshotWithPicker: mockState.importSnapshotWithPicker,
     autosaveSnapshot: vi.fn(),
   }),
 }));
@@ -560,7 +580,14 @@ vi.mock('../services/jimengService', () => ({
 afterEach(() => {
   cleanup();
   delete window.canvaBananaDesktop;
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    value: originalNavigatorPlatform,
+  });
+  mockState.runtimeConfig.isDesktop = false;
   mockState.handleGenerate.mockClear();
+  mockState.importSnapshotWithPicker.mockReset();
+  mockState.importSnapshotWithPicker.mockImplementation((callback: () => void) => callback()); // Default tests use the hidden-input fallback path.
   mockState.setReferenceImageIds.mockClear();
   mockState.images = [];
   mockState.displayedImages = [];
@@ -594,22 +621,33 @@ afterEach(() => {
 });
 
 describe('App video prompt area gating', () => {
-  it('opens the Manage Keys modal from the desktop bridge event', async () => {
-    let openManageKeys: (() => void) | null = null;
+  it('opens the Manage Keys modal from the native menu command', async () => {
+    let fileMenuCommand: ((command: DesktopFileMenuCommand) => void) | null = null;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    mockState.runtimeConfig.isDesktop = true;
     const getSettingsStatus = vi.fn(async () => buildDesktopSettingsStatus());
-    const onOpenManageKeys = vi.fn((callback: () => void) => {
-      openManageKeys = callback; // Store the main-process menu callback for the test.
+    const onCommand = vi.fn((callback: (command: DesktopFileMenuCommand) => void) => {
+      fileMenuCommand = callback; // Store the main-process File menu callback for the test.
       return vi.fn();
     });
-    window.canvaBananaDesktop = { getSettingsStatus, onOpenManageKeys };
+    window.canvaBananaDesktop = {
+      getSettingsStatus,
+      fileMenu: {
+        onCommand,
+        setState: vi.fn(),
+      },
+    };
 
     render(<App />);
 
-    await waitFor(() => expect(onOpenManageKeys).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('button', { name: 'Open prompt chat' })).toBeTruthy();
 
     await act(async () => {
-      openManageKeys?.();
+      fileMenuCommand?.('openManageKeys');
     });
 
     expect(await screen.findByRole('dialog', { name: /manage keys/i })).toBeTruthy();
@@ -655,6 +693,38 @@ describe('App video prompt area gating', () => {
     expect(screen.getByLabelText('Canvas zoom 100%').closest('[data-testid="top-control-rail"]')).toBe(rail);
   });
 
+  it('hides the hamburger menu on macOS desktop', () => {
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    mockState.runtimeConfig.isDesktop = true;
+    window.canvaBananaDesktop = {
+      fileMenu: {
+        onCommand: vi.fn(() => vi.fn()),
+        setState: vi.fn(),
+      },
+    };
+
+    render(<App />);
+
+    expect(screen.queryByLabelText('Snapshot menu')).toBeNull();
+    expect(screen.getByLabelText('Canvas zoom 100%').closest('[data-testid="top-control-rail"]')).toBe(screen.getByTestId('top-control-rail'));
+  });
+
+  it('keeps the hamburger menu on macOS desktop when the native file menu bridge is missing', () => {
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    mockState.runtimeConfig.isDesktop = true;
+    window.canvaBananaDesktop = {};
+
+    render(<App />);
+
+    expect(screen.getByLabelText('Snapshot menu')).toBeTruthy();
+  });
+
   it('suppresses prompt chat while the snapshot menu is open', () => {
     render(<App />);
 
@@ -669,6 +739,20 @@ describe('App video prompt area gating', () => {
     fireEvent.click(screen.getByLabelText('Snapshot menu'));
 
     expect(screen.getByRole('button', { name: 'Close prompt chat' })).toBeTruthy();
+  });
+
+  it('closes the snapshot menu before opening the import picker', () => {
+    mockState.importSnapshotWithPicker.mockImplementation(() => undefined);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByLabelText('Snapshot menu'));
+    expect(screen.getByRole('menu')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import Snapshot' }));
+
+    expect(mockState.importSnapshotWithPicker).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('hides the footer add button when video mode has no video prompt areas', () => {

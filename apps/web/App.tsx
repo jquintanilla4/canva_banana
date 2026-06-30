@@ -113,7 +113,7 @@ import {
   hasCameraSettings,
   type CameraSettingsSelection,
 } from './utils/cameraSettings';
-import { getRuntimeConfig, hasRuntimeConfigValue, type DesktopSettingsStatus } from './services/runtimeConfig';
+import { getRuntimeConfig, hasRuntimeConfigValue, type DesktopFileMenuCommand, type DesktopSettingsStatus } from './services/runtimeConfig';
 
 // Type alias for API providers
 type ApiProvider = ApiProviderId;
@@ -947,8 +947,8 @@ export default function App() {
   }, [handleImportSnapshotFromFile, setError]);
 
   const handleImportSnapshot = useCallback(() => {
+    closeFileMenu();
     importSnapshotWithPicker(() => {
-      closeFileMenu();
       snapshotInputRef.current?.click();
     });
   }, [closeFileMenu, importSnapshotWithPicker]);
@@ -1821,12 +1821,73 @@ export default function App() {
   const activeNegativePrompt = generationNegativePrompt;
   const activeNegativePromptSetter = fal.isWan27ImageModel ? setWan27ImageNegativePrompt : setVideoNegativePrompt;
   const isMacDesktop = runtimeConfig.isDesktop && typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
+  const hasNativeFileMenuBridge = isMacDesktop && typeof window !== 'undefined' && typeof window.canvaBananaDesktop?.fileMenu?.onCommand === 'function';
+  const shouldShowReactFileMenu = !hasNativeFileMenuBridge;
   const topControlRailStyle: React.CSSProperties = isMacDesktop
     ? { paddingLeft: '86px', paddingRight: FLOATING_EDGE_CONTROL_SIDE_OFFSET }
     : { paddingInline: FLOATING_EDGE_CONTROL_SIDE_OFFSET }; // Shift controls away from macOS traffic lights.
   const windowDragRegionStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties; // Electron-only CSS for hidden titlebar dragging.
   // Raise the hamburger so its center lines up with the macOS traffic lights (their visual center sits ~34px from top vs the rail's 40px).
   const fileMenuAlignStyle: React.CSSProperties = isMacDesktop ? { transform: 'translateY(-6px)' } : {};
+
+  useEffect(() => {
+    if (!hasNativeFileMenuBridge) {
+      return;
+    }
+    return window.canvaBananaDesktop?.fileMenu?.onCommand?.((command: DesktopFileMenuCommand) => {
+      switch (command) {
+        case 'importSnapshot':
+          handleImportSnapshot();
+          break;
+        case 'exportSnapshot':
+          void handleExportSnapshot();
+          break;
+        case 'openBackups':
+          openBackupsModal();
+          break;
+        case 'toggleAutosave':
+          handleToggleAutosave();
+          break;
+        case 'toggleZoomLevelBadge':
+          handleToggleZoomLevelBadge();
+          break;
+        case 'openDebugLog':
+          openDebugLogPanel();
+          break;
+        case 'openManageKeys':
+          openDesktopSettings();
+          break;
+        case 'clearJimengCache':
+          void jimengSetup.handleClearCache();
+          break;
+        default: {
+          const exhaustiveCommand: never = command;
+          return exhaustiveCommand;
+        }
+      }
+    });
+  }, [
+    handleExportSnapshot,
+    handleImportSnapshot,
+    handleToggleAutosave,
+    handleToggleZoomLevelBadge,
+    hasNativeFileMenuBridge,
+    jimengSetup.handleClearCache,
+    openBackupsModal,
+    openDebugLogPanel,
+    openDesktopSettings,
+  ]);
+
+  useEffect(() => {
+    if (!hasNativeFileMenuBridge) {
+      return;
+    }
+    void window.canvaBananaDesktop?.fileMenu?.setState?.({
+      autosaveEnabled,
+      showZoomLevelBadge,
+      isClearingJimengCache: jimengSetup.isClearingCache,
+    });
+  }, [autosaveEnabled, hasNativeFileMenuBridge, jimengSetup.isClearingCache, showZoomLevelBadge]);
 
   // TSX (React with Tailwind CSS utility classes)
   return (
@@ -1855,22 +1916,24 @@ export default function App() {
         style={topControlRailStyle}
       >
         <div className="flex items-center justify-start" style={fileMenuAlignStyle}>
-          <FileMenu
-            isOpen={isFileMenuOpen}
-            onToggle={toggleFileMenu}
-            onClose={closeFileMenu}
-            onImportSnapshot={handleImportSnapshot}
-            onExportSnapshot={handleExportSnapshot}
-            onOpenBackups={openBackupsModal}
-            autosaveEnabled={autosaveEnabled}
-            onToggleAutosave={handleToggleAutosave}
-            showZoomLevelBadge={showZoomLevelBadge}
-            onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
-            onOpenDebugLog={openDebugLogPanel}
-            onOpenDesktopSettings={hasDesktopSettingsBridge ? openDesktopSettings : undefined}
-            onClearJimengCache={jimengSetup.handleClearCache}
-            isClearingJimengCache={jimengSetup.isClearingCache}
-          />
+          {shouldShowReactFileMenu && (
+            <FileMenu
+              isOpen={isFileMenuOpen}
+              onToggle={toggleFileMenu}
+              onClose={closeFileMenu}
+              onImportSnapshot={handleImportSnapshot}
+              onExportSnapshot={handleExportSnapshot}
+              onOpenBackups={openBackupsModal}
+              autosaveEnabled={autosaveEnabled}
+              onToggleAutosave={handleToggleAutosave}
+              showZoomLevelBadge={showZoomLevelBadge}
+              onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
+              onOpenDebugLog={openDebugLogPanel}
+              onOpenDesktopSettings={hasDesktopSettingsBridge ? openDesktopSettings : undefined}
+              onClearJimengCache={jimengSetup.handleClearCache}
+              isClearingJimengCache={jimengSetup.isClearingCache}
+            />
+          )}
         </div>
         <div className="flex items-center justify-center">
           {/* Main toolbar, hidden during crop/transform */}

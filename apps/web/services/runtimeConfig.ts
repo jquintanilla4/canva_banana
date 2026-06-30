@@ -63,6 +63,48 @@ export type DesktopSettingsStatus = {
 
 export type DesktopSettingsPayload = Partial<Record<DesktopSettingsKey, string>>;
 
+export type DesktopFileMenuCommand =
+  | 'importSnapshot'
+  | 'exportSnapshot'
+  | 'openBackups'
+  | 'toggleAutosave'
+  | 'toggleZoomLevelBadge'
+  | 'openDebugLog'
+  | 'openManageKeys'
+  | 'clearJimengCache';
+
+export type DesktopFileMenuState = {
+  autosaveEnabled: boolean;
+  showZoomLevelBadge: boolean;
+  isClearingJimengCache: boolean;
+};
+
+export type DesktopOpenSnapshotResult =
+  | { canceled: true }
+  | { canceled: false; fileName: string; data: ArrayBuffer };
+
+export type DesktopSaveSnapshotPayload = {
+  suggestedName: string;
+  data: ArrayBuffer;
+};
+
+export type DesktopSaveSnapshotResult =
+  | { canceled: true }
+  | { canceled: false; fileName: string; autosaveId?: string };
+
+export type DesktopWriteSnapshotPayload = {
+  autosaveId: string;
+  data: ArrayBuffer;
+};
+
+export type DesktopWriteSnapshotResult = {
+  saved: boolean;
+};
+
+export type DesktopChatHistoryClearedPayload = {
+  revision?: number;
+};
+
 declare global {
   interface Window {
     canvaBananaDesktop?: {
@@ -73,6 +115,18 @@ declare global {
       clearSettings?: (keys: DesktopSettingsKey[]) => Promise<DesktopSettingsStatus>;
       restartServices?: () => Promise<DesktopSettingsStatus>;
       onOpenManageKeys?: (callback: () => void) => () => void;
+      fileMenu?: {
+        onCommand?: (callback: (command: DesktopFileMenuCommand) => void) => () => void;
+        setState?: (state: DesktopFileMenuState) => Promise<unknown>;
+        openSnapshotFile?: () => Promise<DesktopOpenSnapshotResult>;
+        saveSnapshotFile?: (payload: DesktopSaveSnapshotPayload) => Promise<DesktopSaveSnapshotResult>;
+        writeSnapshotFile?: (payload: DesktopWriteSnapshotPayload) => Promise<DesktopWriteSnapshotResult>;
+      };
+      chatHistory?: {
+        load?: () => Promise<unknown>;
+        save?: (snapshot: unknown) => Promise<unknown>;
+        onCleared?: (callback: (payload?: DesktopChatHistoryClearedPayload) => void) => () => void;
+      };
     };
   }
 }

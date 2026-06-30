@@ -106,6 +106,29 @@ type AutosaveSessionInfo = {
   fileName: string;
 };
 
+type DesktopAutosaveTarget = {
+  kind: 'desktop';
+  autosaveId: string;
+};
+
+type AutosavePrimaryTarget = FileSystemFileHandle | DesktopAutosaveTarget | null;
+
+const isDesktopAutosaveTarget = (target: AutosavePrimaryTarget): target is DesktopAutosaveTarget =>
+  Boolean(target) && 'kind' in target && target.kind === 'desktop';
+
+const readBlobAsArrayBuffer = (blob: Blob): Promise<ArrayBuffer> => {
+  const modernBlob = blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> };
+  if (typeof modernBlob.arrayBuffer === 'function') {
+    return modernBlob.arrayBuffer();
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read snapshot data.'));
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.readAsArrayBuffer(blob);
+  });
+};
+
 export function useSnapshotIO({
   ui,
   fal,
@@ -141,7 +164,7 @@ export function useSnapshotIO({
   } = ui;
 
   // Persist file handles so autosave can keep writing without prompting each time.
-  const autosavePrimaryHandleRef = useRef<FileSystemFileHandle | null>(null);
+  const autosavePrimaryHandleRef = useRef<AutosavePrimaryTarget>(null);
   const autosaveSessionRef = useRef<AutosaveSessionInfo | null>(null);
   // Serialize autosave writes to avoid overlapping writes on rapid generations.
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -447,6 +470,22 @@ export function useSnapshotIO({
     }
   }, []);
 
+  const writeSnapshotToPrimaryTarget = useCallback(async (
+    target: Exclude<AutosavePrimaryTarget, null>,
+    snapshotBinary: SnapshotBinary,
+  ): Promise<void> => {
+    if (isDesktopAutosaveTarget(target)) {
+      const writeSnapshotFile = window.canvaBananaDesktop?.fileMenu?.writeSnapshotFile;
+      if (!writeSnapshotFile) {
+        throw new Error('Desktop snapshot autosave is unavailable.');
+      }
+      const blob = snapshotBinaryToBlob(snapshotBinary);
+      await writeSnapshotFile({ autosaveId: target.autosaveId, data: await readBlobAsArrayBuffer(blob) });
+      return;
+    }
+    await writeSnapshotToHandle(target, snapshotBinary);
+  }, [writeSnapshotToHandle]);
+
   // Best-effort autosave; no-op unless autosave is enabled and a session is active.
   const autosaveSnapshot = useCallback((stateOverride?: AppState) => {
     if (!autosaveEnabled) {
@@ -472,7 +511,7 @@ export function useSnapshotIO({
         const snapshotBinary = await buildSnapshotBinary(snapshotState);
         const backupBlob = snapshotBinaryToBlob(snapshotBinary);
         if (primaryHandle) {
-          await writeSnapshotToHandle(primaryHandle, snapshotBinary);
+          await writeSnapshotToPrimaryTarget(primaryHandle, snapshotBinary);
         }
         // Save a local backup snapshot so users can restore recent sessions.
         await saveBackupSession({
@@ -499,8 +538,42 @@ export function useSnapshotIO({
     displayedVideoPromptAreas,
     displayedVideoPromptBars,
     setError,
-    writeSnapshotToHandle,
+    writeSnapshotToPrimaryTarget,
   ]);
+
+  const rememberExportedSnapshot = useCallback(async (
+    fileName: string,
+    snapshotBinary: SnapshotBinary,
+    primaryHandle: AutosavePrimaryTarget,
+  ): Promise<boolean> => {
+    const sessionId = crypto.randomUUID();
+    const sessionCreatedAt = Date.now();
+    const backupBlob = snapshotBinaryToBlob(snapshotBinary);
+    autosaveSessionRef.current = {
+      id: sessionId,
+      createdAt: sessionCreatedAt,
+      fileName,
+    };
+    autosavePrimaryHandleRef.current = primaryHandle;
+
+    try {
+      // Persist the initial backup so it shows up in the Backups dialog.
+      await saveBackupSession({
+        id: sessionId,
+        createdAt: sessionCreatedAt,
+        updatedAt: sessionCreatedAt,
+        fileName,
+        size: backupBlob.size,
+        blob: backupBlob,
+      });
+      await pruneBackupSessions(3);
+      return true;
+    } catch (backupError) {
+      console.error(backupError);
+      setError('Snapshot exported, but the autosave backup could not be stored.');
+      return false;
+    }
+  }, [setError]);
 
   const exportSnapshot = useCallback(async () => {
     let shouldClearError = true;
@@ -508,83 +581,49 @@ export function useSnapshotIO({
       const snapshotBinary = await buildSnapshotBinary();
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const suggestedName = `banana-canvas-snapshot-${timestamp}.bcsnap`;
+      const desktopSaveSnapshotFile = window.canvaBananaDesktop?.fileMenu?.saveSnapshotFile;
 
-      const win = window as unknown as { showSaveFilePicker?: (options?: unknown) => Promise<any> };
-      if (typeof win.showSaveFilePicker === 'function') {
-        const saveHandle = await win.showSaveFilePicker({
-          suggestedName,
-          types: [
-            {
-              description: 'Canvas Snapshot',
-              accept: { 'application/octet-stream': ['.bcsnap'] },
-            },
-          ],
-        });
-        await writeSnapshotToHandle(saveHandle as FileSystemFileHandle, snapshotBinary);
-
-        // Start a new autosave session whenever the user exports a snapshot.
-        const sessionId = crypto.randomUUID();
-        const sessionCreatedAt = Date.now();
-        const sessionFileName = saveHandle.name ?? suggestedName;
-        const backupBlob = snapshotBinaryToBlob(snapshotBinary);
-        autosaveSessionRef.current = {
-          id: sessionId,
-          createdAt: sessionCreatedAt,
-          fileName: sessionFileName,
-        };
-        autosavePrimaryHandleRef.current = saveHandle as FileSystemFileHandle;
-
-        try {
-          // Persist the initial backup so it shows up in the Backups dialog.
-          await saveBackupSession({
-            id: sessionId,
-            createdAt: sessionCreatedAt,
-            updatedAt: sessionCreatedAt,
-            fileName: sessionFileName,
-            size: backupBlob.size,
-            blob: backupBlob,
-          });
-          await pruneBackupSessions(3);
-        } catch (backupError) {
-          console.error(backupError);
-          setError('Snapshot exported, but the autosave backup could not be stored.');
-          shouldClearError = false;
-        }
-      } else {
+      if (desktopSaveSnapshotFile) {
         const blob = snapshotBinaryToBlob(snapshotBinary);
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = suggestedName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        const sessionId = crypto.randomUUID();
-        const sessionCreatedAt = Date.now();
-        autosaveSessionRef.current = {
-          id: sessionId,
-          createdAt: sessionCreatedAt,
-          fileName: suggestedName,
-        };
-        autosavePrimaryHandleRef.current = null;
-
-        try {
-          // Persist the initial backup so it shows up in the Backups dialog.
-          await saveBackupSession({
-            id: sessionId,
-            createdAt: sessionCreatedAt,
-            updatedAt: sessionCreatedAt,
-            fileName: suggestedName,
-            size: blob.size,
-            blob,
+        const result = await desktopSaveSnapshotFile({
+          suggestedName,
+          data: await readBlobAsArrayBuffer(blob),
+        });
+        if (result.canceled === true) {
+          return;
+        }
+        const desktopAutosaveTarget = typeof result.autosaveId === 'string'
+          ? { kind: 'desktop' as const, autosaveId: result.autosaveId }
+          : null;
+        shouldClearError = await rememberExportedSnapshot(result.fileName, snapshotBinary, desktopAutosaveTarget);
+      } else {
+        const win = window as unknown as { showSaveFilePicker?: (options?: unknown) => Promise<any> };
+        if (typeof win.showSaveFilePicker === 'function') {
+          const saveHandle = await win.showSaveFilePicker({
+            suggestedName,
+            types: [
+              {
+                description: 'Canvas Snapshot',
+                accept: { 'application/octet-stream': ['.bcsnap'] },
+              },
+            ],
           });
-          await pruneBackupSessions(3);
-        } catch (backupError) {
-          console.error(backupError);
-          setError('Snapshot exported, but the autosave backup could not be stored.');
-          shouldClearError = false;
+          await writeSnapshotToHandle(saveHandle as FileSystemFileHandle, snapshotBinary);
+
+          const sessionFileName = saveHandle.name ?? suggestedName;
+          shouldClearError = await rememberExportedSnapshot(sessionFileName, snapshotBinary, saveHandle as FileSystemFileHandle);
+        } else {
+          const blob = snapshotBinaryToBlob(snapshotBinary);
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = suggestedName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
+          shouldClearError = await rememberExportedSnapshot(suggestedName, snapshotBinary, null);
         }
       }
 
@@ -600,7 +639,7 @@ export function useSnapshotIO({
     } finally {
       setIsFileMenuOpen(false);
     }
-  }, [buildSnapshotBinary, setError, setIsFileMenuOpen, setToastMessage, writeSnapshotToHandle]);
+  }, [buildSnapshotBinary, rememberExportedSnapshot, setError, setIsFileMenuOpen, setToastMessage, writeSnapshotToHandle]);
 
   // Restore a snapshot file into state, validating each option before applying it.
   const importSnapshotFromFile = useCallback(async (file: File) => {
@@ -925,6 +964,28 @@ export function useSnapshotIO({
 
   // Use File System Access API when available; fall back to hidden input for older browsers.
   const importSnapshotWithPicker = useCallback(async (onFallback: () => void) => {
+    const desktopOpenSnapshotFile = window.canvaBananaDesktop?.fileMenu?.openSnapshotFile;
+    if (desktopOpenSnapshotFile) {
+      try {
+        const result = await desktopOpenSnapshotFile();
+        if (result.canceled === true) {
+          return;
+        }
+        const file = new File([new Uint8Array(result.data)], result.fileName, {
+          type: result.fileName.endsWith('.json') ? 'application/json' : 'application/octet-stream',
+        });
+        await importSnapshotFromFile(file);
+      } catch (err) {
+        console.error(err);
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('Failed to import snapshot.');
+        }
+      }
+      return;
+    }
+
     const win = window as unknown as { showOpenFilePicker?: (options?: unknown) => Promise<any[]> };
     if (typeof win.showOpenFilePicker === 'function') {
       try {

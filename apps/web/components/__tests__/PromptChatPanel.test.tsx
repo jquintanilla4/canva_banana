@@ -42,6 +42,7 @@ describe('PromptChatPanel', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it('opens and closes from the robot button', () => {
@@ -72,6 +73,40 @@ describe('PromptChatPanel', () => {
     expect(screen.getByRole('button', { name: 'Close prompt chat' }).style.left).toContain('min(');
   });
 
+  it('centers the welcome placeholder in the chat transcript area', () => {
+    renderHarness('A cinematic product shot', false, true);
+
+    const placeholder = screen.getByText('Ask for a sharper prompt, alternate versions, or a cleaner structure.');
+    const transcript = placeholder.parentElement;
+
+    expect(transcript?.classList.contains('flex')).toBe(true);
+    expect(transcript?.classList.contains('items-center')).toBe(true);
+    expect(transcript?.classList.contains('justify-center')).toBe(true);
+    expect(placeholder.classList.contains('max-w-[18rem]')).toBe(true);
+    expect(placeholder.classList.contains('break-words')).toBe(true);
+    expect(placeholder.classList.contains('whitespace-nowrap')).toBe(false);
+  });
+
+  it('reserves measured header height above transcript content', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      bottom: 80,
+      height: 80,
+      left: 0,
+      right: 0,
+      top: 0,
+      width: 320,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect); // Simulate a wrapped floating header in jsdom.
+    renderHarness('A cinematic product shot', false, true);
+
+    const placeholder = screen.getByText('Ask for a sharper prompt, alternate versions, or a cleaner structure.');
+    const transcript = placeholder.parentElement as HTMLElement;
+
+    await waitFor(() => expect(transcript.style.paddingTop).toBe('104px'));
+  });
+
   it('sends selected model messages and renders markdown replies', async () => {
     sendOpenRouterChat.mockResolvedValue({
       message: { role: 'assistant', content: '**Better** prompt\n\n- add studio lighting' },
@@ -96,6 +131,34 @@ describe('PromptChatPanel', () => {
     expect(screen.getByText('Improve this prompt')).toBeTruthy();
     expect(await screen.findByText('Better')).toBeTruthy();
     expect(screen.getByText('add studio lighting')).toBeTruthy();
+  });
+
+  it('lets a new chat send immediately after abandoning a pending reply', async () => {
+    sendOpenRouterChat
+      .mockImplementationOnce(() => new Promise(() => {})) // Keep the first reply pending until the user starts over.
+      .mockResolvedValueOnce({
+        message: { role: 'assistant', content: 'Fresh reply' },
+        model: 'google/gemini-3.5-flash',
+        usage: null,
+      });
+    renderHarness();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open prompt chat' }));
+    fireEvent.change(screen.getByLabelText('Prompt chat message'), {
+      target: { value: 'First pending request' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(sendOpenRouterChat).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
+    fireEvent.change(screen.getByLabelText('Prompt chat message'), {
+      target: { value: 'Fresh request' },
+    });
+    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(sendOpenRouterChat).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Fresh reply')).toBeTruthy();
   });
 
   it('does not render markdown images from assistant replies', async () => {
