@@ -29,6 +29,7 @@ export default {
     extraResource: [
       'resources/web',
       'resources/python-backend',
+      'resources/app-icons',
     ],
     extendInfo: {
       CFBundleDisplayName: 'The Institute',

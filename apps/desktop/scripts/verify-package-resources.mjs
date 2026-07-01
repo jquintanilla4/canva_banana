@@ -1,23 +1,35 @@
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getRequiredAppIconResourcePaths } from '../app-icon-store.mjs';
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const scriptsDir = dirname(currentFilePath);
 const desktopDir = resolve(scriptsDir, '..');
 
-const requiredPackageResources = [
-  resolve(desktopDir, 'resources/web/index.html'),
-  resolve(desktopDir, 'resources/python-backend/canva-banana-python-backend'),
-  resolve(desktopDir, 'generated/secure-backend/server.mjs'),
+export const getRequiredPackageResources = (targetDesktopDir = desktopDir) => [
+  resolve(targetDesktopDir, 'resources/web/index.html'),
+  resolve(targetDesktopDir, 'resources/python-backend/canva-banana-python-backend'),
+  resolve(targetDesktopDir, 'generated/secure-backend/server.mjs'),
+  ...getRequiredAppIconResourcePaths(targetDesktopDir),
 ]; // These files are required by packaged Electron startup paths.
 
-const missingResources = requiredPackageResources.filter(resourcePath => !existsSync(resourcePath)); // Report every missing artifact at once.
+export const findMissingPackageResources = (targetDesktopDir = desktopDir) => (
+  getRequiredPackageResources(targetDesktopDir).filter(resourcePath => !existsSync(resourcePath))
+); // Report every missing artifact at once.
 
-if (missingResources.length > 0) {
-  console.error('Desktop package resources are missing:');
-  for (const resourcePath of missingResources) {
-    console.error(`- ${resourcePath}`);
+export const verifyPackageResources = (targetDesktopDir = desktopDir) => {
+  const missingResources = findMissingPackageResources(targetDesktopDir);
+  if (missingResources.length > 0) {
+    throw new Error(`Desktop package resources are missing:\n${missingResources.map(resourcePath => `- ${resourcePath}`).join('\n')}`);
   }
-  process.exit(1);
+};
+
+if (process.argv[1] && resolve(process.argv[1]) === currentFilePath) {
+  try {
+    verifyPackageResources();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -17,6 +17,14 @@ import {
   writeDesktopSettingsFileAtomic,
 } from './settings-env.mjs';
 import { APPLICATION_MENU_ITEM_IDS, FILE_MENU_COMMANDS, buildApplicationMenuTemplate } from './application-menu.mjs';
+import {
+  assertKnownAppIconId,
+  buildAppIconState,
+  getAppIconPreferencePath,
+  getRuntimeAppIconOptions,
+  readSelectedAppIconId,
+  writeSelectedAppIconId,
+} from './app-icon-store.mjs';
 import { createChatHistoryStore } from './chat-history-store.mjs';
 import { assertSnapshotDataCanBeWritten, readSnapshotFileCapped, sanitizeSnapshotFileName } from './file-menu-utils.mjs';
 import { resolveSecureBackendRuntime, shouldUseExternalSecureBackend } from './secure-backend-runtime.mjs';
@@ -77,6 +85,18 @@ const getServiceStatusSnapshot = () => JSON.parse(JSON.stringify(serviceStatus))
 const getDesktopSettingsPath = () => join(app.getPath('userData'), '.env.local'); // QA-managed settings live in App Support.
 
 const getChatHistoryPath = () => join(app.getPath('userData'), 'chat-history.json'); // App-level prompt chat history lives in App Support.
+
+const getAppIconRuntimeContext = () => ({
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  desktopDir,
+}); // Runtime paths differ between dev assets and packaged resources.
+
+const getAppIconPath = () => getAppIconPreferencePath(app.getPath('userData')); // Persist only the selected registry id.
+
+const supportsDockIcon = () => process.platform === 'darwin' && typeof app.dock?.setIcon === 'function'; // Electron exposes Dock icons only on macOS.
+
+const getSelectedAppIconId = () => readSelectedAppIconId(getAppIconPath());
 
 const chatHistoryStore = createChatHistoryStore({ getHistoryPath: getChatHistoryPath });
 const snapshotAutosaveTargets = new Map();
@@ -142,6 +162,41 @@ const buildSettingsStatus = () => {
     serviceStatus: getServiceStatusSnapshot(),
   };
 };
+
+const loadDockIconImage = (iconId) => {
+  if (!supportsDockIcon()) {
+    return null; // Non-macOS builds can keep the preference without applying it.
+  }
+  const selectedIconId = assertKnownAppIconId(iconId);
+  const option = getRuntimeAppIconOptions(getAppIconRuntimeContext()).find(candidate => candidate.id === selectedIconId);
+  const image = nativeImage.createFromPath(option?.dockIconPath ?? '');
+  if (image.isEmpty()) {
+    throw new Error(`Could not load app icon asset for "${selectedIconId}".`);
+  }
+  return image;
+};
+
+const applyDockIconImage = (image) => {
+  if (!image) {
+    return false; // The platform does not support runtime Dock icon changes.
+  }
+  app.dock.setIcon(image);
+  return true;
+};
+
+const applySavedDockIcon = async () => {
+  try {
+    applyDockIconImage(loadDockIconImage(await getSelectedAppIconId()));
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : String(error)); // Startup should continue if an icon asset is missing.
+  }
+};
+
+const buildCurrentAppIconState = async () => buildAppIconState({
+  selectedIconId: await getSelectedAppIconId(),
+  supportsDockIcon: supportsDockIcon(),
+  runtimeContext: getAppIconRuntimeContext(),
+});
 
 const refreshRuntimeConfig = (serviceUrls) => {
   runtimeConfig = buildRuntimeConfig(serviceUrls); // Keep preload sync reads aligned with restarted services.
@@ -564,6 +619,7 @@ const installApplicationMenu = () => {
       toggleZoomLevelBadge: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_ZOOM_LEVEL_BADGE),
       openDebugLog: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_DEBUG_LOG),
       openManageKeys: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_MANAGE_KEYS),
+      openChangeIcon: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_CHANGE_ICON),
       clearJimengCache: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.CLEAR_JIMENG_CACHE),
       clearChatHistory: () => void clearChatHistoryFromMenu(),
     },
@@ -634,6 +690,7 @@ const startDesktopApp = async () => {
     callback(webContents === mainWindow?.webContents && isAllowedAudioPermissionRequest(permission, details)); // Trust only the app window's microphone requests.
   });
 
+  await applySavedDockIcon();
   refreshRuntimeConfig(await startManagedServices());
   installApplicationMenu();
   await ensureMainWindow();
@@ -736,6 +793,16 @@ ipcMain.handle('canva-banana:save-chat-history', async (event, snapshot) => {
 });
 
 ipcMain.handle('canva-banana:get-settings-status', () => buildSettingsStatus());
+
+ipcMain.handle('canva-banana:app-icon-get-state', () => buildCurrentAppIconState());
+
+ipcMain.handle('canva-banana:app-icon-set-selected', async (_event, iconId) => {
+  const selectedIconId = assertKnownAppIconId(iconId);
+  const nextImage = loadDockIconImage(selectedIconId);
+  await writeSelectedAppIconId(getAppIconPath(), selectedIconId);
+  applyDockIconImage(nextImage);
+  return buildCurrentAppIconState();
+});
 
 ipcMain.handle('canva-banana:restart-services', async () => {
   await restartManagedServices();

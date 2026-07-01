@@ -71,7 +71,21 @@ export type DesktopFileMenuCommand =
   | 'toggleZoomLevelBadge'
   | 'openDebugLog'
   | 'openManageKeys'
+  | 'openChangeIcon'
   | 'clearJimengCache';
+
+export type DesktopAppIconOption = {
+  id: string;
+  label: string;
+  description: string;
+  previewDataUrl: string;
+};
+
+export type DesktopAppIconState = {
+  selectedIconId: string;
+  options: DesktopAppIconOption[];
+  supportsDockIcon: boolean;
+};
 
 export type DesktopFileMenuState = {
   autosaveEnabled: boolean;
@@ -115,6 +129,10 @@ declare global {
       clearSettings?: (keys: DesktopSettingsKey[]) => Promise<DesktopSettingsStatus>;
       restartServices?: () => Promise<DesktopSettingsStatus>;
       onOpenManageKeys?: (callback: () => void) => () => void;
+      appIcon?: {
+        getState?: () => Promise<DesktopAppIconState>;
+        setSelected?: (iconId: string) => Promise<DesktopAppIconState>;
+      };
       fileMenu?: {
         onCommand?: (callback: (command: DesktopFileMenuCommand) => void) => () => void;
         setState?: (state: DesktopFileMenuState) => Promise<unknown>;

@@ -129,6 +129,42 @@ describe('preload desktop bridge', () => {
     });
   });
 
+  it('exposes app icon bridge helpers', async () => {
+    const appIconState = {
+      selectedIconId: 'institute',
+      supportsDockIcon: true,
+      options: [{ id: 'institute', label: 'The Institute', description: 'Original icon', previewDataUrl: 'data:image/png;base64,' }],
+    };
+    const ipcRenderer = {
+      sendSync: vi.fn(),
+      invoke: vi.fn(async (channel, payload) => {
+        switch (channel) {
+          case 'canva-banana:app-icon-get-state':
+            return appIconState; // Main returns the persisted icon state and previews.
+          case 'canva-banana:app-icon-set-selected':
+            return { ...appIconState, selectedIconId: payload }; // Main echoes the updated state after saving.
+          default:
+            throw new Error(`Unexpected IPC invoke channel: ${channel}`);
+        }
+      }),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const contextBridge = {
+      exposeInMainWorld: vi.fn((_name, api) => {
+        exposedApi = api; // Capture the safe bridge API exposed to React.
+      }),
+    };
+
+    loadPreloadWithElectron({ contextBridge, ipcRenderer });
+
+    await expect(exposedApi.appIcon.getState()).resolves.toBe(appIconState);
+    await expect(exposedApi.appIcon.setSelected('institute')).resolves.toMatchObject({ selectedIconId: 'institute' });
+
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:app-icon-get-state');
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:app-icon-set-selected', 'institute');
+  });
+
   it('rejects invalid snapshot write payloads before IPC', async () => {
     const ipcRenderer = {
       sendSync: vi.fn(),

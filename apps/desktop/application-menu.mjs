@@ -6,6 +6,7 @@ export const FILE_MENU_COMMANDS = Object.freeze({
   TOGGLE_ZOOM_LEVEL_BADGE: 'toggleZoomLevelBadge',
   OPEN_DEBUG_LOG: 'openDebugLog',
   OPEN_MANAGE_KEYS: 'openManageKeys',
+  OPEN_CHANGE_ICON: 'openChangeIcon',
   CLEAR_JIMENG_CACHE: 'clearJimengCache',
 });
 
@@ -24,6 +25,7 @@ export const buildApplicationMenuTemplate = ({
     label: appName,
     submenu: [
       { label: 'Manage Keys...', click: handlers.openManageKeys },
+      { label: 'Change Icon...', click: handlers.openChangeIcon },
       { type: 'separator' },
       { role: 'services' },
       { type: 'separator' },

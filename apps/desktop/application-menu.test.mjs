@@ -9,6 +9,7 @@ const buildHandlers = () => ({
   toggleZoomLevelBadge: vi.fn(),
   openDebugLog: vi.fn(),
   openManageKeys: vi.fn(),
+  openChangeIcon: vi.fn(),
   clearJimengCache: vi.fn(),
   clearChatHistory: vi.fn(),
 });
@@ -74,7 +75,28 @@ describe('application menu template', () => {
     const labels = appMenu.submenu.filter(item => item.label).map(item => item.label);
 
     expect(labels).toContain('Manage Keys...');
+    expect(labels).toContain('Change Icon...');
     expect(labels).not.toContain('Clear Chat History...');
+  });
+
+  it('wires Change Icon to its app menu handler', () => {
+    const handlers = buildHandlers();
+    const template = buildApplicationMenuTemplate({
+      appName: 'The Institute',
+      fileMenuState: {
+        autosaveEnabled: true,
+        showZoomLevelBadge: true,
+        isClearingJimengCache: false,
+      },
+      handlers,
+    });
+
+    const appMenu = template.find(item => item.label === 'The Institute');
+    const changeIconItem = appMenu.submenu.find(item => item.label === 'Change Icon...');
+
+    changeIconItem.click();
+
+    expect(handlers.openChangeIcon).toHaveBeenCalledTimes(1);
   });
 
   it('places clearing actions under History', () => {

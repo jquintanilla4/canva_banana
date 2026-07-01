@@ -94,6 +94,10 @@ contextBridge.exposeInMainWorld('canvaBananaDesktop', {
   clearSettings: keys => ipcRenderer.invoke('canva-banana:clear-settings', keys), // Remove selected managed keys.
   restartServices: () => ipcRenderer.invoke('canva-banana:restart-services'), // QA can retry local services after edits.
   onOpenManageKeys: callback => subscribeToMainChannel(openManageKeysChannel, callback),
+  appIcon: {
+    getState: () => ipcRenderer.invoke('canva-banana:app-icon-get-state'), // Main owns icon registry paths.
+    setSelected: iconId => ipcRenderer.invoke('canva-banana:app-icon-set-selected', iconId), // Main validates and persists ids.
+  },
   fileMenu: {
     onCommand: callback => subscribeToMainChannel(fileMenuCommandChannel, callback),
     setState: state => ipcRenderer.invoke('canva-banana:file-menu-set-state', state), // Sync checked/disabled native items.

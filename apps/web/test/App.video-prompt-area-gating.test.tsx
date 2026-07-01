@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { getJimengSetupStatus } from '../services/jimengService';
-import type { DesktopFileMenuCommand, DesktopSettingsKey, DesktopSettingsStatus } from '../services/runtimeConfig';
+import type { DesktopAppIconState, DesktopFileMenuCommand, DesktopSettingsKey, DesktopSettingsStatus } from '../services/runtimeConfig';
 import { Tool, type CanvasImage } from '../types';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
 
@@ -36,6 +36,19 @@ const buildDesktopSettingsStatus = (presentKeys: DesktopSettingsKey[] = desktopS
     pythonBackend: { state: 'ready', url: 'http://localhost:8000' },
   },
 }); // Keep desktop modal tests focused on bridge behavior, not missing-key startup.
+
+const buildDesktopAppIconState = (): DesktopAppIconState => ({
+  selectedIconId: 'institute',
+  supportsDockIcon: true,
+  options: [
+    {
+      id: 'institute',
+      label: 'The Institute',
+      description: 'Original icon',
+      previewDataUrl: 'data:image/png;base64,',
+    },
+  ],
+}); // The App test only needs enough icon state for the modal to render.
 
 const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType']): CanvasImage => ({
   id,
@@ -333,7 +346,11 @@ vi.mock('../components/Canvas', () => ({
 }));
 
 vi.mock('../components/RecordingOverlay', () => ({ RecordingOverlay: () => null }));
-vi.mock('../components/BackupsModal', () => ({ BackupsModal: () => null }));
+vi.mock('../components/BackupsModal', () => ({
+  BackupsModal: ({ isOpen }: { isOpen: boolean }) => (
+    isOpen ? <div role="dialog" aria-label="Autosave Backups" /> : null
+  ),
+}));
 vi.mock('../components/FalQueuePanel', () => ({ FalQueuePanel: () => null }));
 vi.mock('../components/DebugLogPanel', () => ({ DebugLogPanel: () => null }));
 vi.mock('../components/FileMenu', () => ({
@@ -654,6 +671,94 @@ describe('App video prompt area gating', () => {
     expect(screen.queryByRole('button', { name: 'Open prompt chat' })).toBeNull();
     await waitFor(() => expect(getSettingsStatus).toHaveBeenCalledTimes(2));
     expect(screen.getByLabelText('Jimeng CLI Path', { selector: 'input' })).toBeTruthy();
+  });
+
+  it('opens the Change Icon modal from the native menu command', async () => {
+    let fileMenuCommand: ((command: DesktopFileMenuCommand) => void) | null = null;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    mockState.runtimeConfig.isDesktop = true;
+    const getState = vi.fn(async () => buildDesktopAppIconState());
+    const onCommand = vi.fn((callback: (command: DesktopFileMenuCommand) => void) => {
+      fileMenuCommand = callback; // Store the main-process File menu callback for the test.
+      return vi.fn();
+    });
+    window.canvaBananaDesktop = {
+      appIcon: {
+        getState,
+        setSelected: vi.fn(),
+      },
+      fileMenu: {
+        onCommand,
+        setState: vi.fn(),
+      },
+    };
+
+    render(<App />);
+
+    await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Open prompt chat' })).toBeTruthy();
+
+    await act(async () => {
+      fileMenuCommand?.('openChangeIcon');
+    });
+
+    expect(await screen.findByRole('dialog', { name: /change icon/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open prompt chat' })).toBeNull();
+    expect(screen.getByRole('radio', { name: /the institute/i })).toBeTruthy();
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(1));
+  });
+
+  it('replaces the active blocking modal when native menu commands switch dialogs', async () => {
+    let fileMenuCommand: ((command: DesktopFileMenuCommand) => void) | null = null;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    mockState.runtimeConfig.isDesktop = true;
+    const getSettingsStatus = vi.fn(async () => buildDesktopSettingsStatus());
+    const getState = vi.fn(async () => buildDesktopAppIconState());
+    const onCommand = vi.fn((callback: (command: DesktopFileMenuCommand) => void) => {
+      fileMenuCommand = callback; // Store the main-process File menu callback for the test.
+      return vi.fn();
+    });
+    window.canvaBananaDesktop = {
+      getSettingsStatus,
+      appIcon: {
+        getState,
+        setSelected: vi.fn(),
+      },
+      fileMenu: {
+        onCommand,
+        setState: vi.fn(),
+      },
+    };
+
+    render(<App />);
+
+    await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      fileMenuCommand?.('openChangeIcon');
+    });
+
+    expect(await screen.findByRole('dialog', { name: /change icon/i })).toBeTruthy();
+
+    await act(async () => {
+      fileMenuCommand?.('openManageKeys');
+    });
+
+    expect(await screen.findByRole('dialog', { name: /manage keys/i })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: /change icon/i })).toBeNull();
+
+    await act(async () => {
+      fileMenuCommand?.('openChangeIcon');
+    });
+
+    expect(await screen.findByRole('dialog', { name: /change icon/i })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: /manage keys/i })).toBeNull();
   });
 
   it('hides the Jimeng CLI path during automatic desktop onboarding when the Fal key is missing', async () => {

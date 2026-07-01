@@ -20,6 +20,7 @@ import { DebugLogPanel } from './components/DebugLogPanel';
 import { clearDebugLogs } from './services/debugLog';
 import { JimengSetupPanel } from './components/JimengSetupPanel';
 import { DesktopSettingsModal } from './components/DesktopSettingsModal';
+import { DesktopAppIconModal } from './components/DesktopAppIconModal';
 import { PromptChatPanel } from './components/PromptChatPanel';
 import {
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
@@ -289,9 +290,11 @@ export default function App() {
   // State for toggling the file menu and debug log panels
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [isDesktopSettingsOpen, setIsDesktopSettingsOpen] = useState(false);
+  const [isDesktopAppIconOpen, setIsDesktopAppIconOpen] = useState(false);
   const [desktopSettingsMode, setDesktopSettingsMode] = useState<'onboarding' | 'manage'>('manage'); // Auto-open hides advanced setup fields.
   const [desktopSettingsStatus, setDesktopSettingsStatus] = useState<DesktopSettingsStatus | null>(null);
   const hasDesktopSettingsBridge = typeof window !== 'undefined' && Boolean(window.canvaBananaDesktop?.getSettingsStatus);
+  const hasDesktopAppIconBridge = typeof window !== 'undefined' && Boolean(window.canvaBananaDesktop?.appIcon?.getState);
   // Autosave is opt-out; user can disable it in the file menu.
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   // Increment after each successful generation to trigger autosave.
@@ -299,6 +302,12 @@ export default function App() {
   const [isBackupsOpen, setIsBackupsOpen] = useState(false);
   const [backupSessions, setBackupSessions] = useState<BackupSessionSummary[]>([]);
   const [isBackupsLoading, setIsBackupsLoading] = useState(false);
+  const closeAppOwnedBlockingOverlays = useCallback(() => {
+    setIsFileMenuOpen(false);
+    setIsBackupsOpen(false);
+    setIsDesktopSettingsOpen(false);
+    setIsDesktopAppIconOpen(false);
+  }, []); // Keep native menu modal switches single-dialog.
   const {
     isDebugLogOpen,
     debugLogEntries,
@@ -306,9 +315,20 @@ export default function App() {
     closeDebugLogPanel,
     copyLastEntry,
   } = useDebugLogState({
-    onOpen: () => setIsFileMenuOpen(false),
+    onOpen: closeAppOwnedBlockingOverlays,
   });
-  const hasBlockingOverlay = isFileMenuOpen || isBackupsOpen || isDesktopSettingsOpen || isDebugLogOpen; // Overlays own focus and pointer input.
+  const openAppOwnedBlockingOverlay = useCallback((overlay: 'backups' | 'desktopSettings' | 'desktopAppIcon') => {
+    closeDebugLogPanel();
+    closeAppOwnedBlockingOverlays();
+    if (overlay === 'backups') {
+      setIsBackupsOpen(true);
+    } else if (overlay === 'desktopSettings') {
+      setIsDesktopSettingsOpen(true);
+    } else {
+      setIsDesktopAppIconOpen(true);
+    }
+  }, [closeAppOwnedBlockingOverlays, closeDebugLogPanel]); // Open one blocking modal at a time.
+  const hasBlockingOverlay = isFileMenuOpen || isBackupsOpen || isDesktopSettingsOpen || isDesktopAppIconOpen || isDebugLogOpen; // Overlays own focus and pointer input.
 
   // Callbacks to programmatically trigger zoom in/out from controls
   const requestZoomIn = useCallback(() => {
@@ -886,9 +906,8 @@ export default function App() {
   }, []);
 
   const openBackupsModal = useCallback(() => {
-    setIsFileMenuOpen(false);
-    setIsBackupsOpen(true);
-  }, []);
+    openAppOwnedBlockingOverlay('backups');
+  }, [openAppOwnedBlockingOverlay]);
 
   const refreshDesktopSettingsStatus = useCallback(async () => {
     const nextStatus = await window.canvaBananaDesktop?.getSettingsStatus?.();
@@ -899,11 +918,16 @@ export default function App() {
   }, []);
 
   const openDesktopSettings = useCallback(() => {
-    setIsFileMenuOpen(false);
     setDesktopSettingsMode('manage');
-    setIsDesktopSettingsOpen(true);
+    openAppOwnedBlockingOverlay('desktopSettings');
     void refreshDesktopSettingsStatus();
-  }, [refreshDesktopSettingsStatus]);
+  }, [openAppOwnedBlockingOverlay, refreshDesktopSettingsStatus]);
+
+  const openDesktopAppIcon = useCallback(() => {
+    if (hasDesktopAppIconBridge) {
+      openAppOwnedBlockingOverlay('desktopAppIcon');
+    }
+  }, [hasDesktopAppIconBridge, openAppOwnedBlockingOverlay]);
 
   useEffect(() => {
     return window.canvaBananaDesktop?.onOpenManageKeys?.(openDesktopSettings);
@@ -1857,6 +1881,9 @@ export default function App() {
         case 'openManageKeys':
           openDesktopSettings();
           break;
+        case 'openChangeIcon':
+          openDesktopAppIcon();
+          break;
         case 'clearJimengCache':
           void jimengSetup.handleClearCache();
           break;
@@ -1874,6 +1901,7 @@ export default function App() {
     hasNativeFileMenuBridge,
     jimengSetup.handleClearCache,
     openBackupsModal,
+    openDesktopAppIcon,
     openDebugLogPanel,
     openDesktopSettings,
   ]);
@@ -2121,6 +2149,12 @@ export default function App() {
         onStatusChange={setDesktopSettingsStatus}
         mode={desktopSettingsMode}
       />
+      {hasDesktopAppIconBridge && (
+        <DesktopAppIconModal
+          isOpen={isDesktopAppIconOpen}
+          onClose={() => setIsDesktopAppIconOpen(false)}
+        />
+      )}
       {isResizeToastOpen && (
         <ImageResizeToast
           width={resizeWidth}

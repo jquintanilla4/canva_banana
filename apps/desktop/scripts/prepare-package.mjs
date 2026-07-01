@@ -3,6 +3,7 @@ import { cp, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { APP_ICON_RESOURCE_DIR_NAME, getAppIconResourceSpecs } from '../app-icon-store.mjs';
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const scriptsDir = dirname(currentFilePath);
@@ -13,6 +14,7 @@ const pythonDistDir = resolve(repoRoot, 'apps/python-backend/dist/canva-banana-p
 const secureBackendSourcePath = resolve(repoRoot, 'apps/secure-backend/src/server.mjs');
 const webResourceDir = resolve(desktopDir, 'resources/web');
 const pythonResourceDir = resolve(desktopDir, 'resources/python-backend');
+const appIconResourceDir = resolve(desktopDir, 'resources', APP_ICON_RESOURCE_DIR_NAME);
 const generatedSecureBackendPath = resolve(desktopDir, 'generated/secure-backend/server.mjs');
 
 const run = (label, command, args, extraEnv = {}) => new Promise((resolveRun, rejectRun) => {
@@ -48,7 +50,11 @@ if (!existsSync(resolve(pythonDistDir, 'canva-banana-python-backend'))) {
 
 await resetDir(webResourceDir);
 await resetDir(pythonResourceDir);
+await resetDir(appIconResourceDir);
 await mkdir(dirname(generatedSecureBackendPath), { recursive: true });
 await cp(webDistDir, webResourceDir, { recursive: true });
 await cp(pythonDistDir, pythonResourceDir, { recursive: true });
 await cp(secureBackendSourcePath, generatedSecureBackendPath);
+for (const spec of getAppIconResourceSpecs(desktopDir)) {
+  await cp(spec.sourcePath, resolve(appIconResourceDir, spec.resourceFileName)); // Keep packaged icon names stable for the registry.
+}
