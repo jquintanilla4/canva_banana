@@ -28,8 +28,11 @@ afterEach(async () => {
 
 describe('app icon store', () => {
   it('normalizes unknown icon ids to the default', () => {
+    expect(DEFAULT_APP_ICON_ID).toBe('monalisa-bionic');
     expect(normalizeAppIconId('missing-icon')).toBe(DEFAULT_APP_ICON_ID);
     expect(normalizeAppIconId(DEFAULT_APP_ICON_ID)).toBe(DEFAULT_APP_ICON_ID);
+    expect(normalizeAppIconId('monalisa-bionic')).toBe('monalisa-bionic');
+    expect(normalizeAppIconId('institute')).toBe('institute');
     expect(() => assertKnownAppIconId('missing-icon')).toThrow('Unknown app icon.');
   });
 
@@ -61,8 +64,15 @@ describe('app icon store', () => {
     const specs = getAppIconResourceSpecs(desktopDir);
     const resourcePaths = getRequiredAppIconResourcePaths(desktopDir);
 
-    expect(specs.map(spec => spec.resourceFileName)).toEqual(['institute-preview.png', 'institute-dock.png']);
+    expect(specs.map(spec => spec.resourceFileName)).toEqual([
+      'monalisa-bionic-preview.png',
+      'monalisa-bionic-dock.png',
+      'institute-preview.png',
+      'institute-dock.png',
+    ]);
     expect(resourcePaths).toEqual([
+      join(desktopDir, 'resources', APP_ICON_RESOURCE_DIR_NAME, 'monalisa-bionic-preview.png'),
+      join(desktopDir, 'resources', APP_ICON_RESOURCE_DIR_NAME, 'monalisa-bionic-dock.png'),
       join(desktopDir, 'resources', APP_ICON_RESOURCE_DIR_NAME, 'institute-preview.png'),
       join(desktopDir, 'resources', APP_ICON_RESOURCE_DIR_NAME, 'institute-dock.png'),
     ]);

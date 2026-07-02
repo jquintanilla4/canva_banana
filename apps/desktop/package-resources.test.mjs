@@ -9,5 +9,7 @@ describe('package resources verifier', () => {
 
     expect(resources).toContain(join(desktopDir, 'resources/app-icons/institute-preview.png'));
     expect(resources).toContain(join(desktopDir, 'resources/app-icons/institute-dock.png'));
+    expect(resources).toContain(join(desktopDir, 'resources/app-icons/monalisa-bionic-preview.png'));
+    expect(resources).toContain(join(desktopDir, 'resources/app-icons/monalisa-bionic-dock.png'));
   });
 });

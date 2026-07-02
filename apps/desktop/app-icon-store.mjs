@@ -4,14 +4,23 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
 export const APP_ICON_RESOURCE_DIR_NAME = 'app-icons';
-export const DEFAULT_APP_ICON_ID = 'institute';
+export const DEFAULT_APP_ICON_ID = 'monalisa-bionic';
 
 export const APP_ICON_OPTIONS = Object.freeze([
   Object.freeze({
     id: DEFAULT_APP_ICON_ID,
+    label: 'Mona Lisa',
+    description: 'Bionic portrait',
+    previewAssetSegments: Object.freeze(['monalisa-bionic-icon-preview.png']),
+    dockAssetSegments: Object.freeze(['monalisa-bionic-icon-1024.png']),
+    previewResourceFile: 'monalisa-bionic-preview.png',
+    dockResourceFile: 'monalisa-bionic-dock.png',
+  }),
+  Object.freeze({
+    id: 'institute', // Keep the original icon available as an alternate.
     label: 'The Institute',
     description: 'Original icon',
-    previewAssetSegments: Object.freeze(['AppIcon.iconset', 'icon_512x512.png']),
+    previewAssetSegments: Object.freeze(['institute-icon-preview.png']),
     dockAssetSegments: Object.freeze(['icon-1024.png']),
     previewResourceFile: 'institute-preview.png',
     dockResourceFile: 'institute-dock.png',
