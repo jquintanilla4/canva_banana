@@ -390,6 +390,7 @@ export const generateImageEdit = async (
   if (isGptImage2Model && imageUrls.length > 10) {
     throw new Error('GPT Image 2 supports up to 10 total input images. Please reduce the number of selected images.');
   }
+  const orderedImageUrls = isNanoBananaModel ? [...imageUrls].reverse() : imageUrls; // Nano labels inputs from the end of the array.
 
   const body: {
     prompt: string;
@@ -403,7 +404,7 @@ export const generateImageEdit = async (
     resolution?: FalResolutionOption;
   } = {
     prompt,
-    image_urls: imageUrls,
+    image_urls: orderedImageUrls,
     sync_mode: !isSeedreamModel && !isNanoBananaModel && !isGptImage2Model, // Keep queue history visible for async models.
   };
 

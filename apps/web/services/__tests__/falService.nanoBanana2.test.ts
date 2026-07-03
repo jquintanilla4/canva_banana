@@ -116,4 +116,49 @@ describe('falService (nano banana 2)', () => {
     expect(result.imageBase64).toBe('YmFy');
     expect(result.imagesBase64).toEqual(['YmFy']);
   });
+
+  it('reverses Nano Banana 2 edit uploads so prompt image slots match selection order', async () => {
+    vi.mocked(fal.storage.upload)
+      .mockResolvedValueOnce('https://example.com/first.png')
+      .mockResolvedValueOnce('https://example.com/second.png')
+      .mockResolvedValueOnce('https://example.com/third.png');
+    vi.mocked(fal.subscribe).mockResolvedValue({
+      data: {
+        images: [{ url: 'data:image/png;base64,YmFy' }],
+        description: 'edited',
+      },
+      requestId: 'req-nb2-edit-order',
+    } as unknown as Awaited<ReturnType<typeof fal.subscribe>>);
+
+    const firstImage = document.createElement('img');
+    firstImage.width = 512;
+    firstImage.height = 512;
+    const secondImage = document.createElement('img');
+    secondImage.width = 512;
+    secondImage.height = 512;
+    const thirdImage = document.createElement('img');
+    thirdImage.width = 512;
+    thirdImage.height = 512;
+
+    await generateImageEdit({
+      prompt: 'Use the first, second, and third selected images',
+      image: firstImage,
+      tool: Tool.SELECTION,
+      paths: [],
+      imageDimensions: { width: 512, height: 512 },
+      referenceImages: [secondImage, thirdImage],
+    }, {
+      modelId: NANO_BANANA_2_EDIT_MODEL_ID,
+    });
+
+    expect(fal.subscribe).toHaveBeenCalledWith(NANO_BANANA_2_EDIT_MODEL_ID, expect.objectContaining({
+      input: expect.objectContaining({
+        image_urls: [
+          'https://example.com/third.png',
+          'https://example.com/second.png',
+          'https://example.com/first.png',
+        ],
+      }),
+    }));
+  });
 });

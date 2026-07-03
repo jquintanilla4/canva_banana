@@ -4,6 +4,7 @@ const openManageKeysChannel = 'canva-banana:open-manage-keys';
 const fileMenuCommandChannel = 'canva-banana:file-menu-command';
 const chatHistoryClearedChannel = 'canva-banana:chat-history-cleared';
 const maxSnapshotWriteBytes = 512 * 1024 * 1024; // Mirror main's snapshot write safety cap.
+const maxClipboardTextChars = 1_000_000; // Keep native clipboard IPC bounded to app-sized text.
 const arrayBufferByteLengthGetter = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')?.get; // Requires a real ArrayBuffer receiver.
 const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'byteLength')?.get; // Requires a real typed-array receiver.
 const dataViewByteLengthGetter = Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength')?.get; // Requires a real DataView receiver.
@@ -69,6 +70,19 @@ const assertSnapshotWritePayload = (payload) => {
   return payload;
 };
 
+const assertClipboardText = (text) => {
+  if (typeof text !== 'string') {
+    throw new Error('Clipboard text must be a string.');
+  }
+  if (!globalThis.navigator?.userActivation?.isActive) {
+    throw new Error('Clipboard writes require an active user action.');
+  }
+  if (text.length > maxClipboardTextChars) {
+    throw new Error('Clipboard text is too large to write safely.');
+  }
+  return text;
+};
+
 const mainRuntimeConfig = parseRuntimeConfigArgument();
 
 const runtimeConfig = {
@@ -94,6 +108,9 @@ contextBridge.exposeInMainWorld('canvaBananaDesktop', {
   clearSettings: keys => ipcRenderer.invoke('canva-banana:clear-settings', keys), // Remove selected managed keys.
   restartServices: () => ipcRenderer.invoke('canva-banana:restart-services'), // QA can retry local services after edits.
   onOpenManageKeys: callback => subscribeToMainChannel(openManageKeysChannel, callback),
+  clipboard: {
+    writeText: text => ipcRenderer.invoke('canva-banana:clipboard-write-text', assertClipboardText(text)), // Native writes require a user gesture.
+  },
   appIcon: {
     getState: () => ipcRenderer.invoke('canva-banana:app-icon-get-state'), // Main owns icon registry paths.
     setSelected: iconId => ipcRenderer.invoke('canva-banana:app-icon-set-selected', iconId), // Main validates and persists ids.

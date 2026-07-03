@@ -129,6 +129,9 @@ declare global {
       clearSettings?: (keys: DesktopSettingsKey[]) => Promise<DesktopSettingsStatus>;
       restartServices?: () => Promise<DesktopSettingsStatus>;
       onOpenManageKeys?: (callback: () => void) => () => void;
+      clipboard?: {
+        writeText?: (text: string) => Promise<unknown>;
+      };
       appIcon?: {
         getState?: () => Promise<DesktopAppIconState>;
         setSelected?: (iconId: string) => Promise<DesktopAppIconState>;

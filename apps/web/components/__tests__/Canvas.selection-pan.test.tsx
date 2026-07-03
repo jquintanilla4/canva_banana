@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
@@ -159,6 +159,33 @@ const buildAudio = (id = 'audio-1'): CanvasImage => {
 };
 
 describe('Canvas selection temporary pan', () => {
+  it('enables prompt copy from saved generation metadata', () => {
+    const onImagePromptCopy = vi.fn();
+    const generatedImage = {
+      ...buildImage('generated-1'),
+      metadata: {
+        source: 'generated' as const,
+        generation: {
+          kind: 'text_to_image' as const,
+          prompt: 'A saved generation prompt',
+          provider: 'fal' as const,
+        },
+      },
+    };
+
+    render(<Canvas {...buildCanvasProps({
+      images: [generatedImage],
+      selectedImageIds: ['generated-1'],
+      onImagePromptCopy,
+    })} />);
+
+    const copyButton = screen.getByTitle('Copy Generation Prompt') as HTMLButtonElement;
+    fireEvent.click(copyButton);
+
+    expect(copyButton.disabled).toBe(false);
+    expect(onImagePromptCopy).toHaveBeenCalledWith('generated-1');
+  });
+
   it('temporarily pans while space is held and returns to selection on keyup', () => {
     const { container } = render(<Canvas {...buildCanvasProps()} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;

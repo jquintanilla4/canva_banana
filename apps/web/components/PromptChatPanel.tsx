@@ -10,6 +10,7 @@ import {
   type OpenRouterChatMessage,
   type OpenRouterChatModelId,
 } from '../services/openRouterChatService';
+import { writeClipboardText } from '../services/clipboardService';
 import {
   createConversationId,
   deriveConversationTitle,
@@ -721,7 +722,7 @@ export const PromptChatPanel: React.FC<PromptChatPanelProps> = ({
       return;
     }
     try {
-      await navigator.clipboard.writeText(trimmedText);
+      await writeClipboardText(trimmedText);
       showCopyStatus(successMessage);
     } catch {
       showCopyStatus('Copy failed');

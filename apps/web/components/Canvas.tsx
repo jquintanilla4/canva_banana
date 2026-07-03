@@ -41,6 +41,7 @@ import {
   syncVideoPromptAreaMembership,
 } from '../utils/videoPromptAreas';
 import { stopCanvasMediaPlayback, syncCanvasMediaElementPlayback } from '../utils/canvasMediaPlayback';
+import { getCanvasImagePrompt } from '../utils/canvasImagePrompt';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -948,7 +949,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const selectedVideoIsPlaying = selectedImageIsVideo && selectedImage?.isPlaying;
   const selectedAudioIsPlaying = selectedImageIsAudio && selectedImage?.isPlaying;
   const selectedMediaIsPlaying = selectedVideoIsPlaying || selectedAudioIsPlaying;
-  const selectedImagePrompt = selectedImage?.metadata?.prompt?.trim() ?? '';
+  const selectedImagePrompt = getCanvasImagePrompt(selectedImage);
   const selectedImageHasGeneration = Boolean(selectedImage?.metadata?.generation);
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
   const imageBeingTransformed = useMemo(() => transformMode ? images.find(img => img.id === transformMode.imageId) : null, [images, transformMode]);

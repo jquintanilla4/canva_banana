@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getDebugLogs, subscribeToDebugLogs } from '../services/debugLog';
+import { writeClipboardText } from '../services/clipboardService';
 
 type UseDebugLogStateArgs = {
   onOpen?: () => void;
@@ -59,7 +60,7 @@ export function useDebugLogState({ onOpen }: UseDebugLogStateArgs = {}): UseDebu
     if (!lastWithRequestId) {
       // No requestId found, just copy the most recent entry
       const json = JSON.stringify(sorted[0], null, 2);
-      navigator.clipboard.writeText(json).catch(err => {
+      writeClipboardText(json).catch(err => {
         console.error('Failed to copy to clipboard:', err);
       });
       return;
@@ -86,11 +87,10 @@ export function useDebugLogState({ onOpen }: UseDebugLogStateArgs = {}): UseDebu
     generationEntries.sort((a, b) => a.timestamp - b.timestamp);
 
     const json = JSON.stringify(generationEntries, null, 2);
-    navigator.clipboard.writeText(json).catch(err => {
+    writeClipboardText(json).catch(err => {
       console.error('Failed to copy to clipboard:', err);
     });
   }, [debugLogEntries]);
 
   return { isDebugLogOpen, debugLogEntries, openDebugLogPanel, closeDebugLogPanel, copyLastEntry };
 }
-

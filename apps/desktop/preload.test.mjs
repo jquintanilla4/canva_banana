@@ -7,8 +7,16 @@ const require = createRequire(import.meta.url);
 const preloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 const originalLoad = Module._load;
 const originalArgv = [...process.argv];
+const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
 
 let exposedApi = null;
+
+const setUserActivation = (isActive) => {
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { userActivation: { isActive } },
+  });
+};
 
 const loadPreloadWithElectron = (electronMock) => {
   Module._load = (request, parent, isMain) => (
@@ -21,6 +29,11 @@ const loadPreloadWithElectron = (electronMock) => {
 afterEach(() => {
   Module._load = originalLoad;
   process.argv = [...originalArgv];
+  if (originalNavigatorDescriptor) {
+    Object.defineProperty(globalThis, 'navigator', originalNavigatorDescriptor);
+  } else {
+    delete globalThis.navigator;
+  }
   delete require.cache[preloadPath];
   exposedApi = null;
   vi.restoreAllMocks();
@@ -163,6 +176,69 @@ describe('preload desktop bridge', () => {
 
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:app-icon-get-state');
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:app-icon-set-selected', 'institute');
+  });
+
+  it('exposes a native clipboard write helper', async () => {
+    const ipcRenderer = {
+      sendSync: vi.fn(),
+      invoke: vi.fn(async () => true),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const contextBridge = {
+      exposeInMainWorld: vi.fn((_name, api) => {
+        exposedApi = api; // Capture the safe bridge API exposed to React.
+      }),
+    };
+
+    loadPreloadWithElectron({ contextBridge, ipcRenderer });
+    setUserActivation(true);
+
+    await expect(exposedApi.clipboard.writeText('Copied prompt')).resolves.toBe(true);
+
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:clipboard-write-text', 'Copied prompt');
+  });
+
+  it('blocks native clipboard writes without user activation', async () => {
+    const ipcRenderer = {
+      sendSync: vi.fn(),
+      invoke: vi.fn(async () => true),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const contextBridge = {
+      exposeInMainWorld: vi.fn((_name, api) => {
+        exposedApi = api; // Capture the safe bridge API exposed to React.
+      }),
+    };
+
+    loadPreloadWithElectron({ contextBridge, ipcRenderer });
+    setUserActivation(false);
+
+    expect(() => exposedApi.clipboard.writeText('Copied prompt')).toThrow(/active user action/);
+
+    expect(ipcRenderer.invoke).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-string native clipboard writes before IPC', async () => {
+    const ipcRenderer = {
+      sendSync: vi.fn(),
+      invoke: vi.fn(async () => true),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const contextBridge = {
+      exposeInMainWorld: vi.fn((_name, api) => {
+        exposedApi = api; // Capture the safe bridge API exposed to React.
+      }),
+    };
+
+    loadPreloadWithElectron({ contextBridge, ipcRenderer });
+    setUserActivation(true);
+
+    expect(() => exposedApi.clipboard.writeText(undefined)).toThrow(/must be a string/);
+
+    expect(ipcRenderer.invoke).not.toHaveBeenCalled();
   });
 
   it('rejects invalid snapshot write payloads before IPC', async () => {

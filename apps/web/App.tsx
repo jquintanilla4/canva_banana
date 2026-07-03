@@ -83,6 +83,7 @@ import { useFalQueueJobs } from './hooks/useFalQueueJobs';
 import { useDebugLogState } from './hooks/useDebugLogState';
 import { useJimengSetup } from './hooks/useJimengSetup';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
+import { writeClipboardText } from './services/clipboardService';
 import type { FalModelMode } from './services/modelConfig';
 import {
   buildEffectiveSeedanceReferenceIds,
@@ -104,6 +105,7 @@ import {
   isJimengEmbeddedVideoModel,
 } from './utils/embeddedVideoRouting';
 import { markCanvasMediaStoppedByIds, stopCanvasMediaPlaybackByIds } from './utils/canvasMediaPlayback';
+import { getCanvasImagePrompt } from './utils/canvasImagePrompt';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
 import { OVERLAY_LAYER_CLASS_NAMES } from './utils/overlayLayers';
 import { PlusIcon } from './components/Icons';
@@ -834,7 +836,7 @@ export default function App() {
   const handleNoteCopy = useCallback((noteId: string) => {
     const note = displayedNotes.find(n => n.id === noteId);
     if (note && note.text) {
-      navigator.clipboard.writeText(note.text)
+      writeClipboardText(note.text)
         .then(() => {
           setToastMessage("Copied to clipboard!");
           setTimeout(() => setToastMessage(null), 2000);
@@ -849,7 +851,7 @@ export default function App() {
 
   const handleImagePromptCopy = useCallback((imageId: string) => {
     const image = displayedImages.find(img => img.id === imageId);
-    const promptText = image?.metadata?.prompt?.trim();
+    const promptText = getCanvasImagePrompt(image);
 
     if (!promptText) {
       setToastMessage('No prompt found for this media.');
@@ -857,7 +859,7 @@ export default function App() {
       return;
     }
 
-    navigator.clipboard.writeText(promptText)
+    writeClipboardText(promptText)
       .then(() => {
         setToastMessage('Prompt copied to clipboard!');
         setTimeout(() => setToastMessage(null), 2000);
