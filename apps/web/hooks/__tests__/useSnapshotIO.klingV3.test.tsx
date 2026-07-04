@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Tool } from '../../types';
-import type { SnapshotMetaState } from '../../services/snapshotService';
+import { Tool, type CanvasImage } from '../../types';
+import { parseBinarySnapshotFile, type SnapshotMetaState } from '../../services/snapshotService';
 import { KLING_V3_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import { useSnapshotIO } from '../useSnapshotIO';
 import type { SelectionStateResult } from '../useSelectionState';
@@ -40,6 +40,32 @@ const buildMeta = (): SnapshotMetaState => ({
   selectedNoteIds: [],
   referenceImageIds: [],
 });
+
+const buildAudioImage = (overrides: Partial<CanvasImage> = {}): CanvasImage => {
+  const waveform = document.createElement('img');
+  const audioElement = document.createElement('audio');
+  audioElement.currentTime = 0;
+
+  return {
+    id: 'audio-1',
+    element: waveform,
+    mediaType: 'audio',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 40,
+    rotation: 0,
+    naturalWidth: 100,
+    naturalHeight: 40,
+    file: new File(['audio'], 'audio.wav', { type: 'audio/wav' }),
+    isPlaying: true,
+    hasAudio: true,
+    audioElement,
+    audioDuration: 12,
+    currentPlaybackTime: 1,
+    ...overrides,
+  }; // Audio fixture with both stale state and a live element clock.
+};
 
 afterEach(() => {
   delete window.canvaBananaDesktop;
@@ -252,5 +278,95 @@ describe('useSnapshotIO (Kling v3)', () => {
       autosaveId: 'desktop-target-1',
       data: expect.any(ArrayBuffer),
     });
+  });
+
+  it('exports playing audio with the live element playback time', async () => {
+    let exportedData: ArrayBuffer | null = null;
+    const saveSnapshotFile = vi.fn(async (payload: { suggestedName: string; data: ArrayBuffer }) => {
+      exportedData = payload.data; // Capture the generated snapshot bytes for manifest assertions.
+      return {
+        canceled: false as const,
+        fileName: 'scene.bcsnap',
+        autosaveId: 'desktop-target-1',
+      };
+    });
+    const audioImage = buildAudioImage({ currentPlaybackTime: 1 });
+    (audioImage.audioElement as HTMLAudioElement).currentTime = 7.25;
+    window.canvaBananaDesktop = {
+      fileMenu: {
+        saveSnapshotFile,
+      },
+    };
+
+    const { result } = renderHook(() => useSnapshotIO({
+      ui: {
+        appMode: 'CANVAS',
+        tool: Tool.PAN,
+        brushSize: 20,
+        eraserSize: 20,
+        brushColor: '#ff0000',
+        prompt: '',
+        apiProvider: 'fal',
+        setAppMode: vi.fn(),
+        setTool: vi.fn(),
+        setBrushSize: vi.fn(),
+        setEraserSize: vi.fn(),
+        setBrushColor: vi.fn(),
+        setPrompt: vi.fn(),
+        setApiProvider: vi.fn(),
+        setError: vi.fn(),
+        setToastMessage: vi.fn(),
+        setIsFileMenuOpen: vi.fn(),
+      },
+      fal: {
+        falModelId: KLING_V3_VIDEO_MODEL_ID,
+        falImageSizeSelection: 'default',
+        falAspectRatioSelection: 'default',
+        falResolutionSelection: '720p',
+        falNumImages: 1,
+        falScaleFactor: 2,
+        falNoiseScale: 0.1,
+        falCreativity: 0,
+        klingV3Duration: '5',
+        klingV3GenerateAudio: true,
+        klingV3CfgScale: '0.5',
+        klingV3MultiPromptEnabled: false,
+        klingV3MultiPrompt: '',
+        klingV3Shot1Duration: '5',
+        klingV3Shot2Duration: '5',
+      } as unknown as UseFalSettingsResult,
+      selection: {
+        selectedImageIds: [],
+        selectedNoteIds: [],
+        referenceImageIds: [],
+        referenceVideoIds: [],
+        referenceAudioIds: [],
+        seedanceReferenceOrderIds: [],
+        elementImageIds: [],
+        videoLastFrameImageId: null,
+      } as unknown as SelectionStateResult,
+      displayedImages: [audioImage],
+      displayedNotes: [],
+      displayedPaths: [],
+      displayedVideoPromptAreas: [],
+      displayedVideoPromptBars: [],
+      resetHistory: vi.fn(),
+      providerAvailability: { google: true, fal: true },
+      availableProviders: ['google', 'fal'],
+      autosaveEnabled: true,
+    }));
+
+    await act(async () => {
+      await result.current.exportSnapshot();
+    });
+
+    expect(exportedData).toBeInstanceOf(ArrayBuffer);
+    const exportedFile = { arrayBuffer: async () => exportedData as ArrayBuffer } as File;
+    const parsed = await parseBinarySnapshotFile(exportedFile);
+
+    expect(parsed.manifest.state.images[0]).toEqual(expect.objectContaining({
+      id: 'audio-1',
+      currentPlaybackTime: 7.25,
+    }));
   });
 });

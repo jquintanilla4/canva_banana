@@ -86,6 +86,7 @@ export type SnapshotImageManifest = {
   mediaType?: CanvasMediaType;
   isPlaying?: boolean;
   hasAudio?: boolean;
+  currentPlaybackTime?: number;
 };
 
 export type SnapshotManifestV2 = {
@@ -188,6 +189,7 @@ export type SerializedCanvasImageV1 = {
   mediaType?: CanvasMediaType;
   isPlaying?: boolean;
   hasAudio?: boolean;
+  currentPlaybackTime?: number;
 };
 
 export type SerializedSnapshotV1 = {
@@ -449,6 +451,9 @@ export const buildSnapshotBinaryFromState = async (params: {
         mediaType: img.mediaType,
         isPlaying: img.isPlaying ?? false,
         hasAudio: img.hasAudio,
+        currentPlaybackTime: img.mediaType === 'audio' && typeof img.currentPlaybackTime === 'number' && Number.isFinite(img.currentPlaybackTime)
+          ? img.currentPlaybackTime
+          : undefined, // Audio restores should resume from the saved playhead.
       };
 
       return { manifest, blob: img.file };
@@ -502,6 +507,7 @@ export const restoreSnapshotFromFile = async (
       height?: number;
       rotation?: number;
       metadata?: CanvasImage['metadata'];
+      currentPlaybackTime?: number;
     };
     file: File;
   }): Promise<CanvasImage> => {
@@ -527,6 +533,11 @@ export const restoreSnapshotFromFile = async (
     const naturalWidth = waveformImg.naturalWidth || width;
     const naturalHeight = waveformImg.naturalHeight || height;
     const duration = Number.isFinite(audioElement.duration) ? audioElement.duration : waveformDuration;
+    const audioDuration = Number.isFinite(duration) ? duration : undefined;
+    const currentPlaybackTime = typeof img.currentPlaybackTime === 'number' && Number.isFinite(img.currentPlaybackTime)
+      ? Math.min(Math.max(0, img.currentPlaybackTime), audioDuration ?? img.currentPlaybackTime)
+      : 0; // Older snapshots did not store audio playhead position.
+    audioElement.currentTime = currentPlaybackTime; // Keep actual playback aligned with restored canvas state.
 
     return {
       id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
@@ -544,8 +555,8 @@ export const restoreSnapshotFromFile = async (
       hasAudio: true,
       audioElement,
       waveformImageData,
-      audioDuration: Number.isFinite(duration) ? duration : undefined,
-      currentPlaybackTime: 0,
+      audioDuration,
+      currentPlaybackTime,
       metadata: normalizeSnapshotImageMetadata(img.metadata),
     };
   };

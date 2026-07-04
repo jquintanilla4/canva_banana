@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
@@ -351,6 +351,60 @@ describe('Canvas selection temporary pan', () => {
       requestAnimationFrameSpy.mockRestore();
       cancelAnimationFrameSpy.mockRestore();
     }
+  });
+
+  it('does not push image state on each audio playback frame', async () => {
+    const audioImage = buildAudio();
+    const audioElement = audioImage.audioElement as HTMLAudioElement;
+    const onImagesChange = vi.fn();
+    const callbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    const cancelAnimationFrameSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    audioElement.currentTime = 0.42;
+
+    try {
+      render(<Canvas {...buildCanvasProps({ images: [audioImage], onImagesChange })} />);
+
+      await waitFor(() => {
+        expect(callbacks.length).toBeGreaterThan(0);
+      });
+
+      act(() => {
+        callbacks[callbacks.length - 1]?.(16);
+      });
+
+      expect(onImagesChange).not.toHaveBeenCalled();
+    } finally {
+      requestAnimationFrameSpy.mockRestore();
+      cancelAnimationFrameSpy.mockRestore();
+    }
+  });
+
+  it('persists the current audio time once when playback is paused', () => {
+    const audioImage = buildAudio();
+    const audioElement = audioImage.audioElement as HTMLAudioElement;
+    const onImagesChange = vi.fn();
+    audioElement.currentTime = 0.7;
+
+    render(<Canvas {...buildCanvasProps({
+      images: [audioImage],
+      selectedImageIds: [audioImage.id],
+      onImagesChange,
+    })} />);
+
+    fireEvent.click(screen.getByTitle('Pause'));
+
+    expect(audioElement.pause).toHaveBeenCalled();
+    expect(onImagesChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: audioImage.id,
+        isPlaying: false,
+        currentPlaybackTime: 0.7,
+      }),
+    ]);
   });
 
   it('uses option-shift click as a reference toggle when shift marks an end frame', () => {

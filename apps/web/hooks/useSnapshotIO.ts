@@ -116,6 +116,22 @@ type AutosavePrimaryTarget = FileSystemFileHandle | DesktopAutosaveTarget | null
 const isDesktopAutosaveTarget = (target: AutosavePrimaryTarget): target is DesktopAutosaveTarget =>
   Boolean(target) && 'kind' in target && target.kind === 'desktop';
 
+export const prepareImagesForSnapshot = (images: CanvasImage[]): CanvasImage[] => images.map(image => {
+  if (image.mediaType !== 'audio' || !image.isPlaying || !image.audioElement) {
+    return image;
+  }
+  const currentPlaybackTime = image.audioElement.currentTime;
+  if (!Number.isFinite(currentPlaybackTime)) {
+    return image;
+  }
+  return { ...image, currentPlaybackTime }; // Persist the live audio playhead without pushing RAF state.
+});
+
+export const prepareStateForSnapshot = (state: AppState): AppState => ({
+  ...state,
+  images: prepareImagesForSnapshot(state.images),
+});
+
 const readBlobAsArrayBuffer = (blob: Blob): Promise<ArrayBuffer> => {
   const modernBlob = blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> };
   if (typeof modernBlob.arrayBuffer === 'function') {
@@ -298,13 +314,13 @@ export function useSnapshotIO({
   } = selection;
   // Serialize current canvas state plus UI settings into a binary snapshot for export/share.
   const buildSnapshotBinary = useCallback(async (stateOverride?: AppState): Promise<SnapshotBinary> => {
-    const snapshotState = stateOverride ?? {
+    const snapshotState = prepareStateForSnapshot(stateOverride ?? {
       images: displayedImages,
       notes: displayedNotes,
       paths: displayedPaths,
       videoPromptAreas: displayedVideoPromptAreas,
       videoPromptBars: displayedVideoPromptBars,
-    };
+    });
     const meta: SnapshotMetaState = {
       appMode,
       tool,
@@ -473,13 +489,14 @@ export function useSnapshotIO({
   const writeSnapshotToPrimaryTarget = useCallback(async (
     target: Exclude<AutosavePrimaryTarget, null>,
     snapshotBinary: SnapshotBinary,
+    snapshotBlob?: Blob,
   ): Promise<void> => {
     if (isDesktopAutosaveTarget(target)) {
       const writeSnapshotFile = window.canvaBananaDesktop?.fileMenu?.writeSnapshotFile;
       if (!writeSnapshotFile) {
         throw new Error('Desktop snapshot autosave is unavailable.');
       }
-      const blob = snapshotBinaryToBlob(snapshotBinary);
+      const blob = snapshotBlob ?? snapshotBinaryToBlob(snapshotBinary);
       await writeSnapshotFile({ autosaveId: target.autosaveId, data: await readBlobAsArrayBuffer(blob) });
       return;
     }
@@ -496,13 +513,13 @@ export function useSnapshotIO({
     if (!session) {
       return;
     }
-    const snapshotState = stateOverride ?? {
+    const snapshotState = prepareStateForSnapshot(stateOverride ?? {
       images: displayedImages,
       notes: displayedNotes,
       paths: displayedPaths,
       videoPromptAreas: displayedVideoPromptAreas,
       videoPromptBars: displayedVideoPromptBars,
-    };
+    });
 
     autosaveQueueRef.current = autosaveQueueRef.current
       .catch(() => Promise.resolve())
@@ -511,7 +528,7 @@ export function useSnapshotIO({
         const snapshotBinary = await buildSnapshotBinary(snapshotState);
         const backupBlob = snapshotBinaryToBlob(snapshotBinary);
         if (primaryHandle) {
-          await writeSnapshotToPrimaryTarget(primaryHandle, snapshotBinary);
+          await writeSnapshotToPrimaryTarget(primaryHandle, snapshotBinary, backupBlob);
         }
         // Save a local backup snapshot so users can restore recent sessions.
         await saveBackupSession({
@@ -545,10 +562,11 @@ export function useSnapshotIO({
     fileName: string,
     snapshotBinary: SnapshotBinary,
     primaryHandle: AutosavePrimaryTarget,
+    snapshotBlob?: Blob,
   ): Promise<boolean> => {
     const sessionId = crypto.randomUUID();
     const sessionCreatedAt = Date.now();
-    const backupBlob = snapshotBinaryToBlob(snapshotBinary);
+    const backupBlob = snapshotBlob ?? snapshotBinaryToBlob(snapshotBinary);
     autosaveSessionRef.current = {
       id: sessionId,
       createdAt: sessionCreatedAt,
@@ -595,7 +613,7 @@ export function useSnapshotIO({
         const desktopAutosaveTarget = typeof result.autosaveId === 'string'
           ? { kind: 'desktop' as const, autosaveId: result.autosaveId }
           : null;
-        shouldClearError = await rememberExportedSnapshot(result.fileName, snapshotBinary, desktopAutosaveTarget);
+        shouldClearError = await rememberExportedSnapshot(result.fileName, snapshotBinary, desktopAutosaveTarget, blob);
       } else {
         const win = window as unknown as { showSaveFilePicker?: (options?: unknown) => Promise<any> };
         if (typeof win.showSaveFilePicker === 'function') {

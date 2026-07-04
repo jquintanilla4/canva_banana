@@ -13,6 +13,7 @@ beforeAll(() => {
     restore: vi.fn(),
     translate: vi.fn(),
     scale: vi.fn(),
+    setTransform: vi.fn(),
     rotate: vi.fn(),
     beginPath: vi.fn(),
     moveTo: vi.fn(),

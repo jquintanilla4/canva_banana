@@ -1,6 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { normalizeSnapshotImageMetadata, restoreSnapshotFromFile } from '../snapshotService';
 import type { CanvasImageMetadata } from '../../types';
+
+const audioServiceMocks = vi.hoisted(() => ({
+  generateWaveformImage: vi.fn(),
+  loadAudioFromBlob: vi.fn(),
+}));
+
+vi.mock('../audioService', () => audioServiceMocks);
+
+afterEach(() => {
+  audioServiceMocks.generateWaveformImage.mockReset();
+  audioServiceMocks.loadAudioFromBlob.mockReset();
+  vi.unstubAllGlobals();
+});
 
 describe('snapshotService (Recraft metadata)', () => {
   it('normalizes Recraft color options from snapshots', () => {
@@ -35,6 +48,59 @@ describe('snapshotService (Recraft metadata)', () => {
       { r: 10, g: 11, b: 12 },
       { r: 13, g: 14, b: 15 },
     ]);
+  });
+});
+
+describe('snapshotService (audio restore)', () => {
+  it('seeks restored audio elements to the saved playback time', async () => {
+    const audioElement = document.createElement('audio');
+    Object.defineProperty(audioElement, 'duration', { value: 10, configurable: true });
+    audioElement.currentTime = 0;
+    audioServiceMocks.loadAudioFromBlob.mockResolvedValue(audioElement);
+    audioServiceMocks.generateWaveformImage.mockResolvedValue({
+      dataUrl: 'data:image/png;base64,AA==',
+      duration: 10,
+    });
+    vi.stubGlobal('Image', class {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 100;
+      naturalHeight = 40;
+
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.()); // Simulate data URL image loading.
+      }
+    } as unknown as typeof Image);
+    const snapshot = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      state: {
+        images: [{
+          id: 'audio-1',
+          dataUrl: 'data:audio/wav;base64,AA==',
+          fileName: 'audio.wav',
+          fileType: 'audio/wav',
+          mediaType: 'audio',
+          width: 100,
+          height: 40,
+          currentPlaybackTime: 8.5,
+        }],
+        notes: [],
+        paths: [],
+      },
+    };
+    const snapshotJson = JSON.stringify(snapshot);
+    const file = new File([snapshotJson], 'canvas.json', { type: 'application/json' }) as File & { text: () => Promise<string> };
+    file.text = () => Promise.resolve(snapshotJson); // Node's test File polyfill does not always include text().
+
+    const restored = await restoreSnapshotFromFile(file, {
+      brushSize: 20,
+      eraserSize: 20,
+      brushColor: '#ff0000',
+    });
+
+    expect(restored.images[0]?.currentPlaybackTime).toBe(8.5);
+    expect(restored.images[0]?.audioElement?.currentTime).toBe(8.5);
   });
 });
 

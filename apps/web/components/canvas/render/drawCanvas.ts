@@ -2,13 +2,84 @@ import { formatDuration } from '../../../services/audioService';
 import { Tool, type CanvasImage, type CanvasNote, type Path, type Point } from '../../../types';
 import { getNoteTextColor } from '../noteColors';
 import { CROP_HANDLE_SIZE, DEFAULT_NOTE_FONT_SIZE, RESIZE_HANDLE_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
-import { getImageCenter, getImageRotation } from '../geometry';
+import { getImageBounds, getImageCenter, getImageRotation } from '../geometry';
 import { isVideoImage } from '../mediaGuards';
 import { fitTextWithinBox, wrapText } from './text';
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
 type TransformModeState = { imageId: string; };
 type CanvasBadgeColors = { fill: string; stroke: string; text: string };
+type CanvasRect = { minX: number; minY: number; maxX: number; maxY: number };
+
+export type CanvasRenderCache = {
+  pathCanvas: HTMLCanvasElement | null;
+  pathSignature: string | null;
+};
+
+export const createCanvasRenderCache = (): CanvasRenderCache => ({
+  pathCanvas: null,
+  pathSignature: null,
+});
+
+const getWorldViewport = (canvas: HTMLCanvasElement, pan: Point, scale: number): CanvasRect => {
+  const safeScale = Math.max(scale, 0.0001); // Avoid divide-by-zero if scale is ever malformed.
+  return {
+    minX: -pan.x / safeScale,
+    minY: -pan.y / safeScale,
+    maxX: (canvas.width - pan.x) / safeScale,
+    maxY: (canvas.height - pan.y) / safeScale,
+  };
+};
+
+const expandRect = (rect: CanvasRect, amount: number): CanvasRect => ({
+  minX: rect.minX - amount,
+  minY: rect.minY - amount,
+  maxX: rect.maxX + amount,
+  maxY: rect.maxY + amount,
+});
+
+const rectsIntersect = (a: CanvasRect, b: CanvasRect): boolean => (
+  a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
+);
+
+const getNoteBounds = (note: CanvasNote): CanvasRect => ({
+  minX: note.x,
+  minY: note.y,
+  maxX: note.x + note.width,
+  maxY: note.y + note.height,
+});
+
+const getAudioPlaybackTime = (
+  image: CanvasImage,
+  audioPlaybackTimes?: Readonly<Record<string, number>>,
+): number | undefined => (
+  image.isPlaying ? audioPlaybackTimes?.[image.id] ?? image.currentPlaybackTime : image.currentPlaybackTime
+);
+
+const getPathLayerSignature = (params: {
+  canvas: HTMLCanvasElement;
+  pan: Point;
+  scale: number;
+  paths: Path[];
+}): string => {
+  const { canvas, pan, scale, paths } = params;
+  const pathSignature = paths.map(path => (
+    `${path.tool}:${path.color}:${path.size}:${path.points.map(point => `${point.x},${point.y}`).join('|')}`
+  )).join(';');
+  return `${canvas.width}x${canvas.height}:${pan.x},${pan.y}:${scale}:${pathSignature}`;
+};
+
+const getReusablePathCanvas = (cache: CanvasRenderCache, width: number, height: number): HTMLCanvasElement => {
+  if (!cache.pathCanvas) {
+    cache.pathCanvas = document.createElement('canvas'); // One offscreen layer is reused across draws.
+  }
+  if (cache.pathCanvas.width !== width || cache.pathCanvas.height !== height) {
+    cache.pathCanvas.width = width;
+    cache.pathCanvas.height = height;
+    cache.pathSignature = null; // Size changes invalidate the cached pixels.
+  }
+  return cache.pathCanvas;
+};
 
 const drawCanvasBadge = (
   ctx: CanvasRenderingContext2D,
@@ -73,6 +144,8 @@ type DrawCanvasArgs = {
   showMetadataOverlay: boolean;
   cropMode: CropModeState | null;
   transformMode: TransformModeState | null;
+  renderCache?: CanvasRenderCache;
+  audioPlaybackTimes?: Readonly<Record<string, number>>;
 };
 
 export function drawCanvas({
@@ -108,8 +181,11 @@ export function drawCanvas({
   showMetadataOverlay,
   cropMode,
   transformMode,
+  renderCache,
+  audioPlaybackTimes,
 }: DrawCanvasArgs) {
   // --- 1. Draw scene (images, notes, selections) ---
+  const viewport = expandRect(getWorldViewport(canvas, pan, scale), Math.max(128 / Math.max(scale, 0.0001), 64));
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
   ctx.translate(pan.x, pan.y);
@@ -117,6 +193,9 @@ export function drawCanvas({
 
   // Draw images
   images.forEach(image => {
+    if (!rectsIntersect(getImageBounds(image), viewport)) {
+      return; // Skip fully offscreen media and its badges.
+    }
     const isDisabledMedia = disabledMediaIds.includes(image.id);
     const rotation = getImageRotation(image);
     const center = getImageCenter(image);
@@ -145,8 +224,9 @@ export function drawCanvas({
     ctx.drawImage(image.element, baseX, baseY, image.width, image.height);
 
     // Draw playhead for audio objects
-    if (image.mediaType === 'audio' && image.audioDuration && image.currentPlaybackTime !== undefined) {
-      const progress = image.currentPlaybackTime / image.audioDuration;
+    const audioPlaybackTime = image.mediaType === 'audio' ? getAudioPlaybackTime(image, audioPlaybackTimes) : undefined;
+    if (image.mediaType === 'audio' && image.audioDuration && audioPlaybackTime !== undefined) {
+      const progress = audioPlaybackTime / image.audioDuration;
       const playheadX = baseX + (image.width * progress);
 
       // Draw playhead line
@@ -281,7 +361,7 @@ export function drawCanvas({
 
       // Draw audio duration badge
       if (image.audioDuration) {
-        const currentTime = image.currentPlaybackTime ?? 0;
+        const currentTime = audioPlaybackTime ?? 0;
         const totalTime = image.audioDuration;
         const durationText = image.isPlaying
           ? `${formatDuration(currentTime)}/${formatDuration(totalTime)}`
@@ -393,7 +473,7 @@ export function drawCanvas({
 
   if (cropMode) {
     const imageToCrop = images.find(img => img.id === cropMode.imageId);
-    if (imageToCrop) {
+    if (imageToCrop && rectsIntersect(getImageBounds(imageToCrop), viewport)) {
       const rotation = getImageRotation(imageToCrop);
       const center = getImageCenter(imageToCrop);
       const handleSize = CROP_HANDLE_SIZE / scale;
@@ -453,7 +533,7 @@ export function drawCanvas({
   // Draw transform handles when in transform mode
   if (transformMode) {
     const imageToTransform = images.find(img => img.id === transformMode.imageId);
-    if (imageToTransform) {
+    if (imageToTransform && rectsIntersect(getImageBounds(imageToTransform), viewport)) {
       const handleSize = TRANSFORM_HANDLE_SIZE / scale;
       const rotationDistance = ROTATION_HANDLE_DISTANCE / scale;
       const rotation = getImageRotation(imageToTransform);
@@ -516,6 +596,9 @@ export function drawCanvas({
 
   // Draw notes
   notes.forEach(note => {
+    if (!rectsIntersect(getNoteBounds(note), viewport)) {
+      return; // Skip fully offscreen notes.
+    }
     ctx.fillStyle = note.backgroundColor;
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
     ctx.shadowBlur = 10 / scale;
@@ -562,43 +645,48 @@ export function drawCanvas({
 
   // --- 2. Draw path overlay ---
   if (paths.length > 0) {
-    const pathCanvas = document.createElement('canvas');
-    pathCanvas.width = canvas.width;
-    pathCanvas.height = canvas.height;
+    const cache = renderCache ?? createCanvasRenderCache();
+    const pathCanvas = getReusablePathCanvas(cache, canvas.width, canvas.height);
     const pathCtx = pathCanvas.getContext('2d');
+    const nextPathSignature = getPathLayerSignature({ canvas, pan, scale, paths });
 
     if (pathCtx) {
-      // Apply same transform to the path canvas
-      pathCtx.translate(pan.x, pan.y);
-      pathCtx.scale(scale, scale);
+      if (cache.pathSignature !== nextPathSignature) {
+        pathCtx.setTransform?.(1, 0, 0, 1, 0, 0);
+        pathCtx.clearRect(0, 0, pathCanvas.width, pathCanvas.height);
+        pathCtx.translate(pan.x, pan.y);
+        pathCtx.scale(scale, scale);
 
-      // Process all paths in order to respect drawing/erasing sequence
-      paths.forEach(path => {
-        if (path.tool === Tool.ERASE) {
-          pathCtx.globalCompositeOperation = 'destination-out';
-          // For destination-out, color doesn't matter, but alpha must be 1.
-          pathCtx.strokeStyle = 'rgba(0,0,0,1)';
-        } else {
-          pathCtx.globalCompositeOperation = 'source-over';
-          pathCtx.strokeStyle = path.color;
-        }
+        // Process all paths in order to respect drawing/erasing sequence
+        paths.forEach(path => {
+          if (path.tool === Tool.ERASE) {
+            pathCtx.globalCompositeOperation = 'destination-out';
+            // For destination-out, color doesn't matter, but alpha must be 1.
+            pathCtx.strokeStyle = 'rgba(0,0,0,1)';
+          } else {
+            pathCtx.globalCompositeOperation = 'source-over';
+            pathCtx.strokeStyle = path.color;
+          }
 
-        pathCtx.lineWidth = path.size;
-        pathCtx.lineCap = 'round';
-        pathCtx.lineJoin = 'round';
-        pathCtx.beginPath();
-        path.points.forEach((point, index) => {
-          if (index === 0) pathCtx.moveTo(point.x, point.y);
-          else pathCtx.lineTo(point.x, point.y);
+          pathCtx.lineWidth = path.size;
+          pathCtx.lineCap = 'round';
+          pathCtx.lineJoin = 'round';
+          pathCtx.beginPath();
+          path.points.forEach((point, index) => {
+            if (index === 0) pathCtx.moveTo(point.x, point.y);
+            else pathCtx.lineTo(point.x, point.y);
+          });
+          pathCtx.stroke();
         });
-        pathCtx.stroke();
-      });
 
-      // Reset composite operation for safety before drawing to main canvas
-      pathCtx.globalCompositeOperation = 'source-over';
+        pathCtx.globalCompositeOperation = 'source-over';
+        cache.pathSignature = nextPathSignature; // Reuse the path bitmap until inputs change.
+      }
 
       // Draw the path canvas onto the main canvas
       ctx.drawImage(pathCanvas, 0, 0);
     }
+  } else if (renderCache) {
+    renderCache.pathSignature = null;
   }
 }

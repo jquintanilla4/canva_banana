@@ -25,10 +25,11 @@ import {
 } from './canvas/constants';
 import { getImageBounds } from './canvas/geometry';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
-import { drawCanvas } from './canvas/render/drawCanvas';
+import { createCanvasRenderCache, drawCanvas } from './canvas/render/drawCanvas';
 import { getNoteTextColor } from './canvas/noteColors';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, NOTE_COLOR_OPTIONS, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
+import { useCanvasPlaybackLoop } from './canvas/hooks/useCanvasPlaybackLoop';
 import { PromptBar, type PromptBarControlConfig } from './PromptBar';
 import {
   DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT,
@@ -265,6 +266,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const videoPromptAreaColorPickerRef = useRef<HTMLDivElement>(null);
   const notePointerDownWhileEditingRef = useRef(false);
   const noteEditHandledRef = useRef(false);
+  const renderCacheRef = useRef(createCanvasRenderCache());
+  const audioPlaybackTimesRef = useRef<Record<string, number>>({});
   const [isNoteColorPickerOpen, setIsNoteColorPickerOpen] = useState(false);
   const [isVideoPromptAreaColorPickerOpen, setIsVideoPromptAreaColorPickerOpen] = useState(false);
   const [videoPromptAreaDragState, setVideoPromptAreaDragState] = useState<{
@@ -359,9 +362,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         audioElement.pause();
       }
 
+      audioPlaybackTimesRef.current[mediaId] = audioElement.currentTime; // Persist the clicked playhead position once.
       const updatedImages = images.map(img => {
         if (img.id !== mediaId) return img;
-        return { ...img, isPlaying: nextIsPlaying };
+        return { ...img, isPlaying: nextIsPlaying, currentPlaybackTime: audioElement.currentTime };
       });
       onImagesChange(updatedImages);
       onCommit({ images: updatedImages });
@@ -492,6 +496,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       showMetadataOverlay,
       cropMode,
       transformMode,
+      renderCache: renderCacheRef.current,
+      audioPlaybackTimes: audioPlaybackTimesRef.current,
     });
   }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, transformMode, videoLastFrameImageId]);
 
@@ -709,35 +715,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     };
   }, [images, onMediaPlaybackRejected]);
 
-  useEffect(() => {
-    const hasPlayingMedia = images.some(img =>
-      (img.mediaType === 'video' || img.mediaType === 'audio') && img.isPlaying
-    );
-    if (!hasPlayingMedia) {
-      return;
-    }
-
-    let rafId = requestAnimationFrame(() => {});
-
-    const tick = () => {
-      // Update currentPlaybackTime for playing audio items
-      const needsUpdate = images.some(img => img.mediaType === 'audio' && img.isPlaying && img.audioElement);
-      if (needsUpdate) {
-        const updatedImages = images.map(img => {
-          if (img.mediaType === 'audio' && img.isPlaying && img.audioElement) {
-            return { ...img, currentPlaybackTime: img.audioElement.currentTime };
-          }
-          return img;
-        });
-        onImagesChange(updatedImages);
-      }
-      draw();
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [draw, images, onImagesChange]);
+  useCanvasPlaybackLoop({ images, draw, audioPlaybackTimesRef });
 
   useEffect(() => {
     images.forEach(img => {
