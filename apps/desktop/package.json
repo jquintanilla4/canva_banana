@@ -1,7 +1,7 @@
 {
   "name": "@canva-banana/desktop",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.0.5",
   "type": "module",
   "main": "main.mjs",
   "scripts": {
@@ -17,12 +17,12 @@
     "make": "node scripts/package-mac-app.mjs make"
   },
   "devDependencies": {
-    "@electron/notarize": "^2.5.0",
-    "@electron/packager": "^18.4.4",
     "@electron-forge/cli": "^7.11.2",
     "@electron-forge/maker-dmg": "^7.11.2",
     "@electron-forge/maker-zip": "^7.11.2",
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
+    "@electron/notarize": "^2.5.0",
+    "@electron/packager": "^18.4.4",
     "electron": "^42.4.1"
   }
 }

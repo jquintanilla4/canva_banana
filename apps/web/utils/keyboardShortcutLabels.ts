@@ -1,0 +1,17 @@
+export const KEYBOARD_SHORTCUT_LABELS = {
+  select: 'V',
+  freeSelect: 'F',
+  pan: 'H',
+  note: 'N',
+  videoPromptArea: 'G',
+  brush: 'B',
+  erase: 'E',
+  recordAudio: 'M',
+  undo: 'Shift+Z',
+  redo: 'Shift+Y',
+  deleteObject: 'Delete/Backspace',
+  zoomToFit: '.',
+  generate: 'Cmd/Ctrl+Enter',
+  cancel: 'Esc',
+  confirm: 'Enter',
+} as const;

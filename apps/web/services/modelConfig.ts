@@ -23,9 +23,11 @@ export const KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID = 'krea/v2/large/text-to-image'
 export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
 export const SEEDREAM_V5_LITE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/edit' as const;
+export const SEEDREAM_V5_PRO_MODEL_ID = 'bytedance/seedream/v5/pro/edit' as const; // Seedream 5 Pro edit endpoint.
 export const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
 export const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
 export const SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/text-to-image' as const;
+export const SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID = 'bytedance/seedream/v5/pro/text-to-image' as const; // Seedream 5 Pro t2i endpoint.
 export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
 export const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit' as const;
 export const RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/recraft/v4/pro/text-to-image' as const; // Recraft v4 Pro t2i endpoint.
@@ -132,6 +134,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: SEEDREAM_MODEL_ID, label: 'Seedream 4' },
   { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream 4.5' },
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
+  { value: SEEDREAM_V5_PRO_MODEL_ID, label: 'Seedream 5 Pro' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Wan 2.7 Pro Image' },
  ] as const;
@@ -727,12 +730,17 @@ export const WAN_27_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan27ImageM
 
 export const GPT_IMAGE_2_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
   { value: 'auto', label: 'Auto (default)' },
-  { value: 'landscape_4_3', label: 'Landscape 4:3' },
-  { value: 'landscape_16_9', label: 'Landscape 16:9' },
-  { value: 'portrait_4_3', label: 'Portrait 3:4' },
-  { value: 'portrait_16_9', label: 'Portrait 9:16' },
-  { value: 'square', label: 'Square' },
-  { value: 'square_hd', label: 'Square HD' },
+  { value: '2048x2048', label: '2K Square (2048x2048)' },
+  { value: '2560x1440', label: '2K Landscape (2560x1440)' },
+  { value: '1440x2560', label: '2K Portrait (1440x2560)' },
+  { value: '2048x1152', label: 'HD Landscape (2048x1152)' },
+  { value: '1152x2048', label: 'HD Portrait (1152x2048)' },
+  { value: 'landscape_4_3', label: 'Landscape 4:3 (1024x768)' },
+  { value: 'landscape_16_9', label: 'Landscape 16:9 (1024x576)' },
+  { value: 'portrait_4_3', label: 'Portrait 3:4 (768x1024)' },
+  { value: 'portrait_16_9', label: 'Portrait 9:16 (576x1024)' },
+  { value: 'square', label: 'Square (512x512)' },
+  { value: 'square_hd', label: 'Square HD (1024x1024)' },
 ] as const;
 
 export const GPT_IMAGE_2_QUALITY_OPTIONS: ReadonlyArray<{ value: FalGptImage2QualitySelectionValue; label: string }> = [
@@ -844,17 +852,20 @@ export const recraftHexToRgb = (value: string): RecraftRgbColor | undefined => {
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS_BASE, ...FAL_VIDEO_MODEL_OPTIONS_BASE] as const;
 export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];
-export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID] as const;
+export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID, SEEDREAM_V5_PRO_MODEL_ID] as const;
 export type SeedreamModelId = typeof SEEDREAM_MODEL_IDS[number];
 export const SEEDREAM_TEXT_TO_IMAGE_MAP: Record<SeedreamModelId, string> = {
   [SEEDREAM_MODEL_ID]: SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
   [SEEDREAM_V45_MODEL_ID]: SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
   [SEEDREAM_V5_LITE_MODEL_ID]: SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
+  [SEEDREAM_V5_PRO_MODEL_ID]: SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
 };
 export const isSeedreamV45ModelId = (value: string | undefined): boolean =>
   value === SEEDREAM_V45_MODEL_ID || value === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID;
 export const isSeedreamV5LiteModelId = (value: string | undefined): boolean =>
   value === SEEDREAM_V5_LITE_MODEL_ID || value === SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID; // Match both edit and t2i IDs.
+export const isSeedreamV5ProModelId = (value: string | undefined): boolean =>
+  value === SEEDREAM_V5_PRO_MODEL_ID || value === SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID; // Match both edit and t2i IDs.
 export const NANO_BANANA_EDIT_MODEL_IDS = [NANO_BANANA_PRO_EDIT_MODEL_ID, NANO_BANANA_2_EDIT_MODEL_ID] as const; // Edit ids shown in selector.
 export type NanoBananaEditModelId = typeof NANO_BANANA_EDIT_MODEL_IDS[number]; // Nano Banana edit id union.
 export const NANO_BANANA_TEXT_TO_IMAGE_MAP: Record<NanoBananaEditModelId, string> = {
@@ -906,7 +917,10 @@ export const getSeedreamTextToImageModelId = (modelId: SeedreamModelId): string 
   SEEDREAM_TEXT_TO_IMAGE_MAP[modelId];
 
 export const isFalImageSizeSelectionValue = (value: unknown): value is FalImageSizeSelectionValue =>
-  typeof value === 'string' && FAL_IMAGE_SIZE_OPTIONS.some(option => option.value === value);
+  typeof value === 'string' && (
+    FAL_IMAGE_SIZE_OPTIONS.some(option => option.value === value)
+    || GPT_IMAGE_2_IMAGE_SIZE_OPTIONS.some(option => option.value === value)
+  );
 
 export const isFalAspectRatioSelectionValue = (value: unknown): value is FalAspectRatioSelectionValue =>
   typeof value === 'string' && FAL_ASPECT_RATIO_VALUES.has(value as FalAspectRatioSelectionValue);
@@ -1066,15 +1080,27 @@ export const SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImag
   { value: 'auto_2K', label: 'Auto 2K' },
   { value: 'auto_3K', label: 'Auto 3K' },
 ] as const;
+export const SEEDREAM_V5_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
+  { value: 'square_hd', label: 'Square HD' },
+  { value: 'square', label: 'Square' },
+  { value: 'portrait_4_3', label: 'Portrait 3:4' },
+  { value: 'portrait_16_9', label: 'Portrait 9:16' },
+  { value: 'landscape_4_3', label: 'Landscape 4:3' },
+  { value: 'landscape_16_9', label: 'Landscape 16:9' },
+  { value: 'auto_1K', label: 'Auto 1K' },
+  { value: 'auto_2K', label: 'Auto 2K (default)' },
+] as const;
 export const getSeedreamImageSizeOptions = (modelId: string | undefined) =>
-  isSeedreamV5LiteModelId(modelId) ? SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS : FAL_IMAGE_SIZE_OPTIONS; // Keep v4/v4.5 behavior unchanged.
+  isSeedreamV5ProModelId(modelId)
+    ? SEEDREAM_V5_PRO_IMAGE_SIZE_OPTIONS
+    : isSeedreamV5LiteModelId(modelId) ? SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS : FAL_IMAGE_SIZE_OPTIONS; // Keep v4/v4.5 behavior unchanged.
 
 export const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 export const FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE = [1, 2, 3, 4, 5, 6] as const;
 export const getFalNumImageMaxForModel = (modelId: string | undefined): number =>
-  isSeedreamV5LiteModelId(modelId) ? 6 : 4; // Seedream 5 Lite supports up to 6 outputs.
+  isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 6 : 4; // Seedream 5 supports up to 6 outputs.
 export const getFalNumImageOptionsForModel = (modelId: string | undefined): ReadonlyArray<number> =>
-  isSeedreamV5LiteModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS; // Drive picker values from model capability.
+  isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS; // Drive picker values from model capability.
 export const FAL_CRYSTAL_SCALE_FACTOR_OPTIONS = Array.from({ length: 10 }, (_, index) => {
   const factor = index + 1;
   return { value: `${factor}`, label: `${factor}x` } as const;
@@ -1151,6 +1177,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SEEDREAM_MODEL_ID]: 7,
   [SEEDREAM_V45_MODEL_ID]: 10,
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.
+  [SEEDREAM_V5_PRO_MODEL_ID]: 9, // Seedream 5 Pro supports 10 total input images.
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
   [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
   [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,

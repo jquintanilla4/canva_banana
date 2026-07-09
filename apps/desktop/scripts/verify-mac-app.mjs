@@ -54,6 +54,7 @@ assertSingleConcreteArch(targetArch);
 const appPath = getMacAppPath(repoRoot, targetPlatform, targetArch);
 const executablePath = resolve(appPath, 'Contents/MacOS/TheInstitute');
 const infoPlistPath = resolve(appPath, 'Contents/Info.plist');
+const pythonBackendExecutablePath = resolve(appPath, 'Contents/Resources/python-backend/canva-banana-python-backend');
 const expectedFileArchitecture = expectedFileArchitectureForTarget(targetArch);
 
 if (!existsSync(appPath)) {
@@ -63,9 +64,13 @@ if (!existsSync(appPath)) {
 run('codesign verification', 'codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath]);
 
 const executableFile = run('executable architecture check', 'file', [executablePath]);
+const pythonBackendFile = run('python backend architecture check', 'file', [pythonBackendExecutablePath]);
 
 if (!executableFile.includes(expectedFileArchitecture)) {
   throw new Error(`Packaged executable architecture mismatch. Expected ${expectedFileArchitecture}, got:\n${executableFile}`);
+}
+if (!pythonBackendFile.includes(expectedFileArchitecture)) {
+  throw new Error(`Packaged Python backend architecture mismatch. Expected ${expectedFileArchitecture}, got:\n${pythonBackendFile}`);
 }
 
 const minimumSystemVersion = run('minimum macOS version check', '/usr/libexec/PlistBuddy', ['-c', 'Print :LSMinimumSystemVersion', infoPlistPath]);
@@ -78,4 +83,5 @@ runElectronLoaderCheck();
 
 console.log(`Verified ${appPath}`);
 console.log(executableFile);
+console.log(pythonBackendFile);
 console.log(`LSMinimumSystemVersion ${minimumSystemVersion}`);

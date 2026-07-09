@@ -18,6 +18,13 @@ const MIN_DRAG_PREVIEW_PX = 3; // Match marquee selection so area previews only 
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number } } | null;
 type TransformModeState = { imageId: string } | null;
+type PendingMultiSelectGesture = {
+  startPoint: Point;
+  startClientPoint: Point;
+  targetImageId: string | null;
+  targetNoteId: string | null;
+  didStartMarquee: boolean;
+} | null;
 
 type UseCanvasInteractionsArgs = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -135,6 +142,7 @@ export function useCanvasInteractions({
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState<Point | null>(null);
   const [marqueeCurrent, setMarqueeCurrent] = useState<Point | null>(null);
+  const pendingMultiSelectGestureRef = useRef<PendingMultiSelectGesture>(null);
   const [brushPreviewPosition, setBrushPreviewPosition] = useState<{ x: number; y: number } | null>(null);
   const [videoPromptAreaStart, setVideoPromptAreaStart] = useState<Point | null>(null);
   const [videoPromptAreaCurrent, setVideoPromptAreaCurrent] = useState<Point | null>(null);
@@ -332,6 +340,14 @@ export function useCanvasInteractions({
 
     const point = getTransformedPoint(e.clientX, e.clientY);
 
+    if (activeTool === Tool.FREE_SELECTION && e.button === 2) {
+      e.preventDefault();
+      onVideoPromptAreaSelect(null); // Right-click is the explicit free-select deselect gesture.
+      onImageSelect(null);
+      onNoteSelect(null);
+      return;
+    }
+
     if (activeTool === Tool.NOTE) {
       if (isNoteEditing) {
         return;
@@ -403,7 +419,8 @@ export function useCanvasInteractions({
         const resizeHandleX = resizableNote.x + resizableNote.width - handleSize;
         const resizeHandleY = resizableNote.y + resizableNote.height - handleSize;
 
-        if (point.x >= resizeHandleX && point.y >= resizeHandleY) {
+        if (point.x >= resizeHandleX && point.x <= resizableNote.x + resizableNote.width &&
+          point.y >= resizeHandleY && point.y <= resizableNote.y + resizableNote.height) {
           setIsResizing(true);
           setDraggedNoteIds([resizableNote.id]);
           setDragStartPoint({ x: e.clientX, y: e.clientY });
@@ -414,6 +431,22 @@ export function useCanvasInteractions({
     }
 
     if (activeTool === Tool.SELECTION || activeTool === Tool.FREE_SELECTION) {
+      if (isMultiSelectKey && e.button === 0) {
+        const note = getNoteAtPoint(point, notes);
+        const image = note ? null : getImageAtPoint(point, images);
+        if (note || image) {
+          onVideoPromptAreaSelect(null);
+          pendingMultiSelectGestureRef.current = {
+            startPoint: point,
+            startClientPoint: { x: e.clientX, y: e.clientY },
+            targetImageId: image?.id ?? null,
+            targetNoteId: note?.id ?? null,
+            didStartMarquee: false,
+          }; // Defer Cmd/Ctrl toggles until we know this was not a drag.
+          return;
+        }
+      }
+
       const note = getNoteAtPoint(point, notes);
       if (note) {
         const wantsNoteMultiSelect = isMultiSelectKey || e.shiftKey;
@@ -482,7 +515,7 @@ export function useCanvasInteractions({
         return;
       }
 
-      if (!isMultiSelectKey) {
+      if (!isMultiSelectKey && activeTool === Tool.SELECTION) {
         onVideoPromptAreaSelect(null);
         onImageSelect(null);
         onNoteSelect(null);
@@ -495,7 +528,7 @@ export function useCanvasInteractions({
       }
 
       if (activeTool === Tool.FREE_SELECTION) {
-        const start = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+        const start = { x: e.clientX - pan.x, y: e.clientY - pan.y }; // Left-click pans only; right-click clears selection.
         panStartRef.current = start;
         setPanStart(start);
         isPanningRef.current = true;
@@ -575,6 +608,21 @@ export function useCanvasInteractions({
       }
     } else if (hoveredVideoId !== null) {
       setHoveredVideoId(null);
+    }
+
+    const pendingMultiSelectGesture = pendingMultiSelectGestureRef.current;
+    if (pendingMultiSelectGesture) {
+      const dx = Math.abs(e.clientX - pendingMultiSelectGesture.startClientPoint.x);
+      const dy = Math.abs(e.clientY - pendingMultiSelectGesture.startClientPoint.y);
+      if (!pendingMultiSelectGesture.didStartMarquee && Math.max(dx, dy) > MIN_DRAG_PREVIEW_PX) {
+        pendingMultiSelectGesture.didStartMarquee = true; // Promote the click candidate into a drag marquee.
+        setIsMarqueeSelecting(true);
+        setMarqueeStart(pendingMultiSelectGesture.startPoint);
+      }
+      if (pendingMultiSelectGesture.didStartMarquee) {
+        setMarqueeCurrent(hoverPoint);
+        return;
+      }
     }
 
     if (isMarqueeSelecting) {
@@ -894,7 +942,9 @@ export function useCanvasInteractions({
       return;
     }
 
-    if (isMarqueeSelecting && marqueeStart) {
+    const pendingMultiSelectGesture = pendingMultiSelectGestureRef.current;
+
+    if ((isMarqueeSelecting || pendingMultiSelectGesture?.didStartMarquee) && marqueeStart) {
       const finalPoint = getTransformedPoint(e.clientX, e.clientY);
       const currentPoint = marqueeCurrent ?? finalPoint;
 
@@ -910,6 +960,8 @@ export function useCanvasInteractions({
       const isSignificant = Math.max(pixelWidth, pixelHeight) > 3;
 
       if (isSignificant) {
+        const selectedImageIdSet = new Set(selectedImageIds);
+        const selectedNoteIdSet = new Set(selectedNoteIds);
         const imageIdsInBounds = images
           .filter(img => {
             const b = getImageBounds(img);
@@ -927,15 +979,14 @@ export function useCanvasInteractions({
             note.y + note.height > bounds.minY
           )
           .map(note => note.id);
-
         if (imageIdsInBounds.length === 0 && noteIdsInBounds.length === 0) {
           onVideoPromptAreaSelect(null);
           onImageSelect(null);
           onNoteSelect(null);
         } else {
           onVideoPromptAreaSelect(null);
-          imageIdsInBounds.forEach(id => onImageSelect(id, { multi: true }));
-          noteIdsInBounds.forEach(id => onNoteSelect(id, { multi: true }));
+          imageIdsInBounds.filter(id => !selectedImageIdSet.has(id)).forEach(id => onImageSelect(id, { multi: true }));
+          noteIdsInBounds.filter(id => !selectedNoteIdSet.has(id)).forEach(id => onNoteSelect(id, { multi: true }));
         }
       }
     }
@@ -985,6 +1036,21 @@ export function useCanvasInteractions({
       setIsMarqueeSelecting(false);
       setMarqueeStart(null);
       setMarqueeCurrent(null);
+    }
+
+    pendingMultiSelectGestureRef.current = null; // Every mouseup ends a pending Cmd/Ctrl click-drag.
+    if (pendingMultiSelectGesture && !pendingMultiSelectGesture.didStartMarquee) {
+      if (e.type === 'mouseleave') {
+        return;
+      }
+      onVideoPromptAreaSelect(null);
+      if (pendingMultiSelectGesture.targetImageId) {
+        onImageSelect(pendingMultiSelectGesture.targetImageId, { multi: true });
+      }
+      if (pendingMultiSelectGesture.targetNoteId) {
+        onNoteSelect(pendingMultiSelectGesture.targetNoteId, { multi: true });
+      }
+      return;
     }
 
     if (e.button === 1) {

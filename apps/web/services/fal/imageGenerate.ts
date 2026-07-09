@@ -1,13 +1,15 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption } from '../../types'; // Shared option types.
-import type { FalQueueUpdate, GenerateImageOptions } from './types'; // Fal request types.
+import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
+import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
 import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue normalizers.
 import { logFalEvent } from './logging'; // Fal debug logging.
-import { extractInlineData } from './responses'; // Response parsing helper.
+import { emitFalPhase } from './phase'; // Phase update helper.
+import { extractInlineData, normalizeFalImageMetadata, runFalDownloadStep } from './responses'; // Response parsing helpers.
 import { createRandomSeed } from './random'; // Seed helper.
 import { uploadImageElementToFal } from './media'; // Media upload helper.
-import { isSeedreamTextToImageModelId, normalizeModelId, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
+import { isSeedreamTextToImageModelId, normalizeModelId, resolveGptImage2SizeForFal, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
 import {
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
@@ -17,6 +19,7 @@ import {
   isKrea2CreativitySelectionValue,
   isNanoBananaTextToImageModelId,
   isRecraftV4ProModel,
+  isSeedreamV5ProModelId,
   KREA_2_DEFAULT_ASPECT_RATIO,
   KREA_2_DEFAULT_CREATIVITY,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
@@ -37,11 +40,12 @@ const normalizeKreaStyleReferenceStrength = (value: number): number => {
 export const generateImage = async (
   prompt: string,
   options: GenerateImageOptions = {},
-): Promise<{ imageBase64: string; imagesBase64: string[]; imageDataUrls?: string[]; text: string; requestId?: string }> => { // Generate an image from text.
+): Promise<FalImageGenerationResult> => { // Generate an image from text.
   ensureFalClientConfigured();
 
   const modelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
+  const isSeedreamV5ProTextToImage = isSeedreamV5ProModelId(modelId);
   const isNanoBananaTextToImage = isNanoBananaTextToImageModelId(modelId);
   const isGptImage2TextToImage = isGptImage2TextToImageModelId(modelId);
   const isKrea2TextToImage = modelId === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
@@ -91,7 +95,11 @@ export const generateImage = async (
       : [];
     if (styleReferences.length > 0) {
       body.image_style_references = await Promise.all(styleReferences.map(async reference => ({
-        image_url: await uploadImageElementToFal(reference.image),
+        image_url: await uploadImageElementToFal(reference.image, {
+          jobId: options.jobId,
+          onPhaseUpdate: options.onPhaseUpdate,
+          label: 'style reference image',
+        }),
         strength: normalizeKreaStyleReferenceStrength(reference.strength),
       })));
     }
@@ -106,6 +114,11 @@ export const generateImage = async (
     delete body.sync_mode;
   } else if (!isSeedreamTextToImage) {
     body.output_format = 'png';
+  }
+
+  if (isSeedreamV5ProTextToImage) {
+    body.output_format = 'png';
+    body.enable_safety_checker = false;
   }
 
   if (isFlux2MaxTextToImage) { // Flux2 Max specific settings.
@@ -130,7 +143,7 @@ export const generateImage = async (
 
   if (isGptImage2TextToImage) {
     body.quality = options.gptImage2Quality ?? 'medium'; // App default overrides Fal high default.
-    body.image_size = imageSizeOption === 'default' ? 'auto' : imageSizeOption; // Use one size control for t2i/edit.
+    body.image_size = resolveGptImage2SizeForFal(imageSizeOption); // Use one size control for t2i/edit.
   }
 
   if (!isKrea2TextToImage && !isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
@@ -142,8 +155,10 @@ export const generateImage = async (
   }
 
   if (isSeedreamTextToImage) {
-    const seedOption = Number.isFinite(options.seed) ? Math.floor(options.seed as number) : createRandomSeed();
-    body.seed = seedOption;
+    if (!isSeedreamV5ProTextToImage) {
+      const seedOption = Number.isFinite(options.seed) ? Math.floor(options.seed as number) : createRandomSeed();
+      body.seed = seedOption;
+    }
     if (seedreamCustomSize) {
       body.image_size = seedreamCustomSize;
     } else if (imageSizeOption !== 'default') {
@@ -164,6 +179,7 @@ export const generateImage = async (
 
   let latestRequestId: string | undefined;
 
+  emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
   logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', { input: body });
 
   let result: Awaited<ReturnType<typeof fal.subscribe>>;
@@ -178,6 +194,11 @@ export const generateImage = async (
         if (resolvedRequestId) {
           latestRequestId = resolvedRequestId;
         }
+        emitFalPhase(options, modelId, {
+          phase: queueUpdate.status === 'IN_PROGRESS' ? 'processing' : 'queued',
+          message: queueUpdate.status === 'IN_PROGRESS' ? 'Processing on provider...' : 'Waiting in Fal queue...',
+          requestId: resolvedRequestId,
+        });
         logFalEvent('inbound', modelId, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
@@ -196,7 +217,7 @@ export const generateImage = async (
     logFalEvent('error', modelId, 'Request failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    throw error;
+    throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
   }
 
   logFalEvent('inbound', modelId, 'Result received', {
@@ -204,20 +225,30 @@ export const generateImage = async (
     data: (result?.data as Record<string, unknown>) ?? undefined,
   });
 
-  const data = result?.data as { images?: Array<{ url: string }>; description?: string; generated_text?: string | null } | undefined;
+  const data = result?.data as { images?: Array<{ url: string; content_type?: string; file_name?: string; file_size?: number; width?: number; height?: number }>; description?: string; generated_text?: string | null } | undefined;
   const images = data?.images;
   if (!images || images.length === 0) {
     throw new Error('Fal.ai API did not return an image.');
   }
 
-  const inlineDataList = await Promise.all(images.map(image => extractInlineData(image.url)));
-  const base64List = inlineDataList.map(dataUrl => {
-    const base64 = dataUrl.split(',')[1];
-    if (!base64) {
-      throw new Error('Failed to extract image data from Fal.ai response.');
-    }
-    return base64;
+  emitFalPhase(options, modelId, {
+    phase: 'downloading',
+    message: 'Downloading generated image...',
+    requestId: result?.requestId || latestRequestId,
   });
+  const downloadRequestId = result?.requestId || latestRequestId; // Keep request id on download failures.
+  const inlineDataList = await runFalDownloadStep(downloadRequestId, async () => (
+    Promise.all(images.map(image => extractInlineData(image.url)))
+  ));
+  const base64List = await runFalDownloadStep(downloadRequestId, async () => (
+    inlineDataList.map(dataUrl => {
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) {
+        throw new Error('Failed to extract image data from Fal.ai response.');
+      }
+      return base64;
+    })
+  ));
 
   const [primaryBase64] = base64List;
   if (!primaryBase64) {
@@ -229,6 +260,7 @@ export const generateImage = async (
     : typeof data?.generated_text === 'string' ? data.generated_text : '';
 
   const requestId = result?.requestId || latestRequestId;
+  const imagesMetadata = images.map(normalizeFalImageMetadata); // Preserve provider dimensions.
 
-  return { imageBase64: primaryBase64, imagesBase64: base64List, imageDataUrls: inlineDataList, text: description, requestId };
+  return { imageBase64: primaryBase64, imagesBase64: base64List, imageDataUrls: inlineDataList, imagesMetadata, text: description, requestId };
 };

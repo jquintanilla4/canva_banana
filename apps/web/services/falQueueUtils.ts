@@ -1,5 +1,5 @@
 import type { FalQueueUpdate } from './falService';
-import type { FalJobStatus, FalQueueJob } from '../types';
+import type { FalJobPhase, FalJobStatus, FalQueueJob } from '../types';
 import { buildFalDisplayError, FAL_PROVIDER_DOWN_MESSAGE, formatFalLogMessage } from './falConstants';
 import { addDebugLog } from './debugLog';
 
@@ -18,6 +18,21 @@ export const mapFalStatusToJobStatus = (status: FalQueueUpdate['status'] | undef
       return 'IN_QUEUE';
   }
 };
+
+const mapFalStatusToJobPhase = (status: FalQueueUpdate['status'] | undefined): FalJobPhase => {
+  switch (status) {
+    case 'IN_PROGRESS':
+      return 'processing';
+    case 'COMPLETED':
+      return 'completed';
+    case 'FAILED':
+    case 'CANCELLED':
+    case 'CANCELED':
+      return 'failed';
+    default:
+      return 'queued';
+  }
+}; // Convert provider status to the queue phase.
 
 export const mergeFalLogMessages = (existing: string[], incoming?: string[] | string): string[] => {
   if (!incoming) {
@@ -52,6 +67,8 @@ export const mergeFalLogMessages = (existing: string[], incoming?: string[] | st
 
 export const applyFalQueueUpdateToJob = (job: FalQueueJob, update: FalQueueUpdate): FalQueueJob => {
   const status = mapFalStatusToJobStatus(update.status);
+  const phase = mapFalStatusToJobPhase(update.status);
+  const now = Date.now();
   const normalizedLogs = (() => {
     const raw = update.logs;
     if (!raw) return undefined;
@@ -89,9 +106,13 @@ export const applyFalQueueUpdateToJob = (job: FalQueueJob, update: FalQueueUpdat
   return {
     ...job,
     status,
+    phase,
+    phaseMessage: phase === 'processing' ? 'Processing on provider...' : phase === 'queued' ? 'Waiting in Fal queue...' : job.phaseMessage,
     requestId: update.requestId || job.requestId,
     logs: mergedLogs,
     error,
-    updatedAt: Date.now(),
+    phaseStartedAt: job.phase === phase ? job.phaseStartedAt : now,
+    lastPhaseDurationMs: job.phase !== phase && job.phaseStartedAt ? now - job.phaseStartedAt : job.lastPhaseDurationMs,
+    updatedAt: now,
   };
 };

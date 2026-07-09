@@ -51,7 +51,11 @@ describe('Toolbar video prompt area tool', () => {
     });
 
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button.getAttribute('title')).toBe('Video Prompt Area (G) • Switch to a video model to create video prompt areas');
+    expect(button.getAttribute('title')).toBeNull();
+    fireEvent.mouseEnter(button.parentElement as HTMLElement);
+    expect(screen.getByRole('tooltip').textContent).toContain('Video Prompt Area');
+    expect(screen.getByRole('tooltip').textContent).toContain('G');
+    expect(screen.getByRole('tooltip').textContent).toContain('Switch to a video model to create video prompt areas');
   });
 
   it('keeps the video prompt area button clickable when the current model is a video model', () => {

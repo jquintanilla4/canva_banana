@@ -2,7 +2,7 @@ import React from 'react';
 import type { FalQueueJob } from '../types';
 import { isSuppressedFalLogMessage } from '../services/falConstants';
 import { getBlindTestModelLabel, getOpenSourceAliasLabel, type BlindTestMapping } from '../services/blindTestService';
-import { getFalModelLabel } from '../services/modelConfig';
+import { getFalModelLabel, isFalModelId } from '../services/modelConfig';
 
 interface FalQueuePanelProps {
   jobs: FalQueueJob[];
@@ -25,6 +25,16 @@ const statusLabels: Record<FalQueueJob['status'], string> = {
   COMPLETED: 'Done',
   FAILED: 'Failed',
 };
+
+const phaseLabels: Record<NonNullable<FalQueueJob['phase']>, string> = {
+  uploading: 'Uploading',
+  submitting: 'Submitting',
+  queued: 'Queued',
+  processing: 'Processing',
+  downloading: 'Downloading',
+  completed: 'Done',
+  failed: 'Failed',
+}; // User-facing queue phase labels.
 
 const getProviderLabel = (provider: FalQueueJob['provider']): string => {
   if (provider === 'volcengine') {
@@ -67,6 +77,9 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
               if (!blindTestEnabled && !openSourceAliasEnabled) {
                 return job.modelLabel;
               }
+              if (!isFalModelId(job.modelId)) {
+                return job.modelLabel;
+              }
               const baseLabel = getFalModelLabel(job.modelId);
               const suffix = job.modelLabel.startsWith(baseLabel) ? job.modelLabel.slice(baseLabel.length) : '';
               if (blindTestEnabled) {
@@ -95,9 +108,14 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                     </p>
                   </div>
                   <span className={`text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${statusStyles[job.status]}`}>
-                    {statusLabels[job.status]}
+                    {job.phase ? phaseLabels[job.phase] : statusLabels[job.status]}
                   </span>
                 </div>
+                {job.phaseMessage && (
+                  <p className="text-[11px] text-gray-300 mt-2 leading-snug">
+                    {job.phaseMessage}
+                  </p>
+                )}
                 {lastLog && (
                   <p className="text-[11px] text-gray-300 mt-2 leading-snug">
                     {lastLog}

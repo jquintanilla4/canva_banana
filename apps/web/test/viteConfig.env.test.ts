@@ -42,8 +42,8 @@ describe('vite env defines', () => {
       const config = typeof viteConfig === 'function' ? await viteConfig(env) : viteConfig;
       const define = (config as UserConfig).define ?? {};
 
-      expect(define['process.env.API_KEY']).toBe(JSON.stringify(undefined)); // Desktop keys come from main-process IPC.
-      expect(define['process.env.GEMINI_API_KEY']).toBe(JSON.stringify(undefined)); // Avoid baking local secrets into app assets.
+      expect(define['process.env.API_KEY']).toBe('undefined'); // Desktop keys come from main-process IPC.
+      expect(define['process.env.GEMINI_API_KEY']).toBe('undefined'); // Avoid baking local secrets into app assets.
     } finally {
       if (previousDesktopPackage === undefined) {
         delete process.env.CANVA_BANANA_DESKTOP_PACKAGE;

@@ -5,6 +5,10 @@ import tailwindcss from '@tailwindcss/vite';
 
 const normalizeModuleId = (id: string): string => id.replaceAll('\\', '/'); // Rollup ids can use platform separators.
 
+const defineOptionalString = (value: string | undefined): string => (
+  value === undefined ? 'undefined' : JSON.stringify(value)
+); // Vite define values must be JavaScript expression strings.
+
 const getManualChunk = (id: string): string | undefined => {
   const normalizedId = normalizeModuleId(id);
   if (!normalizedId.includes('/node_modules/')) {
@@ -38,8 +42,8 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react(), tailwindcss()],
       define: {
-        'process.env.API_KEY': JSON.stringify(isDesktopPackageBuild ? undefined : env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(isDesktopPackageBuild ? undefined : env.GEMINI_API_KEY),
+        'process.env.API_KEY': defineOptionalString(isDesktopPackageBuild ? undefined : env.GEMINI_API_KEY),
+        'process.env.GEMINI_API_KEY': defineOptionalString(isDesktopPackageBuild ? undefined : env.GEMINI_API_KEY),
         'process.env.SECURE_BACKEND_API_BASE_URL': JSON.stringify(env.SECURE_BACKEND_API_BASE_URL),
         'process.env.FAL_API_URL': JSON.stringify(env.FAL_API_URL),
         'process.env.FAL_MODEL_ID': JSON.stringify(env.FAL_MODEL_ID),

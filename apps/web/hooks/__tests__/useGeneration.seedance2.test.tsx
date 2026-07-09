@@ -876,7 +876,7 @@ describe('useGeneration (seedance 2)', () => {
       await Promise.resolve();
     });
 
-    expect(uploadVideoToFal).toHaveBeenCalledWith(audio1.file);
+    expect(uploadVideoToFal).toHaveBeenCalledWith(audio1.file, expect.objectContaining({ label: 'source audio' }));
     expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
       'A neon dance sequence synced to the beat',
       null,
@@ -1031,7 +1031,7 @@ describe('useGeneration (seedance 2)', () => {
     });
 
     const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
-    expect(uploadVideoToFal).toHaveBeenCalledWith(video1.file);
+    expect(uploadVideoToFal).toHaveBeenCalledWith(video1.file, expect.objectContaining({ label: 'source video' }));
     expect(submittedOptions?.modelId).toBe(WAN_27_VIDEO_MODEL_ID);
     expect(submittedOptions?.wan27VideoVariant).toBe('edit');
     expect(submittedOptions?.sourceVideoUrl).toBe('https://example.com/wan-source.mp4');
@@ -1210,7 +1210,7 @@ describe('useGeneration (seedance 2)', () => {
       await Promise.resolve();
     });
 
-    expect(uploadVideoToFal).toHaveBeenCalledWith(video1.file);
+    expect(uploadVideoToFal).toHaveBeenCalledWith(video1.file, expect.objectContaining({ label: 'source video' }));
     expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
       'Repeat the saved O3 edit',
       null,

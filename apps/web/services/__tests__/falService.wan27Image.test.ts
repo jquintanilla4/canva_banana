@@ -140,6 +140,7 @@ describe('falService (Wan 2.7 Pro Image)', () => {
     }));
     expect(result.imageBase64).toBe('YmFy');
     expect(result.imagesBase64).toEqual(['YmFy']);
+    expect(result.imageDataUrls).toEqual(['data:image/png;base64,YmFy']);
   });
 
   it('routes legacy Wan 2.6 edit ids through the Wan 2.7 Pro edit endpoint', async () => {

@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { notarize } from '@electron/notarize';
 import {
+  assertPackagedPythonBackendTargetArch,
   getFlagValue,
   getMacAppPath,
   resolveConcreteTargetArchs,
@@ -116,6 +117,7 @@ const makeArgs = withTargetArgs(cliArgs, targetArch, targetPlatform);
 const concreteTargetArchs = targetPlatform === 'darwin' ? resolveConcreteTargetArchs(targetArch, targetPlatform) : [targetArch];
 
 validateNotarizationConfig(targetPlatform);
+assertPackagedPythonBackendTargetArch(targetArch, targetPlatform, getHostArch());
 run('desktop build', 'npm', ['run', 'build']);
 run('electron forge package', 'electron-forge', ['package', ...packageArgs]);
 

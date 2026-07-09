@@ -20,17 +20,24 @@ import {
   SEEDREAM_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
+  SEEDREAM_V5_PRO_MODEL_ID,
+  SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
+  isSeedreamV5ProModelId,
+  getSeedreamTextToImageModelId,
 } from '../modelConfig';
 
 describe('modelConfig (seedream 5 lite helpers)', () => {
   it('returns Seedream 5 Lite max outputs as 6', () => {
     expect(getFalNumImageMaxForModel(SEEDREAM_V5_LITE_MODEL_ID)).toBe(6);
     expect(getFalNumImageMaxForModel(SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID)).toBe(6);
+    expect(getFalNumImageMaxForModel(SEEDREAM_V5_PRO_MODEL_ID)).toBe(6);
+    expect(getFalNumImageMaxForModel(SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(6);
     expect(getFalNumImageMaxForModel(SEEDREAM_MODEL_ID)).toBe(4);
   });
 
   it('returns Seedream 5 Lite num image picker values as 1..6', () => {
     expect(getFalNumImageOptionsForModel(SEEDREAM_V5_LITE_MODEL_ID)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(getFalNumImageOptionsForModel(SEEDREAM_V5_PRO_MODEL_ID)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(getFalNumImageOptionsForModel(SEEDREAM_MODEL_ID)).toEqual([1, 2, 3, 4]);
   });
 
@@ -44,6 +51,27 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
       'landscape_16_9',
       'auto_2K',
       'auto_3K',
+    ]);
+  });
+
+  it('exposes Seedream 5 Pro with Pro image controls and reference capacity', () => {
+    const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === SEEDREAM_V5_PRO_MODEL_ID);
+
+    expect(option?.label).toBe('Seedream 5 Pro');
+    expect(isFalModelId(SEEDREAM_V5_PRO_MODEL_ID)).toBe(true);
+    expect(isSeedreamV5ProModelId(SEEDREAM_V5_PRO_MODEL_ID)).toBe(true);
+    expect(isSeedreamV5ProModelId(SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
+    expect(getSeedreamTextToImageModelId(SEEDREAM_V5_PRO_MODEL_ID)).toBe(SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID);
+    expect(getMaxReferenceImages(SEEDREAM_V5_PRO_MODEL_ID)).toBe(9);
+    expect(getSeedreamImageSizeOptions(SEEDREAM_V5_PRO_MODEL_ID).map(size => size.value)).toEqual([
+      'square_hd',
+      'square',
+      'portrait_4_3',
+      'portrait_16_9',
+      'landscape_4_3',
+      'landscape_16_9',
+      'auto_1K',
+      'auto_2K',
     ]);
   });
 

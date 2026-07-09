@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import electronPath from 'electron';
@@ -21,6 +22,7 @@ const SECURE_BACKEND_HEALTH_URL = 'http://localhost:8787/health';
 const PYTHON_BACKEND_HEALTH_URL = 'http://localhost:8000/health';
 const desktopDir = fileURLToPath(new URL('..', import.meta.url));
 const repoRoot = canonicalWorkspaceRoot(fileURLToPath(new URL('../../..', import.meta.url)));
+const pythonBackendUvCacheDir = join(repoRoot, 'apps/python-backend/backend/.uv-cache'); // Keep uv dev cache inside the repo.
 const devServiceHealthToken = resolveDevServiceHealthToken(repoRoot, process.env); // Stable per-workspace token for dev reuse.
 
 const spawnManaged = (label, command, args, options = {}) => {
@@ -160,7 +162,13 @@ try {
       },
     },
   });
-  await startOwnedService('python backend', PYTHON_BACKEND_HEALTH_URL, 'npm', ['-w', '@canva-banana/python-backend', 'run', 'dev']);
+  await startOwnedService('python backend', PYTHON_BACKEND_HEALTH_URL, 'npm', ['-w', '@canva-banana/python-backend', 'run', 'dev'], {
+    spawnOptions: {
+      env: {
+        UV_CACHE_DIR: process.env.UV_CACHE_DIR || pythonBackendUvCacheDir,
+      },
+    },
+  });
 
   await waitForHttp('web renderer', WEB_URL);
   await waitForHttp('secure backend', SECURE_BACKEND_HEALTH_URL);

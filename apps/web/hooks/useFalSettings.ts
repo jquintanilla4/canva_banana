@@ -48,6 +48,7 @@ import {
   isFalVideoModelId,
   isSeedreamModelId,
   isSeedreamV5LiteModelId,
+  isSeedreamV5ProModelId,
   normalizeFalModelId,
   isVeo31AspectRatioSelectionValue,
   isVeo31DurationSelectionValue,
@@ -541,8 +542,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
     if (
       falVideoModelId === KLING_VIDEO_MODEL_ID
-      || falVideoModelId === KLING_O3_VIDEO_MODEL_ID
-      || falVideoModelId === KLING_O3_VIDEO_EDIT_MODEL_ID
+      || isKlingO3VideoModelId(falVideoModelId)
     ) {
       setFalVideoDuration('5');
     }
@@ -688,7 +688,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
     const validImageSizeOptions = getSeedreamImageSizeOptions(falModelId).map(option => option.value);
     if (!validImageSizeOptions.includes(falImageSizeSelection)) {
-      const fallback = isSeedreamV5LiteModelId(falModelId) ? 'auto_2K' : 'default'; // Seedream 5 Lite defaults to auto_2K.
+      const fallback = isSeedreamV5LiteModelId(falModelId) || isSeedreamV5ProModelId(falModelId) ? 'auto_2K' : 'default'; // Seedream 5 defaults to auto_2K.
       setFalImageSizeSelection(fallback);
     }
   }, [falModelId, falModelMode, falImageSizeSelection, isSeedreamModel]);

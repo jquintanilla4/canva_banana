@@ -1,8 +1,10 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import type { FalQueueUpdate, GenerateVideoOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
+import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
 import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue normalizers.
 import { logFalEvent } from './logging'; // Fal debug logging.
+import { emitFalPhase } from './phase'; // Phase update helper.
 import { collectReferenceUploadUrls, uploadImageElementToFal, uploadVideoToFal } from './media'; // Media upload helpers.
 import {
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
@@ -45,10 +47,11 @@ import {
 const subscribeForVideoUrl = async (
   modelId: string,
   inputPayload: Record<string, unknown>,
-  options: Pick<GenerateVideoOptions, 'onQueueUpdate'>,
+  options: Pick<GenerateVideoOptions, 'onQueueUpdate' | 'onPhaseUpdate' | 'jobId'>,
 ): Promise<{ videoUrl: string; requestId?: string }> => { // Subscribe and return video output.
   let latestRequestId: string | undefined; // Track latest queue request id.
 
+  emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
   logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
     input: inputPayload,
   });
@@ -65,6 +68,11 @@ const subscribeForVideoUrl = async (
         if (resolvedRequestId) {
           latestRequestId = resolvedRequestId;
         }
+        emitFalPhase(options, modelId, {
+          phase: queueUpdate.status === 'IN_PROGRESS' ? 'processing' : 'queued',
+          message: queueUpdate.status === 'IN_PROGRESS' ? 'Processing on provider...' : 'Waiting in Fal queue...',
+          requestId: resolvedRequestId,
+        });
         logFalEvent('inbound', modelId, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
@@ -83,7 +91,7 @@ const subscribeForVideoUrl = async (
     logFalEvent('error', modelId, 'Request failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    throw error;
+    throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
   }
 
   logFalEvent('inbound', modelId, 'Result received', {
@@ -129,8 +137,8 @@ export const generateImageToVideo = async (
       throw new Error('Kling O3 Video Edit requires a source video.');
     }
 
-    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
-    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img)));
+    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages, options) : [];
+    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img, options)));
     const elementsPayload = elementUrls.map(url => ({
       frontal_image_url: url,
       reference_image_urls: [url],
@@ -161,9 +169,9 @@ export const generateImageToVideo = async (
       throw new Error('Kling O3 Reference requires an image.');
     }
 
-    const imageUrl = await uploadImageElementToFal(image);
-    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
-    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img)));
+    const imageUrl = await uploadImageElementToFal(image, options);
+    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages, options) : [];
+    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img, options)));
     const elementsPayload = elementUrls.map(url => ({
       frontal_image_url: url,
       reference_image_urls: [url],
@@ -174,7 +182,7 @@ export const generateImageToVideo = async (
       throw new Error('Kling O3 Video Reference supports up to 4 images total (references + elements).');
     }
 
-    const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage) : undefined;
+    const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage, options) : undefined;
     const aspectRatioValue = options.aspectRatio === '9:16' || options.aspectRatio === '1:1' ? options.aspectRatio : '16:9';
     const referenceDuration = options.klingO3Duration ?? (isKlingO3DurationSelectionValue(duration) ? duration : '5');
     const generateAudio = typeof options.klingO3GenerateAudio === 'boolean'
@@ -230,7 +238,7 @@ export const generateImageToVideo = async (
       throw new Error('Grok Imagine Video requires a prompt.');
     }
 
-    const imageUrl = await uploadImageElementToFal(image);
+    const imageUrl = await uploadImageElementToFal(image, options);
 
     const duration = options.grokImagineVideoDuration
       ? Number(options.grokImagineVideoDuration)
@@ -302,7 +310,7 @@ export const generateImageToVideo = async (
       throw new Error('Veo 3.1 requires a prompt.');
     }
 
-    const imageUrl = await uploadImageElementToFal(image);
+    const imageUrl = await uploadImageElementToFal(image, options);
     const aspectRatio = options.veo31AspectRatio === 'auto' || options.veo31AspectRatio === '16:9' || options.veo31AspectRatio === '9:16'
       ? options.veo31AspectRatio
       : undefined;
@@ -320,7 +328,7 @@ export const generateImageToVideo = async (
       if (!tailImage) {
         throw new Error('Veo 3.1 FFLF requires a first and last frame.');
       }
-      const lastFrameUrl = await uploadImageElementToFal(tailImage);
+      const lastFrameUrl = await uploadImageElementToFal(tailImage, options);
 
       const inputPayload: Record<string, unknown> = {
         prompt: trimmedPrompt,
@@ -407,8 +415,8 @@ export const generateImageToVideo = async (
     }
 
     if (image) {
-      const imageUrl = await uploadImageElementToFal(image);
-      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage) : undefined;
+      const imageUrl = await uploadImageElementToFal(image, options);
+      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage, options) : undefined;
       const inputPayload: Record<string, unknown> = {
         ...sharedPayload,
         start_image_url: imageUrl,
@@ -479,7 +487,7 @@ export const generateImageToVideo = async (
       if (referenceImages.length > 1) {
         throw new Error('Wan 2.7 Edit supports one reference image.');
       }
-      const referenceImageUrl = referenceImages[0] ? await uploadImageElementToFal(referenceImages[0]) : undefined;
+      const referenceImageUrl = referenceImages[0] ? await uploadImageElementToFal(referenceImages[0], options) : undefined;
       const inputPayload: Record<string, unknown> = {
         prompt: trimmedPrompt,
         video_url: options.sourceVideoUrl,
@@ -499,9 +507,9 @@ export const generateImageToVideo = async (
       if (!trimmedPrompt) {
         throw new Error('Wan 2.7 Reference requires a prompt.');
       }
-      const imageUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
+      const imageUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages, options) : [];
       const videoUrls = options.referenceVideos?.length
-        ? await Promise.all(options.referenceVideos.map(file => uploadVideoToFal(file)))
+        ? await Promise.all(options.referenceVideos.map(file => uploadVideoToFal(file, options)))
         : [];
       if (imageUrls.length + videoUrls.length === 0) {
         throw new Error('Wan 2.7 Reference requires at least one reference image or video.');
@@ -523,8 +531,8 @@ export const generateImageToVideo = async (
     }
 
     if (image) {
-      const imageUrl = await uploadImageElementToFal(image);
-      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage) : undefined;
+      const imageUrl = await uploadImageElementToFal(image, options);
+      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage, options) : undefined;
       const inputPayload: Record<string, unknown> = {
         ...sharedPayload,
         image_url: imageUrl,
@@ -561,9 +569,9 @@ export const generateImageToVideo = async (
       throw new Error('Seedance 1.5 requires a prompt.');
     }
 
-    const imageUrl = await uploadImageElementToFal(image);
+    const imageUrl = await uploadImageElementToFal(image, options);
     const tailImage = options.tailImage;
-    const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage) : undefined;
+    const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage, options) : undefined;
 
     const aspectRatio = options.seedance15AspectRatio ?? '16:9';
     const resolution = options.seedance15Resolution ?? '720p';
@@ -612,12 +620,12 @@ export const generateImageToVideo = async (
     };
 
     if (variant === 'reference') {
-      const imageUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages) : [];
+      const imageUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages, options) : [];
       const videoUrls = options.referenceVideos?.length
-        ? await Promise.all(options.referenceVideos.map(file => uploadVideoToFal(file)))
+        ? await Promise.all(options.referenceVideos.map(file => uploadVideoToFal(file, options)))
         : [];
       const audioUrls = options.referenceAudios?.length
-        ? await Promise.all(options.referenceAudios.map(file => uploadVideoToFal(file)))
+        ? await Promise.all(options.referenceAudios.map(file => uploadVideoToFal(file, options)))
         : [];
       const totalReferenceFiles = imageUrls.length + videoUrls.length + audioUrls.length;
 
@@ -642,8 +650,8 @@ export const generateImageToVideo = async (
     }
 
     if (image) {
-      const imageUrl = await uploadImageElementToFal(image);
-      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage) : undefined;
+      const imageUrl = await uploadImageElementToFal(image, options);
+      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage, options) : undefined;
       const inputPayload: Record<string, unknown> = {
         ...sharedPayload,
         image_url: imageUrl,
@@ -714,7 +722,7 @@ export const generateImageToVideo = async (
       ? options.negativePrompt.trim()
       : ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT;
 
-    const imageUrl = await uploadImageElementToFal(image);
+    const imageUrl = await uploadImageElementToFal(image, options);
 
     const resolution = options.resolution === '480p' || options.resolution === '580p' || options.resolution === '720p'
       ? options.resolution
@@ -745,7 +753,7 @@ export const generateImageToVideo = async (
       throw new Error('Scail requires a prompt.');
     }
 
-    const imageUrl = await uploadImageElementToFal(image);
+    const imageUrl = await uploadImageElementToFal(image, options);
 
     const inputPayload: Record<string, unknown> = {
       prompt: trimmedPrompt,
@@ -815,7 +823,7 @@ export const generateImageToVideo = async (
       throw new Error('Wan Animate requires a still image.');
     }
 
-    const imageUrl = await uploadImageElementToFal(image);
+    const imageUrl = await uploadImageElementToFal(image, options);
 
     const numInferenceStepsRaw = typeof options.numInferenceSteps === 'number'
       ? options.numInferenceSteps
@@ -874,6 +882,7 @@ export const generateImageToVideo = async (
       ...(creativity !== undefined ? { creativity } : {}),
     };
 
+    emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
     logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
       input: inputPayload,
     });
@@ -890,6 +899,11 @@ export const generateImageToVideo = async (
           if (resolvedRequestId) {
             latestRequestId = resolvedRequestId;
           }
+          emitFalPhase(options, modelId, {
+            phase: queueUpdate.status === 'IN_PROGRESS' ? 'processing' : 'queued',
+            message: queueUpdate.status === 'IN_PROGRESS' ? 'Processing on provider...' : 'Waiting in Fal queue...',
+            requestId: resolvedRequestId,
+          });
           logFalEvent('inbound', modelId, 'Queue update', {
             status: queueUpdate.status,
             position: queueUpdate.position,
@@ -908,7 +922,7 @@ export const generateImageToVideo = async (
       logFalEvent('error', modelId, 'Request failed', {
         error: error instanceof Error ? error.message : String(error),
       });
-      throw error;
+      throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
     }
 
     logFalEvent('inbound', modelId, 'Result received', {
@@ -942,7 +956,7 @@ export const generateImageToVideo = async (
     }
 
     const trimmedPrompt = prompt.trim();
-    const imageUrl = await uploadImageElementToFal(image);
+    const imageUrl = await uploadImageElementToFal(image, options);
     const characterOrientation = options.characterOrientation === 'image' ? 'image' : 'video';
     const keepOriginalSound = typeof options.keepOriginalSound === 'boolean' ? options.keepOriginalSound : undefined;
 
@@ -960,7 +974,7 @@ export const generateImageToVideo = async (
   if (!image) { // Remaining image-first video models require an image.
     throw new Error('Image is required for video generation.');
   }
-  const imageUrl = await uploadImageElementToFal(image);
+  const imageUrl = await uploadImageElementToFal(image, options);
 
   const isHailuoVideoModel = modelId.includes('hailuo-2.3');
   const promptOptimizer = options.promptOptimizer ?? (isHailuoVideoModel ? true : undefined);
@@ -969,7 +983,7 @@ export const generateImageToVideo = async (
     ? options.cfgScale
     : undefined;
   const tailImage = options.tailImage;
-  const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage) : undefined;
+  const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage, options) : undefined;
   const generateAudio = typeof options.generateAudio === 'boolean' ? options.generateAudio : undefined;
   let latestRequestId: string | undefined;
 
@@ -984,6 +998,7 @@ export const generateImageToVideo = async (
     ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
   };
 
+  emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
   logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
     input: inputPayload,
   });
@@ -1000,6 +1015,11 @@ export const generateImageToVideo = async (
         if (resolvedRequestId) {
           latestRequestId = resolvedRequestId;
         }
+        emitFalPhase(options, modelId, {
+          phase: queueUpdate.status === 'IN_PROGRESS' ? 'processing' : 'queued',
+          message: queueUpdate.status === 'IN_PROGRESS' ? 'Processing on provider...' : 'Waiting in Fal queue...',
+          requestId: resolvedRequestId,
+        });
         logFalEvent('inbound', modelId, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
@@ -1018,7 +1038,7 @@ export const generateImageToVideo = async (
     logFalEvent('error', modelId, 'Request failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    throw error;
+    throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
   }
 
   logFalEvent('inbound', modelId, 'Result received', {

@@ -6,6 +6,8 @@ import {
   SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
+  SEEDREAM_V5_PRO_MODEL_ID,
+  SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V45_MODEL_ID,
   SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
@@ -40,22 +42,29 @@ export const normalizeModelId = (modelId: string | undefined): string | undefine
 
 export const FAL_MODEL_ID = normalizeModelId(getRuntimeConfig().falModelId) || NANO_BANANA_PRO_EDIT_MODEL_ID; // Default edit model.
 
-const SEEDREAM_EDIT_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID] as const; // Seedream edit ids.
+const SEEDREAM_EDIT_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID, SEEDREAM_V5_PRO_MODEL_ID] as const; // Seedream edit ids.
 export type SeedreamEditModelId = typeof SEEDREAM_EDIT_MODEL_IDS[number]; // Seedream edit id union.
 export const isSeedreamEditModelId = (modelId: string | undefined): modelId is SeedreamEditModelId =>
   !!modelId && (SEEDREAM_EDIT_MODEL_IDS as readonly string[]).includes(modelId); // Seedream edit guard.
 
-const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID] as const; // Seedream t2i ids.
+const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID] as const; // Seedream t2i ids.
 export const isSeedreamTextToImageModelId = (modelId: string | undefined): boolean =>
   !!modelId && (SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(modelId); // Seedream t2i guard.
 
 const SEEDREAM_CUSTOM_SIZE_MAP = {
+  '2048x2048': { width: 2048, height: 2048 },
+  '2048x1152': { width: 2048, height: 1152 },
+  '1152x2048': { width: 1152, height: 2048 },
   '2560x1440': { width: 2560, height: 1440 },
   '1440x2560': { width: 1440, height: 2560 },
 } as const; // Custom sizes used by Seedream.
 type SeedreamCustomSizeKey = keyof typeof SEEDREAM_CUSTOM_SIZE_MAP; // Custom size keys.
 const isSeedreamCustomSize = (value: unknown): value is SeedreamCustomSizeKey =>
-  value === '2560x1440' || value === '1440x2560'; // Custom size guard.
+  value === '2048x2048'
+  || value === '2048x1152'
+  || value === '1152x2048'
+  || value === '2560x1440'
+  || value === '1440x2560'; // Custom size guard.
 const getSeedreamCustomSize = (value: string | undefined) =>
   isSeedreamCustomSize(value) ? SEEDREAM_CUSTOM_SIZE_MAP[value] : undefined; // Resolve custom size.
 
@@ -68,4 +77,30 @@ export const resolveSeedreamCustomSizeForModel = (
     return undefined;
   }
   return baseSize;
+};
+
+const GPT_IMAGE_2_EXPLICIT_SIZE_MAP = {
+  '2048x2048': { width: 2048, height: 2048 },
+  '2048x1152': { width: 2048, height: 1152 },
+  '1152x2048': { width: 1152, height: 2048 },
+  '2560x1440': { width: 2560, height: 1440 },
+  '1440x2560': { width: 1440, height: 2560 },
+} as const; // Explicit GPT Image 2 pixel sizes.
+type GptImage2ExplicitSizeKey = keyof typeof GPT_IMAGE_2_EXPLICIT_SIZE_MAP; // Explicit size keys.
+const isGptImage2ExplicitSize = (value: unknown): value is GptImage2ExplicitSizeKey =>
+  value === '2048x2048'
+  || value === '2048x1152'
+  || value === '1152x2048'
+  || value === '2560x1440'
+  || value === '1440x2560'; // Explicit size guard.
+
+export const resolveGptImage2SizeForFal = (
+  imageSizeOption: FalImageSizeOption,
+): { width: number; height: number } | string => { // Convert selected GPT size to Fal input.
+  if (imageSizeOption === 'default') {
+    return 'auto';
+  }
+  return isGptImage2ExplicitSize(imageSizeOption)
+    ? GPT_IMAGE_2_EXPLICIT_SIZE_MAP[imageSizeOption]
+    : imageSizeOption;
 };

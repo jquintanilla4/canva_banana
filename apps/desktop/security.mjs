@@ -1,6 +1,21 @@
-export const getDevRendererUrl = (env, isPackaged) => (
-  isPackaged ? undefined : env.ELECTRON_RENDERER_URL?.trim() || undefined
-); // Packaged apps must always load bundled renderer assets.
+const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']); // Only same-machine renderers may receive preload secrets.
+
+const isLocalDevRendererUrl = (url) => {
+  try {
+    const parsedUrl = new URL(url); // Use URL parsing so host checks cannot be bypassed with strings.
+    return (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') && LOCAL_DEV_HOSTS.has(parsedUrl.hostname);
+  } catch {
+    return false; // Invalid renderer URLs fall back to bundled assets.
+  }
+};
+
+export const getDevRendererUrl = (env, isPackaged) => {
+  if (isPackaged) {
+    return undefined; // Packaged apps must always load bundled renderer assets.
+  }
+  const rendererUrl = env.ELECTRON_RENDERER_URL?.trim();
+  return rendererUrl && isLocalDevRendererUrl(rendererUrl) ? rendererUrl : undefined;
+};
 
 export const isAllowedAudioPermissionRequest = (permission, details = {}) => {
   if (permission !== 'media') {

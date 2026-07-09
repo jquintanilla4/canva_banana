@@ -22,10 +22,12 @@ import {
 } from "./Icons";
 import { MAX_STROKE_SIZE, MIN_STROKE_SIZE } from "./canvas/constants";
 import { CameraSettingsPopover } from "./CameraSettingsPopover";
+import { Tooltip } from "./Tooltip";
 import {
   hasCameraSettings,
   type CameraSettingsSelection,
 } from "../utils/cameraSettings";
+import { KEYBOARD_SHORTCUT_LABELS } from "../utils/keyboardShortcutLabels";
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -65,26 +67,33 @@ interface ToolbarProps {
 
 const ToolButton: React.FC<{
   label: string;
+  shortcut?: string;
+  detail?: string;
   isActive: boolean;
   onClick: () => void;
   children: React.ReactNode;
   disabled?: boolean;
   activeClassName?: string;
-}> = ({ label, isActive, onClick, children, disabled, activeClassName }) => (
-  <button
-    onClick={onClick}
-    className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
-      isActive
-        ? (activeClassName ?? "bg-blue-600 text-white")
-        : "bg-gray-700 hover:bg-gray-600"
-    } disabled:opacity-50 disabled:cursor-not-allowed`}
-    title={label}
-    aria-label={label}
-    disabled={disabled}
-  >
-    {children}
-  </button>
-);
+}> = ({ label, shortcut, detail, isActive, onClick, children, disabled, activeClassName }) => {
+  const accessibleLabel = `${label}${shortcut ? ` (${shortcut})` : ""}${detail ? ` • ${detail}` : ""}`;
+
+  return (
+    <Tooltip label={label} shortcut={shortcut} detail={detail}>
+      <button
+        onClick={onClick}
+        className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
+          isActive
+            ? (activeClassName ?? "bg-blue-600 text-white")
+            : "bg-gray-700 hover:bg-gray-600"
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
+        aria-label={accessibleLabel}
+        disabled={disabled}
+      >
+        {children}
+      </button>
+    </Tooltip>
+  );
+};
 
 const ModeButton: React.FC<{
   label: string;
@@ -101,19 +110,20 @@ const ModeButton: React.FC<{
   disabled,
   showHintLine = false,
 }) => (
-  <button
-    onClick={onClick}
-    className={`relative flex h-8 items-center px-3 text-sm font-semibold rounded-md transition-colors duration-200 ${
-      isActive ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600"
-    } disabled:opacity-50 disabled:cursor-not-allowed`}
-    title={label}
-    disabled={disabled}
-  >
-    {children}
-    {showHintLine && (
-      <span className="pointer-events-none absolute left-1/2 top-full mt-1 h-0.5 w-5 -translate-x-1/2 rounded-full bg-white/80" />
-    )}
-  </button>
+  <Tooltip label={label}>
+    <button
+      onClick={onClick}
+      className={`relative flex h-8 items-center px-3 text-sm font-semibold rounded-md transition-colors duration-200 ${
+        isActive ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600"
+      } disabled:opacity-50 disabled:cursor-not-allowed`}
+      disabled={disabled}
+    >
+      {children}
+      {showHintLine && (
+        <span className="pointer-events-none absolute left-1/2 top-full mt-1 h-0.5 w-5 -translate-x-1/2 rounded-full bg-white/80" />
+      )}
+    </button>
+  </Tooltip>
 );
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -171,9 +181,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const isInactiveModeDisabled = isCanvasMode ? isAnnotateModeDisabled : false;
   const activeModeLabel = isCanvasMode ? "Canvas" : "Annotate";
   const activeModeTitle = isCanvasMode ? "Canvas Mode" : "Annotate Mode";
-  const videoPromptAreaToolLabel = isVideoPromptAreaToolEnabled
-    ? "Video Prompt Area (G)"
-    : "Video Prompt Area (G) • Switch to a video model to create video prompt areas";
+  const videoPromptAreaToolDetail = isVideoPromptAreaToolEnabled
+    ? undefined
+    : "Switch to a video model to create video prompt areas";
   const modeMenuVisibility = isModeMenuOpen
     ? "opacity-100 pointer-events-auto"
     : "opacity-0 pointer-events-none";
@@ -277,50 +287,58 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
         <ToolButton
-          label="Select (V)"
+          label="Select"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.select}
           isActive={activeTool === Tool.SELECTION}
           onClick={() => onToolChange(Tool.SELECTION)}
         >
           <SelectionIcon className="w-4 h-4" />
         </ToolButton>
         <ToolButton
-          label="Free Select (F)"
+          label="Free Select"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.freeSelect}
           isActive={activeTool === Tool.FREE_SELECTION}
           onClick={() => onToolChange(Tool.FREE_SELECTION)}
         >
           <FreeSelectionIcon className="w-4 h-4" />
         </ToolButton>
         <ToolButton
-          label="Pan (H)"
+          label="Pan"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.pan}
           isActive={activeTool === Tool.PAN}
           onClick={() => onToolChange(Tool.PAN)}
         >
           <PanIcon className="w-4 h-4" />
         </ToolButton>
         <ToolButton
-          label="Note (N)"
+          label="Note"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.note}
           isActive={activeTool === Tool.NOTE}
           onClick={() => onToolChange(Tool.NOTE)}
         >
           <NoteIcon className="w-4 h-4" />
         </ToolButton>
-        <button
-          onClick={onRecordToggle}
-          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
-            isRecording
-              ? "bg-red-600 animate-pulse text-white"
-              : "bg-gray-700 hover:bg-gray-600 text-white"
-          }`}
-          title={isRecording ? "Stop Recording" : "Record Audio (M)"}
-        >
-          {isRecording ? (
-            <StopIcon className="w-4 h-4" />
-          ) : (
-            <MicrophoneIcon className="w-4 h-4" />
-          )}
-        </button>
+        <Tooltip label={isRecording ? "Stop Recording" : "Record Audio"} shortcut={KEYBOARD_SHORTCUT_LABELS.recordAudio}>
+          <button
+            onClick={onRecordToggle}
+            className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
+              isRecording
+                ? "bg-red-600 animate-pulse text-white"
+                : "bg-gray-700 hover:bg-gray-600 text-white"
+            }`}
+            aria-label={isRecording ? `Stop Recording (${KEYBOARD_SHORTCUT_LABELS.recordAudio})` : `Record Audio (${KEYBOARD_SHORTCUT_LABELS.recordAudio})`}
+          >
+            {isRecording ? (
+              <StopIcon className="w-4 h-4" />
+            ) : (
+              <MicrophoneIcon className="w-4 h-4" />
+            )}
+          </button>
+        </Tooltip>
         <ToolButton
-          label={videoPromptAreaToolLabel}
+          label="Video Prompt Area"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.videoPromptArea}
+          detail={videoPromptAreaToolDetail}
           isActive={activeTool === Tool.VIDEO_PROMPT_AREA}
           onClick={() => onToolChange(Tool.VIDEO_PROMPT_AREA)}
           disabled={!isVideoPromptAreaToolEnabled}
@@ -354,7 +372,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           />
         </div>
         <ToolButton
-          label="Brush (B)"
+          label="Brush"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.brush}
           isActive={activeTool === Tool.BRUSH}
           onClick={() => onToolChange(Tool.BRUSH)}
           disabled={appMode === "CANVAS"}
@@ -362,34 +381,35 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <BrushIcon className="w-4 h-4" />
         </ToolButton>
         <ToolButton
-          label={
-            appMode === "CANVAS"
-              ? "Erase (E) • Only available in Annotate mode"
-              : "Erase (E)"
-          }
+          label="Erase"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.erase}
+          detail={appMode === "CANVAS" ? "Only available in Annotate mode" : undefined}
           isActive={activeTool === Tool.ERASE}
           onClick={() => onToolChange(Tool.ERASE)}
           disabled={appMode === "CANVAS"}
         >
           <EraseIcon className="w-4 h-4" />
         </ToolButton>
-        <button
-          onClick={onClear}
-          disabled={!hasClearablePaths}
-          className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
-            hasClearablePaths
-              ? "bg-[#E1B927] hover:bg-[#d4a51f] text-black"
-              : "bg-[#222937] text-white"
-          } disabled:cursor-not-allowed`}
-          title="Nuke markings"
-        >
-          <ClearIcon className="w-[1.20rem] h-[1.20rem]" />
-        </button>
+        <Tooltip label="Clear Markings">
+          <button
+            onClick={onClear}
+            disabled={!hasClearablePaths}
+            className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 ${
+              hasClearablePaths
+                ? "bg-[#E1B927] hover:bg-[#d4a51f] text-black"
+                : "bg-[#222937] text-white"
+            } disabled:cursor-not-allowed`}
+            aria-label="Clear Markings"
+          >
+            <ClearIcon className="w-[1.20rem] h-[1.20rem]" />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="flex h-full items-center space-x-2 border-r border-gray-600 pr-4">
         <ToolButton
           label="Undo"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.undo}
           onClick={onUndo}
           disabled={!canUndo}
           isActive={false}
@@ -398,6 +418,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </ToolButton>
         <ToolButton
           label="Redo"
+          shortcut={KEYBOARD_SHORTCUT_LABELS.redo}
           onClick={onRedo}
           disabled={!canRedo}
           isActive={false}
@@ -441,55 +462,58 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       )}
 
       <div className="flex h-full items-center space-x-2">
-        <button
-          onClick={onResize}
-          disabled={isResizeDisabled}
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-blue-600 text-white disabled:bg-gray-700 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Resize Selected Image"
-          aria-label="Resize Selected Image"
-        >
-          <ResizeIcon className="w-4 h-4" />
-        </button>
-        <button
-          onClick={onRemoveBackground}
-          disabled={isBackgroundRemovalDisabled}
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-[#9334EB] text-white disabled:bg-gray-700 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Remove Background"
-          aria-label="Remove Background"
-        >
-          {isBackgroundRemovalLoading ? (
-            <svg
-              className="h-4 w-4 animate-spin"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              />
-            </svg>
-          ) : (
-            <RemoveBackgroundIcon className="w-4 h-4" />
-          )}
-        </button>
-        <button
-          onClick={onUploadClick}
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-[#2663EB] text-white"
-          title="Upload Image"
-          aria-label="Upload Image"
-        >
-          <UploadIcon className="w-4 h-4" />
-        </button>
+        <Tooltip label="Resize Selected Image">
+          <button
+            onClick={onResize}
+            disabled={isResizeDisabled}
+            className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-blue-600 text-white disabled:bg-gray-700 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Resize Selected Image"
+          >
+            <ResizeIcon className="w-4 h-4" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Remove Background">
+          <button
+            onClick={onRemoveBackground}
+            disabled={isBackgroundRemovalDisabled}
+            className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-[#9334EB] text-white disabled:bg-gray-700 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Remove Background"
+          >
+            {isBackgroundRemovalLoading ? (
+              <svg
+                className="h-4 w-4 animate-spin"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+            ) : (
+              <RemoveBackgroundIcon className="w-4 h-4" />
+            )}
+          </button>
+        </Tooltip>
+        <Tooltip label="Upload Image">
+          <button
+            onClick={onUploadClick}
+            className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 active:bg-[#2663EB] text-white"
+            aria-label="Upload Image"
+          >
+            <UploadIcon className="w-4 h-4" />
+          </button>
+        </Tooltip>
         <ToolButton
           label="Download Selected Image"
           onClick={onDownload}
@@ -498,14 +522,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <DownloadIcon className="w-4 h-4" />
         </ToolButton>
-        <button
-          onClick={onDelete}
-          disabled={!isObjectSelected}
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Delete Selected Object (Delete/Backspace)"
-        >
-          <DeleteIcon className="w-4 h-4" />
-        </button>
+        <Tooltip label="Delete Selected Object" shortcut={KEYBOARD_SHORTCUT_LABELS.deleteObject}>
+          <button
+            onClick={onDelete}
+            disabled={!isObjectSelected}
+            className="flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={`Delete Selected Object (${KEYBOARD_SHORTCUT_LABELS.deleteObject})`}
+          >
+            <DeleteIcon className="w-4 h-4" />
+          </button>
+        </Tooltip>
       </div>
     </header>
   );

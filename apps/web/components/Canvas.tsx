@@ -31,6 +31,7 @@ import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, NOTE_COLOR_OPTIONS, VIDEO_PROMP
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
 import { useCanvasPlaybackLoop } from './canvas/hooks/useCanvasPlaybackLoop';
 import { PromptBar, type PromptBarControlConfig } from './PromptBar';
+import { Tooltip } from './Tooltip';
 import {
   DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT,
   EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING,
@@ -43,6 +44,7 @@ import {
 } from '../utils/videoPromptAreas';
 import { stopCanvasMediaPlayback, syncCanvasMediaElementPlayback } from '../utils/canvasMediaPlayback';
 import { getCanvasImagePrompt } from '../utils/canvasImagePrompt';
+import { KEYBOARD_SHORTCUT_LABELS } from '../utils/keyboardShortcutLabels';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -159,14 +161,16 @@ const ActionButton: React.FC<{
   title: string;
   children: React.ReactNode;
 }> = ({ onClick, disabled, title, children }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    title={title}
-    className="p-2.5 rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-  >
-    {children}
-  </button>
+  <Tooltip label={title}>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={title}
+      className="p-2.5 rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+    >
+      {children}
+    </button>
+  </Tooltip>
 );
 
 // Core canvas surface: renders images/notes, handles drawing tools, selection, transforms, and emits updates to parents.
@@ -854,6 +858,17 @@ export const Canvas: React.FC<CanvasProps> = ({
     handleMouseDown(e);
   }, [editingNoteId, handleNoteBlur, handleMouseDown, tool]);
 
+  const handleContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (currentTool !== Tool.FREE_SELECTION) {
+      return;
+    }
+    const target = event.target as HTMLElement;
+    if (target.closest('button') || target.tagName === 'TEXTAREA') {
+      return;
+    }
+    event.preventDefault(); // Keep free-select right-click deselect from opening the browser menu.
+  }, [currentTool]);
+
   const editingNote = useMemo(() => editingNoteId ? notes.find(n => n.id === editingNoteId) : null, [notes, editingNoteId]);
   const selectedNote = useMemo(() => {
     if (editingNoteId) return null;
@@ -977,7 +992,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
-    const videoElement = target.element;
+    const videoElement = target.element as HTMLVideoElement;
     const captureWidth = videoElement.videoWidth || target.naturalWidth || target.width || 1;
     const captureHeight = videoElement.videoHeight || target.naturalHeight || target.height || 1;
 
@@ -1300,6 +1315,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseMove={handleMouseMoveWithOverlays}
       onMouseUp={handleMouseUpWithOverlays}
       onMouseLeave={handleMouseUpWithOverlays}
+      onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
@@ -1494,15 +1510,16 @@ export const Canvas: React.FC<CanvasProps> = ({
               >
                 {selectedEmbeddedModelLabel}
               </button>
-              <button
-                type="button"
-                onClick={() => handleDeleteVideoPromptBar(bar.id)}
-                className="absolute left-[-2.6rem] bottom-[0.2rem] flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/55 text-gray-200 transition-colors duration-200 hover:bg-red-500/25 hover:text-red-100"
-                aria-label={`Delete ${assignedArea?.label ?? 'video prompt bar'}`}
-                title="Delete video prompt bar"
-              >
-                <MinusIcon className="h-3 w-3" />
-              </button>
+              <Tooltip label="Delete video prompt bar" wrapperClassName="absolute left-[-2.6rem] bottom-[0.2rem] inline-flex">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteVideoPromptBar(bar.id)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/55 text-gray-200 transition-colors duration-200 hover:bg-red-500/25 hover:text-red-100"
+                  aria-label={`Delete ${assignedArea?.label ?? 'video prompt bar'}`}
+                >
+                  <MinusIcon className="h-3 w-3" />
+                </button>
+              </Tooltip>
               <div style={{ paddingTop: `${DEFAULT_VIDEO_PROMPT_BAR_DRAG_HANDLE_HEIGHT}px` }}>
                 <PromptBar
                   layout="inline"
@@ -1859,20 +1876,24 @@ export const Canvas: React.FC<CanvasProps> = ({
             zIndex: 100,
           }}
         >
-          <button
-            onClick={onCancelCrop}
-            title="Cancel Crop (Esc)"
-            className="p-2.5 rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 text-white shadow-lg"
-          >
-            <CancelIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onConfirmCrop}
-            title="Confirm Crop (Enter)"
-            className="p-2.5 rounded-md transition-colors duration-200 bg-green-600 hover:bg-green-500 text-white shadow-lg"
-          >
-            <ConfirmIcon className="w-4 h-4" />
-          </button>
+          <Tooltip label="Cancel Crop" shortcut={KEYBOARD_SHORTCUT_LABELS.cancel}>
+            <button
+              onClick={onCancelCrop}
+              aria-label="Cancel Crop (Esc)"
+              className="p-2.5 rounded-md transition-colors duration-200 bg-red-600 hover:bg-red-500 text-white shadow-lg"
+            >
+              <CancelIcon className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Confirm Crop" shortcut={KEYBOARD_SHORTCUT_LABELS.confirm}>
+            <button
+              onClick={onConfirmCrop}
+              aria-label="Confirm Crop (Enter)"
+              className="p-2.5 rounded-md transition-colors duration-200 bg-green-600 hover:bg-green-500 text-white shadow-lg"
+            >
+              <ConfirmIcon className="w-4 h-4" />
+            </button>
+          </Tooltip>
         </div>
       )}
       {imageBeingTransformed && (
@@ -1886,13 +1907,15 @@ export const Canvas: React.FC<CanvasProps> = ({
             zIndex: 100,
           }}
         >
-          <button
-            onClick={onExitTransform}
-            title="Exit Transform (Enter) • Hold Shift for free transform"
-            className="p-2.5 rounded-md transition-colors duration-200 bg-orange-500 hover:bg-orange-400 text-white shadow-lg"
-          >
-            <TransformIcon className="w-4 h-4" />
-          </button>
+          <Tooltip label="Exit Transform" shortcut={KEYBOARD_SHORTCUT_LABELS.confirm} detail="Hold Shift for free transform">
+            <button
+              onClick={onExitTransform}
+              aria-label="Exit Transform (Enter) • Hold Shift for free transform"
+              className="p-2.5 rounded-md transition-colors duration-200 bg-orange-500 hover:bg-orange-400 text-white shadow-lg"
+            >
+              <TransformIcon className="w-4 h-4" />
+            </button>
+          </Tooltip>
         </div>
       )}
       {images.length === 0 && notes.length === 0 && !isDraggingOver && (

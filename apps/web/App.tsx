@@ -13,6 +13,7 @@ import {
   type CanvasImage,
   type CanvasVideoPromptArea,
   type CanvasVideoPromptBar,
+  type GenerationPlacedPayload,
   type VideoPromptAreaMembership,
 } from './types';
 import { FalQueuePanel } from './components/FalQueuePanel';
@@ -62,8 +63,10 @@ import { isOverlapping } from './utils/canvasGeometry';
 import { FileMenu } from './components/FileMenu';
 import { ViewToolbar } from './components/ViewToolbar';
 import { ProviderSwitcher } from './components/ProviderSwitcher';
+import { Tooltip } from './components/Tooltip';
 import { StatusBanner } from './components/StatusBanner';
 import { ImageResizeToast } from './components/ImageResizeToast';
+import { GenerationCanvasNotifications } from './components/GenerationCanvasNotifications';
 import { useGeneration } from './hooks/useGeneration';
 import { useCanvasHistory } from './hooks/useCanvasHistory';
 import { useSelectionState } from './hooks/useSelectionState';
@@ -82,6 +85,7 @@ import { useVideoNegativePrompt } from './hooks/useVideoNegativePrompt';
 import { useFalQueueJobs } from './hooks/useFalQueueJobs';
 import { useDebugLogState } from './hooks/useDebugLogState';
 import { useJimengSetup } from './hooks/useJimengSetup';
+import { useGenerationCanvasNotifications, type GenerationCanvasNotification } from './hooks/useGenerationCanvasNotifications';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
 import { writeClipboardText } from './services/clipboardService';
 import type { FalModelMode } from './services/modelConfig';
@@ -106,6 +110,7 @@ import {
 } from './utils/embeddedVideoRouting';
 import { markCanvasMediaStoppedByIds, stopCanvasMediaPlaybackByIds } from './utils/canvasMediaPlayback';
 import { getCanvasImagePrompt } from './utils/canvasImagePrompt';
+import { applyGenerationPlacementSelection } from './utils/generationPlacementSelection';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
 import { OVERLAY_LAYER_CLASS_NAMES } from './utils/overlayLayers';
 import { PlusIcon } from './components/Icons';
@@ -222,6 +227,11 @@ export default function App() {
   // State for transient toast message notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isPromptChatOpen, setIsPromptChatOpen] = useState(false);
+  const {
+    notifications: generationCanvasNotifications,
+    notifyGenerationPlaced,
+    dismissGenerationNotification,
+  } = useGenerationCanvasNotifications();
 
   // State for currently selected API provider (e.g., 'google', 'fal')
   const [apiProvider, setApiProvider] = useState<ApiProvider>(DEFAULT_API_PROVIDER);
@@ -907,6 +917,73 @@ export default function App() {
     setGenerationTick(prev => prev + 1);
   }, []);
 
+  const handleGenerationNotificationActivate = useCallback((notification: GenerationCanvasNotification) => {
+    const targetIds = new Set(notification.mediaIds);
+    const existingTargetIds = images.filter(image => targetIds.has(image.id)).map(image => image.id);
+    dismissGenerationNotification(notification.id);
+    if (existingTargetIds.length === 0) {
+      setToastMessage('Generation is no longer on the canvas.');
+      setTimeout(() => setToastMessage(null), 2000);
+      return;
+    }
+    applyGenerationPlacementSelection(notification, {
+      setSelectedImageIds,
+      setSelectedNoteIds,
+      setReferenceImageIds,
+      setReferenceVideoIds,
+      setReferenceAudioIds,
+      setElementImageIds,
+      setVideoLastFrameImageId,
+      setSourceVideoId,
+      setSourceAudioId,
+      setSelectedVideoPromptAreaId,
+    }, { mediaIds: existingTargetIds, preserveVideoSourceState: notification.mediaType === 'video' });
+    setZoomToSelectionTrigger(prev => prev + 1);
+  }, [
+    dismissGenerationNotification,
+    images,
+    setElementImageIds,
+    setReferenceAudioIds,
+    setReferenceImageIds,
+    setReferenceVideoIds,
+    setSelectedImageIds,
+    setSelectedNoteIds,
+    setSelectedVideoPromptAreaId,
+    setSourceAudioId,
+    setSourceVideoId,
+    setVideoLastFrameImageId,
+  ]);
+
+  const handleGenerationPlaced = useCallback((payload: GenerationPlacedPayload) => {
+    notifyGenerationPlaced(payload);
+    applyGenerationPlacementSelection(payload, {
+      setSelectedImageIds,
+      setSelectedNoteIds,
+      setReferenceImageIds,
+      setReferenceVideoIds,
+      setReferenceAudioIds,
+      setElementImageIds,
+      setVideoLastFrameImageId,
+      setSourceVideoId,
+      setSourceAudioId,
+      setSelectedVideoPromptAreaId,
+      setTool,
+    });
+  }, [
+    notifyGenerationPlaced,
+    setElementImageIds,
+    setReferenceAudioIds,
+    setReferenceImageIds,
+    setReferenceVideoIds,
+    setSelectedImageIds,
+    setSelectedNoteIds,
+    setSelectedVideoPromptAreaId,
+    setSourceAudioId,
+    setSourceVideoId,
+    setTool,
+    setVideoLastFrameImageId,
+  ]);
+
   const openBackupsModal = useCallback(() => {
     openAppOwnedBlockingOverlay('backups');
   }, [openAppOwnedBlockingOverlay]);
@@ -1038,6 +1115,7 @@ export default function App() {
     setToastMessage,
     setTool,
     onGenerationComplete: handleGenerationComplete,
+    onGenerationPlaced: handleGenerationPlaced,
   });
 
   const isEmbeddedPromptBarActive = activeEmbeddedPromptBarId !== null;
@@ -1567,7 +1645,7 @@ export default function App() {
           seedance2Resolution: value === 'seedance2.0_vip' ? currentBar.seedance2Resolution : (currentBar.seedance2Resolution === '1080p' ? '720p' : currentBar.seedance2Resolution),
           falOptions: {
             ...(currentBar.falOptions ?? {}),
-            seedance2JimengModelVersion: value,
+            seedance2JimengModelVersion: value as CanvasVideoPromptBar['seedance2JimengModelVersion'],
             seedance2Resolution: value === 'seedance2.0_vip' ? currentBar.falOptions?.seedance2Resolution : (currentBar.falOptions?.seedance2Resolution === '1080p' ? '720p' : currentBar.falOptions?.seedance2Resolution),
           },
         }));
@@ -2137,6 +2215,11 @@ export default function App() {
       {toastMessage && (
         <StatusBanner message={toastMessage} variant="success" />
       )}
+      <GenerationCanvasNotifications
+        notifications={generationCanvasNotifications}
+        onActivate={handleGenerationNotificationActivate}
+        onDismiss={dismissGenerationNotification}
+      />
       <BackupsModal
         isOpen={isBackupsOpen}
         isLoading={isBackupsLoading}
@@ -2279,16 +2362,17 @@ export default function App() {
           klingSuggestionOptions={klingPromptMentions}
           sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}
           leadingAccessory={shouldShowVideoPromptBarAccessory ? (
-            <button
-              type="button"
-              onClick={handleCreateVideoPromptBar}
-              disabled={isLoading}
-              className={`flex shrink-0 self-start items-center justify-center rounded-2xl bg-gray-900/70 text-white shadow-xl transition-all duration-300 ease-out hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-45 ${isEmbeddedPromptBarActive ? 'h-[2.28rem] w-[2.28rem]' : 'h-[3.2rem] w-[3.2rem]'}`}
-              aria-label="Create video prompt bar"
-              title="Create video prompt bar"
-            >
-              <PlusIcon className="h-4 w-4" />
-            </button>
+            <Tooltip label="Create video prompt bar">
+              <button
+                type="button"
+                onClick={handleCreateVideoPromptBar}
+                disabled={isLoading}
+                className={`flex shrink-0 self-start items-center justify-center rounded-2xl bg-gray-900/70 text-white shadow-xl transition-all duration-300 ease-out hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-45 ${isEmbeddedPromptBarActive ? 'h-[2.28rem] w-[2.28rem]' : 'h-[3.2rem] w-[3.2rem]'}`}
+                aria-label="Create video prompt bar"
+              >
+                <PlusIcon className="h-4 w-4" />
+              </button>
+            </Tooltip>
           ) : undefined}
         />
       )}

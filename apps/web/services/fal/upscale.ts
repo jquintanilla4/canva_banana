@@ -1,10 +1,12 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import type { FalQueueUpdate, UpscaleImageOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
+import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
 import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue normalizers.
 import { logFalEvent } from './logging'; // Fal debug logging.
+import { emitFalPhase } from './phase'; // Phase update helper.
 import { uploadImageElementToFal } from './media'; // Media upload helper.
-import { extractInlineData } from './responses'; // Response parsing helper.
+import { extractInlineData, runFalDownloadStep } from './responses'; // Response parsing helper.
 import { createRandomSeed } from './random'; // Seed helper.
 import { CRYSTAL_UPSCALER_MODEL_ID, SEEDVR_UPSCALER_MODEL_ID } from '../modelConfig'; // Upscale model IDs.
 
@@ -16,7 +18,7 @@ export const upscaleCrystalImage = async (
 ): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => { // Upscale with Crystal.
   ensureFalClientConfigured(); // Ensure SDK is configured before requests.
 
-  const imageUrl = await uploadImageElementToFal(image); // Upload source image first.
+  const imageUrl = await uploadImageElementToFal(image, options); // Upload source image first.
   const sanitizedScale = Number.isFinite(scaleFactor) ? Math.round(scaleFactor) : 2; // Snap scale to integer.
   const normalizedScale = Math.min(200, Math.max(1, sanitizedScale)); // Clamp scale to API range.
   const sanitizedCreativity = Number.isFinite(creativity) ? creativity : 0; // Default creativity when invalid.
@@ -25,6 +27,7 @@ export const upscaleCrystalImage = async (
 
   let latestRequestId: string | undefined; // Track latest queue request id.
 
+  emitFalPhase(options, CRYSTAL_UPSCALER_MODEL_ID, { phase: 'submitting', message: 'Submitting to Fal...' });
   logFalEvent('outbound', CRYSTAL_UPSCALER_MODEL_ID, 'Outbound request (fal.subscribe)', {
     input: {
       image_url: imageUrl,
@@ -49,6 +52,11 @@ export const upscaleCrystalImage = async (
         if (resolvedRequestId) {
           latestRequestId = resolvedRequestId;
         }
+        emitFalPhase(options, CRYSTAL_UPSCALER_MODEL_ID, {
+          phase: queueUpdate.status === 'IN_PROGRESS' ? 'processing' : 'queued',
+          message: queueUpdate.status === 'IN_PROGRESS' ? 'Processing on provider...' : 'Waiting in Fal queue...',
+          requestId: resolvedRequestId,
+        });
         logFalEvent('inbound', CRYSTAL_UPSCALER_MODEL_ID, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
@@ -67,7 +75,7 @@ export const upscaleCrystalImage = async (
     logFalEvent('error', CRYSTAL_UPSCALER_MODEL_ID, 'Request failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    throw error;
+    throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
   }
 
   logFalEvent('inbound', CRYSTAL_UPSCALER_MODEL_ID, 'Result received', {
@@ -91,13 +99,21 @@ export const upscaleCrystalImage = async (
     throw new Error('Unexpected image reference returned by Fal.ai Crystal Upscaler.');
   });
 
-  const inlineDataList = await Promise.all(imageUrls.map(url => extractInlineData(url))); // Convert URLs to data URIs.
-  const base64List = inlineDataList.map(dataUrl => {
-    const base64 = dataUrl.split(',')[1];
-    if (!base64) {
-      throw new Error('Failed to extract image data from Fal.ai Crystal Upscaler response.');
-    }
-    return base64;
+  emitFalPhase(options, CRYSTAL_UPSCALER_MODEL_ID, {
+    phase: 'downloading',
+    message: 'Downloading generated image...',
+    requestId: result?.requestId || latestRequestId,
+  });
+  const downloadRequestId = result?.requestId || latestRequestId; // Keep request id on download failures.
+  const base64List = await runFalDownloadStep(downloadRequestId, async () => {
+    const inlineDataList = await Promise.all(imageUrls.map(url => extractInlineData(url))); // Convert URLs to data URIs.
+    return inlineDataList.map(dataUrl => {
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) {
+        throw new Error('Failed to extract image data from Fal.ai Crystal Upscaler response.');
+      }
+      return base64;
+    });
   });
 
   const [primaryBase64] = base64List;
@@ -123,7 +139,7 @@ export const upscaleSeedvrImage = async (
 ): Promise<{ imageBase64: string; imagesBase64: string[]; text: string; requestId?: string }> => { // Upscale with SeedVR2.
   ensureFalClientConfigured(); // Ensure SDK is configured before requests.
 
-  const imageUrl = await uploadImageElementToFal(image); // Upload source image first.
+  const imageUrl = await uploadImageElementToFal(image, options); // Upload source image first.
   const sanitizedScale = Number.isFinite(scaleFactor) ? Math.round(scaleFactor) : 2; // Snap scale to integer.
   const normalizedScale = Math.min(10, Math.max(1, sanitizedScale)); // Clamp scale to API range.
   const sanitizedNoise = Number.isFinite(noiseScale) ? noiseScale : 0.1; // Default noise when invalid.
@@ -142,6 +158,7 @@ export const upscaleSeedvrImage = async (
     seed: seedValue,
   };
 
+  emitFalPhase(options, SEEDVR_UPSCALER_MODEL_ID, { phase: 'submitting', message: 'Submitting to Fal...' });
   logFalEvent('outbound', SEEDVR_UPSCALER_MODEL_ID, 'Outbound request (fal.subscribe)', {
     input: inputPayload,
   });
@@ -158,6 +175,11 @@ export const upscaleSeedvrImage = async (
         if (resolvedRequestId) {
           latestRequestId = resolvedRequestId;
         }
+        emitFalPhase(options, SEEDVR_UPSCALER_MODEL_ID, {
+          phase: queueUpdate.status === 'IN_PROGRESS' ? 'processing' : 'queued',
+          message: queueUpdate.status === 'IN_PROGRESS' ? 'Processing on provider...' : 'Waiting in Fal queue...',
+          requestId: resolvedRequestId,
+        });
         logFalEvent('inbound', SEEDVR_UPSCALER_MODEL_ID, 'Queue update', {
           status: queueUpdate.status,
           position: queueUpdate.position,
@@ -176,7 +198,7 @@ export const upscaleSeedvrImage = async (
     logFalEvent('error', SEEDVR_UPSCALER_MODEL_ID, 'Request failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    throw error;
+    throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
   }
 
   logFalEvent('inbound', SEEDVR_UPSCALER_MODEL_ID, 'Result received', {
@@ -200,11 +222,20 @@ export const upscaleSeedvrImage = async (
     throw new Error('Unexpected image reference returned by SeedVR2 Upscaler.');
   }
 
-  const inlineData = await extractInlineData(upscaledUrl);
-  const base64 = inlineData.split(',')[1];
-  if (!base64) {
-    throw new Error('Failed to extract image data from SeedVR2 Upscaler response.');
-  }
+  emitFalPhase(options, SEEDVR_UPSCALER_MODEL_ID, {
+    phase: 'downloading',
+    message: 'Downloading generated image...',
+    requestId: result?.requestId || latestRequestId,
+  });
+  const downloadRequestId = result?.requestId || latestRequestId; // Keep request id on download failures.
+  const base64 = await runFalDownloadStep(downloadRequestId, async () => {
+    const inlineData = await extractInlineData(upscaledUrl);
+    const extractedBase64 = inlineData.split(',')[1];
+    if (!extractedBase64) {
+      throw new Error('Failed to extract image data from SeedVR2 Upscaler response.');
+    }
+    return extractedBase64;
+  });
 
   const requestId = result?.requestId || latestRequestId; // Prefer server request id.
 

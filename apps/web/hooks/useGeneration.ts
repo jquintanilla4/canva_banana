@@ -79,6 +79,7 @@ import {
   isFalVideoModelId,
   isSeedreamModelId,
   isSeedreamV5LiteModelId,
+  isSeedreamV5ProModelId,
   normalizeKlingO3Variant as normalizeLegacyKlingO3Variant,
   normalizeFalModelId,
   type FalAspectRatioSelectionValue,
@@ -121,6 +122,10 @@ import {
   upscaleCrystalImage as upscaleFalCrystalImage,
   upscaleSeedvrImage as upscaleFalSeedvrImage,
   uploadVideoToFal,
+  getFalErrorPhase,
+  getFalErrorRequestId,
+  type FalImageGenerationResult,
+  type FalPhaseUpdate,
   type FalQueueUpdate,
 } from '../services/falService';
 import { addDebugLog } from '../services/debugLog';
@@ -132,6 +137,7 @@ import type {
   CanvasNote,
   GenerationInputs,
   GenerationKind,
+  GenerationPlacedPayload,
   GenerationProviderId,
   Path,
   Point,
@@ -185,6 +191,7 @@ type UseGenerationArgs = {
   setToastMessage: (message: string | null) => void;
   setTool: (tool: Tool) => void;
   onGenerationComplete?: () => void;
+  onGenerationPlaced?: (payload: GenerationPlacedPayload) => void;
 };
 
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
@@ -307,6 +314,22 @@ const applyVolcengineQueueUpdateToJob = (
   updatedAt: Date.now(),
 });
 
+const applyFalPhaseUpdateToJob = (
+  job: FalQueueJob,
+  update: FalPhaseUpdate,
+): FalQueueJob => {
+  const now = Date.now();
+  return {
+    ...job,
+    phase: update.phase,
+    phaseMessage: update.message ?? job.phaseMessage,
+    requestId: update.requestId || job.requestId,
+    phaseStartedAt: job.phase === update.phase ? job.phaseStartedAt : now,
+    lastPhaseDurationMs: update.durationMs ?? (job.phase !== update.phase && job.phaseStartedAt ? now - job.phaseStartedAt : job.lastPhaseDurationMs),
+    updatedAt: now,
+  };
+}; // Apply service-level phase changes to the queue row.
+
 const buildSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant): string =>
   `${baseLabel} ${variant === 'reference' ? 'Reference' : 'Smart'}`; // Surface the active variant in the queue.
 
@@ -350,6 +373,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setToastMessage,
     setTool,
     onGenerationComplete,
+    onGenerationPlaced,
   } = args;
 
   const seedanceRepeatStreakRef = useRef<{ requestKey: string | null; count: number }>({ requestKey: null, count: 0 });
@@ -468,13 +492,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     selectedImageIds,
     primaryImageId,
     activePrimaryImage,
-    setSelectedImageIds,
-    setSelectedNoteIds,
-    setReferenceImageIds,
-    setReferenceVideoIds,
-    setReferenceAudioIds,
-    setElementImageIds,
-    setVideoLastFrameImageId,
   } = selection;
 
   // Centralized generation orchestrator for both providers (Fal/Gemini) across text-to-image, edits, upscales, and video.
@@ -755,9 +772,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const usesGlobalLoadingLock = generationProviderForRun === 'google';
     const isVideoMode = generationProviderForRun !== 'google' && falModelModeForRun === 'video';
     const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelIdForRun);
-    const normalizedFalImageSizeSelectionForRun = isSeedreamV5LiteModelId(falModelIdForRun) && falImageSizeSelectionForRun === 'default'
+    const normalizedFalImageSizeSelectionForRun = (isSeedreamV5LiteModelId(falModelIdForRun) || isSeedreamV5ProModelId(falModelIdForRun)) && falImageSizeSelectionForRun === 'default'
       ? 'auto_2K'
-      : falImageSizeSelectionForRun; // Seedream 5 Lite defaults to auto_2K instead of source-matching.
+      : falImageSizeSelectionForRun; // Seedream 5 defaults to auto_2K instead of source-matching.
     const isNanoBananaModel = !isVideoMode && isNanoBananaEditModelId(falModelIdForRun);
     const isGptImage2ModelForRun = !isVideoMode && isGptImage2EditModelId(falModelIdForRun);
     const isKrea2LargeModelForRun = usingFal && !isVideoMode && isKrea2LargeModel(falModelIdForRun);
@@ -1304,21 +1321,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...prev,
               images: [...prev.images, newVideo],
             }));
-            setSelectedImageIds([newVideo.id]);
-            setSelectedNoteIds([]);
-            setReferenceImageIds([]);
-            setReferenceVideoIds([]);
-            setReferenceAudioIds([]);
-            setElementImageIds([]);
-            setTool(Tool.FREE_SELECTION);
-
-            setToastMessage('Video added to canvas');
+            onGenerationPlaced?.({ mediaIds: [newVideo.id], mediaType: 'video', modelLabel: jobModelLabel });
             onGenerationComplete?.();
           } catch (loadErr) {
             console.error('Failed to load generated Seedance 2 video into canvas', loadErr);
             setToastMessage('Video ready! Open from the queue panel.');
+            setTimeout(() => setToastMessage(null), 2000);
           }
-          setTimeout(() => setToastMessage(null), 2000);
         } catch (err) {
           const message = err instanceof Error ? err.message : 'An unknown error occurred.';
           if (jobQueued) {
@@ -1343,6 +1352,35 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
       let videoPromptForRequest = trimmedPrompt;
       let jobQueued = false;
+      const handleFalPhaseUpdate = (update: FalPhaseUpdate) => {
+        if (!jobQueued) {
+          jobQueued = true;
+        }
+        setFalJobs(prev => {
+          const hasJob = prev.some(job => job.id === falJobId);
+          if (!hasJob) {
+            const newJob: FalQueueJob = {
+              id: falJobId,
+              prompt: videoPromptForRequest,
+              modelId: falModelIdForRun,
+              modelLabel: jobModelLabel,
+              provider: 'fal',
+              status: 'IN_QUEUE',
+              phase: update.phase,
+              phaseMessage: update.message,
+              requestId: update.requestId,
+              logs: [],
+              phaseStartedAt: Date.now(),
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            };
+            return [...prev.slice(-9), newJob];
+          }
+          return prev.map(job => (
+            job.id === falJobId ? applyFalPhaseUpdateToJob(job, update) : job
+          ));
+        });
+      }; // Reflect service phase changes in the queue row.
       const enqueueJob = () => {
         if (jobQueued) {
           return;
@@ -1355,7 +1393,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
           modelLabel: jobModelLabel,
           provider: 'fal',
           status: 'IN_QUEUE',
+          phase: 'submitting',
+          phaseMessage: 'Preparing request...',
           logs: [],
+          phaseStartedAt: Date.now(),
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
@@ -1369,6 +1410,23 @@ export const useGeneration = (args: UseGenerationArgs) => {
         });
         jobQueued = true;
       };
+      const failQueuedJob = (message: string) => {
+        if (!jobQueued) {
+          return;
+        }
+        setFalJobs(prev => prev.map(job => (
+          job.id === falJobId
+            ? {
+              ...job,
+              status: 'FAILED',
+              phase: 'failed',
+              phaseMessage: 'Request not submitted',
+              error: message,
+              updatedAt: Date.now(),
+            }
+            : job
+        )));
+      }; // Close provisional upload rows when validation stops submission.
 
       try {
         // In Kling O3 reference mode, ensure a still image is selected before generation.
@@ -1589,7 +1647,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
               throw new Error('The selected video does not have a file to upload.');
             }
             setToastMessage('Uploading video...');
-            sourceVideoUrlForRequest = await uploadVideoToFal(sourceVideo.file);
+            sourceVideoUrlForRequest = await uploadVideoToFal(sourceVideo.file, {
+              jobId: falJobId,
+              onPhaseUpdate: handleFalPhaseUpdate,
+              label: 'source video',
+            });
             setToastMessage(null);
           }
         } else if (!activePrimary && !isKlingV3VideoModel && !isWan27VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun))) {
@@ -1616,7 +1678,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ? new File([await convertAudioBlobToWav(sourceAudio.file)], `fal-audio-${Date.now()}.wav`, { type: 'audio/wav' })
             : sourceAudio.file;
           setToastMessage('Uploading audio...');
-          sourceAudioUrlForRequest = await uploadVideoToFal(audioFileForUpload);
+          sourceAudioUrlForRequest = await uploadVideoToFal(audioFileForUpload, {
+            jobId: falJobId,
+            onPhaseUpdate: handleFalPhaseUpdate,
+            label: 'source audio',
+          });
           setToastMessage(null);
         }
 
@@ -1672,35 +1738,49 @@ export const useGeneration = (args: UseGenerationArgs) => {
           .map(img => img.element as HTMLImageElement);
         if (isKlingO3VideoModel) {
           if (referenceImagesForRun.length !== referenceImageIdsForRun.length) {
-            setError('Reference images must be still images.');
+            const message = 'Reference images must be still images.';
+            failQueuedJob(message);
+            setError(message);
             return;
           }
           if (elementImagesForRun.length !== elementImageIdsForRun.length) {
-            setError('Element images must be still images.');
+            const message = 'Element images must be still images.';
+            failQueuedJob(message);
+            setError(message);
             return;
           }
           const maxSupportImages = getMaxReferenceImages(falModelIdForRun);
           const totalImageCount = referenceImagesForRun.length + elementImagesForRun.length;
           if (totalImageCount > maxSupportImages) {
-            setError(`Kling O3 Video ${isKlingO3EditMode ? 'Edit' : 'Reference'} supports up to 4 images total (references + elements).`);
+            const message = `Kling O3 Video ${isKlingO3EditMode ? 'Edit' : 'Reference'} supports up to 4 images total (references + elements).`;
+            failQueuedJob(message);
+            setError(message);
             return;
           }
         }
         if (isWan27ReferenceModeForRun && referenceImagesForRun.length !== referenceImageIdsForRun.length) {
-          setError('Wan 2.7 image references must be still images.');
+          const message = 'Wan 2.7 image references must be still images.';
+          failQueuedJob(message);
+          setError(message);
           return;
         }
         if (isWan27EditModeForRun) {
           if (referenceImagesForRun.length !== referenceImageIdsForRun.length) {
-            setError('Wan 2.7 Edit reference must be a still image.');
+            const message = 'Wan 2.7 Edit reference must be a still image.';
+            failQueuedJob(message);
+            setError(message);
             return;
           }
           if (referenceImagesForRun.length > 1) {
-            setError('Wan 2.7 Edit supports one reference image.');
+            const message = 'Wan 2.7 Edit supports one reference image.';
+            failQueuedJob(message);
+            setError(message);
             return;
           }
           if (referenceVideoIdsForRun.length > 0 || referenceAudioIdsForRun.length > 0) {
-            setError('Wan 2.7 Edit supports one still reference image.');
+            const message = 'Wan 2.7 Edit supports one still reference image.';
+            failQueuedJob(message);
+            setError(message);
             return;
           }
         }
@@ -1709,7 +1789,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
-            setError('Select a still image on the canvas to use as the ending frame.');
+            const message = 'Select a still image on the canvas to use as the ending frame.';
+            failQueuedJob(message);
+            setError(message);
             return;
           }
           videoTailImageElement = tailFrame.element as HTMLImageElement;
@@ -1750,6 +1832,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const keepOriginalSoundForRequest = isKlingV3ControlVideoModel ? klingV3ControlKeepSoundForRun : undefined;
         const characterOrientationForRequest = isKlingV3ControlVideoModel ? klingV3ControlOrientationForRun : undefined;
         const videoResult = await generateFalImageToVideo(videoPromptForRequest, videoSourceImage, {
+          jobId: falJobId,
+          onPhaseUpdate: handleFalPhaseUpdate,
           modelId: videoModelIdForRequest,
           duration: durationForRequest,
           negativePrompt: isOneToAllAnimateVideoModel ? oneToAllNegativePromptForRequest : negativePromptForRequest,
@@ -1895,15 +1979,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
           return {
             ...job,
-            status: 'COMPLETED',
+            status: 'IN_PROGRESS',
+            phase: 'downloading',
+            phaseMessage: 'Downloading generated video...',
             requestId: videoResult.requestId || job.requestId,
-            description: 'Video ready',
             outputUrl: videoResult.videoUrl,
             updatedAt: Date.now(),
           };
         }));
 
         try {
+          handleFalPhaseUpdate({
+            phase: 'downloading',
+            message: 'Downloading generated video...',
+            requestId: videoResult.requestId,
+          });
           const videoBlob = await fetchGeneratedVideoBlob(videoResult.videoUrl, `${jobModelLabel} result`);
           const fileType = videoBlob.type || 'video/mp4';
           const extension = fileType.split('/')[1]?.split(';')[0] || 'mp4';
@@ -2097,25 +2187,54 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...prev,
             images: [...prev.images, newVideo],
           }));
-          setSelectedImageIds([newVideo.id]);
-          setSelectedNoteIds([]);
-          setReferenceImageIds([]);
-          setReferenceVideoIds([]);
-          setReferenceAudioIds([]);
-          setElementImageIds([]);
-          setTool(Tool.FREE_SELECTION);
-
-          setToastMessage('Video added to canvas');
+          setFalJobs(prev => prev.map(job => {
+            if (job.id !== falJobId) {
+              return job;
+            }
+            if (job.status === 'FAILED') {
+              return job;
+            }
+            return {
+              ...job,
+              status: 'COMPLETED',
+              phase: 'completed',
+              phaseMessage: 'Video ready',
+              description: 'Video ready',
+              updatedAt: Date.now(),
+            };
+          }));
+          onGenerationPlaced?.({ mediaIds: [newVideo.id], mediaType: 'video', modelLabel: jobModelLabel });
           // Let autosave know a generation completed successfully.
           onGenerationComplete?.();
         } catch (loadErr) {
           console.error('Failed to load generated video into canvas', loadErr);
+          setFalJobs(prev => prev.map(job => {
+            if (job.id !== falJobId) {
+              return job;
+            }
+            if (job.status === 'FAILED') {
+              return job;
+            }
+            return {
+              ...job,
+              status: 'COMPLETED',
+              phase: 'completed',
+              phaseMessage: 'Video ready',
+              description: 'Video ready',
+              updatedAt: Date.now(),
+            };
+          }));
           setToastMessage('Video ready! Open from the Fal Queue panel.');
+          setTimeout(() => setToastMessage(null), 2000);
         }
-        setTimeout(() => setToastMessage(null), 2000);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'An unknown error occurred.';
-        const userFacingMessage = buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE;
+        const errorPhase = getFalErrorPhase(err);
+        const errorRequestId = getFalErrorRequestId(err);
+        const userFacingMessage = buildFalDisplayError(message, undefined, {
+          phase: errorPhase,
+          hasRequestId: Boolean(errorRequestId),
+        }) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE;
 
         if (jobQueued) {
           setFalJobs(prev => prev.map(job => {
@@ -2125,6 +2244,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             return {
               ...job,
               status: 'FAILED',
+              phase: 'failed',
+              phaseMessage: errorPhase === 'uploading' ? 'Upload failed' : 'Generation failed',
               error: userFacingMessage,
               updatedAt: Date.now(),
             };
@@ -2144,7 +2265,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
     const shouldValidateFalOptions = usingFal
-      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel); // Include Grok validation.
+      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun); // Include image-count models.
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImagesForRun) ||
@@ -2187,6 +2308,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const jobPromptDescription = usingFal && isUpscaleModel
       ? `${jobModelLabel} (${upscaleDetails})`
       : trimmedPrompt;
+    const handleFalPhaseUpdate = (update: FalPhaseUpdate) => {
+      if (!falJobId) {
+        return;
+      }
+      setFalJobs(prev => prev.map(job => (
+        job.id === falJobId ? applyFalPhaseUpdateToJob(job, update) : job
+      )));
+    }; // Reflect service phase changes in the queue row.
 
     if (usingFal && falJobId) {
       const newJob: FalQueueJob = {
@@ -2196,7 +2325,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
         modelLabel: jobModelLabel,
         provider: 'fal',
         status: 'IN_QUEUE',
+        phase: 'submitting',
+        phaseMessage: 'Preparing request...',
         logs: [],
+        phaseStartedAt: Date.now(),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -2218,7 +2350,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setError(null);
 
     if (rawFalImageSizeSelection === 'placeholder' && !falOptionsOverride.imageSizeSelection) {
-      setFalImageSizeSelection(isSeedreamV5LiteModelId(falModelIdForRun) ? 'auto_2K' : 'default');
+      setFalImageSizeSelection(isSeedreamV5LiteModelId(falModelIdForRun) || isSeedreamV5ProModelId(falModelIdForRun) ? 'auto_2K' : 'default');
     }
     if (rawFalAspectRatioSelection === 'placeholder' && !falOptionsOverride.aspectRatioSelection) {
       setFalAspectRatioSelection(isGrokImagineModel ? '1:1' : 'default'); // Grok uses 1:1 default.
@@ -2227,7 +2359,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     let referenceIdsUsed: string[] = [];
 
     try {
-      let generationResult: { imageBase64: string; imagesBase64: string[]; imageDataUrls?: string[]; text: string; requestId?: string };
+      let generationResult: FalImageGenerationResult;
       let placementOrigin = { x: 100, y: 100 };
       let sourceImageForAPI: {
         element: HTMLImageElement;
@@ -2290,6 +2422,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
 
           const falResult = await generateFalImage(trimmedPrompt, {
+            jobId: falJobId,
+            onPhaseUpdate: handleFalPhaseUpdate,
             onQueueUpdate: (update) => {
               setFalJobs(prev => prev.map(job => {
                 if (job.id !== falJobId) {
@@ -2334,6 +2468,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             return {
               ...job,
               status: 'COMPLETED',
+              phase: 'completed',
+              phaseMessage: 'Image ready',
               requestId: falResult.requestId || job.requestId,
               description: falResult.text,
               updatedAt: Date.now(),
@@ -2385,13 +2521,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 sourceImageForAPI.element,
                 falScaleFactorForRun,
                 falNoiseScaleForRun,
-                { onQueueUpdate },
+                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate },
               )
               : await upscaleFalCrystalImage(
                 sourceImageForAPI.element,
                 falScaleFactorForRun,
                 falCreativityForRun,
-                { onQueueUpdate },
+                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate },
               );
 
             generationResult = falUpscaleResult;
@@ -2406,6 +2542,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
               return {
                 ...job,
                 status: 'COMPLETED',
+                phase: 'completed',
+                phaseMessage: 'Image ready',
                 requestId: falUpscaleResult.requestId || job.requestId,
                 description: falUpscaleResult.text,
                 updatedAt: Date.now(),
@@ -2445,6 +2583,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
               imageDimensions: editImageDimensions,
               referenceImages: editReferenceImages,
             }, {
+              jobId: falJobId,
+              onPhaseUpdate: handleFalPhaseUpdate,
               modelId: falModelIdForRun,
               ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
               ...(normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
@@ -2478,6 +2618,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
               return {
                 ...job,
                 status: 'COMPLETED',
+                phase: 'completed',
+                phaseMessage: 'Image ready',
                 requestId: falEditResult.requestId || job.requestId,
                 description: falEditResult.text,
                 updatedAt: Date.now(),
@@ -2607,13 +2749,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
           images: [...prev.images, ...newImages],
         }));
         if (newImages.length > 0) {
-          setSelectedImageIds([newImages[newImages.length - 1].id]);
+          onGenerationPlaced?.({
+            mediaIds: newImages.map(image => image.id),
+            mediaType: 'image',
+            modelLabel: generationModelLabel,
+          });
         }
-        setSelectedNoteIds([]);
-        setReferenceImageIds([]);
-        setTool(Tool.FREE_SELECTION);
-        setToastMessage('Generation complete');
-        setTimeout(() => setToastMessage(null), 2000);
       };
 
       await addGeneratedImages();
@@ -2621,13 +2762,25 @@ export const useGeneration = (args: UseGenerationArgs) => {
       onGenerationComplete?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An unknown error occurred.';
+      const errorPhase = getFalErrorPhase(err);
+      const errorRequestId = getFalErrorRequestId(err);
       const userFacingMessage = usingFal
-        ? buildFalDisplayError(message) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE
+        ? buildFalDisplayError(message, undefined, {
+          phase: errorPhase,
+          hasRequestId: Boolean(errorRequestId),
+        }) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE
         : message;
       if (usingFal) {
         setFalJobs(prev => prev.map(job => {
           if (job.id === falJobId) {
-            return { ...job, status: 'FAILED', error: userFacingMessage, updatedAt: Date.now() };
+            return {
+              ...job,
+              status: 'FAILED',
+              phase: 'failed',
+              phaseMessage: errorPhase === 'uploading' ? 'Upload failed' : 'Generation failed',
+              error: userFacingMessage,
+              updatedAt: Date.now(),
+            };
           }
           return job;
         }));
@@ -2737,16 +2890,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setIsLoading,
     setFalJobs,
     setState,
-    setSelectedImageIds,
-    setSelectedNoteIds,
-    setReferenceImageIds,
-    setReferenceVideoIds,
-    setReferenceAudioIds,
-    setElementImageIds,
-    setVideoLastFrameImageId,
     setToastMessage,
-    setTool,
     onGenerationComplete,
+    onGenerationPlaced,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   ]);

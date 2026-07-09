@@ -1,4 +1,5 @@
-export type { FalQueueUpdate } from './fal/types'; // Re-export queue update type.
+export type { FalImageGenerationResult, FalPhaseUpdate, FalQueueUpdate } from './fal/types'; // Re-export Fal service types.
+export { getFalErrorPhase, getFalErrorRequestId } from './fal/errors'; // Re-export phase error helpers.
 
 export {
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
@@ -26,6 +27,8 @@ export {
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
+  SEEDREAM_V5_PRO_MODEL_ID,
+  SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
 } from './fal/modelIds'; // Re-export model identifiers.
 
 export { uploadVideoToFal } from './fal/media'; // Re-export storage upload helper.

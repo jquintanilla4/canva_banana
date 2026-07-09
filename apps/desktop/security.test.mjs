@@ -6,7 +6,15 @@ describe('desktop security helpers', () => {
     const env = { ELECTRON_RENDERER_URL: 'https://renderer.example.test' };
 
     expect(getDevRendererUrl(env, true)).toBeUndefined();
-    expect(getDevRendererUrl(env, false)).toBe('https://renderer.example.test');
+  });
+
+  it('allows only local dev renderer overrides in unpackaged builds', () => {
+    expect(getDevRendererUrl({ ELECTRON_RENDERER_URL: 'http://localhost:3000' }, false)).toBe('http://localhost:3000');
+    expect(getDevRendererUrl({ ELECTRON_RENDERER_URL: 'http://127.0.0.1:3000' }, false)).toBe('http://127.0.0.1:3000');
+    expect(getDevRendererUrl({ ELECTRON_RENDERER_URL: 'http://[::1]:3000' }, false)).toBe('http://[::1]:3000');
+    expect(getDevRendererUrl({ ELECTRON_RENDERER_URL: 'file:///tmp/canva-banana/index.html' }, false)).toBeUndefined();
+    expect(getDevRendererUrl({ ELECTRON_RENDERER_URL: 'https://renderer.example.test' }, false)).toBeUndefined();
+    expect(getDevRendererUrl({ ELECTRON_RENDERER_URL: 'notaurl' }, false)).toBeUndefined();
   });
 
   it('allows only audio media permission requests', () => {

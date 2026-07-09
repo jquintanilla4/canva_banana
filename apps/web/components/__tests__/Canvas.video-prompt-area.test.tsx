@@ -351,6 +351,7 @@ describe('Canvas video prompt area tool', () => {
               acceptedImageIds: [],
               acceptedVideoIds: [],
               acceptedAudioIds: [],
+              elementImageIds: [],
               ignoredMediaIds: [],
               orderLabels: {},
             },
@@ -414,6 +415,7 @@ describe('Canvas video prompt area tool', () => {
               acceptedImageIds: [],
               acceptedVideoIds: [],
               acceptedAudioIds: [],
+              elementImageIds: [],
               ignoredMediaIds: [],
               orderLabels: {},
             },
@@ -855,7 +857,7 @@ describe('Canvas video prompt area tool', () => {
 
     render(<Harness />);
 
-    const swatchButton = screen.getByTitle('Video Prompt Area Border Color');
+    const swatchButton = screen.getByRole('button', { name: 'Video Prompt Area Border Color' });
     const swatch = swatchButton.querySelector('span') as HTMLSpanElement | null;
     expect(swatch).not.toBeNull();
     expect(window.getComputedStyle(swatch as HTMLSpanElement).backgroundColor).toBe('rgb(209, 213, 219)');
@@ -917,6 +919,7 @@ describe('Canvas video prompt area tool', () => {
             acceptedImageIds: ['image-1'],
             acceptedVideoIds: [],
             acceptedAudioIds: [],
+            elementImageIds: [],
             ignoredMediaIds: [],
             orderLabels: { 'image-1': '@Image1' },
           },
@@ -1085,6 +1088,7 @@ describe('Canvas video prompt area tool', () => {
                 acceptedImageIds: ['image-1'],
                 acceptedVideoIds: [],
                 acceptedAudioIds: [],
+                elementImageIds: [],
                 ignoredMediaIds: [],
                 orderLabels: { 'image-1': '@Image1' },
               },
@@ -1259,6 +1263,7 @@ describe('Canvas video prompt area tool', () => {
                   acceptedImageIds: ['image-1'],
                   acceptedVideoIds: [],
                   acceptedAudioIds: [],
+                  elementImageIds: [],
                   ignoredMediaIds: [],
                   orderLabels: { 'image-1': '@Image1' },
                 },
@@ -1331,6 +1336,7 @@ describe('Canvas video prompt area tool', () => {
             acceptedImageIds: [],
             acceptedVideoIds: [],
             acceptedAudioIds: [],
+            elementImageIds: [],
             ignoredMediaIds: [],
             orderLabels: {},
           },
@@ -1457,6 +1463,7 @@ describe('Canvas video prompt area tool', () => {
             acceptedImageIds: ['image-1'],
             acceptedVideoIds: [],
             acceptedAudioIds: [],
+            elementImageIds: [],
             ignoredMediaIds: [],
             orderLabels: { 'image-1': '@Image1' },
           },
@@ -1590,6 +1597,7 @@ describe('Canvas video prompt area tool', () => {
             acceptedImageIds: ['image-1'],
             acceptedVideoIds: [],
             acceptedAudioIds: [],
+            elementImageIds: [],
             ignoredMediaIds: [],
             orderLabels: { 'image-1': '@Image1' },
           },

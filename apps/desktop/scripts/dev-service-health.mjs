@@ -25,6 +25,8 @@ export {
 
 const isRecord = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value); // JSON object guard.
 const DEV_SERVICE_HEALTH_TOKEN_BYTES = 32; // Keep generated tokens high entropy.
+const DEV_SERVICE_HEALTH_TOKEN_DIR_MODE = 0o700; // Allow only this user into the token store.
+const DEV_SERVICE_HEALTH_TOKEN_FILE_MODE = 0o600; // Allow only this user to read the token.
 const DEV_SERVICE_HEALTH_TOKEN_STORE_DIR = join(homedir(), 'Library', 'Application Support', 'Canva Banana', 'dev-service-health'); // Per-user app state.
 
 const getWorkspaceTokenFilePath = (rootDir, tokenStoreDir) => {
@@ -32,8 +34,16 @@ const getWorkspaceTokenFilePath = (rootDir, tokenStoreDir) => {
   return join(tokenStoreDir, `${workspaceHash}.token`);
 };
 
+const ensurePrivateMode = (path, stats, expectedMode) => {
+  const currentMode = stats.mode & 0o777; // Compare only permission bits.
+  if (currentMode === expectedMode) {
+    return; // Avoid no-op chmod failures on restricted macOS locations.
+  }
+  chmodSync(path, expectedMode); // Tighten permissions when they drift.
+};
+
 const ensurePrivateTokenStoreDir = (tokenStoreDir) => {
-  mkdirSync(tokenStoreDir, { recursive: true, mode: 0o700 });
+  mkdirSync(tokenStoreDir, { recursive: true, mode: DEV_SERVICE_HEALTH_TOKEN_DIR_MODE });
   const stats = lstatSync(tokenStoreDir);
   if (!stats.isDirectory()) {
     throw new Error(`Dev health token store is not a directory: ${tokenStoreDir}`);
@@ -41,7 +51,7 @@ const ensurePrivateTokenStoreDir = (tokenStoreDir) => {
   if (typeof process.getuid === 'function' && stats.uid !== process.getuid()) {
     throw new Error(`Dev health token store is owned by another user: ${tokenStoreDir}`);
   }
-  chmodSync(tokenStoreDir, 0o700); // Keep other local users out of the token directory.
+  ensurePrivateMode(tokenStoreDir, stats, DEV_SERVICE_HEALTH_TOKEN_DIR_MODE);
 };
 
 const readStoredToken = (tokenPath) => {
@@ -55,7 +65,7 @@ const readStoredToken = (tokenPath) => {
   if (typeof process.getuid === 'function' && stats.uid !== process.getuid()) {
     throw new Error(`Dev health token file is owned by another user: ${tokenPath}`);
   }
-  chmodSync(tokenPath, 0o600); // Keep existing token files private after upgrades.
+  ensurePrivateMode(tokenPath, stats, DEV_SERVICE_HEALTH_TOKEN_FILE_MODE);
   const cachedToken = readFileSync(tokenPath, 'utf8').trim();
   return cachedToken || null;
 };
@@ -63,7 +73,7 @@ const readStoredToken = (tokenPath) => {
 const writeStoredTokenAtomic = (tokenPath, token) => {
   let fileDescriptor;
   try {
-    fileDescriptor = openSync(tokenPath, 'wx', 0o600);
+    fileDescriptor = openSync(tokenPath, 'wx', DEV_SERVICE_HEALTH_TOKEN_FILE_MODE);
     writeFileSync(fileDescriptor, `${token}\n`);
     return token;
   } finally {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertPackagedPythonBackendTargetArch,
   assertSingleConcreteArch,
   expectedFileArchitectureForTarget,
   getFlagValue,
@@ -29,6 +30,14 @@ describe('mac package target helpers', () => {
     expect(() => assertSingleConcreteArch('all')).toThrow('requires one concrete architecture');
     expect(() => assertSingleConcreteArch('x64,arm64')).toThrow('requires one concrete architecture');
     expect(() => assertSingleConcreteArch('arm64')).not.toThrow();
+  });
+
+  it('rejects macOS package targets that cannot match the packaged Python backend', () => {
+    expect(() => assertPackagedPythonBackendTargetArch('arm64', 'darwin', 'arm64')).not.toThrow();
+    expect(() => assertPackagedPythonBackendTargetArch('x64', 'linux', 'arm64')).not.toThrow();
+    expect(() => assertPackagedPythonBackendTargetArch('x64', 'darwin', 'arm64')).toThrow('does not match host Python backend architecture');
+    expect(() => assertPackagedPythonBackendTargetArch('universal', 'darwin', 'arm64')).toThrow('requires one concrete architecture');
+    expect(() => assertPackagedPythonBackendTargetArch('all', 'darwin', 'arm64')).toThrow('requires one concrete architecture');
   });
 
   it('builds package output paths and file architecture expectations', () => {

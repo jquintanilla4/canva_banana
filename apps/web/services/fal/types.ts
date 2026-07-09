@@ -1,4 +1,5 @@
 import type {
+  FalJobPhase,
   Tool,
   Path,
   ImageDimensions,
@@ -40,6 +41,36 @@ export interface FalQueueUpdate {
   [key: string]: unknown; // Allow extra provider fields.
 } // Normalized Fal queue update event.
 
+export interface FalPhaseUpdate {
+  phase: FalJobPhase; // Current phase in the Fal flow.
+  message?: string; // Short detail suitable for queue rows.
+  requestId?: string; // Fal request id when available.
+  durationMs?: number; // Completed phase duration in milliseconds.
+}
+
+export interface FalPhaseOptions {
+  jobId?: string; // UI queue job id for debug correlation.
+  onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase changes.
+}
+
+export interface FalGeneratedImageMetadata {
+  url: string; // Provider image URL or data URI.
+  contentType?: string; // Returned MIME type when available.
+  fileName?: string; // Provider file name when available.
+  fileSize?: number; // File size in bytes when available.
+  width?: number; // Natural output width in pixels.
+  height?: number; // Natural output height in pixels.
+} // Provider image metadata.
+
+export interface FalImageGenerationResult {
+  imageBase64: string; // Primary image payload.
+  imagesBase64: string[]; // All image payloads.
+  imageDataUrls?: string[]; // Inline image URLs preserving MIME type.
+  imagesMetadata?: FalGeneratedImageMetadata[]; // Provider dimensions and file details.
+  text: string; // Optional provider description or revised prompt.
+  requestId?: string; // Fal request id when available.
+} // Shared Fal image result.
+
 export interface GenerateImageEditParams {
   prompt: string;
   image: HTMLImageElement;
@@ -51,6 +82,8 @@ export interface GenerateImageEditParams {
 
 export interface GenerateImageEditOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void; // Hook for queue updates.
+  onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase updates.
+  jobId?: string; // UI queue job id for debug correlation.
   modelId?: string;
   imageSize?: FalImageSizeOption;
   aspectRatio?: FalAspectRatioOption;
@@ -64,6 +97,8 @@ export interface GenerateImageEditOptions {
 
 export interface GenerateImageOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
+  onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase updates.
+  jobId?: string; // UI queue job id for debug correlation.
   modelId?: string;
   aspectRatio?: FalAspectRatioOption;
   numImages?: number;
@@ -85,10 +120,14 @@ export interface GenerateImageOptions {
 
 export interface UpscaleImageOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
+  onPhaseUpdate?: (update: FalPhaseUpdate) => void;
+  jobId?: string;
 } // Optional controls for upscaling.
 
 export interface GenerateVideoOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
+  onPhaseUpdate?: (update: FalPhaseUpdate) => void;
+  jobId?: string;
   promptOptimizer?: boolean;
   modelId?: string;
   duration?: FalVideoDuration | KlingO3DurationSelectionValue;
@@ -161,4 +200,6 @@ export interface GenerateVideoOptions {
 
 export interface RemoveBackgroundOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
+  onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase updates.
+  jobId?: string; // UI queue job id for debug correlation.
 } // Optional controls for background removal.

@@ -19,6 +19,8 @@ const SERVER_BUSY_KEYWORDS = [
   'queue is full',
 ];
 const TIMEOUT_KEYWORDS = [
+  '408',
+  'request timeout',
   'timeout',
   'timed out',
   'time out',
@@ -59,6 +61,13 @@ const hasKeywordMatch = (message: string, keywords: string[]): boolean => {
   return keywords.some(keyword => normalized.includes(keyword));
 };
 
+export type FalDisplayErrorPhase = 'uploading' | 'submitting' | 'queued' | 'processing' | 'downloading' | 'completed' | 'failed'; // Error phase labels.
+
+interface FalDisplayErrorOptions {
+  phase?: FalDisplayErrorPhase; // Phase that produced the error.
+  hasRequestId?: boolean; // True once Fal has accepted a queued request.
+}
+
 const formatFileSizeLimit = (bytes: number): string => {
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return '';
@@ -93,7 +102,11 @@ export const getFalFileSizeErrorMessage = (message?: string, logMessages?: strin
   return undefined;
 };
 
-export const buildFalDisplayError = (message?: string, logMessages?: string[]): string | undefined => {
+export const buildFalDisplayError = (
+  message?: string,
+  logMessages?: string[],
+  options: FalDisplayErrorOptions = {},
+): string | undefined => {
   const candidates = [
     ...(typeof message === 'string' ? [message] : []),
     ...(logMessages ?? []),
@@ -108,11 +121,22 @@ export const buildFalDisplayError = (message?: string, logMessages?: string[]): 
     return 'The generation servers are busy on the provider side. Please try again shortly.';
   }
 
-  if (candidates.some(entry => hasKeywordMatch(entry, TIMEOUT_KEYWORDS))) {
+  const hasTimeout = candidates.some(entry => hasKeywordMatch(entry, TIMEOUT_KEYWORDS));
+  const hasNetworkError = candidates.some(entry => hasKeywordMatch(entry, NETWORK_ERROR_KEYWORDS));
+
+  if (options.phase === 'uploading' && (hasTimeout || hasNetworkError)) {
+    return 'Upload to Fal storage is taking too long. Check your upload connection or try smaller media.';
+  }
+
+  if (options.phase === 'submitting' && hasTimeout && !options.hasRequestId) {
+    return 'Fal did not return queue status before timing out. Please try again in a moment.';
+  }
+
+  if (hasTimeout) {
     return 'The generation server is responding slowly on the provider side. Please try again in a moment.';
   }
 
-  if (candidates.some(entry => hasKeywordMatch(entry, NETWORK_ERROR_KEYWORDS))) {
+  if (hasNetworkError) {
     return 'We could not reach the generation servers (network/provider). Please check your connection and try again.';
   }
 

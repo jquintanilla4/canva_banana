@@ -68,6 +68,7 @@ describe('falService (grok imagine edit)', () => {
     }));
     expect(result.imageBase64).toBe('Zm9v');
     expect(result.imagesBase64).toEqual(['Zm9v']);
+    expect(result.imageDataUrls).toEqual(['data:image/png;base64,Zm9v']);
     expect(result.text).toBe('rp');
   });
 });

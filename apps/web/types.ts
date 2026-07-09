@@ -51,9 +51,13 @@ export type FalImageSizePreset =
   | 'portrait_16_9'
   | 'landscape_4_3'
   | 'landscape_16_9'
+  | '2048x2048'
+  | '2048x1152'
+  | '1152x2048'
   | '2560x1440'
   | '1440x2560'
   | 'auto'
+  | 'auto_1K'
   | 'auto_2K'
   | 'auto_3K'
   | 'auto_4K';
@@ -210,6 +214,12 @@ export interface GenerationInputs {
   jimengOptions?: GenerationJimengOptions;
 }
 
+export interface GenerationPlacedPayload {
+  mediaIds: string[];
+  mediaType: 'image' | 'video';
+  modelLabel?: string;
+}
+
 export type VideoPromptAreaMediaRole =
   | 'primary'
   | 'reference'
@@ -321,6 +331,7 @@ export interface VideoModelCapabilityProfile {
 }
 
 export type FalJobStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+export type FalJobPhase = 'uploading' | 'submitting' | 'queued' | 'processing' | 'downloading' | 'completed' | 'failed'; // UI phase label for Fal jobs.
 
 export interface FalQueueJob {
   id: string;
@@ -329,8 +340,12 @@ export interface FalQueueJob {
   modelLabel: string;
   provider: GenerationProviderId;
   status: FalJobStatus;
+  phase?: FalJobPhase; // Current user-visible Fal phase.
+  phaseMessage?: string; // Short phase detail for the queue row.
   requestId?: string;
   logs: string[];
+  phaseStartedAt?: number; // Timestamp when the current phase began.
+  lastPhaseDurationMs?: number; // Duration of the previous phase in milliseconds.
   description?: string;
   error?: string;
   createdAt: number;

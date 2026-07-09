@@ -115,6 +115,7 @@ describe('falService (nano banana 2)', () => {
     }));
     expect(result.imageBase64).toBe('YmFy');
     expect(result.imagesBase64).toEqual(['YmFy']);
+    expect(result.imageDataUrls).toEqual(['data:image/png;base64,YmFy']);
   });
 
   it('reverses Nano Banana 2 edit uploads so prompt image slots match selection order', async () => {

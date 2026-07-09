@@ -29,7 +29,6 @@ dev-backends:
 	@command -v npm >/dev/null 2>&1 || { echo "Missing npm. Install Node.js/npm first."; exit 1; }; \
 	command -v uv >/dev/null 2>&1 || { echo "Missing uv. Install uv first."; exit 1; }; \
 	test -d node_modules || { echo "Missing node_modules. Run npm install."; exit 1; }; \
-	test -d apps/python-backend/backend/.venv || { echo "Missing apps/python-backend/backend/.venv. Run npm -w @canva-banana/python-backend run sync."; exit 1; }; \
 	backend_pid=''; \
 	secure_backend_pid=''; \
 	cleanup() { \

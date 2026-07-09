@@ -42,6 +42,19 @@ export const assertSingleConcreteArch = (targetArch) => { // Keeps direct verifi
   }
 };
 
+export const assertPackagedPythonBackendTargetArch = (targetArch, targetPlatform, hostArch) => {
+  if (targetPlatform !== 'darwin') {
+    return; // The packaged Python backend is only bundled into macOS app output here.
+  }
+  const concreteArchs = resolveConcreteTargetArchs(targetArch, targetPlatform);
+  if (concreteArchs.length !== 1 || concreteArchs[0] === 'universal') {
+    throw new Error('macOS packaging with the Python backend requires one concrete architecture matching the host.');
+  }
+  if (concreteArchs[0] !== hostArch) {
+    throw new Error(`macOS packaging target "${concreteArchs[0]}" does not match host Python backend architecture "${hostArch}".`);
+  }
+}; // Prevent shipping a PyInstaller backend built for the wrong CPU.
+
 export const getMacAppPath = (repoRoot, targetPlatform, targetArch) => (
   resolve(repoRoot, `out/The Institute-${targetPlatform}-${targetArch}/The Institute.app`)
 );

@@ -107,6 +107,7 @@ import {
   VEO31_EXTEND_RESOLUTION_OPTIONS,
   VEO31_VARIANT_OPTIONS,
   isSeedreamV5LiteModelId,
+  isSeedreamV5ProModelId,
   isRecraftV4ProModel,
   RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS,
   RECRAFT_V4_PRO_MAX_COLORS,
@@ -1547,12 +1548,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const isGrokImagineModel = !isVideoMode && falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
   const isSeedreamV5Lite = isSeedreamV5LiteModelId(falModelId); // Seedream 5 Lite uses stricter controls.
+  const isSeedreamV5Pro = isSeedreamV5ProModelId(falModelId); // Seedream 5 Pro uses Pro controls.
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel; // Show size picker for all Seedream models.
   if (shouldShowSeedreamImageSizeControl) {
     const seedreamImageSizeOptions = getSeedreamImageSizeOptions(falModelId);
     controls.push({
       id: 'fal-image-size-select',
-      prefixLabel: isSeedreamV5Lite ? 'Image Size' : undefined,
+      prefixLabel: isSeedreamV5Pro ? 'Size' : isSeedreamV5Lite ? 'Image Size' : undefined,
       ariaLabel: 'Select Seedream image size',
       options: seedreamImageSizeOptions.map(option => ({ value: option.value, label: option.label })),
       value: falImageSizeSelection,
@@ -1646,7 +1648,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
     controls.push({
       id: 'fal-num-images-select',
-      prefixLabel: isSeedreamV5Lite ? 'Images' : (isGrokImagineModel ? 'Num' : undefined), // Seedream 5 Lite matches Infinitalk-style prefixed controls.
+      prefixLabel: isSeedreamV5Lite || isSeedreamV5Pro ? 'Images' : (isGrokImagineModel ? 'Num' : undefined), // Seedream 5 uses prefixed controls.
       ariaLabel: 'Select number of images to generate',
       options: falNumImageOptions.map(option => ({ value: `${option}`, label: `${option}` })),
       value: falNumImages.toString(),
