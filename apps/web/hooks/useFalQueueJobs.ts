@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { FalQueueJob } from '../types';
 
+export const FAL_QUEUE_COMPLETED_AUTO_DISMISS_MS = 10_000; // Leave completed queue rows visible long enough to notice.
+
 type UseFalQueueJobsResult = {
   falJobs: FalQueueJob[];
   setFalJobs: Dispatch<SetStateAction<FalQueueJob[]>>;
@@ -42,7 +44,7 @@ export function useFalQueueJobs(): UseFalQueueJobsResult {
       const timeoutId = window.setTimeout(() => {
         timeoutMap.delete(job.id);
         setFalJobs(prev => prev.filter(j => j.id !== job.id));
-      }, 1000);
+      }, FAL_QUEUE_COMPLETED_AUTO_DISMISS_MS);
       timeoutMap.set(job.id, timeoutId);
     });
   }, [falJobs]);
@@ -58,4 +60,3 @@ export function useFalQueueJobs(): UseFalQueueJobsResult {
 
   return { falJobs, setFalJobs, dismissFalJob };
 }
-

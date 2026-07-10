@@ -95,23 +95,74 @@ export type DesktopFileMenuState = {
 
 export type DesktopOpenSnapshotResult =
   | { canceled: true }
-  | { canceled: false; fileName: string; data: ArrayBuffer };
+  | { canceled: false; sourceId: string; fileName: string; size: number; type: string; mediaUrlBase?: string };
 
-export type DesktopSaveSnapshotPayload = {
+export type DesktopBeginSaveSnapshotPayload = {
   suggestedName: string;
-  data: ArrayBuffer;
 };
 
-export type DesktopSaveSnapshotResult =
+export type DesktopBeginSnapshotWriteResult =
   | { canceled: true }
-  | { canceled: false; fileName: string; autosaveId?: string };
+  | { canceled: false; writeId: string; fileName: string; autosaveId?: string };
 
-export type DesktopWriteSnapshotPayload = {
+export type DesktopSnapshotWriteSession = {
+  writeId: string;
+  fileName: string;
+  autosaveId?: string;
+};
+
+export type DesktopBeginAutosaveSnapshotPayload = {
   autosaveId: string;
+};
+
+export type DesktopBeginBackupSnapshotPayload = {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  fileName: string;
+  size: number;
+};
+
+export type DesktopSnapshotWritePayload = {
+  writeId: string;
   data: ArrayBuffer;
 };
 
-export type DesktopWriteSnapshotResult = {
+export type DesktopSnapshotWriteIdPayload = {
+  writeId: string;
+};
+
+export type DesktopSnapshotReadRangePayload = {
+  sourceId: string;
+  offset: number;
+  length: number;
+};
+
+export type DesktopSnapshotReadSource = {
+  sourceId: string;
+  fileName: string;
+  size: number;
+  type: string;
+  mediaUrlBase?: string; // New desktop sources build lazy media URLs without per-item IPC.
+};
+
+export type DesktopSnapshotMediaUrlPayload = {
+  sourceId: string;
+  offset: number;
+  length: number;
+  type: string;
+  fileName: string;
+};
+
+export type DesktopSnapshotBackupSummary = {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  fileName: string;
+  size: number;
+};
+
+export type DesktopSnapshotWriteResult = {
   saved: boolean;
 };
 
@@ -140,8 +191,19 @@ declare global {
         onCommand?: (callback: (command: DesktopFileMenuCommand) => void) => () => void;
         setState?: (state: DesktopFileMenuState) => Promise<unknown>;
         openSnapshotFile?: () => Promise<DesktopOpenSnapshotResult>;
-        saveSnapshotFile?: (payload: DesktopSaveSnapshotPayload) => Promise<DesktopSaveSnapshotResult>;
-        writeSnapshotFile?: (payload: DesktopWriteSnapshotPayload) => Promise<DesktopWriteSnapshotResult>;
+        beginSaveSnapshot?: (payload: DesktopBeginSaveSnapshotPayload) => Promise<DesktopBeginSnapshotWriteResult>;
+        beginAutosaveSnapshot?: (payload: DesktopBeginAutosaveSnapshotPayload) => Promise<DesktopSnapshotWriteSession>;
+        beginBackupSnapshot?: (payload: DesktopBeginBackupSnapshotPayload) => Promise<DesktopSnapshotWriteSession>;
+        writeSnapshotChunk?: (payload: DesktopSnapshotWritePayload) => Promise<{ written: number }>;
+        finishSnapshotWrite?: (payload: DesktopSnapshotWriteIdPayload) => Promise<DesktopSnapshotWriteResult>;
+        abortSnapshotWrite?: (payload: DesktopSnapshotWriteIdPayload) => Promise<{ aborted: boolean }>;
+        readSnapshotRange?: (payload: DesktopSnapshotReadRangePayload) => Promise<ArrayBuffer>;
+        getSnapshotMediaUrl?: (payload: DesktopSnapshotMediaUrlPayload) => Promise<string>;
+        retainSnapshotRead?: (payload: { sourceId: string }) => Promise<{ retained: boolean }>;
+        closeSnapshotRead?: (payload: { sourceId: string }) => Promise<{ closed: boolean }>;
+        listSnapshotBackups?: () => Promise<DesktopSnapshotBackupSummary[]>;
+        openBackupSnapshot?: (payload: { id: string }) => Promise<DesktopSnapshotReadSource>;
+        deleteBackupSnapshot?: (payload: { id: string }) => Promise<{ deleted: boolean }>;
       };
       chatHistory?: {
         load?: () => Promise<unknown>;

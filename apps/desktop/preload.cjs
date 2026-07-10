@@ -1,13 +1,26 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const { createSnapshotOperationBudget } = require('./snapshot-operation-budget.cjs');
 
 const openManageKeysChannel = 'canva-banana:open-manage-keys';
 const fileMenuCommandChannel = 'canva-banana:file-menu-command';
 const chatHistoryClearedChannel = 'canva-banana:chat-history-cleared';
-const maxSnapshotWriteBytes = 512 * 1024 * 1024; // Mirror main's snapshot write safety cap.
+const maxSnapshotChunkBytes = 16 * 1024 * 1024; // Keep each snapshot IPC message bounded.
+const maxSnapshotChunkOperations = 4; // Normal streams await one chunk while hostile bursts are rejected.
+const maxSnapshotChunkOperationBytes = maxSnapshotChunkBytes * 2; // Total snapshot size remains independent of concurrent IPC memory.
 const maxClipboardTextChars = 1_000_000; // Keep native clipboard IPC bounded to app-sized text.
 const arrayBufferByteLengthGetter = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')?.get; // Requires a real ArrayBuffer receiver.
 const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'byteLength')?.get; // Requires a real typed-array receiver.
 const dataViewByteLengthGetter = Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength')?.get; // Requires a real DataView receiver.
+const snapshotWriteOperationBudget = createSnapshotOperationBudget({
+  maxOperations: maxSnapshotChunkOperations,
+  maxBytes: maxSnapshotChunkOperationBytes,
+  errorMessage: 'Too many snapshot write chunks are already in progress.',
+});
+const snapshotReadOperationBudget = createSnapshotOperationBudget({
+  maxOperations: maxSnapshotChunkOperations,
+  maxBytes: maxSnapshotChunkOperationBytes,
+  errorMessage: 'Too many snapshot read ranges are already in progress.',
+});
 
 const normalizeBaseUrl = (value, fallback) => {
   const raw = typeof value === 'string' && value.trim() ? value.trim() : fallback;
@@ -55,7 +68,15 @@ const getSnapshotBinaryByteLength = (data) => {
   }
 };
 
-const assertSnapshotWritePayload = (payload) => {
+const assertNonEmptyString = (value, message) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(message);
+  }
+  return value;
+};
+
+const assertSnapshotChunkPayload = (payload) => {
+  assertNonEmptyString(payload?.writeId, 'Snapshot write session is invalid.');
   const data = payload?.data;
   const byteLength = getSnapshotBinaryByteLength(data);
   if (byteLength === null) {
@@ -64,10 +85,48 @@ const assertSnapshotWritePayload = (payload) => {
   if (!Number.isFinite(byteLength) || byteLength < 0) {
     throw new Error('Snapshot data size is invalid.');
   }
-  if (byteLength > maxSnapshotWriteBytes) {
-    throw new Error('Snapshot data is too large to write safely.');
+  if (byteLength > maxSnapshotChunkBytes) {
+    throw new Error('Snapshot data chunk is too large to write safely.');
   }
   return payload;
+};
+
+const assertSnapshotWriteIdPayload = (payload) => {
+  assertNonEmptyString(payload?.writeId, 'Snapshot write session is invalid.');
+  return payload;
+};
+
+const assertSnapshotReadRangePayload = (payload) => {
+  assertNonEmptyString(payload?.sourceId, 'Snapshot read source is invalid.');
+  if (!Number.isFinite(payload?.offset) || payload.offset < 0 || !Number.isFinite(payload?.length) || payload.length < 0) {
+    throw new Error('Snapshot byte range is invalid.');
+  }
+  if (payload.length > maxSnapshotChunkBytes) {
+    throw new Error('Snapshot read range is too large.');
+  }
+  return payload;
+};
+
+const assertSnapshotMediaUrlPayload = (payload) => {
+  assertNonEmptyString(payload?.sourceId, 'Snapshot read source is invalid.');
+  if (!Number.isSafeInteger(payload?.offset) || payload.offset < 0 || !Number.isSafeInteger(payload?.length) || payload.length <= 0) {
+    throw new Error('Snapshot media range is invalid.');
+  }
+  return payload;
+};
+
+const assertSnapshotReadSourcePayload = (payload) => {
+  assertNonEmptyString(payload?.sourceId, 'Snapshot read source is invalid.');
+  return payload;
+};
+
+const invokeWithSnapshotBudget = async (budget, bytes, channel, payload) => {
+  const releaseOperation = budget.reserve(bytes); // Context isolation stops renderer code from bypassing this IPC gate.
+  try {
+    return await ipcRenderer.invoke(channel, payload);
+  } finally {
+    releaseOperation();
+  }
 };
 
 const assertClipboardText = (text) => {
@@ -119,8 +178,25 @@ contextBridge.exposeInMainWorld('canvaBananaDesktop', {
     onCommand: callback => subscribeToMainChannel(fileMenuCommandChannel, callback),
     setState: state => ipcRenderer.invoke('canva-banana:file-menu-set-state', state), // Sync checked/disabled native items.
     openSnapshotFile: () => ipcRenderer.invoke('canva-banana:file-menu-open-snapshot'), // Native picker keeps macOS menu commands reliable.
-    saveSnapshotFile: payload => ipcRenderer.invoke('canva-banana:file-menu-save-snapshot', assertSnapshotWritePayload(payload)), // Main owns filesystem writes.
-    writeSnapshotFile: payload => ipcRenderer.invoke('canva-banana:file-menu-write-snapshot', assertSnapshotWritePayload(payload)), // Main writes only previously exported paths.
+    beginSaveSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-save-snapshot', payload), // Main owns the save dialog and temp file.
+    beginAutosaveSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-autosave-snapshot', payload), // Main writes only remembered export paths.
+    beginBackupSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-backup-snapshot', payload), // Main stores desktop backups on disk.
+    writeSnapshotChunk: payload => {
+      const safePayload = assertSnapshotChunkPayload(payload);
+      return invokeWithSnapshotBudget(snapshotWriteOperationBudget, getSnapshotBinaryByteLength(safePayload.data), 'canva-banana:file-menu-write-snapshot-chunk', safePayload);
+    }, // Renderer streams bounded chunks with concurrent backpressure.
+    finishSnapshotWrite: payload => ipcRenderer.invoke('canva-banana:file-menu-finish-snapshot-write', assertSnapshotWriteIdPayload(payload)), // Atomic rename happens in main.
+    abortSnapshotWrite: payload => ipcRenderer.invoke('canva-banana:file-menu-abort-snapshot-write', assertSnapshotWriteIdPayload(payload)), // Failed exports clean temp files.
+    readSnapshotRange: payload => {
+      const safePayload = assertSnapshotReadRangePayload(payload);
+      return invokeWithSnapshotBudget(snapshotReadOperationBudget, safePayload.length, 'canva-banana:file-menu-read-snapshot-range', safePayload);
+    }, // Imports read bounded ranges with concurrent backpressure.
+    getSnapshotMediaUrl: payload => ipcRenderer.invoke('canva-banana:file-menu-get-snapshot-media-url', assertSnapshotMediaUrlPayload(payload)), // Media elements stream through a scoped URL.
+    retainSnapshotRead: payload => ipcRenderer.invoke('canva-banana:file-menu-retain-snapshot-read', assertSnapshotReadSourcePayload(payload)), // Imported media keeps its read source.
+    closeSnapshotRead: payload => ipcRenderer.invoke('canva-banana:file-menu-close-snapshot-read', assertSnapshotReadSourcePayload(payload)), // Release main-side read metadata.
+    listSnapshotBackups: () => ipcRenderer.invoke('canva-banana:file-menu-list-snapshot-backups'), // Desktop backups live outside IndexedDB.
+    openBackupSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-open-backup-snapshot', payload), // Restore a saved backup as a read source.
+    deleteBackupSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-delete-backup-snapshot', payload), // Remove desktop backup files from disk.
   },
   chatHistory: {
     load: () => ipcRenderer.invoke('canva-banana:load-chat-history'), // App-level prompt chat history persists in main.

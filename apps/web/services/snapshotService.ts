@@ -19,6 +19,7 @@ import {
   isFalModelMode,
   isFalVideoModelId,
   isFalResolutionSelectionValue,
+  isFlux2MaxImageSizeSelectionValue,
   isGenerationProvider,
   isJimengSeedance2ModelVersion,
   isGptImage2QualitySelectionValue,
@@ -39,6 +40,8 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isWan27ImageAspectRatioSelectionValue,
+  isWan27ImageMaxImagesSelectionValue,
   isVeo31AspectRatioSelectionValue,
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
@@ -53,14 +56,17 @@ import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
 } from './modelConfig';
+import { mapWithConcurrency } from '../utils/mapWithConcurrency';
 import {
   dataUrlToFile,
   getMediaTypeFromFileType,
   getNaturalSize,
   loadMediaFromBlob,
   loadMediaFromDataUrl,
+  loadMediaFromUrl,
 } from './mediaService';
-import { generateWaveformImage, loadAudioFromBlob } from './audioService';
+import { generateWaveformImage, loadAudioFromBlob, loadAudioFromUrl } from './audioService';
+import { createSnapshotRangeCursor } from './snapshotRangeReader';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../utils/canvasColorOptions';
 
 const isVideoPromptAreaMediaRole = (value: unknown): value is CanvasVideoPromptArea['mediaRoles'][string] =>
@@ -87,6 +93,9 @@ export type SnapshotImageManifest = {
   isPlaying?: boolean;
   hasAudio?: boolean;
   currentPlaybackTime?: number;
+  audioDuration?: number;
+  fallbackForMediaType?: CanvasMediaType;
+  fallbackReason?: string;
 };
 
 export type SnapshotManifestV2 = {
@@ -170,10 +179,67 @@ export type SnapshotManifestV2 = {
   };
 };
 
+export type SnapshotMediaBlob = {
+  readonly size: number;
+  readonly type: string;
+  readonly name?: string;
+  readonly lastModified?: number;
+  readonly snapshotObjectUrl?: string;
+  slice: (start?: number, end?: number, contentType?: string) => SnapshotMediaBlob;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+  stream: () => ReadableStream<Uint8Array>;
+  text: () => Promise<string>;
+  readonly snapshotLeaseSource?: SnapshotSourceLeaseProvider;
+  withSourceLease?: <T>(operation: () => Promise<T>) => Promise<T>;
+};
+
+export type SnapshotSourceLease = () => Promise<void>;
+
+export interface SnapshotSourceLeaseProvider {
+  acquireLease: () => SnapshotSourceLease | Promise<SnapshotSourceLease>;
+}
+
 export type SnapshotBinary = {
   manifest: SnapshotManifestV2;
-  images: Array<{ manifest: SnapshotImageManifest; blob: Blob }>;
+  images: Array<{ manifest: SnapshotImageManifest; blob: SnapshotMediaBlob }>;
 };
+
+export type SnapshotBuildOptions = {
+  fallbackMediaIds?: ReadonlySet<string>;
+};
+
+export class SnapshotMediaReadError extends Error {
+  mediaId: string;
+  fileName: string;
+  mediaType?: CanvasMediaType;
+  cause: unknown;
+
+  constructor(manifest: SnapshotImageManifest, cause: unknown) {
+    super(`Snapshot media "${manifest.fileName || manifest.id}" could not be read.`);
+    this.name = 'SnapshotMediaReadError';
+    this.mediaId = manifest.id;
+    this.fileName = manifest.fileName;
+    this.mediaType = manifest.mediaType;
+    this.cause = cause;
+  }
+}
+
+export const isSnapshotMediaReadError = (error: unknown): error is SnapshotMediaReadError =>
+  error instanceof SnapshotMediaReadError;
+
+export interface SnapshotRangeSource {
+  fileName: string;
+  size: number;
+  type?: string;
+  maxMediaBytes?: number; // Range sources without media URLs keep a bounded renderer memory cap.
+  getMediaUrl?: (offset: number, length: number, type: string, fileName: string) => Promise<string>;
+  readRange: (offset: number, length: number) => Promise<ArrayBuffer>;
+  retain?: () => Promise<void>;
+  acquireLease?: () => SnapshotSourceLease | Promise<SnapshotSourceLease>;
+  close?: () => Promise<void>;
+}
+
+export type SnapshotByteSource = File | SnapshotRangeSource;
 
 export type SerializedCanvasImageV1 = {
   id: string;
@@ -284,6 +350,7 @@ export type RestoredSnapshotState = {
   videoPromptAreas: CanvasVideoPromptArea[];
   videoPromptBars: CanvasVideoPromptBar[];
   meta?: SerializedSnapshotV1['state']['meta'];
+  sourceRetention: 'required' | 'not-required'; // Lazy desktop binary media keeps its range source open.
 };
 
 export const DEFAULT_NOTE_BACKGROUND = '#1f2937';
@@ -291,6 +358,305 @@ export const DEFAULT_NOTE_BACKGROUND = '#1f2937';
 const SNAPSHOT_MAGIC = 'BANANA_SNAPSHOT_V2\n';
 const snapshotEncoder = new TextEncoder();
 const snapshotDecoder = new TextDecoder();
+const SNAPSHOT_MAX_JSON_SECTION_BYTES = 64 * 1024 * 1024; // Bounds one metadata JSON read.
+const SNAPSHOT_MAX_TOTAL_JSON_BYTES = 128 * 1024 * 1024; // Bounds all imported metadata JSON.
+const SNAPSHOT_MAX_LEGACY_JSON_BYTES = 512 * 1024 * 1024; // Matches the old non-binary import cap.
+const SNAPSHOT_MAX_RANGE_MEDIA_BYTES = 512 * 1024 * 1024; // Caps eager range sources only; desktop URL media must remain uncapped.
+const SNAPSHOT_MAX_AUDIO_WAVEFORM_BYTES = 64 * 1024 * 1024; // Decoding compressed audio can expand far beyond its file size.
+const SNAPSHOT_MAX_WAVEFORM_WIDTH = 4096; // Bounds canvas memory for crafted snapshot dimensions.
+const SNAPSHOT_MAX_WAVEFORM_HEIGHT = 1024; // Bounds canvas memory for crafted snapshot dimensions.
+const SNAPSHOT_MEDIA_READ_CHUNK_BYTES = 8 * 1024 * 1024; // Keeps large media imports off one huge buffer.
+const SNAPSHOT_METADATA_READ_AHEAD_BYTES = 64 * 1024; // Amortizes compact records without reading large media eagerly.
+const SNAPSHOT_READ_AHEAD_MAX_MEDIA_BYTES = 4 * 1024; // Large images and videos remain fully lazy.
+const SNAPSHOT_MIN_BINARY_IMAGE_RECORD_BYTES = 14; // Four length bytes, one metadata byte, eight size bytes, and one media byte.
+const SNAPSHOT_PARSE_YIELD_INTERVAL = 1_000; // Large valid manifests periodically return control to the browser.
+const SNAPSHOT_MEDIA_RESTORE_CONCURRENCY = 4; // Match the preload read budget while every valid media item waits its turn.
+const fallbackPngBytes = new Uint8Array([
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+  0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
+  0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 96, 0, 0, 0, 2,
+  0, 1, 226, 33, 188, 51, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66,
+  96, 130,
+]);
+
+class SnapshotRangeBlob implements SnapshotMediaBlob {
+  readonly size: number;
+  readonly type: string;
+  readonly name: string;
+  readonly lastModified: number;
+  readonly snapshotObjectUrl?: string;
+  readonly snapshotLeaseSource?: SnapshotSourceLeaseProvider;
+  private readonly source: Exclude<SnapshotByteSource, File>;
+  private readonly offset: number;
+
+  constructor(params: {
+    source: Exclude<SnapshotByteSource, File>;
+    offset: number;
+    length: number;
+    type: string;
+    name: string;
+    objectUrl?: string;
+  }) {
+    this.source = params.source;
+    this.offset = params.offset;
+    this.size = params.length;
+    this.type = params.type;
+    this.name = params.name;
+    this.lastModified = Date.now();
+    this.snapshotObjectUrl = params.objectUrl;
+    this.snapshotLeaseSource = params.source.acquireLease ? params.source as SnapshotSourceLeaseProvider : undefined; // Share one source lease across all media entries.
+  }
+
+  slice(start = 0, end = this.size, contentType = this.type): SnapshotMediaBlob {
+    const normalizedStart = Math.min(Math.max(0, start < 0 ? this.size + start : start), this.size);
+    const normalizedEnd = Math.min(Math.max(normalizedStart, end < 0 ? this.size + end : end), this.size);
+    return new SnapshotRangeBlob({
+      source: this.source,
+      offset: this.offset + normalizedStart,
+      length: normalizedEnd - normalizedStart,
+      type: contentType || this.type,
+      name: this.name,
+      objectUrl: undefined,
+    });
+  }
+
+  async withSourceLease<T>(operation: () => Promise<T>): Promise<T> {
+    const release = await this.source.acquireLease?.();
+    try {
+      return await operation();
+    } finally {
+      await release?.();
+    }
+  }
+
+  arrayBuffer(): Promise<ArrayBuffer> {
+    return this.withSourceLease(async () => {
+      const chunks: Uint8Array[] = [];
+      let totalBytes = 0;
+      for (let cursor = 0; cursor < this.size; cursor += SNAPSHOT_MEDIA_READ_CHUNK_BYTES) {
+        const chunkLength = Math.min(SNAPSHOT_MEDIA_READ_CHUNK_BYTES, this.size - cursor);
+        const chunk = await this.source.readRange(this.offset + cursor, chunkLength);
+        chunks.push(new Uint8Array(chunk));
+        totalBytes += chunk.byteLength;
+      }
+      const merged = new Uint8Array(totalBytes);
+      let mergeOffset = 0;
+      chunks.forEach(chunk => {
+        merged.set(chunk, mergeOffset);
+        mergeOffset += chunk.byteLength;
+      });
+      return merged.buffer;
+    });
+  }
+
+  stream(): ReadableStream<Uint8Array> {
+    let cursor = 0;
+    let released = false;
+    const releasePromise = Promise.resolve(this.source.acquireLease?.()); // Acquire before the first asynchronous range read.
+    const release = async () => {
+      if (released) return;
+      released = true;
+      const releaseLease = await releasePromise;
+      await releaseLease?.();
+    };
+    return new ReadableStream<Uint8Array>({
+      start: async () => {
+        await releasePromise;
+      },
+      pull: async (controller) => {
+        try {
+          if (cursor >= this.size) {
+            controller.close();
+            await release();
+            return;
+          }
+          const chunkLength = Math.min(SNAPSHOT_MEDIA_READ_CHUNK_BYTES, this.size - cursor);
+          const chunk = await this.source.readRange(this.offset + cursor, chunkLength);
+          cursor += chunkLength;
+          controller.enqueue(new Uint8Array(chunk));
+        } catch (error) {
+          await release();
+          controller.error(error);
+        }
+      },
+      cancel: release,
+    });
+  }
+
+  async text(): Promise<string> {
+    return snapshotDecoder.decode(new Uint8Array(await this.arrayBuffer()));
+  }
+}
+
+const materializedSnapshotFiles = new WeakMap<SnapshotMediaBlob, Promise<File>>();
+
+export const withSnapshotMediaLease = async <T>(blob: SnapshotMediaBlob, operation: () => Promise<T>): Promise<T> => (
+  typeof blob.withSourceLease === 'function' ? blob.withSourceLease(operation) : operation()
+); // One lease spans every chunk in a logical media operation.
+
+export const withSnapshotMediaLeases = async <T>(
+  blobs: readonly SnapshotMediaBlob[],
+  operation: () => Promise<T>,
+): Promise<T> => {
+  const leaseSources = [...new Set(blobs.flatMap(blob => blob.snapshotLeaseSource ? [blob.snapshotLeaseSource] : []))];
+  const leaseResults = await Promise.allSettled(leaseSources.map(source => source.acquireLease())); // Reserve every source before queued work can be overtaken by replacement.
+  const releases = leaseResults.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+  const ungroupedBlobs = blobs.filter(blob => !blob.snapshotLeaseSource);
+  const runUngrouped = (index: number): Promise<T> => {
+    if (index >= ungroupedBlobs.length) return operation();
+    return withSnapshotMediaLease(ungroupedBlobs[index], () => runUngrouped(index + 1));
+  };
+  try {
+    const failedLease = leaseResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failedLease) throw failedLease.reason;
+    return await runUngrouped(0);
+  } finally {
+    await Promise.allSettled(releases.reverse().map(release => release())); // Release every acquired source even when another acquisition or the operation fails.
+  }
+}; // Snapshot-wide writes keep all source files alive between sequential media entries.
+
+// Desktop-restored CanvasImage.file may be a lazy snapshot-backed pseudo-File (SnapshotRangeBlob
+// cast to File), which is not a real Blob. Call this before handing the file to any Blob API
+// (URL.createObjectURL, FileReader, new File([...]), fal.storage.upload).
+export const ensureRealSnapshotFile = (file: File): Promise<File> => {
+  if (file instanceof Blob) {
+    return Promise.resolve(file);
+  }
+  const lazy = file as unknown as SnapshotMediaBlob; // Do not reject by size: large desktop snapshot media is an intentional product requirement.
+  let pending = materializedSnapshotFiles.get(lazy);
+  if (!pending) {
+    pending = withSnapshotMediaLease(lazy, async () => {
+      const parts: BlobPart[] = [];
+      for (let cursor = 0; cursor < lazy.size; cursor += SNAPSHOT_MEDIA_READ_CHUNK_BYTES) {
+        const chunkEnd = Math.min(cursor + SNAPSHOT_MEDIA_READ_CHUNK_BYTES, lazy.size);
+        parts.push(await lazy.slice(cursor, chunkEnd).arrayBuffer());
+      }
+      return new File(parts, lazy.name || 'snapshot-media', {
+        type: lazy.type || 'application/octet-stream',
+        lastModified: lazy.lastModified,
+      });
+    });
+    materializedSnapshotFiles.set(lazy, pending);
+    pending.catch(() => materializedSnapshotFiles.delete(lazy)); // Allow retry after a failed read.
+  }
+  return pending;
+};
+
+const createTransparentPngBlob = (): Blob => new Blob([fallbackPngBytes], { type: 'image/png' });
+
+const toFallbackFileName = (fileName: string, mediaId: string): string => {
+  const baseName = (fileName || mediaId || 'media').replace(/\.[^./\\]+$/, '');
+  return `${baseName || 'media'}-snapshot-fallback.png`;
+};
+
+const canvasToPngBlob = async (canvas: HTMLCanvasElement): Promise<Blob> => {
+  if (typeof canvas.toBlob === 'function') {
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (blob) {
+      return blob;
+    }
+  }
+  if (typeof canvas.toDataURL === 'function' && typeof fetch === 'function') {
+    return fetch(canvas.toDataURL('image/png')).then(response => response.blob());
+  }
+  return createTransparentPngBlob();
+};
+
+const createPlaceholderPngBlob = async (width: number, height: number, label: string): Promise<Blob> => {
+  if (typeof document === 'undefined') {
+    return createTransparentPngBlob();
+  }
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width));
+    canvas.height = Math.max(1, Math.round(height));
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return createTransparentPngBlob();
+    }
+    context.fillStyle = '#111827';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = '#64748b';
+    context.strokeRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#e5e7eb';
+    context.font = '16px sans-serif';
+    context.fillText(label, 12, Math.min(canvas.height - 12, 28));
+    return canvasToPngBlob(canvas);
+  } catch {
+    return createTransparentPngBlob();
+  }
+};
+
+const createMediaPreviewPngBlob = async (image: CanvasImage): Promise<Blob> => {
+  const width = Math.max(1, Math.round(image.naturalWidth || image.width || 1));
+  const height = Math.max(1, Math.round(image.naturalHeight || image.height || 1));
+  if (typeof document === 'undefined') {
+    return createTransparentPngBlob();
+  }
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return createPlaceholderPngBlob(width, height, `${image.mediaType} unavailable`);
+    }
+    context.drawImage(image.element, 0, 0, width, height);
+    return canvasToPngBlob(canvas);
+  } catch {
+    return createPlaceholderPngBlob(width, height, `${image.mediaType} unavailable`);
+  }
+};
+
+const buildSnapshotImageManifest = (img: CanvasImage): SnapshotImageManifest => ({
+  id: img.id,
+  x: img.x,
+  y: img.y,
+  width: img.width,
+  height: img.height,
+  rotation: img.rotation ?? 0,
+  fileName: img.file.name,
+  fileType: img.file.type || 'application/octet-stream',
+  fileSize: img.file.size,
+  metadata: img.metadata ? { ...img.metadata } : undefined,
+  mediaType: img.mediaType,
+  isPlaying: img.isPlaying ?? false,
+  hasAudio: img.hasAudio,
+  currentPlaybackTime: img.mediaType === 'audio' && typeof img.currentPlaybackTime === 'number' && Number.isFinite(img.currentPlaybackTime)
+    ? img.currentPlaybackTime
+    : undefined, // Audio restores should resume from the saved playhead.
+  audioDuration: img.mediaType === 'audio' && typeof img.audioDuration === 'number' && Number.isFinite(img.audioDuration)
+    ? img.audioDuration
+    : undefined, // Large audio can restore duration without waveform decoding.
+});
+
+const createAudioWaveformPlaceholderDataUrl = (width: number, height: number): string => {
+  const renderWidth = Math.min(Math.max(1, Math.round(width)), SNAPSHOT_MAX_WAVEFORM_WIDTH);
+  const renderHeight = Math.min(Math.max(1, Math.round(height)), SNAPSHOT_MAX_WAVEFORM_HEIGHT);
+  const centerY = Math.round(renderHeight / 2);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${renderWidth}" height="${renderHeight}" viewBox="0 0 ${renderWidth} ${renderHeight}"><rect width="100%" height="100%" rx="8" fill="#1f2937"/><path d="M16 ${centerY} H${Math.max(16, renderWidth - 16)}" stroke="#4ade80" stroke-width="3" stroke-dasharray="6 6"/><text x="16" y="${Math.min(renderHeight - 10, centerY + 24)}" fill="#d1d5db" font-family="sans-serif" font-size="14">Waveform preview unavailable</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}; // Keeps oversized audio playable without decoding it into renderer memory.
+
+const buildFallbackSnapshotImage = async (img: CanvasImage): Promise<SnapshotBinary['images'][number]> => {
+  const blob = await createMediaPreviewPngBlob(img);
+  const manifest = buildSnapshotImageManifest(img);
+  return {
+    manifest: {
+      ...manifest,
+      fileName: toFallbackFileName(manifest.fileName, manifest.id),
+      fileType: 'image/png',
+      fileSize: blob.size,
+      mediaType: 'image',
+      isPlaying: false,
+      hasAudio: false,
+      currentPlaybackTime: undefined,
+      fallbackForMediaType: img.mediaType,
+      fallbackReason: 'source-unreadable',
+    },
+    blob,
+  };
+};
 
 const writeUint32BE = (value: number): Uint8Array<ArrayBuffer> => {
   const buffer = new ArrayBuffer(4);
@@ -307,9 +673,120 @@ const writeUint64BE = (value: number): Uint8Array<ArrayBuffer> => {
 const readUint32BE = (view: DataView, offset: number): number => view.getUint32(offset, false);
 const readUint64BE = (view: DataView, offset: number): number => Number(view.getBigUint64(offset, false));
 
-export const isBinarySnapshotFile = async (file: File): Promise<boolean> => {
+const isSnapshotRangeOutOfBounds = (offset: number, length: number, sourceSize: number): boolean => (
+  !Number.isSafeInteger(offset)
+  || !Number.isSafeInteger(length)
+  || !Number.isSafeInteger(sourceSize)
+  || offset < 0
+  || length < 0
+  || offset > sourceSize
+  || length > sourceSize - offset
+); // Avoids unsafe offset + length arithmetic.
+
+const isSnapshotMetadataLengthInvalid = (
+  offset: number,
+  length: number,
+  sourceSize: number,
+  totalMetadataBytes: number,
+): boolean => (
+  length <= 0
+  || length > SNAPSHOT_MAX_JSON_SECTION_BYTES
+  || totalMetadataBytes + length > SNAPSHOT_MAX_TOTAL_JSON_BYTES
+  || isSnapshotRangeOutOfBounds(offset, length, sourceSize)
+); // Keeps JSON metadata bounded while media remains uncapped.
+
+const isFileSnapshotSource = (source: SnapshotByteSource): source is File => (
+  (typeof File !== 'undefined' && source instanceof File)
+  || ('slice' in source && 'text' in source)
+);
+
+const getSnapshotSourceSize = (source: SnapshotByteSource): number => (
+  isFileSnapshotSource(source) ? source.size : source.size
+);
+
+const getSnapshotRangeMediaLimit = (source: SnapshotByteSource): number | null => {
+  if (isFileSnapshotSource(source) || typeof source.getMediaUrl === 'function') {
+    return null;
+  }
+  return Number.isSafeInteger(source.maxMediaBytes) && source.maxMediaBytes >= 0
+    ? source.maxMediaBytes
+    : SNAPSHOT_MAX_RANGE_MEDIA_BYTES; // Unmarked range sources keep the conservative memory guard.
+};
+
+const readSnapshotSourceRange = async (
+  source: SnapshotByteSource,
+  offset: number,
+  length: number,
+): Promise<ArrayBuffer> => {
+  if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(length) || length < 0) {
+    throw new Error('Snapshot byte range is invalid.');
+  }
+  if (isFileSnapshotSource(source)) {
+    const blob = source.slice(offset, offset + length);
+    if (typeof blob.arrayBuffer === 'function') {
+      return blob.arrayBuffer();
+    }
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error ?? new Error('Failed to read snapshot data.'));
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.readAsArrayBuffer(blob);
+    });
+  }
+  return source.readRange(offset, length);
+};
+
+const readSnapshotSourceBlob = async (
+  source: SnapshotByteSource,
+  offset: number,
+  length: number,
+  type: string,
+  fileName: string,
+): Promise<SnapshotMediaBlob> => {
+  if (isFileSnapshotSource(source)) {
+    return source.slice(offset, offset + length, type);
+  }
+  if (typeof source.getMediaUrl === 'function') {
+    const objectUrl = await source.getMediaUrl(offset, length, type, fileName);
+    return new SnapshotRangeBlob({ source, offset, length, type, name: fileName, objectUrl });
+  }
+  const parts: BlobPart[] = [];
+  for (let cursor = 0; cursor < length; cursor += SNAPSHOT_MEDIA_READ_CHUNK_BYTES) {
+    const chunkLength = Math.min(SNAPSHOT_MEDIA_READ_CHUNK_BYTES, length - cursor);
+    parts.push(await readSnapshotSourceRange(source, offset + cursor, chunkLength));
+  }
+  return new Blob(parts, { type });
+};
+
+const assertSnapshotSourceTextCanBeRead = (source: SnapshotByteSource): void => {
+  if (isFileSnapshotSource(source)) {
+    return; // Product requirement: user-selected legacy files stay unlimited despite renderer memory use.
+  }
+  if (getSnapshotSourceSize(source) > SNAPSHOT_MAX_LEGACY_JSON_BYTES) {
+    throw new Error('Snapshot file is too large to import safely.');
+  }
+}; // Legacy JSON fallback must stay bounded because it is read as one string.
+
+const readSnapshotSourceText = async (source: SnapshotByteSource): Promise<string> => {
+  assertSnapshotSourceTextCanBeRead(source);
+  if (isFileSnapshotSource(source)) {
+    return source.text();
+  }
+  const sourceSize = getSnapshotSourceSize(source);
+  const textDecoder = new TextDecoder();
+  const chunks: string[] = [];
+  for (let offset = 0; offset < sourceSize; offset += SNAPSHOT_MEDIA_READ_CHUNK_BYTES) {
+    const chunkLength = Math.min(SNAPSHOT_MEDIA_READ_CHUNK_BYTES, sourceSize - offset);
+    const buffer = await readSnapshotSourceRange(source, offset, chunkLength);
+    chunks.push(textDecoder.decode(new Uint8Array(buffer), { stream: offset + chunkLength < sourceSize })); // Preserve UTF-8 characters split across chunks.
+  }
+  chunks.push(textDecoder.decode());
+  return chunks.join('');
+};
+
+export const isBinarySnapshotFile = async (file: SnapshotByteSource): Promise<boolean> => {
   const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
-  const headBuffer = await file.slice(0, magicBytes.length).arrayBuffer();
+  const headBuffer = await readSnapshotSourceRange(file, 0, magicBytes.length);
   const head = new Uint8Array(headBuffer);
   if (head.length !== magicBytes.length) return false;
   for (let i = 0; i < magicBytes.length; i += 1) {
@@ -320,16 +797,20 @@ export const isBinarySnapshotFile = async (file: File): Promise<boolean> => {
   return true;
 };
 
-export const parseBinarySnapshotFile = async (file: File): Promise<SnapshotBinary> => {
-  const buffer = await file.arrayBuffer();
-  const view = new DataView(buffer);
+export const parseBinarySnapshotFile = async (file: SnapshotByteSource): Promise<SnapshotBinary> => {
   const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
+  const sourceSize = getSnapshotSourceSize(file);
+  const rangeMediaLimit = getSnapshotRangeMediaLimit(file);
   let offset = 0;
+  let totalMetadataBytes = 0;
+  let rangeMediaBytes = 0;
 
-  if (buffer.byteLength < magicBytes.length + 4) {
+  if (sourceSize < magicBytes.length + 4) {
     throw new Error('Snapshot file is too small.');
   }
 
+  const headerBuffer = await readSnapshotSourceRange(file, 0, magicBytes.length + 4);
+  const view = new DataView(headerBuffer);
   for (let i = 0; i < magicBytes.length; i += 1) {
     if (view.getUint8(i) !== magicBytes[i]) {
       throw new Error('Snapshot file format is invalid.');
@@ -339,11 +820,12 @@ export const parseBinarySnapshotFile = async (file: File): Promise<SnapshotBinar
 
   const manifestLength = readUint32BE(view, offset);
   offset += 4;
-  if (manifestLength <= 0 || offset + manifestLength > buffer.byteLength) {
+  if (isSnapshotMetadataLengthInvalid(offset, manifestLength, sourceSize, totalMetadataBytes)) {
     throw new Error('Snapshot manifest length is invalid.');
   }
+  totalMetadataBytes += manifestLength;
 
-  const manifestBytes = new Uint8Array(buffer, offset, manifestLength);
+  const manifestBytes = new Uint8Array(await readSnapshotSourceRange(file, offset, manifestLength));
   offset += manifestLength;
   const manifestJson = snapshotDecoder.decode(manifestBytes);
   const manifest = JSON.parse(manifestJson) as SnapshotManifestV2;
@@ -351,53 +833,100 @@ export const parseBinarySnapshotFile = async (file: File): Promise<SnapshotBinar
   if (!manifest || manifest.version !== 2 || !manifest.state) {
     throw new Error('Snapshot manifest is invalid.');
   }
+  if (!Array.isArray(manifest.state.images)) {
+    throw new Error('Snapshot manifest images are invalid.');
+  }
+  const remainingBytes = sourceSize - offset;
+  if (manifest.state.images.length > Math.floor(remainingBytes / SNAPSHOT_MIN_BINARY_IMAGE_RECORD_BYTES)) {
+    throw new Error('Snapshot image count cannot fit in the file.');
+  }
+  const cursor = createSnapshotRangeCursor({
+    size: sourceSize,
+    readRange: (rangeOffset, length) => readSnapshotSourceRange(file, rangeOffset, length),
+  }, {
+    start: offset,
+  });
 
   const images: SnapshotBinary['images'] = [];
   for (let index = 0; index < manifest.state.images.length; index += 1) {
-    if (offset + 4 > buffer.byteLength) {
+    if (isSnapshotRangeOutOfBounds(cursor.position, 4, sourceSize)) {
       throw new Error(`Snapshot image ${index + 1} metadata length is invalid.`);
     }
-    const metaLength = readUint32BE(view, offset);
-    offset += 4;
-    if (metaLength <= 0 || offset + metaLength > buffer.byteLength) {
+    const metaLengthBuffer = await cursor.read(4);
+    const metaLength = readUint32BE(new DataView(metaLengthBuffer), 0);
+    if (isSnapshotMetadataLengthInvalid(cursor.position, metaLength, sourceSize, totalMetadataBytes)) {
       throw new Error(`Snapshot image ${index + 1} metadata is invalid.`);
     }
-    const metaBytes = new Uint8Array(buffer, offset, metaLength);
-    offset += metaLength;
+    totalMetadataBytes += metaLength;
+    const metaBytes = new Uint8Array(await cursor.read(metaLength));
     const imageManifest = JSON.parse(snapshotDecoder.decode(metaBytes)) as SnapshotImageManifest;
 
-    if (offset + 8 > buffer.byteLength) {
+    if (isSnapshotRangeOutOfBounds(cursor.position, 8, sourceSize)) {
       throw new Error(`Snapshot image ${index + 1} data length is invalid.`);
     }
-    const dataLength = readUint64BE(view, offset);
-    offset += 8;
-    if (dataLength <= 0 || offset + dataLength > buffer.byteLength) {
+    const dataLengthBuffer = await cursor.read(8);
+    const dataLength = readUint64BE(new DataView(dataLengthBuffer), 0);
+    if (dataLength <= 0 || isSnapshotRangeOutOfBounds(cursor.position, dataLength, sourceSize)) {
       throw new Error(`Snapshot image ${index + 1} data is invalid.`);
     }
-    const dataBytes = buffer.slice(offset, offset + dataLength);
-    offset += dataLength;
+    if (rangeMediaLimit !== null && rangeMediaBytes + dataLength > rangeMediaLimit) {
+      throw new Error('Snapshot media is too large to import safely.');
+    }
+    if (rangeMediaLimit !== null) {
+      rangeMediaBytes += dataLength;
+    }
+    const fileType = imageManifest.fileType || 'application/octet-stream';
+    const fileName = imageManifest.fileName || `snapshot-image-${index + 1}`;
+    const dataBlob = await readSnapshotSourceBlob(file, cursor.position, dataLength, fileType, fileName);
+    if (!isFileSnapshotSource(file) && typeof file.getMediaUrl === 'function' && dataLength <= SNAPSHOT_READ_AHEAD_MAX_MEDIA_BYTES) {
+      await cursor.readAhead(SNAPSHOT_METADATA_READ_AHEAD_BYTES); // Compact URL-backed records share one range read; large media is never probed.
+    }
+    cursor.skip(dataLength); // Media stays lazy while the metadata cursor advances to the next record.
 
     images.push({
       manifest: imageManifest,
-      blob: new Blob([dataBytes], { type: imageManifest.fileType || 'application/octet-stream' }),
+      blob: dataBlob,
     });
+    if ((index + 1) % SNAPSHOT_PARSE_YIELD_INTERVAL === 0) {
+      await new Promise<void>(resolve => setTimeout(resolve, 0)); // Keep very large valid snapshots responsive without a hard count cap.
+    }
   }
 
   return { manifest, images };
 };
 
+// Import enforces the same caps (isSnapshotMetadataLengthInvalid); encoding through this helper
+// makes exports fail loudly instead of producing a file that can never be re-imported.
+const encodeSnapshotMetadataSections = (binary: SnapshotBinary): { manifestBytes: Uint8Array; imageMetaBytes: Uint8Array[] } => {
+  let totalMetadataBytes = 0;
+  const encodeSection = (value: unknown, label: string): Uint8Array => {
+    const bytes = snapshotEncoder.encode(JSON.stringify(value));
+    totalMetadataBytes += bytes.byteLength;
+    if (bytes.byteLength > SNAPSHOT_MAX_JSON_SECTION_BYTES || totalMetadataBytes > SNAPSHOT_MAX_TOTAL_JSON_BYTES) {
+      throw new Error(`Snapshot ${label} is too large to export and re-import. Reduce notes, drawn paths, or prompt text.`);
+    }
+    return bytes;
+  };
+  return {
+    manifestBytes: encodeSection(binary.manifest, 'canvas metadata'),
+    imageMetaBytes: binary.images.map(({ manifest }) => encodeSection(manifest, `media metadata for "${manifest.fileName || manifest.id}"`)),
+  };
+};
+
 export const snapshotBinaryToBlob = (binary: SnapshotBinary): Blob => {
+  const { manifestBytes, imageMetaBytes } = encodeSnapshotMetadataSections(binary);
   const parts: BlobPart[] = [];
   const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
   parts.push(magicBytes);
 
-  const manifestJson = JSON.stringify(binary.manifest);
-  const manifestBytes = snapshotEncoder.encode(manifestJson);
   parts.push(writeUint32BE(manifestBytes.length));
   parts.push(manifestBytes);
 
-  binary.images.forEach(({ manifest, blob }) => {
-    const metaBytes = snapshotEncoder.encode(JSON.stringify(manifest));
+  binary.images.forEach(({ blob }, index) => {
+    if (!(blob instanceof Blob)) {
+      throw new Error('Snapshot media must be streamed for this export path.');
+    }
+    const metaBytes = imageMetaBytes[index];
     parts.push(writeUint32BE(metaBytes.length));
     parts.push(metaBytes);
     parts.push(writeUint64BE(blob.size));
@@ -407,23 +936,127 @@ export const snapshotBinaryToBlob = (binary: SnapshotBinary): Blob => {
   return new Blob(parts, { type: 'application/octet-stream' });
 };
 
-type SnapshotWritable = { write: (data: Blob | Uint8Array | string) => Promise<void> };
-export const writeSnapshotBinary = async (binary: SnapshotBinary, writable: SnapshotWritable) => {
-  const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
-  await writable.write(magicBytes);
+export const getSnapshotBinaryByteLength = (binary: SnapshotBinary): number => {
+  const { manifestBytes, imageMetaBytes } = encodeSnapshotMetadataSections(binary);
+  return binary.images.reduce((sum, { blob }, index) => (
+    sum + 4 + imageMetaBytes[index].byteLength + 8 + blob.size
+  ), snapshotEncoder.encode(SNAPSHOT_MAGIC).byteLength + 4 + manifestBytes.byteLength);
+};
 
-  const manifestJson = JSON.stringify(binary.manifest);
-  const manifestBytes = snapshotEncoder.encode(manifestJson);
-  await writable.write(writeUint32BE(manifestBytes.length));
-  await writable.write(manifestBytes);
-
-  for (const { manifest, blob } of binary.images) {
-    const metaBytes = snapshotEncoder.encode(JSON.stringify(manifest));
-    await writable.write(writeUint32BE(metaBytes.length));
-    await writable.write(metaBytes);
-    await writable.write(writeUint64BE(blob.size));
-    await writable.write(blob);
+const readSnapshotBlobAsArrayBuffer = (blob: SnapshotMediaBlob): Promise<ArrayBuffer> => {
+  const reader = (blob as { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
+  if (typeof reader === 'function') {
+    return reader.call(blob);
   }
+  return new Promise((resolve, reject) => {
+    const fileReader = new FileReader();
+    fileReader.onerror = () => reject(fileReader.error ?? new Error('Failed to read snapshot media.'));
+    fileReader.onload = () => resolve(fileReader.result as ArrayBuffer);
+    fileReader.readAsArrayBuffer(blob as Blob);
+  });
+};
+
+export const readSnapshotBlobPartAsArrayBuffer = (blob: SnapshotMediaBlob, start: number, end: number): Promise<ArrayBuffer> => {
+  const part = start === 0 && end === blob.size ? blob : blob.slice(start, end);
+  return readSnapshotBlobAsArrayBuffer(part);
+};
+
+const getSnapshotBlobObjectUrl = (blob: SnapshotMediaBlob): string | undefined => (
+  typeof blob.snapshotObjectUrl === 'string' && blob.snapshotObjectUrl.length > 0
+    ? blob.snapshotObjectUrl
+    : undefined
+);
+
+const createRestoredSnapshotFile = (blob: SnapshotMediaBlob, fileName: string, fileType: string): File => {
+  if (blob instanceof Blob) {
+    return new File([blob], fileName, { type: fileType });
+  }
+  return Object.assign(blob, {
+    name: fileName,
+    lastModified: Date.now(),
+    webkitRelativePath: '',
+  }) as unknown as File;
+};
+
+const readSnapshotMediaProbe = async (blob: SnapshotMediaBlob, manifest: SnapshotImageManifest, offset: number): Promise<void> => {
+  try {
+    const probe = blob.slice(offset, offset + 1);
+    await readSnapshotBlobAsArrayBuffer(probe);
+  } catch (error) {
+    throw new SnapshotMediaReadError(manifest, error);
+  }
+};
+
+export const assertSnapshotBinaryMediaReadable = async (binary: SnapshotBinary): Promise<void> => {
+  for (const { manifest, blob } of binary.images) {
+    await readSnapshotMediaProbe(blob, manifest, 0);
+    if (blob.size > 1) {
+      await readSnapshotMediaProbe(blob, manifest, blob.size - 1);
+    }
+  }
+};
+
+const isMissingSourceFileError = (error: unknown): boolean => {
+  const name = typeof DOMException !== 'undefined' && error instanceof DOMException ? error.name : '';
+  const message = error instanceof Error ? error.message : String(error);
+  return name === 'NotFoundError'
+    || /requested file or directory could not be found/i.test(message)
+    || /could not be found at the time an operation was processed/i.test(message)
+    // Desktop IPC reads fail with this once a snapshot read source is closed (Electron wraps the
+    // message, so match by substring). Treat it as a media-read error so writes fall back per-media.
+    || /snapshot read source is no longer available/i.test(message);
+};
+
+export type SnapshotWritableData = Blob | Uint8Array | string;
+export type SnapshotStreamingWritableData = SnapshotMediaBlob | Uint8Array | string;
+type SnapshotWritable = { write: (data: SnapshotWritableData, manifest?: SnapshotImageManifest) => Promise<void> };
+type SnapshotStreamingWritable = { write: (data: SnapshotStreamingWritableData, manifest?: SnapshotImageManifest) => Promise<void> };
+export const isSnapshotMediaBlob = (data: SnapshotStreamingWritableData | SnapshotWritableData): data is SnapshotMediaBlob => (
+  typeof data !== 'string' && 'size' in data && typeof data.slice === 'function'
+);
+const writeSnapshotBinaryWithMedia = async (binary: SnapshotBinary, writable: SnapshotStreamingWritable) => {
+  const { manifestBytes, imageMetaBytes } = encodeSnapshotMetadataSections(binary); // Validate metadata before acquiring sources or writing bytes.
+  return withSnapshotMediaLeases(binary.images.map(({ blob }) => blob), async () => {
+    const magicBytes = snapshotEncoder.encode(SNAPSHOT_MAGIC);
+    await writable.write(magicBytes);
+
+    await writable.write(writeUint32BE(manifestBytes.length));
+    await writable.write(manifestBytes);
+
+    for (const [index, { manifest, blob }] of binary.images.entries()) {
+      const metaBytes = imageMetaBytes[index];
+      await writable.write(writeUint32BE(metaBytes.length));
+      await writable.write(metaBytes);
+      await writable.write(writeUint64BE(blob.size));
+      try {
+        await writable.write(blob, manifest);
+      } catch (error) {
+        if (isSnapshotMediaReadError(error) || isMissingSourceFileError(error)) {
+          throw isSnapshotMediaReadError(error) ? error : new SnapshotMediaReadError(manifest, error);
+        }
+        throw error;
+      }
+    }
+  });
+};
+
+export const writeSnapshotBinaryStreaming = async (binary: SnapshotBinary, writable: SnapshotStreamingWritable) => {
+  await writeSnapshotBinaryWithMedia(binary, writable); // Allows callers to stream lazy range-backed media.
+};
+
+export const writeSnapshotBinary = async (binary: SnapshotBinary, writable: SnapshotWritable) => {
+  await writeSnapshotBinaryWithMedia(binary, {
+    write: async (data, manifest) => {
+      if (isSnapshotMediaBlob(data)) {
+        if (typeof Blob === 'undefined' || !(data instanceof Blob)) {
+          throw new Error('Snapshot media must be streamed for this export path.');
+        }
+        await writable.write(data, manifest);
+        return;
+      }
+      await writable.write(data, manifest);
+    },
+  });
 };
 
 export const buildSnapshotBinaryFromState = async (params: {
@@ -433,28 +1066,14 @@ export const buildSnapshotBinaryFromState = async (params: {
   videoPromptAreas: CanvasVideoPromptArea[];
   videoPromptBars: CanvasVideoPromptBar[];
   meta: SnapshotMetaState;
-}): Promise<SnapshotBinary> => {
+}, options: SnapshotBuildOptions = {}): Promise<SnapshotBinary> => {
   const { images, notes, paths, videoPromptAreas, videoPromptBars, meta } = params;
   const imagesWithManifests: SnapshotBinary['images'] = await Promise.all(
     images.map(async (img) => {
-      const manifest: SnapshotImageManifest = {
-        id: img.id,
-        x: img.x,
-        y: img.y,
-        width: img.width,
-        height: img.height,
-        rotation: img.rotation ?? 0,
-        fileName: img.file.name,
-        fileType: img.file.type || 'application/octet-stream',
-        fileSize: img.file.size,
-        metadata: img.metadata ? { ...img.metadata } : undefined,
-        mediaType: img.mediaType,
-        isPlaying: img.isPlaying ?? false,
-        hasAudio: img.hasAudio,
-        currentPlaybackTime: img.mediaType === 'audio' && typeof img.currentPlaybackTime === 'number' && Number.isFinite(img.currentPlaybackTime)
-          ? img.currentPlaybackTime
-          : undefined, // Audio restores should resume from the saved playhead.
-      };
+      if (options.fallbackMediaIds?.has(img.id)) {
+        return buildFallbackSnapshotImage(img);
+      }
+      const manifest = buildSnapshotImageManifest(img);
 
       return { manifest, blob: img.file };
     })
@@ -480,7 +1099,7 @@ export const buildSnapshotBinaryFromState = async (params: {
 };
 
 export const restoreSnapshotFromFile = async (
-  file: File,
+  file: SnapshotByteSource,
   options: {
     brushSize: number;
     eraserSize: number;
@@ -497,6 +1116,7 @@ export const restoreSnapshotFromFile = async (
   let snapshotVideoPromptAreas: CanvasVideoPromptArea[] = [];
   let snapshotVideoPromptBars: CanvasVideoPromptBar[] = [];
   let meta: SerializedSnapshotV1['state']['meta'] | undefined;
+  let sourceRetentionRequired = false;
   // Audio snapshots need special handling because they render as waveform images.
   const restoreAudioImage = async (params: {
     img: {
@@ -508,21 +1128,25 @@ export const restoreSnapshotFromFile = async (
       rotation?: number;
       metadata?: CanvasImage['metadata'];
       currentPlaybackTime?: number;
+      audioDuration?: number;
     };
     file: File;
+    audioUrl?: string;
+    waveformSource?: Pick<Blob, 'arrayBuffer' | 'size'>;
   }): Promise<CanvasImage> => {
-    const { img, file: audioFile } = params;
+    const { img, file: audioFile, audioUrl, waveformSource = audioFile } = params;
     const width = typeof img.width === 'number' && Number.isFinite(img.width) ? Math.max(1, img.width) : 400;
     const height = typeof img.height === 'number' && Number.isFinite(img.height) ? Math.max(1, img.height) : 80;
     const rotation = typeof img.rotation === 'number' && Number.isFinite(img.rotation) ? img.rotation : 0;
     // Rebuild the audio element from the stored blob.
-    const audioElement = await loadAudioFromBlob(audioFile);
-    // Regenerate the waveform preview so the canvas can draw the audio item.
-    const { dataUrl: waveformImageData, duration: waveformDuration } = await generateWaveformImage(
-      audioFile,
-      width,
-      height,
-    );
+    const audioElement = audioUrl ? await loadAudioFromUrl(audioUrl) : await loadAudioFromBlob(audioFile);
+    const waveformWidth = Math.min(width, SNAPSHOT_MAX_WAVEFORM_WIDTH);
+    const waveformHeight = Math.min(height, SNAPSHOT_MAX_WAVEFORM_HEIGHT);
+    const shouldDecodeWaveform = waveformSource.size <= SNAPSHOT_MAX_AUDIO_WAVEFORM_BYTES;
+    const waveform = shouldDecodeWaveform
+      ? await generateWaveformImage(waveformSource, waveformWidth, waveformHeight)
+      : { dataUrl: createAudioWaveformPlaceholderDataUrl(waveformWidth, waveformHeight), duration: img.audioDuration ?? Number.NaN };
+    const { dataUrl: waveformImageData, duration: waveformDuration } = waveform;
     // Turn the waveform data URL into a drawable element.
     const waveformImg = new Image();
     await new Promise<void>((resolve, reject) => {
@@ -563,39 +1187,50 @@ export const restoreSnapshotFromFile = async (
 
   if (isBinarySnapshot) {
     const parsed = await parseBinarySnapshotFile(file);
+    sourceRetentionRequired = parsed.images.some(({ blob }) => blob instanceof SnapshotRangeBlob); // Retain only sources that still back lazy media.
     const { state } = parsed.manifest;
     const manifestImages = Array.isArray(state.images) ? state.images : [];
     const blobsById = new Map(parsed.images.map(entry => [entry.manifest.id, entry.blob]));
 
-    restoredImages = await Promise.all(
-      manifestImages.map(async (img, index) => {
-        const blob = blobsById.get(img.id) ?? parsed.images[index]?.blob;
+    restoredImages = await mapWithConcurrency(
+      manifestImages,
+      SNAPSHOT_MEDIA_RESTORE_CONCURRENCY,
+      async (img, index) => {
+        const snapshotEntry = parsed.images[index];
+        const imageManifest = snapshotEntry?.manifest ?? img;
+        const blob = blobsById.get(img.id) ?? snapshotEntry?.blob;
         if (!blob) {
           throw new Error(`Snapshot image "${img.fileName || img.id}" is missing data.`);
         }
 
-        const fileType = typeof img.fileType === 'string' && img.fileType.length > 0
-          ? img.fileType
+        const fileType = typeof imageManifest.fileType === 'string' && imageManifest.fileType.length > 0
+          ? imageManifest.fileType
           : blob.type || 'application/octet-stream';
-        const fileName = typeof img.fileName === 'string' && img.fileName.length > 0
-          ? img.fileName
+        const fileName = typeof imageManifest.fileName === 'string' && imageManifest.fileName.length > 0
+          ? imageManifest.fileName
           : `snapshot-image-${index + 1}.png`;
-        const mediaType = img.mediaType ?? getMediaTypeFromFileType(fileType);
+        const mediaType = imageManifest.mediaType ?? getMediaTypeFromFileType(fileType);
 
-        const snapshotFile = new File([blob], fileName, { type: fileType });
+        const snapshotFile = createRestoredSnapshotFile(blob, fileName, fileType);
         // Audio snapshots are stored as blobs but must be rehydrated as waveform images.
         if (mediaType === 'audio') {
+          const objectUrl = getSnapshotBlobObjectUrl(blob);
           return restoreAudioImage({
-            img,
+            img: imageManifest,
             file: snapshotFile,
+            audioUrl: objectUrl,
+            waveformSource: blob,
           });
         }
         // Non-audio media can be rehydrated directly as an image/video element.
-        const element = await loadMediaFromBlob(blob, mediaType);
+        const objectUrl = getSnapshotBlobObjectUrl(blob);
+        const element = objectUrl
+          ? await loadMediaFromUrl(objectUrl, mediaType, false, 'metadata') // Avoid eagerly filling stream slots for every restored video.
+          : await loadMediaFromBlob(blob as Blob, mediaType);
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
-        const width = typeof img.width === 'number' ? img.width : naturalWidth;
-        const height = typeof img.height === 'number' ? img.height : naturalHeight;
-        const rotation = typeof img.rotation === 'number' && Number.isFinite(img.rotation) ? img.rotation : 0;
+        const width = typeof imageManifest.width === 'number' ? imageManifest.width : naturalWidth;
+        const height = typeof imageManifest.height === 'number' ? imageManifest.height : naturalHeight;
+        const rotation = typeof imageManifest.rotation === 'number' && Number.isFinite(imageManifest.rotation) ? imageManifest.rotation : 0;
         if (element instanceof HTMLVideoElement) {
           element.pause();
           element.currentTime = 0;
@@ -605,22 +1240,22 @@ export const restoreSnapshotFromFile = async (
         }
 
         return {
-          id: typeof img.id === 'string' && img.id.length > 0 ? img.id : crypto.randomUUID(),
+          id: typeof imageManifest.id === 'string' && imageManifest.id.length > 0 ? imageManifest.id : crypto.randomUUID(),
           element,
           mediaType,
-          x: typeof img.x === 'number' ? img.x : 0,
-          y: typeof img.y === 'number' ? img.y : 0,
+          x: typeof imageManifest.x === 'number' ? imageManifest.x : 0,
+          y: typeof imageManifest.y === 'number' ? imageManifest.y : 0,
           width,
           height,
           rotation,
           naturalWidth,
           naturalHeight,
           file: snapshotFile,
-          isPlaying: mediaType === 'video' ? Boolean(img.isPlaying) : false,
-          hasAudio: mediaType === 'video' ? img.hasAudio : false,
-          metadata: normalizeSnapshotImageMetadata(img.metadata),
+          isPlaying: mediaType === 'video' ? Boolean(imageManifest.isPlaying) : false,
+          hasAudio: mediaType === 'video' ? imageManifest.hasAudio : false,
+          metadata: normalizeSnapshotImageMetadata(imageManifest.metadata),
         };
-      })
+      },
     );
 
     snapshotNotes = Array.isArray(state.notes) ? state.notes.map(note => ({ ...note })) : [];
@@ -638,7 +1273,7 @@ export const restoreSnapshotFromFile = async (
       : [];
     meta = state.meta as SerializedSnapshotV1['state']['meta'];
   } else {
-    const raw = await file.text();
+    const raw = await readSnapshotSourceText(file);
     const parsed = JSON.parse(raw) as Partial<SerializedSnapshotV1>;
     if (!parsed || typeof parsed !== 'object' || !parsed.state) {
       throw new Error('Snapshot file is invalid.');
@@ -830,6 +1465,7 @@ export const restoreSnapshotFromFile = async (
     videoPromptAreas: sanitizedVideoPromptAreas,
     videoPromptBars: sanitizedVideoPromptBars,
     meta,
+    sourceRetention: sourceRetentionRequired ? 'required' : 'not-required', // Empty, materialized, and legacy imports no longer own a source handle.
   };
 };
 
@@ -856,6 +1492,27 @@ export const normalizeSnapshotImageMetadata = (
     const referenceImageIds = Array.isArray(raw.referenceImageIds)
       ? raw.referenceImageIds.filter((id): id is string => typeof id === 'string')
       : undefined;
+    const editAppMode = raw.editAppMode === 'CANVAS' || raw.editAppMode === 'ANNOTATE'
+      ? raw.editAppMode
+      : undefined; // Preserve saved edit mode for reruns.
+    const rawEditTool = (raw as { editTool?: unknown }).editTool;
+    const editTool = rawEditTool === Tool.SELECTION || rawEditTool === Tool.FREE_SELECTION || rawEditTool === Tool.ANNOTATE
+      ? rawEditTool
+      : undefined; // Preserve only tools that image edits can replay.
+    const editPaths = Array.isArray((raw as { editPaths?: unknown }).editPaths)
+      ? (raw as { editPaths: unknown[] }).editPaths.map(path => {
+        const rawPath = path && typeof path === 'object' ? path as Partial<Path> : {};
+        const rawPoints = Array.isArray(rawPath.points) ? rawPath.points : [];
+        return {
+          points: rawPoints
+            .filter((point): point is Point => !!point && typeof point === 'object' && typeof (point as Point).x === 'number' && typeof (point as Point).y === 'number')
+            .map(point => ({ x: point.x, y: point.y })),
+          color: typeof rawPath.color === 'string' && rawPath.color.length > 0 ? rawPath.color : '#ff0000',
+          size: typeof rawPath.size === 'number' ? rawPath.size : 8,
+          tool: Object.values(Tool).includes(rawPath.tool as Tool) ? rawPath.tool as Tool : Tool.BRUSH,
+        };
+      })
+      : undefined; // Preserve edit masks without trusting malformed snapshots.
     const referenceVideoIds = Array.isArray(raw.referenceVideoIds)
       ? raw.referenceVideoIds.filter((id): id is string => typeof id === 'string')
       : undefined;
@@ -885,6 +1542,9 @@ export const normalizeSnapshotImageMetadata = (
       }
       if (isFalResolutionSelectionValue((typed as { resolutionSelection?: unknown }).resolutionSelection)) {
         normalizedOptions.resolutionSelection = typed.resolutionSelection;
+      }
+      if (isFlux2MaxImageSizeSelectionValue((typed as { flux2MaxImageSize?: unknown }).flux2MaxImageSize)) {
+        normalizedOptions.flux2MaxImageSize = typed.flux2MaxImageSize; // Keep the saved Flux output dimensions for reruns.
       }
       if (isGptImage2QualitySelectionValue((typed as { gptImage2Quality?: unknown }).gptImage2Quality)) {
         normalizedOptions.gptImage2Quality = typed.gptImage2Quality;
@@ -1103,6 +1763,11 @@ export const normalizeSnapshotImageMetadata = (
         normalizedOptions.heygenEnableSpeechEnhancement = heygenEnableSpeechEnhancementValue;
       }
 
+      const heygenTimingResolvedValue = (typed as { heygenTimingResolved?: unknown }).heygenTimingResolved;
+      if (typeof heygenTimingResolvedValue === 'boolean') {
+        normalizedOptions.heygenTimingResolved = heygenTimingResolvedValue;
+      }
+
       const heygenStartTimeValue = (typed as { heygenStartTime?: unknown }).heygenStartTime;
       if (typeof heygenStartTimeValue === 'number' && Number.isFinite(heygenStartTimeValue) && heygenStartTimeValue >= 0) {
         normalizedOptions.heygenStartTime = heygenStartTimeValue;
@@ -1193,6 +1858,12 @@ export const normalizeSnapshotImageMetadata = (
         if (recraftColors.length > 0) {
           normalizedOptions.recraftColors = recraftColors;
         }
+      }
+      if (isWan27ImageAspectRatioSelectionValue((typed as { wan27ImageAspectRatio?: unknown }).wan27ImageAspectRatio)) {
+        normalizedOptions.wan27ImageAspectRatio = typed.wan27ImageAspectRatio;
+      }
+      if (isWan27ImageMaxImagesSelectionValue((typed as { wan27ImageMaxImages?: unknown }).wan27ImageMaxImages)) {
+        normalizedOptions.wan27ImageMaxImages = typed.wan27ImageMaxImages;
       }
 
       if (isSeedance2Variant((typed as { seedance2Variant?: unknown }).seedance2Variant)) {
@@ -1290,6 +1961,9 @@ export const normalizeSnapshotImageMetadata = (
       ...(primaryImageId ? { primaryImageId } : {}),
       ...(originalSourceImageId ? { originalSourceImageId } : {}),
       ...(referenceImageIds && referenceImageIds.length > 0 ? { referenceImageIds } : {}),
+      ...(editAppMode ? { editAppMode } : {}),
+      ...(editTool ? { editTool } : {}),
+      ...(editPaths ? { editPaths } : {}),
       ...(referenceVideoIds && referenceVideoIds.length > 0 ? { referenceVideoIds } : {}),
       ...(referenceAudioIds && referenceAudioIds.length > 0 ? { referenceAudioIds } : {}),
       ...(elementImageIds && elementImageIds.length > 0 ? { elementImageIds } : {}),

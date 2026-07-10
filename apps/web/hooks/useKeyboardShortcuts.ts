@@ -14,6 +14,8 @@ type KeyboardShortcutsArgs = {
   onAdjustStrokeSize?: (delta: number) => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  onTogglePresentationMode?: () => void;
+  isPresentationMode?: boolean;
 };
 
 export function useKeyboardShortcuts({
@@ -29,6 +31,8 @@ export function useKeyboardShortcuts({
   onAdjustStrokeSize,
   onUndo,
   onRedo,
+  onTogglePresentationMode,
+  isPresentationMode = false,
 }: KeyboardShortcutsArgs) {
   useEffect(() => {
     // Guard against hijacking shortcuts while typing in inputs.
@@ -51,10 +55,41 @@ export function useKeyboardShortcuts({
 
     const handleKeyboardShortcuts = (event: KeyboardEvent) => {
       const focusedInTextInput = isTextInput(event.target);
+      const key = event.key.toLowerCase();
+
+      if (!focusedInTextInput && (event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && key === 'p' && onTogglePresentationMode) {
+        event.preventDefault();
+        onTogglePresentationMode();
+        return;
+      }
+
+      const handleViewportZoomShortcut = (): boolean => {
+        if (!event.metaKey && !event.ctrlKey && (key === '-' || key === '_')) {
+          event.preventDefault();
+          requestZoomOut();
+          return true;
+        }
+        if (!event.metaKey && !event.ctrlKey && (key === '=' || key === '+')) {
+          event.preventDefault();
+          requestZoomIn();
+          return true;
+        }
+        if (!event.metaKey && !event.ctrlKey && key === '.' && onZoomToFit) {
+          event.preventDefault();
+          onZoomToFit();
+          return true;
+        }
+        if (!event.metaKey && !event.ctrlKey && key === ',' && onZoomToSelection) {
+          event.preventDefault();
+          onZoomToSelection();
+          return true;
+        }
+        return false;
+      };
 
       if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
         // Prompt/negative prompt inputs handle Cmd/Ctrl+Enter themselves; skip here to avoid double submissions.
-        if (!focusedInTextInput) {
+        if (!focusedInTextInput && !isPresentationMode) {
           event.preventDefault();
           onGenerate();
         }
@@ -65,7 +100,11 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      const key = event.key.toLowerCase();
+      if (isPresentationMode) {
+        handleViewportZoomShortcut();
+        return;
+      }
+
       if (!event.metaKey && !event.ctrlKey && !event.altKey && event.shiftKey && isCanvasFocused()) {
         if (key === 'z' && onUndo) {
           event.preventDefault();
@@ -127,30 +166,12 @@ export function useKeyboardShortcuts({
         onAdjustStrokeSize(isDecreaseStrokeKey ? -1 : 1);
         return;
       }
-      if (!event.metaKey && !event.ctrlKey && (key === '-' || key === '_')) {
-        event.preventDefault();
-        requestZoomOut();
-        return;
-      }
-      if (!event.metaKey && !event.ctrlKey && (key === '=' || key === '+')) {
-        event.preventDefault();
-        requestZoomIn();
-        return;
-      }
-      if (!event.metaKey && !event.ctrlKey && key === '.' && onZoomToFit) {
-        event.preventDefault();
-        onZoomToFit();
-        return;
-      }
-      if (!event.metaKey && !event.ctrlKey && key === ',' && onZoomToSelection) {
-        event.preventDefault();
-        onZoomToSelection();
-      }
+      handleViewportZoomShortcut();
     };
 
     window.addEventListener('keydown', handleKeyboardShortcuts);
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [appMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onRedo, onToolChange, onUndo, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut]);
+  }, [appMode, isPresentationMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onRedo, onTogglePresentationMode, onToolChange, onUndo, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut]);
 }

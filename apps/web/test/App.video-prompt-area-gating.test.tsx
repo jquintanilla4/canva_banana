@@ -289,7 +289,7 @@ const mockState = vi.hoisted(() => {
     images: [] as CanvasImage[],
     displayedImages: [] as CanvasImage[],
     lastCanvasProps: null as Record<string, unknown> | null,
-    keyboardShortcuts: null as { onGenerate: () => void } | null,
+    keyboardShortcuts: null as { onGenerate: () => void; onTogglePresentationMode?: () => void; isPresentationMode?: boolean } | null,
     baseVideoPromptArea,
     baseVideoPromptBar,
     videoPromptAreas: [{ ...baseVideoPromptArea }],
@@ -476,7 +476,7 @@ vi.mock('../hooks/useCanvasMediaActions', () => ({
 }));
 
 vi.mock('../hooks/useKeyboardShortcuts', () => ({
-  useKeyboardShortcuts: (args: { onGenerate: () => void }) => {
+  useKeyboardShortcuts: (args: { onGenerate: () => void; onTogglePresentationMode?: () => void; isPresentationMode?: boolean }) => {
     mockState.keyboardShortcuts = args;
   },
 }));
@@ -567,6 +567,8 @@ vi.mock('../hooks/useDebugLogState', () => ({
 }));
 
 vi.mock('../services/backupService', () => ({
+  pruneBackupSessions: vi.fn(),
+  saveBackupSessionBinary: vi.fn(),
   listBackupSessions: vi.fn(),
   getBackupSession: vi.fn(),
 }));
@@ -796,6 +798,27 @@ describe('App video prompt area gating', () => {
     expect(rail.style.paddingInline).toBe(FLOATING_EDGE_CONTROL_SIDE_OFFSET);
     expect(screen.getByLabelText('Snapshot menu').closest('[data-testid="top-control-rail"]')).toBe(rail);
     expect(screen.getByLabelText('Canvas zoom 100%').closest('[data-testid="top-control-rail"]')).toBe(rail);
+  });
+
+  it('toggles presentation mode from the shortcut handler and hides app chrome', () => {
+    render(<App />);
+
+    expect(screen.getByTestId('top-control-rail')).toBeTruthy();
+    expect(screen.getByTestId('active-tool')).toBeTruthy();
+    expect(screen.getByText('Generate')).toBeTruthy();
+    expect(screen.getByText('Switch To Fal')).toBeTruthy();
+    expect(mockState.lastCanvasProps?.isPresentationMode).toBe(false);
+
+    act(() => {
+      mockState.keyboardShortcuts?.onTogglePresentationMode?.();
+    });
+
+    expect(screen.queryByTestId('top-control-rail')).toBeNull();
+    expect(screen.queryByTestId('active-tool')).toBeNull();
+    expect(screen.queryByText('Generate')).toBeNull();
+    expect(screen.queryByText('Switch To Fal')).toBeNull();
+    expect(mockState.lastCanvasProps?.isPresentationMode).toBe(true);
+    expect(mockState.keyboardShortcuts?.isPresentationMode).toBe(true);
   });
 
   it('hides the hamburger menu on macOS desktop', () => {

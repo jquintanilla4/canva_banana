@@ -177,6 +177,53 @@ describe('drawCanvas frame role labels', () => {
     const labels = vi.mocked(ctx.fillText).mock.calls.map(([label]) => label);
     expect(labels).not.toContain('First frame');
   });
+
+  it('hides selection badges and outlines in presentation mode', () => {
+    const canvas = buildCanvas();
+    const ctx = buildContext();
+    const firstFrame = buildImage('first', 10);
+    const lastFrame = buildImage('last', 140);
+
+    drawCanvas({
+      canvas,
+      ctx,
+      pan: { x: 0, y: 0 },
+      scale: 1,
+      images: [firstFrame, lastFrame],
+      notes: [],
+      paths: [],
+      selectedImageIds: [firstFrame.id],
+      selectedNoteIds: [],
+      primarySelectedNoteId: null,
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+      referenceImageOrderLabels: null,
+      disabledMediaIds: [],
+      elementImageIds: [],
+      elementImageOrderLabels: null,
+      videoLastFrameImageId: lastFrame.id,
+      tailSelectionEnabled: true,
+      sourceVideoId: null,
+      isKlingO3VideoInputMode: false,
+      isKlingO3ReferenceMode: false,
+      isSeedance15FflfMode: false,
+      isKlingV3ControlVideoInputMode: false,
+      isVeo31ExtendMode: false,
+      isWanAnimateVideoInputMode: false,
+      isWan27VideoMode: false,
+      isKrea2StyleReferenceMode: false,
+      showMetadataOverlay: false,
+      cropMode: null,
+      transformMode: null,
+      isPresentationMode: true,
+    });
+
+    const labels = vi.mocked(ctx.fillText).mock.calls.map(([label]) => label);
+    expect(labels).not.toContain('First frame');
+    expect(labels).not.toContain('Last frame');
+    expect(ctx.strokeRect).not.toHaveBeenCalled();
+  });
 });
 
 describe('drawCanvas culling and path cache', () => {

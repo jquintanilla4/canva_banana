@@ -1,8 +1,8 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, session, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -17,6 +17,9 @@ import {
   writeDesktopSettingsFileAtomic,
 } from './settings-env.mjs';
 import { APPLICATION_MENU_ITEM_IDS, FILE_MENU_COMMANDS, buildApplicationMenuTemplate } from './application-menu.mjs';
+import { createAppQuitBarrier } from './app-quit-barrier.mjs';
+import { createBoundedHttpServerShutdown } from './bounded-http-server-shutdown.mjs';
+import { createManagedServiceLifecycle } from './managed-service-lifecycle.mjs';
 import {
   assertKnownAppIconId,
   buildAppIconState,
@@ -26,11 +29,37 @@ import {
   writeSelectedAppIconId,
 } from './app-icon-store.mjs';
 import { createChatHistoryStore } from './chat-history-store.mjs';
-import { assertSnapshotDataCanBeWritten, readSnapshotFileCapped, sanitizeSnapshotFileName } from './file-menu-utils.mjs';
+import { createSnapshotBackupCoordinator } from './snapshot-backup-coordinator.mjs';
+import { openSnapshotBackupSource } from './snapshot-backup-open.mjs';
+import { reconcileSnapshotBackupDirectory } from './snapshot-backup-recovery.mjs';
+import { createSnapshotMediaStreamController, isSnapshotMediaStreamBusyError } from './snapshot-media-stream-controller.mjs';
+import { createRendererResourceEpochs } from './renderer-resource-epochs.mjs';
+import snapshotOperationBudget from './snapshot-operation-budget.cjs';
+import {
+  MAX_SNAPSHOT_BACKUP_COUNT,
+  MAX_SNAPSHOT_CHUNK_BYTES,
+  MAX_SNAPSHOT_WRITE_BYTES,
+  assertSnapshotBackupSizeCanBeWritten,
+  assertSnapshotDataCanBeWritten,
+  assertSnapshotFileCanBeOpened,
+  getSnapshotBackupTransactionBaseBytes,
+  sanitizeSnapshotFileName,
+} from './file-menu-utils.mjs';
 import { resolveSecureBackendRuntime, shouldUseExternalSecureBackend } from './secure-backend-runtime.mjs';
-import { getDevRendererUrl, isAllowedAudioPermissionRequest } from './security.mjs';
+import {
+  SNAPSHOT_MEDIA_PROTOCOL,
+  SNAPSHOT_MEDIA_PROTOCOL_PRIVILEGES,
+  getDevRendererUrl,
+  isAllowedAudioPermissionRequest,
+} from './security.mjs';
+
+const { createSnapshotOperationBudget } = snapshotOperationBudget;
 
 app.setName('The Institute');
+protocol.registerSchemesAsPrivileged([{
+  scheme: SNAPSHOT_MEDIA_PROTOCOL,
+  privileges: SNAPSHOT_MEDIA_PROTOCOL_PRIVILEGES,
+}]);
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock(); // One main process owns userData files and managed services.
 if (!hasSingleInstanceLock) {
@@ -53,6 +82,8 @@ const serviceStatus = {
 };
 const managedChildren = new Set();
 let managedSecureBackendServer = null;
+let managedSecureBackendShutdown = null; // Owns the socket tracker and bounded server close.
+let managedServicesStopPromise = null; // Makes concurrent restart and quit cleanup share one stop.
 let mainWindow = null;
 let mainWindowPromise = null;
 let runtimeConfig = null;
@@ -101,7 +132,29 @@ const getSelectedAppIconId = () => readSelectedAppIconId(getAppIconPath());
 
 const chatHistoryStore = createChatHistoryStore({ getHistoryPath: getChatHistoryPath });
 const snapshotAutosaveTargets = new Map();
+const snapshotWriteSessions = new Map();
+const snapshotWriteOperations = new Set();
+const snapshotReadSources = new Map();
+const rendererResourceEpochs = createRendererResourceEpochs();
+let pendingSnapshotWriteSessions = 0;
+let pendingSnapshotReadSources = 0;
+let reservedSnapshotBackupBytes = 0; // Tracks active backup temp-file reservations.
+let snapshotWriteShutdownStarted = false; // Prevents new temp files once quit cleanup begins.
 const maxSnapshotAutosaveTargets = 20;
+const maxSnapshotWriteSessions = 4; // Limit concurrent renderer-owned temp files.
+const maxSnapshotReadSources = 8; // Limit concurrent open snapshot import handles.
+const maxSnapshotChunkOperations = 4; // Normal writers use one operation; bursts stay bounded.
+const maxSnapshotChunkOperationBytes = MAX_SNAPSHOT_CHUNK_BYTES * 2; // Preserve large streams while bounding concurrent memory.
+const maxSnapshotMediaStreams = 32; // Large media stays unlimited while simultaneous streams stay bounded.
+const maxSnapshotPendingMediaStreams = maxSnapshotMediaStreams * 2; // Renderer scheduling keeps normal restores below this main-process backstop.
+const maxSnapshotPendingBackupOperations = 8; // Normal autosave and backup UI flows stay below this count-only backstop.
+const snapshotWriteSessionTimeoutMs = 5 * 60 * 1000; // Abandon stale snapshot writes after five minutes.
+const snapshotReadSourceTimeoutMs = 5 * 60 * 1000; // Release stale snapshot import handles after five minutes.
+const snapshotBackupDirName = 'snapshot-backups';
+const snapshotBackupCoordinator = createSnapshotBackupCoordinator({
+  maxPending: maxSnapshotPendingBackupOperations,
+  busyErrorMessage: 'Too many snapshot backup operations are waiting.',
+}); // Serializes backup state changes without buffering snapshot bytes.
 
 const toBinaryBuffer = (data) => {
   assertSnapshotDataCanBeWritten(data);
@@ -110,15 +163,599 @@ const toBinaryBuffer = (data) => {
     : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 };
 
-const writeFileAtomic = async (filePath, data) => {
-  const tempPath = join(dirname(filePath), `.${basename(filePath)}.${randomBytes(6).toString('hex')}.tmp`); // Same directory keeps rename atomic.
+const assertNonEmptyString = (value, message) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(message);
+  }
+  return value.trim();
+};
+
+const assertSnapshotSessionId = (value, message) => {
+  const id = assertNonEmptyString(value, message);
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+    throw new Error(message);
+  }
+  return id;
+};
+
+const getSnapshotBackupDir = () => join(app.getPath('userData'), snapshotBackupDirName);
+
+const getSnapshotBackupDataPath = id => join(getSnapshotBackupDir(), `${id}.bcsnap`);
+
+const getSnapshotBackupMetaPath = id => join(getSnapshotBackupDir(), `${id}.json`);
+
+const getSnapshotMediaProtocolBaseUrl = (sourceId) => {
+  const id = assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.');
+  return `${SNAPSHOT_MEDIA_PROTOCOL}://media/${encodeURIComponent(id)}/`; // One source capability replaces per-media URL IPC.
+};
+
+const getSnapshotMediaProtocolUrl = ({ sourceId, offset, length, type, fileName }) => {
+  const id = assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.');
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length <= 0) {
+    throw new Error('Snapshot media range is invalid.');
+  }
+  const url = new URL(`${SNAPSHOT_MEDIA_PROTOCOL}://media/${encodeURIComponent(id)}/${offset}/${length}/${encodeURIComponent(sanitizeSnapshotFileName(fileName))}`);
+  url.searchParams.set('type', typeof type === 'string' && type.trim() ? type.trim() : 'application/octet-stream');
+  return url.toString();
+};
+
+const parseSnapshotMediaProtocolUrl = (requestUrl) => {
+  const parsedUrl = new URL(requestUrl);
+  if (parsedUrl.protocol !== `${SNAPSHOT_MEDIA_PROTOCOL}:` || parsedUrl.hostname !== 'media') {
+    throw new Error('Snapshot media URL is invalid.');
+  }
+  const [, rawSourceId, rawOffset, rawLength] = parsedUrl.pathname.split('/');
+  const sourceId = assertSnapshotSessionId(decodeURIComponent(rawSourceId ?? ''), 'Snapshot read source is invalid.');
+  const offset = Number(rawOffset);
+  const length = Number(rawLength);
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length <= 0) {
+    throw new Error('Snapshot media range is invalid.');
+  }
+  return {
+    sourceId,
+    offset,
+    length,
+    type: parsedUrl.searchParams.get('type') || 'application/octet-stream',
+  };
+};
+
+const parseHttpRangeHeader = (value, size) => {
+  if (typeof value !== 'string' || !value.startsWith('bytes=')) {
+    return { start: 0, end: size - 1, partial: false };
+  }
+  const [startText, endText] = value.slice('bytes='.length).split('-', 2);
+  const start = startText === '' ? Math.max(0, size - Number(endText)) : Number(startText);
+  const end = endText === '' || startText === '' ? size - 1 : Number(endText);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= size) {
+    return null;
+  }
+  return { start, end: Math.min(end, size - 1), partial: true };
+};
+
+const handleSnapshotMediaProtocolRequest = async (request) => {
+  const media = parseSnapshotMediaProtocolUrl(request.url);
+  const source = getSnapshotReadSource(media.sourceId);
+  if (media.offset + media.length > source.size) {
+    return new Response('Snapshot media range is invalid.', { status: 416 });
+  }
+  const byteRange = parseHttpRangeHeader(request.headers.get('range'), media.length);
+  if (!byteRange) {
+    return new Response('Snapshot media range is invalid.', { status: 416 });
+  }
+  const fileStart = media.offset + byteRange.start;
+  const fileEnd = media.offset + byteRange.end;
+  const headers = new Headers({
+    'Accept-Ranges': 'bytes',
+    // The renderer origin (file:// packaged, http://localhost in dev) is cross-origin to this
+    // scheme; without CORS, restored media taints every canvas it is drawn into.
+    'Access-Control-Allow-Origin': '*',
+    'Content-Length': String(fileEnd - fileStart + 1),
+    'Content-Type': media.type,
+  });
+  if (byteRange.partial) {
+    headers.set('Content-Range', `bytes ${byteRange.start}-${byteRange.end}/${media.length}`);
+  }
+  let body;
   try {
-    await writeFile(tempPath, data);
-    await rename(tempPath, filePath); // Replace the target only after the temp file is complete.
+    body = await source.mediaStreamController.open({
+      signal: request.signal,
+      createStream: () => source.handle.createReadStream({ start: fileStart, end: fileEnd, autoClose: false }),
+    }); // Excess range requests wait without limiting the media byte length.
   } catch (error) {
-    await rm(tempPath, { force: true }); // Avoid leaving failed partial writes behind.
+    if (isSnapshotMediaStreamBusyError(error)) {
+      return new Response('Snapshot media streams are busy.', {
+        status: 503,
+        headers: { 'Access-Control-Allow-Origin': '*', 'Retry-After': '1' },
+      }); // Scheduled restores should not reach this hostile-request backstop.
+    }
     throw error;
   }
+  refreshSnapshotReadSourceTimeout(media.sourceId, source);
+  try {
+    return new Response(body, {
+      status: byteRange.partial ? 206 : 200,
+      headers,
+    });
+  } catch (error) {
+    await body.cancel(error).catch(() => {});
+    throw error;
+  }
+};
+
+const normalizeBackupSummary = (payload, size = payload?.size) => {
+  const id = assertSnapshotSessionId(payload?.id, 'Backup id is invalid.');
+  const createdAt = Number.isFinite(payload?.createdAt) ? payload.createdAt : Date.now();
+  const updatedAt = Number.isFinite(payload?.updatedAt) ? payload.updatedAt : Date.now();
+  return {
+    id,
+    createdAt,
+    updatedAt,
+    fileName: sanitizeSnapshotFileName(payload?.fileName),
+    size: Number.isSafeInteger(size) && size >= 0 ? size : 0,
+  };
+};
+
+const listSnapshotBackupSummariesUnlocked = async () => {
+  await mkdir(getSnapshotBackupDir(), { recursive: true });
+  const entries = await readdir(getSnapshotBackupDir(), { withFileTypes: true });
+  const summaries = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) {
+      continue;
+    }
+    try {
+      const metaPath = join(getSnapshotBackupDir(), entry.name);
+      const raw = await readFile(metaPath, 'utf8');
+      const summary = JSON.parse(raw);
+      const id = assertSnapshotSessionId(summary?.id, 'Backup id is invalid.');
+      const dataStats = await stat(getSnapshotBackupDataPath(id));
+      if (!dataStats.isFile()) {
+        continue;
+      }
+      summaries.push(normalizeBackupSummary(summary, dataStats.size));
+    } catch {
+      continue;
+    }
+  }
+  return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
+};
+
+const listSnapshotBackupSummaries = () => snapshotBackupCoordinator.runExclusive(listSnapshotBackupSummariesUnlocked); // UI reads see one stable committed backup state.
+
+const deleteSnapshotBackupFiles = async (id) => {
+  const backupId = assertSnapshotSessionId(id, 'Backup id is invalid.');
+  await Promise.all([
+    rm(getSnapshotBackupDataPath(backupId), { force: true }),
+    rm(getSnapshotBackupMetaPath(backupId), { force: true }),
+  ]);
+};
+
+const deleteSnapshotBackup = id => snapshotBackupCoordinator.runExclusive(() => deleteSnapshotBackupFiles(id)); // A requested delete runs after any active streamed backup commits or aborts.
+
+const pruneSnapshotBackupsUnlocked = async (limit = MAX_SNAPSHOT_BACKUP_COUNT) => {
+  const summaries = await listSnapshotBackupSummariesUnlocked();
+  await Promise.all(summaries.slice(limit).map(summary => deleteSnapshotBackupFiles(summary.id)));
+};
+
+const pruneSnapshotBackups = limit => snapshotBackupCoordinator.runExclusive(() => pruneSnapshotBackupsUnlocked(limit)); // Retention reads and deletes one stable committed backup state.
+
+const stageSnapshotBackupMeta = async (summary, writeId, replacesExisting) => {
+  await mkdir(getSnapshotBackupDir(), { recursive: true });
+  const metaPath = getSnapshotBackupMetaPath(summary.id);
+  const pendingPath = `${metaPath}.${writeId}.pending`;
+  let handle;
+  try {
+    handle = await open(pendingPath, 'wx', 0o600);
+    await handle.writeFile(JSON.stringify({ ...summary, commitId: writeId, replacesExisting }), 'utf8');
+    await handle.sync(); // Persist transaction metadata before replacing the committed data file.
+    await handle.close();
+    return pendingPath;
+  } catch (error) {
+    await handle?.close().catch(() => {});
+    await rm(pendingPath, { force: true }).catch(() => {});
+    throw error;
+  }
+};
+
+const reserveSnapshotBackupBytes = async (summary) => {
+  const summaries = await listSnapshotBackupSummariesUnlocked();
+  const currentBytes = getSnapshotBackupTransactionBaseBytes({ summaries, summary });
+  const replacingExisting = summaries.some(item => item.id === summary.id);
+  assertSnapshotBackupSizeCanBeWritten({ size: summary.size, currentBytes, reservedBytes: reservedSnapshotBackupBytes });
+  reservedSnapshotBackupBytes += summary.size;
+  return { replacingExisting };
+};
+
+const releaseSnapshotBackupBytes = (bytes) => {
+  if (bytes > 0) {
+    reservedSnapshotBackupBytes = Math.max(0, reservedSnapshotBackupBytes - bytes);
+  }
+};
+
+const refreshSnapshotWriteSessionTimeout = (writeId, session) => {
+  if (session.closing) return;
+  if (session.timeout) {
+    clearTimeout(session.timeout);
+  }
+  session.timeout = setTimeout(() => {
+    void abortSnapshotWriteSession(writeId);
+  }, snapshotWriteSessionTimeoutMs);
+  session.timeout.unref?.();
+};
+
+const trackSnapshotWriteOperation = (operation) => {
+  snapshotWriteOperations.add(operation);
+  operation.then(
+    () => snapshotWriteOperations.delete(operation),
+    () => snapshotWriteOperations.delete(operation),
+  ); // Shutdown can await sessions already finishing outside the session map.
+  return operation;
+};
+
+const beginSnapshotWriteSession = ({
+  targetPath,
+  owner,
+  backupSummary,
+  maxBytes = MAX_SNAPSHOT_WRITE_BYTES,
+  backupReservedBytes = 0,
+  backupReplacingExisting = false,
+  releaseBackupLease = null,
+}) => trackSnapshotWriteOperation((async () => {
+  if (snapshotWriteShutdownStarted) {
+    throw new Error('Snapshot writes are unavailable while the app is quitting.');
+  }
+  if (!rendererResourceEpochs.isCurrent(owner)) {
+    throw new Error('Snapshot write owner is no longer available.');
+  }
+  if (snapshotWriteSessions.size + pendingSnapshotWriteSessions >= maxSnapshotWriteSessions) {
+    throw new Error('Too many snapshot writes are already in progress.');
+  }
+  pendingSnapshotWriteSessions += 1;
+  try {
+    await mkdir(dirname(targetPath), { recursive: true });
+    const writeId = randomBytes(18).toString('base64url');
+    const tempPath = join(dirname(targetPath), `.${basename(targetPath)}.${writeId}.tmp`);
+    const handle = await open(tempPath, 'w', 0o600);
+    if (snapshotWriteShutdownStarted || !rendererResourceEpochs.isCurrent(owner)) {
+      await handle.close().catch(() => {});
+      await rm(tempPath, { force: true }).catch(() => {});
+      throw new Error(snapshotWriteShutdownStarted
+        ? 'Snapshot writes are unavailable while the app is quitting.'
+        : 'Snapshot write owner is no longer available.');
+    }
+    const session = {
+      handle,
+      tempPath,
+      targetPath,
+      owner, // Reload and crash cleanup target only the renderer document that began this write.
+      backupSummary,
+      maxBytes, // Per-session write cap; backups use their declared size.
+      backupReservedBytes, // Releases reserved backup quota on finish or abort.
+      backupReplacingExisting, // Enables rollback when autosave replaces the same backup id.
+      releaseBackupLease, // Holds deletion and pruning until this streamed backup settles.
+      closing: false, // Stops completed chunks from rearming a closing session timeout.
+      bytesWritten: 0,
+      writeError: null,
+      writeChain: Promise.resolve(),
+      operationBudget: createSnapshotOperationBudget({
+        maxOperations: maxSnapshotChunkOperations,
+        maxBytes: maxSnapshotChunkOperationBytes,
+        errorMessage: 'Too many snapshot write chunks are already in progress.',
+      }),
+    };
+    refreshSnapshotWriteSessionTimeout(writeId, session);
+    snapshotWriteSessions.set(writeId, session);
+    return writeId;
+  } finally {
+    pendingSnapshotWriteSessions -= 1;
+  }
+})());
+
+const getSnapshotWriteSession = (writeId, owner) => {
+  const session = snapshotWriteSessions.get(assertSnapshotSessionId(writeId, 'Snapshot write session is invalid.'));
+  if (!session) {
+    throw new Error('Snapshot write session is no longer available.');
+  }
+  if (owner && !rendererResourceEpochs.isSame(session.owner, owner)) {
+    throw new Error('Snapshot write session belongs to another renderer.');
+  }
+  return session;
+};
+
+const writeSnapshotSessionChunk = async ({ writeId, data, owner }) => {
+  const session = getSnapshotWriteSession(writeId, owner);
+  const chunk = toBinaryBuffer(data);
+  const releaseOperation = session.operationBudget.reserve(chunk.byteLength); // Reserve before the queued closure retains the chunk.
+  const writeChunk = async () => {
+    let countedBytes = 0;
+    try {
+      if (session.writeError) {
+        throw session.writeError;
+      }
+      if (session.bytesWritten + chunk.byteLength > session.maxBytes) {
+        throw new Error('Snapshot data is too large to write safely.');
+      }
+      session.bytesWritten += chunk.byteLength;
+      countedBytes = chunk.byteLength;
+      let offset = 0;
+      while (offset < chunk.byteLength) {
+        const { bytesWritten } = await session.handle.write(chunk, offset, chunk.byteLength - offset);
+        if (bytesWritten <= 0) {
+          throw new Error('Snapshot data could not be written safely.');
+        }
+        offset += bytesWritten;
+      }
+      refreshSnapshotWriteSessionTimeout(writeId, session);
+      return { written: chunk.byteLength };
+    } catch (error) {
+      if (countedBytes > 0) {
+        session.bytesWritten -= countedBytes;
+      }
+      session.writeError ??= error;
+      throw error;
+    } finally {
+      releaseOperation();
+    }
+  };
+  const result = session.writeChain.then(writeChunk, writeChunk);
+  session.writeChain = result.catch(() => {});
+  return result;
+};
+
+const finishSnapshotWriteSession = (writeId, owner) => {
+  const id = assertSnapshotSessionId(writeId, 'Snapshot write session is invalid.');
+  const session = getSnapshotWriteSession(id, owner);
+  session.closing = true;
+  snapshotWriteSessions.delete(id);
+  return trackSnapshotWriteOperation((async () => {
+    let renamedTarget = false;
+    let rollbackPath = null;
+    let pendingMetaPath = null;
+    try {
+      if (session.timeout) {
+        clearTimeout(session.timeout);
+      }
+      await session.writeChain;
+      if (session.writeError) {
+        throw session.writeError;
+      }
+      if (session.backupSummary && session.bytesWritten !== session.backupSummary.size) {
+        throw new Error('Snapshot backup size did not match the declared size.');
+      }
+      await session.handle.sync(); // Flush large streamed snapshots before exposing the completed file.
+      await session.handle.close();
+      if (session.backupSummary) {
+        pendingMetaPath = await stageSnapshotBackupMeta(session.backupSummary, id, session.backupReplacingExisting);
+      }
+      if (session.backupSummary && session.backupReplacingExisting) {
+        rollbackPath = `${session.targetPath}.${id}.rollback`;
+        await rm(rollbackPath, { force: true }).catch(() => {});
+        await rename(session.targetPath, rollbackPath);
+      }
+      await rename(session.tempPath, session.targetPath);
+      renamedTarget = true;
+      if (session.backupSummary) {
+        await rename(pendingMetaPath, getSnapshotBackupMetaPath(session.backupSummary.id));
+        pendingMetaPath = null;
+        await pruneSnapshotBackupsUnlocked(MAX_SNAPSHOT_BACKUP_COUNT).catch(error => console.error('Snapshot backup pruning failed.', error));
+      }
+      if (rollbackPath) {
+        await rm(rollbackPath, { force: true }).catch(() => {});
+      }
+      return { saved: true };
+    } catch (error) {
+      await session.handle.close().catch(() => {});
+      await rm(session.tempPath, { force: true });
+      if (pendingMetaPath) {
+        await rm(pendingMetaPath, { force: true }).catch(() => {});
+      }
+      if (rollbackPath) {
+        if (renamedTarget) {
+          await rm(session.targetPath, { force: true }).catch(() => {});
+        }
+        await rename(rollbackPath, session.targetPath).catch(() => {});
+      } else if (renamedTarget && session.backupSummary) {
+        await deleteSnapshotBackupFiles(session.backupSummary.id).catch(() => {});
+      }
+      throw error;
+    } finally {
+      releaseSnapshotBackupBytes(session.backupReservedBytes);
+      session.releaseBackupLease?.(); // The next backup mutation sees only committed or fully aborted state.
+    }
+  })());
+};
+
+const abortSnapshotWriteSession = (writeId, owner) => {
+  const id = assertSnapshotSessionId(writeId, 'Snapshot write session is invalid.');
+  const session = snapshotWriteSessions.get(id);
+  if (!session) {
+    return Promise.resolve({ aborted: true });
+  }
+  if (owner && !rendererResourceEpochs.isSame(session.owner, owner)) {
+    throw new Error('Snapshot write session belongs to another renderer.');
+  }
+  session.closing = true;
+  snapshotWriteSessions.delete(id);
+  return trackSnapshotWriteOperation((async () => {
+    try {
+      if (session.timeout) {
+        clearTimeout(session.timeout);
+      }
+      await session.writeChain.catch(() => {});
+      await session.handle.close().catch(() => {});
+      await rm(session.tempPath, { force: true });
+      return { aborted: true };
+    } finally {
+      releaseSnapshotBackupBytes(session.backupReservedBytes);
+      session.releaseBackupLease?.(); // Timeout and renderer cleanup release queued deletes and backups too.
+    }
+  })());
+};
+
+const abortAllSnapshotWriteSessions = async () => {
+  snapshotWriteShutdownStarted = true;
+  do {
+    const aborts = [...snapshotWriteSessions.keys()].map(id => abortSnapshotWriteSession(id));
+    await Promise.allSettled([...aborts, ...snapshotWriteOperations]);
+  } while (snapshotWriteSessions.size > 0 || snapshotWriteOperations.size > 0);
+};
+
+const abortInvalidatedSnapshotWriteSessions = async (invalidation) => {
+  const aborts = [...snapshotWriteSessions.entries()]
+    .filter(([, session]) => rendererResourceEpochs.wasInvalidated(session.owner, invalidation))
+    .map(([id]) => abortSnapshotWriteSession(id));
+  await Promise.allSettled(aborts); // Lifecycle cleanup must continue even if one temp file removal fails.
+};
+
+const closeInvalidatedSnapshotReadSources = async (invalidation) => {
+  const closes = [...snapshotReadSources.entries()]
+    .filter(([, source]) => rendererResourceEpochs.wasInvalidated(source.owner, invalidation))
+    .map(([id]) => closeSnapshotReadSource(id));
+  await Promise.allSettled(closes); // Close only handles owned by the replaced renderer document.
+};
+
+const releaseRendererSnapshotResources = async (ownerId) => {
+  const invalidation = rendererResourceEpochs.invalidate(ownerId);
+  await Promise.allSettled([
+    abortInvalidatedSnapshotWriteSessions(invalidation),
+    closeInvalidatedSnapshotReadSources(invalidation),
+  ]); // Reloads release renderer-owned resources without disabling future writes.
+};
+
+const refreshSnapshotReadSourceTimeout = (sourceId, source) => {
+  if (source?.retained) {
+    if (source.timeout) {
+      clearTimeout(source.timeout);
+      source.timeout = null;
+    }
+    return;
+  }
+  if (source.timeout) {
+    clearTimeout(source.timeout);
+  }
+  source.timeout = setTimeout(() => {
+    void closeSnapshotReadSource(sourceId);
+  }, snapshotReadSourceTimeoutMs);
+  source.timeout.unref?.();
+};
+
+const rememberSnapshotReadSource = async (filePath, owner) => {
+  rendererResourceEpochs.assertCurrent(owner, 'Snapshot read request is no longer active.');
+  if (snapshotReadSources.size + pendingSnapshotReadSources >= maxSnapshotReadSources) {
+    throw new Error('Too many snapshot reads are already in progress.');
+  }
+  pendingSnapshotReadSources += 1;
+  let handle;
+  try {
+    handle = await open(filePath, 'r');
+    const fileStats = await handle.stat();
+    if (!fileStats.isFile()) {
+      throw new Error('Snapshot import requires a regular file.');
+    }
+    const fileName = basename(filePath);
+    assertSnapshotFileCanBeOpened({ fileName, size: fileStats.size });
+    rendererResourceEpochs.assertCurrent(owner, 'Snapshot read request is no longer active.');
+    const sourceId = randomBytes(18).toString('base64url');
+    snapshotReadSources.set(sourceId, {
+      handle,
+      owner,
+      filePath,
+      fileName,
+      size: fileStats.size,
+      type: fileName.endsWith('.json') ? 'application/json' : 'application/octet-stream',
+      retained: false,
+      operationBudget: createSnapshotOperationBudget({
+        maxOperations: maxSnapshotChunkOperations,
+        maxBytes: maxSnapshotChunkOperationBytes,
+        errorMessage: 'Too many snapshot read ranges are already in progress.',
+      }),
+      mediaStreamController: createSnapshotMediaStreamController({
+        maxActive: maxSnapshotMediaStreams,
+        maxPending: maxSnapshotPendingMediaStreams,
+        closedErrorMessage: 'Snapshot read source is no longer available.',
+        busyErrorMessage: 'Too many snapshot media streams are waiting.',
+      }),
+    });
+    refreshSnapshotReadSourceTimeout(sourceId, snapshotReadSources.get(sourceId));
+    return {
+      sourceId,
+      fileName,
+      size: fileStats.size,
+      type: fileName.endsWith('.json') ? 'application/json' : 'application/octet-stream',
+      mediaUrlBase: getSnapshotMediaProtocolBaseUrl(sourceId), // The random source id scopes every lazy media URL.
+    };
+  } catch (error) {
+    await handle?.close().catch(() => {});
+    throw error;
+  } finally {
+    pendingSnapshotReadSources -= 1;
+  }
+};
+
+const getSnapshotReadSource = (sourceId, owner) => {
+  const source = snapshotReadSources.get(assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.'));
+  if (!source) {
+    throw new Error('Snapshot read source is no longer available.');
+  }
+  if (!rendererResourceEpochs.isCurrent(source.owner) || (owner && !rendererResourceEpochs.isSame(source.owner, owner))) {
+    throw new Error('Snapshot read source belongs to an inactive renderer document.');
+  }
+  return source;
+};
+
+const readSnapshotSourceRange = async ({ sourceId, offset, length, owner }) => {
+  const id = assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.');
+  const source = getSnapshotReadSource(id, owner);
+  if (!Number.isFinite(offset) || offset < 0 || !Number.isFinite(length) || length < 0) {
+    throw new Error('Snapshot byte range is invalid.');
+  }
+  if (length > MAX_SNAPSHOT_CHUNK_BYTES) {
+    throw new Error('Snapshot read range is too large.');
+  }
+  if (offset + length > source.size) {
+    throw new Error('Snapshot byte range is outside the file.');
+  }
+  const releaseOperation = source.operationBudget.reserve(length); // Reserve before allocating the main-process buffer.
+  try {
+    const buffer = Buffer.allocUnsafe(length);
+    let totalBytesRead = 0;
+    while (totalBytesRead < length) {
+      const { bytesRead } = await source.handle.read(buffer, totalBytesRead, length - totalBytesRead, offset + totalBytesRead);
+      if (bytesRead === 0) {
+        throw new Error('Snapshot byte range could not be read completely.');
+      }
+      totalBytesRead += bytesRead;
+    }
+    refreshSnapshotReadSourceTimeout(id, source);
+    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + totalBytesRead);
+  } finally {
+    releaseOperation();
+  }
+};
+
+const closeSnapshotReadSource = async (sourceId, owner) => {
+  const id = assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.');
+  const existingSource = snapshotReadSources.get(id);
+  const source = owner && existingSource ? getSnapshotReadSource(id, owner) : existingSource;
+  snapshotReadSources.delete(id);
+  if (source?.timeout) {
+    clearTimeout(source.timeout);
+  }
+  source?.mediaStreamController.close(); // Stop active and queued protocol reads before closing the shared handle.
+  await source?.handle.close().catch(() => {});
+  return { closed: true };
+};
+
+const retainSnapshotReadSource = async (sourceId, owner) => {
+  const id = assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.');
+  const source = getSnapshotReadSource(id, owner);
+  source.retained = true;
+  refreshSnapshotReadSourceTimeout(id, source);
+  return { retained: true };
+};
+
+const closeAllSnapshotReadSources = async () => {
+  await Promise.all([...snapshotReadSources.keys()].map(id => closeSnapshotReadSource(id)));
 };
 
 const rememberSnapshotAutosaveTarget = (filePath) => {
@@ -248,19 +885,22 @@ const getConfiguredOrAvailablePort = async (envKey, host) => {
     : getAvailablePort(host); // Packaged services avoid fixed localhost ports by default.
 };
 
-const waitForHealth = async (label, healthUrl, timeoutMs) => {
+const waitForHealth = async (label, healthUrl, timeoutMs, signal) => {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
+    signal?.throwIfAborted();
     try {
-      const response = await fetch(healthUrl);
+      const response = await fetch(healthUrl, { signal });
       if (response.ok) {
         return;
       }
-    } catch {
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? error;
       // Retry until the backend binds or the timeout expires.
     }
-    await delay(350);
+    await delay(350, undefined, signal ? { signal } : undefined);
   }
+  signal?.throwIfAborted();
   throw new Error(`${label} did not become healthy at ${healthUrl}`);
 };
 
@@ -309,27 +949,45 @@ const getSecureBackendModuleUrl = () => (
     : pathToFileURL(resolve(repoRoot, 'apps/secure-backend/src/server.mjs')).toString()
 );
 
-const startSecureBackend = async () => {
+const startSecureBackend = async (signal) => {
+  signal?.throwIfAborted();
   const host = process.env.NODE_BACKEND_HOST?.trim() || '127.0.0.1';
   const port = await getConfiguredOrAvailablePort('NODE_BACKEND_PORT', host);
+  signal?.throwIfAborted();
   const url = normalizeBaseUrl(`http://${host === '127.0.0.1' ? 'localhost' : host}:${port}`);
   setServiceStatus('secureBackend', { state: 'starting', url, mode: 'managed', urlSource: 'managed', authTokenActive: true });
   try {
     const { createSecureBackendServer } = await import(getSecureBackendModuleUrl());
+    signal?.throwIfAborted();
     const env = {
       ...process.env,
       NODE_BACKEND_HOST: host,
       NODE_BACKEND_PORT: String(port),
       CANVA_BANANA_DESKTOP_AUTH_TOKEN: desktopAuthToken,
     };
-    managedSecureBackendServer = createSecureBackendServer({ env });
+    const server = createSecureBackendServer({ env });
+    managedSecureBackendServer = server;
+    managedSecureBackendShutdown = createBoundedHttpServerShutdown(server);
     await new Promise((resolveListen, rejectListen) => {
-      managedSecureBackendServer.once('error', rejectListen);
-      managedSecureBackendServer.listen(port, host, resolveListen);
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        server.off('error', onError);
+        signal?.removeEventListener('abort', onAbort);
+        callback(value);
+      };
+      const onError = error => finish(rejectListen, error);
+      const onAbort = () => finish(rejectListen, signal.reason);
+      server.once('error', onError);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      server.listen(port, host, () => finish(resolveListen));
     });
-    await waitForHealth('secure backend', `${url}/health`, 10000);
+    await waitForHealth('secure backend', `${url}/health`, 10000, signal);
+    signal?.throwIfAborted();
     setServiceStatus('secureBackend', { state: 'ready', url, mode: 'managed', urlSource: 'managed', authTokenActive: true });
   } catch (error) {
+    if (signal?.aborted) return url;
     setServiceStatus('secureBackend', {
       state: 'unavailable',
       url,
@@ -348,9 +1006,11 @@ const getPackagedPythonExecutablePath = () => join(
   'canva-banana-python-backend',
 );
 
-const startPythonBackend = async () => {
+const startPythonBackend = async (signal) => {
+  signal?.throwIfAborted();
   const host = process.env.CANVA_BANANA_PYTHON_HOST?.trim() || '127.0.0.1';
   const port = await getConfiguredOrAvailablePort('CANVA_BANANA_PYTHON_PORT', host);
+  signal?.throwIfAborted();
   const url = normalizeBaseUrl(`http://${host === '127.0.0.1' ? 'localhost' : host}:${port}`);
   const userDataDir = app.getPath('userData');
   const env = {
@@ -383,6 +1043,7 @@ const startPythonBackend = async () => {
     return url;
   }
   try {
+    signal?.throwIfAborted();
     const child = spawn(command, args, {
       cwd: app.isPackaged ? userDataDir : repoRoot,
       env,
@@ -399,9 +1060,11 @@ const startPythonBackend = async () => {
       managedChildren.delete(child);
       setServiceStatus('pythonBackend', { state: 'unavailable', url, error: error.message });
     });
-    await waitForHealth('python backend', `${url}/health`, app.isPackaged ? 45000 : 60000);
+    await waitForHealth('python backend', `${url}/health`, app.isPackaged ? 45000 : 60000, signal);
+    signal?.throwIfAborted();
     setServiceStatus('pythonBackend', { state: 'ready', url });
   } catch (error) {
+    if (signal?.aborted) return url;
     setServiceStatus('pythonBackend', {
       state: 'unavailable',
       url,
@@ -411,7 +1074,8 @@ const startPythonBackend = async () => {
   return url;
 };
 
-const startManagedServices = async () => {
+const startManagedServices = async (signal) => {
+  signal?.throwIfAborted();
   if (devRendererUrl) {
     const secureBackendRuntime = resolveSecureBackendRuntime({
       isPackaged: app.isPackaged,
@@ -442,7 +1106,7 @@ const startManagedServices = async () => {
       managedUrl: 'http://localhost:8787',
       desktopAuthToken,
     });
-    const pythonBackendUrl = await startPythonBackend();
+    const pythonBackendUrl = await startPythonBackend(signal);
     setServiceStatus('secureBackend', {
       state: 'external',
       url: secureBackendRuntime.url,
@@ -453,8 +1117,8 @@ const startManagedServices = async () => {
     return { secureBackendUrl: secureBackendRuntime.url, pythonBackendUrl, pythonBackendAuthOrigin: getUrlOrigin(pythonBackendUrl) };
   }
   const [secureBackendUrl, pythonBackendUrl] = await Promise.all([
-    startSecureBackend(),
-    startPythonBackend(),
+    startSecureBackend(signal),
+    startPythonBackend(signal),
   ]);
   return { secureBackendUrl, pythonBackendUrl, pythonBackendAuthOrigin: getUrlOrigin(pythonBackendUrl) };
 };
@@ -510,30 +1174,44 @@ const waitForChildExit = (child) => new Promise(resolveExit => {
   setTimeout(finish, 2500).unref();
 });
 
-const stopManagedServices = async () => {
-  setServiceStatus('secureBackend', { state: 'stopping' });
-  setServiceStatus('pythonBackend', { state: 'stopping' });
-  const childExits = [];
-  for (const child of managedChildren) {
-    childExits.push(waitForChildExit(child));
-    child.kill('SIGTERM'); // Give packaged child processes a normal shutdown signal.
-  }
-  managedChildren.clear();
-  await Promise.all(childExits);
-  if (managedSecureBackendServer) {
-    await new Promise(resolveClose => managedSecureBackendServer.close(resolveClose));
+const stopManagedServices = () => {
+  if (managedServicesStopPromise) return managedServicesStopPromise;
+  managedServicesStopPromise = (async () => {
+    setServiceStatus('secureBackend', { state: 'stopping' });
+    setServiceStatus('pythonBackend', { state: 'stopping' });
+    const serviceStops = [];
+    for (const child of managedChildren) {
+      serviceStops.push(waitForChildExit(child));
+      child.kill('SIGTERM'); // Give packaged child processes a normal shutdown signal.
+    }
+    managedChildren.clear();
+    const secureBackendShutdown = managedSecureBackendShutdown;
     managedSecureBackendServer = null;
-  }
-  setServiceStatus('secureBackend', { state: 'stopped' });
-  setServiceStatus('pythonBackend', { state: 'stopped' });
+    managedSecureBackendShutdown = null;
+    if (secureBackendShutdown) {
+      serviceStops.push(secureBackendShutdown()); // Graceful close becomes forced and bounded for hung requests.
+    }
+    await Promise.all(serviceStops);
+    setServiceStatus('secureBackend', { state: 'stopped' });
+    setServiceStatus('pythonBackend', { state: 'stopped' });
+  })().finally(() => {
+    managedServicesStopPromise = null;
+  });
+  return managedServicesStopPromise;
 };
 
 const restartManagedServices = async () => {
-  await stopManagedServices();
-  const serviceUrls = await startManagedServices();
-  refreshRuntimeConfig(serviceUrls);
+  const serviceUrls = await managedServiceLifecycle.restart();
+  if (serviceUrls) {
+    refreshRuntimeConfig(serviceUrls); // A shutdown-blocked restart must not replace the last runtime config.
+  }
   return getServiceStatusSnapshot();
 };
+
+const managedServiceLifecycle = createManagedServiceLifecycle({
+  start: startManagedServices,
+  stop: stopManagedServices,
+});
 
 const focusMainWindowForMenuCommand = async () => {
   const targetWindow = await ensureMainWindow();
@@ -649,6 +1327,7 @@ const createMainWindow = async () => {
     },
   });
   mainWindow = createdWindow;
+  const rendererOwnerId = createdWindow.webContents.id;
 
   createdWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternalOpenUrl(url)) {
@@ -663,8 +1342,16 @@ const createMainWindow = async () => {
     }
   });
 
+  createdWindow.webContents.on('render-process-gone', () => {
+    void releaseRendererSnapshotResources(rendererOwnerId); // A crash destroys the document that owns open snapshot resources.
+  });
+  createdWindow.webContents.on('did-navigate', () => {
+    void releaseRendererSnapshotResources(rendererOwnerId); // A reload replaces the document and its resource closer list.
+  });
+
   await createdWindow.loadURL(getRendererUrl());
   createdWindow.on('closed', () => {
+    void releaseRendererSnapshotResources(rendererOwnerId); // A reopened window must not inherit resources from the old one.
     if (mainWindow === createdWindow) {
       mainWindow = null; // Avoid clearing a newer window if an older one closes late.
     }
@@ -687,12 +1374,17 @@ const ensureMainWindow = async () => {
 const startDesktopApp = async () => {
   await migrateLegacyDesktopSettings();
   loadDesktopEnv();
+  await reconcileSnapshotBackupDirectory(getSnapshotBackupDir()).catch(error => console.error('Snapshot backup recovery failed.', error));
+  await pruneSnapshotBackups(MAX_SNAPSHOT_BACKUP_COUNT).catch(error => console.error('Snapshot backup pruning failed.', error));
+  session.defaultSession.protocol.handle(SNAPSHOT_MEDIA_PROTOCOL, handleSnapshotMediaProtocolRequest);
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(webContents === mainWindow?.webContents && isAllowedAudioPermissionRequest(permission, details)); // Trust only the app window's microphone requests.
   });
 
   await applySavedDockIcon();
-  refreshRuntimeConfig(await startManagedServices());
+  const serviceUrls = await managedServiceLifecycle.start();
+  if (!serviceUrls || managedServiceLifecycle.isShutdownRequested()) return;
+  refreshRuntimeConfig(serviceUrls);
   installApplicationMenu();
   await ensureMainWindow();
 
@@ -732,7 +1424,8 @@ ipcMain.handle('canva-banana:file-menu-set-state', (event, nextState) => {
   return true;
 });
 
-ipcMain.handle('canva-banana:file-menu-open-snapshot', async () => {
+ipcMain.handle('canva-banana:file-menu-open-snapshot', async (event) => {
+  const owner = rendererResourceEpochs.capture(event.sender.id);
   const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
   const dialogOptions = {
     properties: ['openFile'],
@@ -746,16 +1439,12 @@ ipcMain.handle('canva-banana:file-menu-open-snapshot', async () => {
   if (result.canceled || result.filePaths.length === 0) {
     return { canceled: true };
   }
-  const filePath = result.filePaths[0];
-  const data = await readSnapshotFileCapped(filePath);
-  return {
-    canceled: false,
-    fileName: basename(filePath),
-    data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
-  };
+  rendererResourceEpochs.assertCurrent(owner, 'Snapshot open dialog belongs to an inactive renderer document.');
+  return { canceled: false, ...await rememberSnapshotReadSource(result.filePaths[0], owner) };
 });
 
-ipcMain.handle('canva-banana:file-menu-save-snapshot', async (event, payload) => {
+ipcMain.handle('canva-banana:file-menu-begin-save-snapshot', async (event, payload) => {
+  const owner = rendererResourceEpochs.capture(event.sender.id);
   const suggestedName = sanitizeSnapshotFileName(payload?.suggestedName);
   const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
   const dialogOptions = {
@@ -768,23 +1457,121 @@ ipcMain.handle('canva-banana:file-menu-save-snapshot', async (event, payload) =>
   if (result.canceled || !result.filePath) {
     return { canceled: true };
   }
-  const binary = toBinaryBuffer(payload?.data);
-  await writeFileAtomic(result.filePath, binary);
+  const writeId = await beginSnapshotWriteSession({ targetPath: result.filePath, owner });
   return {
     canceled: false,
     fileName: basename(result.filePath),
+    writeId,
     autosaveId: rememberSnapshotAutosaveTarget(result.filePath),
   };
 });
 
-ipcMain.handle('canva-banana:file-menu-write-snapshot', async (event, payload) => {
+ipcMain.handle('canva-banana:file-menu-begin-autosave-snapshot', async (event, payload) => {
+  const owner = rendererResourceEpochs.capture(event.sender.id);
   const autosaveId = typeof payload?.autosaveId === 'string' ? payload.autosaveId : '';
   const filePath = snapshotAutosaveTargets.get(autosaveId);
   if (!filePath) {
     throw new Error('Snapshot autosave target is no longer available. Export the snapshot again.');
   }
-  await writeFileAtomic(filePath, toBinaryBuffer(payload?.data));
-  return { saved: true };
+  const writeId = await beginSnapshotWriteSession({ targetPath: filePath, owner });
+  return { writeId, fileName: basename(filePath) };
+});
+
+ipcMain.handle('canva-banana:file-menu-begin-backup-snapshot', async (event, payload) => {
+  const owner = rendererResourceEpochs.capture(event.sender.id);
+  const summary = normalizeBackupSummary(payload);
+  const targetPath = getSnapshotBackupDataPath(summary.id);
+  const releaseBackupLease = await snapshotBackupCoordinator.acquire(); // Own backup state for the complete streamed write session.
+  let reservation;
+  try {
+    reservation = await reserveSnapshotBackupBytes(summary);
+    const writeId = await beginSnapshotWriteSession({
+      targetPath,
+      owner,
+      backupSummary: summary,
+      maxBytes: summary.size,
+      backupReservedBytes: summary.size,
+      backupReplacingExisting: reservation.replacingExisting,
+      releaseBackupLease,
+    });
+    return { writeId, fileName: summary.fileName };
+  } catch (error) {
+    if (reservation) {
+      releaseSnapshotBackupBytes(summary.size);
+    }
+    releaseBackupLease();
+    throw error;
+  }
+});
+
+ipcMain.handle('canva-banana:file-menu-write-snapshot-chunk', async (event, payload) => (
+  writeSnapshotSessionChunk({
+    writeId: payload?.writeId,
+    data: payload?.data,
+    owner: rendererResourceEpochs.capture(event.sender.id),
+  })
+));
+
+ipcMain.handle('canva-banana:file-menu-finish-snapshot-write', async (event, payload) => (
+  finishSnapshotWriteSession(payload?.writeId, rendererResourceEpochs.capture(event.sender.id))
+));
+
+ipcMain.handle('canva-banana:file-menu-abort-snapshot-write', async (event, payload) => (
+  abortSnapshotWriteSession(payload?.writeId, rendererResourceEpochs.capture(event.sender.id))
+));
+
+ipcMain.handle('canva-banana:file-menu-read-snapshot-range', async (event, payload) => (
+  readSnapshotSourceRange({
+    sourceId: payload?.sourceId,
+    offset: payload?.offset,
+    length: payload?.length,
+    owner: rendererResourceEpochs.capture(event.sender.id),
+  })
+));
+
+ipcMain.handle('canva-banana:file-menu-get-snapshot-media-url', async (event, payload) => {
+  getSnapshotReadSource(payload?.sourceId, rendererResourceEpochs.capture(event.sender.id));
+  return getSnapshotMediaProtocolUrl(payload); // Issue URLs only for sources owned by this renderer document.
+});
+
+ipcMain.handle('canva-banana:file-menu-retain-snapshot-read', (event, payload) => (
+  retainSnapshotReadSource(payload?.sourceId, rendererResourceEpochs.capture(event.sender.id))
+));
+
+ipcMain.handle('canva-banana:file-menu-close-snapshot-read', (event, payload) => (
+  closeSnapshotReadSource(payload?.sourceId, rendererResourceEpochs.capture(event.sender.id))
+));
+
+ipcMain.handle('canva-banana:file-menu-list-snapshot-backups', () => listSnapshotBackupSummaries());
+
+ipcMain.handle('canva-banana:file-menu-open-backup-snapshot', async (event, payload) => {
+  const owner = rendererResourceEpochs.capture(event.sender.id);
+  const id = assertSnapshotSessionId(payload?.id, 'Backup id is invalid.');
+  return openSnapshotBackupSource({
+    coordinator: snapshotBackupCoordinator,
+    openSource: async () => {
+      let source;
+      try {
+        source = await rememberSnapshotReadSource(getSnapshotBackupDataPath(id), owner); // The open handle pins this committed backup version.
+        const summaries = await listSnapshotBackupSummariesUnlocked();
+        const summary = summaries.find(item => item.id === id);
+        return {
+          ...source,
+          fileName: summary?.fileName ?? source.fileName,
+        };
+      } catch (error) {
+        if (source) {
+          await closeSnapshotReadSource(source.sourceId, owner); // Do not leak a handle when summary lookup fails.
+        }
+        throw error;
+      }
+    },
+  }); // Large imports keep reading in chunks from the pinned handle without holding the backup lease.
+});
+
+ipcMain.handle('canva-banana:file-menu-delete-backup-snapshot', async (event, payload) => {
+  await deleteSnapshotBackup(payload?.id);
+  return { deleted: true };
 });
 
 ipcMain.handle('canva-banana:load-chat-history', () => chatHistoryStore.read());
@@ -860,6 +1647,20 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  void stopManagedServices(); // Stop local backends when Electron is exiting.
-});
+const cleanupBeforeQuit = async () => {
+  const results = await Promise.allSettled([
+    managedServiceLifecycle.shutdown(),
+    abortAllSnapshotWriteSessions(),
+    closeAllSnapshotReadSources(),
+  ]); // Electron does not await asynchronous event listeners, so the barrier owns this promise.
+  results.forEach(result => {
+    if (result.status === 'rejected') {
+      console.error('App shutdown cleanup failed.', result.reason);
+    }
+  });
+};
+
+app.on('before-quit', createAppQuitBarrier({
+  cleanup: cleanupBeforeQuit,
+  quit: () => app.quit(),
+}));

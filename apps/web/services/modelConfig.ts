@@ -6,6 +6,7 @@ import type {
   FalKrea2CreativityOption,
   FalResolutionOption,
   FalVideoDuration,
+  Flux2MaxImageSizeOption,
   GenerationProviderId,
   GenerationKind,
   JimengSeedance2ModelVersion,
@@ -684,7 +685,7 @@ export const isJimengSeedance2ModelVersion = (value: unknown): value is JimengSe
   value === 'seedance2.0fast' || value === 'seedance2.0' || value === 'seedance2.0_vip' || value === 'seedance2.0fast_vip';
 
 // Flux2 Max image size options
-export type Flux2MaxImageSizeSelectionValue = 'landscape_4_3' | 'landscape_16_9' | 'portrait_4_3' | 'portrait_16_9' | 'square' | 'square_hd';
+export type Flux2MaxImageSizeSelectionValue = Flux2MaxImageSizeOption;
 
 export const FLUX2_MAX_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: Flux2MaxImageSizeSelectionValue; label: string }> = [
   { value: 'landscape_4_3', label: 'Landscape 4:3' },

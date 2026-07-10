@@ -87,6 +87,7 @@ import { useDebugLogState } from './hooks/useDebugLogState';
 import { useJimengSetup } from './hooks/useJimengSetup';
 import { useGenerationCanvasNotifications, type GenerationCanvasNotification } from './hooks/useGenerationCanvasNotifications';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
+import { createDesktopSnapshotSource } from './services/desktopSnapshotSource';
 import { writeClipboardText } from './services/clipboardService';
 import type { FalModelMode } from './services/modelConfig';
 import {
@@ -223,6 +224,8 @@ export default function App() {
   const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
   const [canvasScale, setCanvasScale] = useState(1);
   const [showZoomLevelBadge, setShowZoomLevelBadge] = useState(true);
+  const [isPresentationMode, setIsPresentationMode] = useState(false);
+  const retryingFalJobIdsRef = useRef(new Set<string>());
 
   // State for transient toast message notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -912,6 +915,9 @@ export default function App() {
   const handleToggleZoomLevelBadge = useCallback(() => {
     setShowZoomLevelBadge(prev => !prev);
   }, []);
+  const handleTogglePresentationMode = useCallback(() => {
+    setIsPresentationMode(prev => !prev);
+  }, []);
 
   const handleGenerationComplete = useCallback(() => {
     setGenerationTick(prev => prev + 1);
@@ -1037,10 +1043,14 @@ export default function App() {
         setError('Backup not found.');
         return;
       }
-      const backupFile = new File([session.blob], session.fileName, {
-        type: session.blob.type || 'application/octet-stream',
-      });
-      await handleImportSnapshotFromFile(backupFile);
+      if (session.source) {
+        await handleImportSnapshotFromFile(createDesktopSnapshotSource(session.source));
+      } else if (session.blob) {
+        const backupFile = new File([session.blob], session.fileName, {
+          type: session.blob.type || 'application/octet-stream',
+        });
+        await handleImportSnapshotFromFile(backupFile);
+      }
       setIsBackupsOpen(false);
     } catch (err) {
       console.error(err);
@@ -1190,6 +1200,8 @@ export default function App() {
     onAdjustStrokeSize: handleAdjustStrokeSize,
     onUndo: undo,
     onRedo: redo,
+    onTogglePresentationMode: handleTogglePresentationMode,
+    isPresentationMode,
   });
 
   const handleUploadClick = () => {
@@ -1213,6 +1225,28 @@ export default function App() {
     }
     void handleGenerate(generation);
   }, [handleGenerate, images, jimengSetup, setToastMessage]);
+
+  const handleRetryFalJob = useCallback(async (jobId: string) => {
+    if (retryingFalJobIdsRef.current.has(jobId)) {
+      return true;
+    }
+    const job = falJobs.find(candidate => candidate.id === jobId);
+    if (!job?.retryInputs || job.status !== 'FAILED') {
+      setToastMessage('No queue retry data available.');
+      setTimeout(() => setToastMessage(null), 2000);
+      return false;
+    }
+    if (job.retryInputs.provider === 'jimeng' && !(await jimengSetup.ensureReady())) {
+      return false;
+    }
+    retryingFalJobIdsRef.current.add(jobId); // Blocks duplicate retries while this attempt runs.
+    try {
+      await handleGenerate(job.retryInputs, { retryJobId: job.id });
+      return true;
+    } finally {
+      retryingFalJobIdsRef.current.delete(jobId);
+    }
+  }, [falJobs, handleGenerate, jimengSetup, setToastMessage]);
 
   const handleNoteTextChange = useCallback((noteId: string, text: string) => {
     const targetNotes = displayedNotes;
@@ -2018,82 +2052,84 @@ export default function App() {
           style={windowDragRegionStyle}
         />
       )}
-      <div
-        data-testid="top-control-rail"
-        className="pointer-events-none absolute inset-x-0 top-4 z-30 grid h-12 grid-cols-[1fr_auto_1fr] items-center"
-        style={topControlRailStyle}
-      >
-        <div className="flex items-center justify-start" style={fileMenuAlignStyle}>
-          {shouldShowReactFileMenu && (
-            <FileMenu
-              isOpen={isFileMenuOpen}
-              onToggle={toggleFileMenu}
-              onClose={closeFileMenu}
-              onImportSnapshot={handleImportSnapshot}
-              onExportSnapshot={handleExportSnapshot}
-              onOpenBackups={openBackupsModal}
-              autosaveEnabled={autosaveEnabled}
-              onToggleAutosave={handleToggleAutosave}
-              showZoomLevelBadge={showZoomLevelBadge}
-              onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
-              onOpenDebugLog={openDebugLogPanel}
-              onOpenDesktopSettings={hasDesktopSettingsBridge ? openDesktopSettings : undefined}
-              onClearJimengCache={jimengSetup.handleClearCache}
-              isClearingJimengCache={jimengSetup.isClearingCache}
-            />
-          )}
+      {!isPresentationMode && (
+        <div
+          data-testid="top-control-rail"
+          className="pointer-events-none absolute inset-x-0 top-4 z-30 grid h-12 grid-cols-[1fr_auto_1fr] items-center"
+          style={topControlRailStyle}
+        >
+          <div className="flex items-center justify-start" style={fileMenuAlignStyle}>
+            {shouldShowReactFileMenu && (
+              <FileMenu
+                isOpen={isFileMenuOpen}
+                onToggle={toggleFileMenu}
+                onClose={closeFileMenu}
+                onImportSnapshot={handleImportSnapshot}
+                onExportSnapshot={handleExportSnapshot}
+                onOpenBackups={openBackupsModal}
+                autosaveEnabled={autosaveEnabled}
+                onToggleAutosave={handleToggleAutosave}
+                showZoomLevelBadge={showZoomLevelBadge}
+                onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
+                onOpenDebugLog={openDebugLogPanel}
+                onOpenDesktopSettings={hasDesktopSettingsBridge ? openDesktopSettings : undefined}
+                onClearJimengCache={jimengSetup.handleClearCache}
+                isClearingJimengCache={jimengSetup.isClearingCache}
+              />
+            )}
+          </div>
+          <div className="flex items-center justify-center">
+            {/* Main toolbar, hidden during crop/transform */}
+            {!cropMode && !transformMode && (
+              <Toolbar
+                activeTool={tool}
+                onToolChange={handleToolChange}
+                isVideoPromptAreaToolEnabled={canCreateVideoPromptAreas}
+                appMode={appMode}
+                onModeChange={handleModeChange}
+                brushSize={brushSize}
+                eraserSize={eraserSize}
+                onBrushSizeChange={setBrushSize}
+                onEraserSizeChange={setEraserSize}
+                brushColor={brushColor}
+                onBrushColorChange={setBrushColor}
+                onClear={handleClear}
+                hasClearablePaths={hasClearablePaths}
+                onUploadClick={handleUploadClick}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                onDownload={handleDownload}
+                isImageSelected={hasSingleImageSelected}
+                isObjectSelected={selectedImageIds.length > 0 || selectedNoteIds.length > 0}
+                onDelete={handleDelete}
+                onResize={openResizeToast}
+                isResizeDisabled={!canResize || isRemovingBackground || isResizing || isLoading}
+                onRemoveBackground={handleBackgroundRemoval}
+                isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
+                isBackgroundRemovalLoading={isRemovingBackground}
+                isAnnotateModeDisabled={isAnnotateModeDisabled}
+                isRecording={isRecording}
+                onRecordToggle={handleRecordToggle}
+                cameraSettings={cameraSettings}
+                onCameraSettingsChange={setCameraSettings}
+                cameraSettingsEnabled={isCameraSettingsEnabled}
+              />
+            )}
+          </div>
+          <div className="flex items-center justify-end">
+            {showZoomLevelBadge && (
+              <div
+                className="pointer-events-none shrink-0 rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
+                aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}`}
+              >
+                Zoom {formatZoomPercentage(canvasScale)}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center justify-center">
-          {/* Main toolbar, hidden during crop/transform */}
-          {!cropMode && !transformMode && (
-            <Toolbar
-              activeTool={tool}
-              onToolChange={handleToolChange}
-              isVideoPromptAreaToolEnabled={canCreateVideoPromptAreas}
-              appMode={appMode}
-              onModeChange={handleModeChange}
-              brushSize={brushSize}
-              eraserSize={eraserSize}
-              onBrushSizeChange={setBrushSize}
-              onEraserSizeChange={setEraserSize}
-              brushColor={brushColor}
-              onBrushColorChange={setBrushColor}
-              onClear={handleClear}
-              hasClearablePaths={hasClearablePaths}
-              onUploadClick={handleUploadClick}
-              onUndo={undo}
-              onRedo={redo}
-              canUndo={canUndo}
-              canRedo={canRedo}
-              onDownload={handleDownload}
-              isImageSelected={hasSingleImageSelected}
-              isObjectSelected={selectedImageIds.length > 0 || selectedNoteIds.length > 0}
-              onDelete={handleDelete}
-              onResize={openResizeToast}
-              isResizeDisabled={!canResize || isRemovingBackground || isResizing || isLoading}
-              onRemoveBackground={handleBackgroundRemoval}
-              isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
-              isBackgroundRemovalLoading={isRemovingBackground}
-              isAnnotateModeDisabled={isAnnotateModeDisabled}
-              isRecording={isRecording}
-              onRecordToggle={handleRecordToggle}
-              cameraSettings={cameraSettings}
-              onCameraSettingsChange={setCameraSettings}
-              cameraSettingsEnabled={isCameraSettingsEnabled}
-            />
-          )}
-        </div>
-        <div className="flex items-center justify-end">
-          {showZoomLevelBadge && (
-            <div
-              className="pointer-events-none shrink-0 rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
-              aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}`}
-            >
-              Zoom {formatZoomPercentage(canvasScale)}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Recording overlay */}
       <RecordingOverlay duration={recordingDuration} visible={isRecording} />
@@ -2189,24 +2225,30 @@ export default function App() {
           onVideoPromptBarSubmit={handleEmbeddedVideoPromptSubmit}
           buildVideoPromptBarControls={buildEmbeddedVideoPromptBarControls}
           embeddedVideoPromptBarModelOptions={embeddedVideoPromptBarModelOptions}
+          isPresentationMode={isPresentationMode}
         />
-        <ViewToolbar
-          onZoomToFit={handleZoomToFit}
-          disabled={images.length === 0 && notes.length === 0}
-          metadataVisible={showMetadataOverlay}
-          onToggleMetadata={() => setShowMetadataOverlay(prev => !prev)}
-          blindTestEnabled={blindTestEnabled}
-          openSourceAliasEnabled={openSourceAliasEnabled}
-          onToggleBlindTest={handleBlindTestClick}
-        />
+        {!isPresentationMode && (
+          <ViewToolbar
+            onZoomToFit={handleZoomToFit}
+            disabled={images.length === 0 && notes.length === 0}
+            metadataVisible={showMetadataOverlay}
+            onToggleMetadata={() => setShowMetadataOverlay(prev => !prev)}
+            blindTestEnabled={blindTestEnabled}
+            openSourceAliasEnabled={openSourceAliasEnabled}
+            onToggleBlindTest={handleBlindTestClick}
+          />
+        )}
       </main>
 
-      <PromptChatPanel
-        isOpen={isPromptChatOpen}
-        isSuppressed={hasBlockingOverlay}
-        currentPrompt={prompt}
-        onToggle={() => setIsPromptChatOpen(prev => !prev)}
-      />
+      {/* App chrome: every overlay below hides in presentation mode. RecordingOverlay (above)
+          deliberately stays visible so presentations can be recorded. */}
+      {!isPresentationMode && (<>
+        <PromptChatPanel
+          isOpen={isPromptChatOpen}
+          isSuppressed={hasBlockingOverlay}
+          currentPrompt={prompt}
+          onToggle={() => setIsPromptChatOpen(prev => !prev)}
+        />
 
       {/* Error/status banners */}
       {error && (
@@ -2258,6 +2300,7 @@ export default function App() {
       <FalQueuePanel
         jobs={falJobs}
         onDismiss={handleDismissFalJob}
+        onRetry={handleRetryFalJob}
         blindTestEnabled={blindTestEnabled}
         openSourceAliasEnabled={openSourceAliasEnabled}
         blindTestMapping={blindTestMappingRef.current}
@@ -2376,6 +2419,7 @@ export default function App() {
           ) : undefined}
         />
       )}
+      </>)}
     </div>
   );
 }

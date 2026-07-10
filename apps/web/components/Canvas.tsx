@@ -134,6 +134,7 @@ interface CanvasProps {
   buildVideoPromptBarControls: (bar: CanvasVideoPromptBar) => ReadonlyArray<PromptBarControlConfig>;
   embeddedVideoPromptBarModelOptions: ReadonlyArray<{ value: string; label: string }>;
   onScaleChange?: (scale: number) => void;
+  isPresentationMode?: boolean;
 }
 
 const normalizeEmbeddedPromptBarForModel = (bar: CanvasVideoPromptBar, modelId: string): CanvasVideoPromptBar => {
@@ -261,6 +262,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   buildVideoPromptBarControls,
   embeddedVideoPromptBarModelOptions,
   onScaleChange,
+  isPresentationMode = false,
 }) => {
   type VideoPromptAreaDragMode = 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br'; // Area resizing should track which corner the user grabbed.
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -302,6 +304,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const primarySelectedNoteId = selectedNoteIds[0] ?? null;
   const isAreaSelectionTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
   const areaLabelFontSize = Math.max(11, Math.min(16, 11 / Math.max(scale, 0.7))); // Keep area titles readable even when the canvas is zoomed far out.
+  const effectiveTool = isPresentationMode ? Tool.PAN : tool; // Presentation mode keeps the canvas navigable only.
+  const effectiveCropMode = isPresentationMode ? null : cropMode; // Hidden crop handles should not remain interactive.
+  const effectiveTransformMode = isPresentationMode ? null : transformMode; // Hidden transform handles should not remain interactive.
 
   const getCanvasContext = () => canvasRef.current?.getContext('2d');
 
@@ -404,15 +409,16 @@ export const Canvas: React.FC<CanvasProps> = ({
   } = useCanvasInteractions({
     canvasRef,
     containerRef,
-    tool,
-    canCreateVideoPromptAreas,
+    tool: effectiveTool,
+    canCreateVideoPromptAreas: !isPresentationMode && canCreateVideoPromptAreas,
+    canUpdateSelection: !isPresentationMode,
     appMode,
     images,
     notes,
     videoPromptAreas,
     videoPromptAreaProfiles,
     paths,
-    isNoteEditing: Boolean(editingNoteId),
+    isNoteEditing: !isPresentationMode && Boolean(editingNoteId),
     pan,
     scale,
     brushSize,
@@ -422,8 +428,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     selectedNoteIds,
     primarySelectedNoteId,
     tailSelectionEnabled,
-    cropMode,
-    transformMode,
+    cropMode: effectiveCropMode,
+    transformMode: effectiveTransformMode,
     onImagesChange,
     onNotesChange,
     onVideoPromptAreasChange,
@@ -432,8 +438,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     onImageSelect,
     onNoteSelect,
     onVideoPromptAreaSelect,
-    onFilesDrop,
-    onNoteDoubleClick,
+    onFilesDrop: isPresentationMode ? () => {} : onFilesDrop,
+    onNoteDoubleClick: isPresentationMode ? () => {} : onNoteDoubleClick,
     onCropRectChange,
     setPanSmoothly,
   });
@@ -498,12 +504,13 @@ export const Canvas: React.FC<CanvasProps> = ({
       isWan27VideoMode,
       isKrea2StyleReferenceMode,
       showMetadataOverlay,
-      cropMode,
-      transformMode,
+      cropMode: effectiveCropMode,
+      transformMode: effectiveTransformMode,
       renderCache: renderCacheRef.current,
       audioPlaybackTimes: audioPlaybackTimesRef.current,
+      isPresentationMode,
     });
-  }, [cropMode, disabledMediaIds, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, transformMode, videoLastFrameImageId]);
+  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {
@@ -780,9 +787,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   useEffect(() => {
     if (containerRef.current) {
       let cursor;
-      if (cropMode) {
+      if (effectiveCropMode) {
         cursor = 'crosshair'; // Default for crop mode
-      } else if (transformMode) {
+      } else if (effectiveTransformMode) {
         cursor = 'default'; // Default for transform mode, will be updated on mouse move
       } else if (isResizing) {
         cursor = 'nwse-resize';
@@ -803,7 +810,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
       containerRef.current.style.cursor = cursor;
     }
-  }, [currentTool, isPanning, isDragging, isResizing, cropMode, transformMode, isMarqueeSelecting]);
+  }, [currentTool, effectiveCropMode, effectiveTransformMode, isPanning, isDragging, isResizing, isMarqueeSelecting]);
 
   useEffect(() => {
     if (!editingNoteId) return;
@@ -977,7 +984,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [scale]);
 
   const brushPreviewDiameter = currentTool === Tool.ERASE ? eraserSize : brushSize;
-  const shouldRenderBrushPreview = brushPreviewPosition && (currentTool === Tool.BRUSH || currentTool === Tool.ERASE) && brushPreviewDiameter > 0;
+  const shouldRenderBrushPreview = !isPresentationMode && brushPreviewPosition && (currentTool === Tool.BRUSH || currentTool === Tool.ERASE) && brushPreviewDiameter > 0;
 
   const backgroundImage = useMemo(
     () => `radial-gradient(circle, rgba(255,255,255,0.2) ${dotRadius}px, transparent ${dotRadius}px)`,
@@ -1318,7 +1325,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') {
+        if (!isPresentationMode && e.key === 'Escape') {
           onImageSelect(null);
           onNoteSelect(null);
           onVideoPromptAreaSelect(null);
@@ -1328,7 +1335,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {videoPromptAreas.map(area => (
+      {!isPresentationMode && videoPromptAreas.map(area => (
         <div
           key={area.id}
           className="pointer-events-none absolute rounded-2xl border-[3px] bg-[#030303] shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
@@ -1342,10 +1349,10 @@ export const Canvas: React.FC<CanvasProps> = ({
           }}
         >
           <div
-            className={`pointer-events-none absolute inset-[-6px] rounded-[1.35rem] border transition-colors ${selectedVideoPromptAreaId === area.id ? 'border-sky-300/70' : 'border-transparent'}`}
+            className={`pointer-events-none absolute inset-[-6px] rounded-[1.35rem] border transition-colors ${!isPresentationMode && selectedVideoPromptAreaId === area.id ? 'border-sky-300/70' : 'border-transparent'}`}
           />
-          <div className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ${selectedVideoPromptAreaId === area.id ? 'ring-sky-300/45' : 'ring-white/8'}`} />
-          {!area.promptBarId && area.orderedMediaIds.length === 0 && (
+          <div className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ${!isPresentationMode && selectedVideoPromptAreaId === area.id ? 'ring-sky-300/45' : 'ring-white/8'}`} />
+          {!isPresentationMode && !area.promptBarId && area.orderedMediaIds.length === 0 && (
             <div className="pointer-events-none absolute inset-x-6 top-20 rounded-xl border border-dashed border-white/15 bg-black/10 px-4 py-5 text-sm text-gray-400">
               Drag a video prompt bar here to activate this area.
             </div>
@@ -1353,7 +1360,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         </div>
       ))}
       <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full z-10" />
-      {videoPromptAreas.map(area => {
+      {!isPresentationMode && videoPromptAreas.map(area => {
         const screenLeft = area.x * scale + pan.x;
         const screenTop = area.y * scale + pan.y;
         const screenWidth = area.width * scale;
@@ -1412,7 +1419,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           </div>
         );
       })}
-      {embeddedPromptBars.map(({ bar, assignedArea }) => {
+      {!isPresentationMode && embeddedPromptBars.map(({ bar, assignedArea }) => {
         const barMembership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : null;
         const isAssigned = Boolean(assignedArea);
         const assignedAreaScreenWidth = assignedArea ? assignedArea.width * scale : undefined;
@@ -1607,7 +1614,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           }}
         />
       )}
-      {editingNote && (
+      {!isPresentationMode && editingNote && (
         <textarea
           ref={textareaRef}
           value={editingNote.text}
@@ -1637,7 +1644,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           }}
         />
       )}
-      {selectedNote && (
+      {!isPresentationMode && selectedNote && (
         <div
           className="flex items-center space-x-2"
           style={{
@@ -1714,7 +1721,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           </ActionButton>
         </div>
       )}
-      {selectedVideoPromptArea && (
+      {!isPresentationMode && selectedVideoPromptArea && (
         <div
           className="flex items-center space-x-2"
           style={{
@@ -1759,7 +1766,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           </div>
         </div>
       )}
-      {krea2StyleReferenceControls.map(control => (
+      {!isPresentationMode && krea2StyleReferenceControls.map(control => (
         <div
           key={control.id}
           className="flex items-center gap-2 rounded-md border border-emerald-400/50 bg-gray-950/90 px-3 py-2 text-xs text-emerald-50 shadow-xl"
@@ -1789,7 +1796,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           />
         </div>
       ))}
-      {selectedImage && !cropMode && !transformMode && (
+      {!isPresentationMode && selectedImage && !cropMode && !transformMode && (
         <div
           className="flex items-center space-x-2"
           style={{
@@ -1865,7 +1872,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           </ActionButton>
         </div>
       )}
-      {imageBeingCropped && (
+      {!isPresentationMode && imageBeingCropped && (
         <div
           className="flex items-center space-x-2"
           style={{
@@ -1896,7 +1903,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           </Tooltip>
         </div>
       )}
-      {imageBeingTransformed && (
+      {!isPresentationMode && imageBeingTransformed && (
         <div
           className="flex items-center space-x-2"
           style={{
@@ -1918,7 +1925,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           </Tooltip>
         </div>
       )}
-      {images.length === 0 && notes.length === 0 && !isDraggingOver && (
+      {!isPresentationMode && images.length === 0 && notes.length === 0 && !isDraggingOver && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center px-4 sm:px-6">
           <div className="w-full max-w-xl text-center p-6 sm:p-8 bg-black/30 rounded-lg backdrop-blur-sm">
             <h2 className="text-xl sm:text-2xl font-bold text-white">Welcome to the Infinite Canvas</h2>
@@ -1926,7 +1933,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           </div>
         </div>
       )}
-      {isDraggingOver && (
+      {!isPresentationMode && isDraggingOver && (
         <div className="absolute inset-0 bg-sky-500/30 border-4 border-dashed border-sky-300 rounded-2xl flex items-center justify-center pointer-events-none z-20 m-4">
           <div className="text-center p-8 bg-black/50 rounded-lg">
             <h2 className="text-3xl font-bold text-white">Drop to Upload</h2>

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   ApiProviderId,
@@ -11,14 +11,25 @@ import type {
 } from '../types';
 import { Tool } from '../types';
 import {
+  assertSnapshotBinaryMediaReadable,
+  getSnapshotBinaryByteLength,
+  isSnapshotMediaBlob,
+  readSnapshotBlobPartAsArrayBuffer,
   snapshotBinaryToBlob,
-  writeSnapshotBinary,
+  writeSnapshotBinaryStreaming,
+  isSnapshotMediaReadError,
+  SnapshotMediaReadError,
   type SnapshotBinary,
+  type SnapshotByteSource,
+  type SnapshotMediaBlob,
   type SnapshotMetaState,
   buildSnapshotBinaryFromState,
   restoreSnapshotFromFile,
 } from '../services/snapshotService';
-import { pruneBackupSessions, saveBackupSession } from '../services/backupService';
+import { pruneBackupSessions, saveBackupSessionBinary } from '../services/backupService';
+import { createDesktopSnapshotSource } from '../services/desktopSnapshotSource';
+import { persistAutosaveSnapshot } from '../services/autosavePersistence';
+import { enqueueSnapshotAutosave } from '../services/snapshotAutosaveQueue';
 import {
   getFalNumImageMaxForModel,
   isFalAspectRatioSelectionValue,
@@ -95,7 +106,7 @@ type SnapshotIOArgs = {
 
 type SnapshotIOResult = {
   exportSnapshot: () => Promise<void>;
-  importSnapshotFromFile: (file: File) => Promise<void>;
+  importSnapshotFromFile: (file: SnapshotByteSource) => Promise<void>;
   importSnapshotWithPicker: (onFallback: () => void) => Promise<void>;
   autosaveSnapshot: (stateOverride?: AppState) => void;
 };
@@ -112,9 +123,16 @@ type DesktopAutosaveTarget = {
 };
 
 type AutosavePrimaryTarget = FileSystemFileHandle | DesktopAutosaveTarget | null;
+type SnapshotFallbackWriteResult = {
+  snapshotBinary: SnapshotBinary;
+  snapshotBlob?: Blob;
+  fallbackCount: number;
+};
 
 const isDesktopAutosaveTarget = (target: AutosavePrimaryTarget): target is DesktopAutosaveTarget =>
   Boolean(target) && 'kind' in target && target.kind === 'desktop';
+
+const DESKTOP_SNAPSHOT_CHUNK_BYTES = 8 * 1024 * 1024;
 
 export const prepareImagesForSnapshot = (images: CanvasImage[]): CanvasImage[] => images.map(image => {
   if (image.mediaType !== 'audio' || !image.isPlaying || !image.audioElement) {
@@ -132,18 +150,58 @@ export const prepareStateForSnapshot = (state: AppState): AppState => ({
   images: prepareImagesForSnapshot(state.images),
 });
 
-const readBlobAsArrayBuffer = (blob: Blob): Promise<ArrayBuffer> => {
-  const modernBlob = blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> };
-  if (typeof modernBlob.arrayBuffer === 'function') {
-    return modernBlob.arrayBuffer();
+const createDesktopSnapshotWritable = (writeId: string): { write: (data: SnapshotMediaBlob | Uint8Array | string, manifest?: SnapshotBinary['images'][number]['manifest']) => Promise<void> } => ({
+  write: async (data, manifest) => {
+    const writeSnapshotChunk = window.canvaBananaDesktop?.fileMenu?.writeSnapshotChunk;
+    if (!writeSnapshotChunk) {
+      throw new Error('Desktop snapshot export is unavailable.');
+    }
+    const writeBytes = async (bytes: Uint8Array) => {
+      for (let offset = 0; offset < bytes.byteLength; offset += DESKTOP_SNAPSHOT_CHUNK_BYTES) {
+        const chunk = bytes.subarray(offset, offset + DESKTOP_SNAPSHOT_CHUNK_BYTES);
+        await writeSnapshotChunk({ writeId, data: chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) }); // Keep non-Blob snapshot chunks bounded.
+      }
+    };
+    if (isSnapshotMediaBlob(data)) {
+      for (let offset = 0; offset < data.size; offset += DESKTOP_SNAPSHOT_CHUNK_BYTES) {
+        const chunk = data.slice(offset, offset + DESKTOP_SNAPSHOT_CHUNK_BYTES);
+        let chunkData: ArrayBuffer;
+        try {
+          chunkData = await readSnapshotBlobPartAsArrayBuffer(chunk, 0, chunk.size);
+        } catch (error) {
+          if (manifest) {
+            throw new SnapshotMediaReadError(manifest, error);
+          }
+          throw error;
+        }
+        await writeSnapshotChunk({ writeId, data: chunkData }); // Keep snapshot IPC chunks bounded.
+      }
+      return;
+    }
+    if (typeof data === 'string') {
+      await writeBytes(new TextEncoder().encode(data));
+      return;
+    }
+    await writeBytes(data);
+  },
+});
+
+const finishDesktopSnapshotWrite = async (writeId: string): Promise<void> => {
+  const finishSnapshotWrite = window.canvaBananaDesktop?.fileMenu?.finishSnapshotWrite;
+  if (!finishSnapshotWrite) {
+    throw new Error('Desktop snapshot export is unavailable.');
   }
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read snapshot data.'));
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.readAsArrayBuffer(blob);
-  });
+  await finishSnapshotWrite({ writeId });
 };
+
+const abortDesktopSnapshotWrite = async (writeId: string): Promise<void> => {
+  await window.canvaBananaDesktop?.fileMenu?.abortSnapshotWrite?.({ writeId });
+};
+
+const getSnapshotExportToast = (fallbackCount: number): string =>
+  fallbackCount > 0
+    ? `Snapshot exported with ${fallbackCount} unavailable media ${fallbackCount === 1 ? 'preview' : 'previews'}`
+    : 'Snapshot exported';
 
 export function useSnapshotIO({
   ui,
@@ -182,8 +240,15 @@ export function useSnapshotIO({
   // Persist file handles so autosave can keep writing without prompting each time.
   const autosavePrimaryHandleRef = useRef<AutosavePrimaryTarget>(null);
   const autosaveSessionRef = useRef<AutosaveSessionInfo | null>(null);
+  const retainedSnapshotSourceClosersRef = useRef<Array<() => Promise<void>>>([]);
   // Serialize autosave writes to avoid overlapping writes on rapid generations.
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => () => {
+    const closers = retainedSnapshotSourceClosersRef.current;
+    retainedSnapshotSourceClosersRef.current = [];
+    void Promise.all(closers.map(close => close().catch(error => console.error(error)))); // Release retained desktop handles after renderer teardown.
+  }, []);
 
   const {
     falModelId,
@@ -313,7 +378,7 @@ export function useSnapshotIO({
     setVideoLastFrameImageId,
   } = selection;
   // Serialize current canvas state plus UI settings into a binary snapshot for export/share.
-  const buildSnapshotBinary = useCallback(async (stateOverride?: AppState): Promise<SnapshotBinary> => {
+  const buildSnapshotBinary = useCallback(async (stateOverride?: AppState, fallbackMediaIds?: ReadonlySet<string>): Promise<SnapshotBinary> => {
     const snapshotState = prepareStateForSnapshot(stateOverride ?? {
       images: displayedImages,
       notes: displayedNotes,
@@ -398,7 +463,7 @@ export function useSnapshotIO({
       videoPromptAreas: snapshotState.videoPromptAreas,
       videoPromptBars: snapshotState.videoPromptBars,
       meta,
-    });
+    }, { fallbackMediaIds });
   }, [
     appMode,
     apiProvider,
@@ -467,11 +532,39 @@ export function useSnapshotIO({
     referenceAudioIds,
     referenceImageIds,
     referenceVideoIds,
+    seedanceReferenceOrderIds,
     selectedImageIds,
     selectedNoteIds,
     tool,
     videoLastFrameImageId,
   ]);
+
+  const writeSnapshotWithMediaFallbacks = useCallback(async (
+    snapshotState: AppState,
+    writeAttempt: (snapshotBinary: SnapshotBinary, getSnapshotBlob: () => Blob) => Promise<void>,
+    afterMediaFallback?: () => Promise<void>,
+  ): Promise<SnapshotFallbackWriteResult> => {
+    const fallbackMediaIds = new Set<string>();
+
+    while (true) {
+      const snapshotBinary = await buildSnapshotBinary(snapshotState, fallbackMediaIds);
+      let snapshotBlob: Blob | undefined;
+      const getSnapshotBlob = () => {
+        snapshotBlob ??= snapshotBinaryToBlob(snapshotBinary);
+        return snapshotBlob;
+      };
+      try {
+        await writeAttempt(snapshotBinary, getSnapshotBlob);
+        return { snapshotBinary, snapshotBlob, fallbackCount: fallbackMediaIds.size };
+      } catch (error) {
+        if (!isSnapshotMediaReadError(error) || fallbackMediaIds.has(error.mediaId)) {
+          throw error;
+        }
+        fallbackMediaIds.add(error.mediaId);
+        await afterMediaFallback?.();
+      }
+    }
+  }, [buildSnapshotBinary]);
 
   // Wrap FileSystemFileHandle writes so callers don't repeat the write/close flow.
   const writeSnapshotToHandle = useCallback(async (
@@ -480,24 +573,46 @@ export function useSnapshotIO({
   ): Promise<void> => {
     const writable = await handle.createWritable();
     try {
-      await writeSnapshotBinary(snapshotBinary, writable);
-    } finally {
-      await writable.close();
+      await writeSnapshotBinaryStreaming(snapshotBinary, {
+        write: async (data) => {
+          if (isSnapshotMediaBlob(data) && !(data instanceof Blob)) {
+            for (let offset = 0; offset < data.size; offset += DESKTOP_SNAPSHOT_CHUNK_BYTES) {
+              const chunk = data.slice(offset, offset + DESKTOP_SNAPSHOT_CHUNK_BYTES);
+              await writable.write(new Uint8Array(await readSnapshotBlobPartAsArrayBuffer(chunk, 0, chunk.size))); // File handles need concrete byte chunks.
+            }
+            return;
+          }
+          await writable.write(data as FileSystemWriteChunkType);
+        },
+      });
+    } catch (writeError) {
+      try {
+        await writable.abort(); // Discard partial bytes so the previous file stays intact.
+      } catch (abortError) {
+        console.error(abortError); // Keep the original write failure as the user-facing cause.
+      }
+      throw writeError;
     }
+    await writable.close(); // Closing is the commit point after every snapshot byte succeeds.
   }, []);
 
   const writeSnapshotToPrimaryTarget = useCallback(async (
     target: Exclude<AutosavePrimaryTarget, null>,
     snapshotBinary: SnapshotBinary,
-    snapshotBlob?: Blob,
   ): Promise<void> => {
     if (isDesktopAutosaveTarget(target)) {
-      const writeSnapshotFile = window.canvaBananaDesktop?.fileMenu?.writeSnapshotFile;
-      if (!writeSnapshotFile) {
+      const beginAutosaveSnapshot = window.canvaBananaDesktop?.fileMenu?.beginAutosaveSnapshot;
+      if (!beginAutosaveSnapshot) {
         throw new Error('Desktop snapshot autosave is unavailable.');
       }
-      const blob = snapshotBlob ?? snapshotBinaryToBlob(snapshotBinary);
-      await writeSnapshotFile({ autosaveId: target.autosaveId, data: await readBlobAsArrayBuffer(blob) });
+      const session = await beginAutosaveSnapshot({ autosaveId: target.autosaveId });
+      try {
+        await writeSnapshotBinaryStreaming(snapshotBinary, createDesktopSnapshotWritable(session.writeId));
+        await finishDesktopSnapshotWrite(session.writeId);
+      } catch (error) {
+        await abortDesktopSnapshotWrite(session.writeId);
+        throw error;
+      }
       return;
     }
     await writeSnapshotToHandle(target, snapshotBinary);
@@ -521,26 +636,44 @@ export function useSnapshotIO({
       videoPromptBars: displayedVideoPromptBars,
     });
 
-    autosaveQueueRef.current = autosaveQueueRef.current
-      .catch(() => Promise.resolve())
-      .then(async () => {
-        // Rebuild the binary just-in-time so state stays fresh.
-        const snapshotBinary = await buildSnapshotBinary(snapshotState);
-        const backupBlob = snapshotBinaryToBlob(snapshotBinary);
-        if (primaryHandle) {
-          await writeSnapshotToPrimaryTarget(primaryHandle, snapshotBinary, backupBlob);
-        }
-        // Save a local backup snapshot so users can restore recent sessions.
-        await saveBackupSession({
+    const queuedMedia = snapshotState.images.map(image => image.file); // Keep lazy media on disk while this captured state waits its turn.
+    autosaveQueueRef.current = enqueueSnapshotAutosave(autosaveQueueRef.current, queuedMedia, async () => {
+      const persistence = await persistAutosaveSnapshot({
+        writeWithMediaFallbacks: writeAttempt => writeSnapshotWithMediaFallbacks(snapshotState, writeAttempt),
+        writePrimary: primaryHandle
+          ? snapshotBinary => writeSnapshotToPrimaryTarget(primaryHandle, snapshotBinary)
+          : undefined,
+        writeBackup: snapshotBinary => saveBackupSessionBinary({
           id: session.id,
           createdAt: session.createdAt,
           updatedAt: Date.now(),
           fileName: session.fileName,
-          size: backupBlob.size,
-          blob: backupBlob,
-        });
-        await pruneBackupSessions(3);
-      })
+          size: getSnapshotBinaryByteLength(snapshotBinary),
+        }, snapshotBinary),
+        pruneBackups: () => pruneBackupSessions(3),
+      });
+      const { fallbackCount } = persistence.writeResult;
+      const backupUnavailable = persistence.backup.status === 'failed';
+      if (persistence.backup.status === 'failed') {
+        console.warn('Primary snapshot autosave succeeded, but its backup could not be stored.', persistence.backup.error); // Backup quota cannot invalidate the user-selected file.
+      }
+      if (persistence.maintenanceError) {
+        console.warn('Snapshot autosave succeeded, but old backups could not be pruned.', persistence.maintenanceError); // Cleanup stays independent from persistence success.
+      }
+      const maintenanceUnavailable = persistence.maintenanceError !== undefined;
+      if (fallbackCount > 0 || backupUnavailable || maintenanceUnavailable) {
+        const fallbackMessage = fallbackCount > 0
+          ? ` with ${fallbackCount} unavailable media ${fallbackCount === 1 ? 'preview' : 'previews'}`
+          : '';
+        const backupMessage = backupUnavailable
+          ? '; backup unavailable'
+          : maintenanceUnavailable
+            ? '; backup cleanup unavailable'
+            : '';
+        setToastMessage(`Autosaved${fallbackMessage}${backupMessage}`);
+        setTimeout(() => setToastMessage(null), 2000);
+      }
+    })
       .catch(err => {
         console.error(err);
         const message = err instanceof Error ? err.message : 'Autosave failed.';
@@ -555,6 +688,8 @@ export function useSnapshotIO({
     displayedVideoPromptAreas,
     displayedVideoPromptBars,
     setError,
+    setToastMessage,
+    writeSnapshotWithMediaFallbacks,
     writeSnapshotToPrimaryTarget,
   ]);
 
@@ -566,7 +701,7 @@ export function useSnapshotIO({
   ): Promise<boolean> => {
     const sessionId = crypto.randomUUID();
     const sessionCreatedAt = Date.now();
-    const backupBlob = snapshotBlob ?? snapshotBinaryToBlob(snapshotBinary);
+    const backupSize = snapshotBlob?.size ?? getSnapshotBinaryByteLength(snapshotBinary);
     autosaveSessionRef.current = {
       id: sessionId,
       createdAt: sessionCreatedAt,
@@ -576,14 +711,13 @@ export function useSnapshotIO({
 
     try {
       // Persist the initial backup so it shows up in the Backups dialog.
-      await saveBackupSession({
+      await saveBackupSessionBinary({
         id: sessionId,
         createdAt: sessionCreatedAt,
         updatedAt: sessionCreatedAt,
         fileName,
-        size: backupBlob.size,
-        blob: backupBlob,
-      });
+        size: backupSize,
+      }, snapshotBinary);
       await pruneBackupSessions(3);
       return true;
     } catch (backupError) {
@@ -595,25 +729,50 @@ export function useSnapshotIO({
 
   const exportSnapshot = useCallback(async () => {
     let shouldClearError = true;
+    let fallbackCount = 0;
     try {
-      const snapshotBinary = await buildSnapshotBinary();
+      const snapshotState = prepareStateForSnapshot({
+        images: displayedImages,
+        notes: displayedNotes,
+        paths: displayedPaths,
+        videoPromptAreas: displayedVideoPromptAreas,
+        videoPromptBars: displayedVideoPromptBars,
+      });
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const suggestedName = `banana-canvas-snapshot-${timestamp}.bcsnap`;
-      const desktopSaveSnapshotFile = window.canvaBananaDesktop?.fileMenu?.saveSnapshotFile;
+      const desktopBeginSaveSnapshot = window.canvaBananaDesktop?.fileMenu?.beginSaveSnapshot;
 
-      if (desktopSaveSnapshotFile) {
-        const blob = snapshotBinaryToBlob(snapshotBinary);
-        const result = await desktopSaveSnapshotFile({
-          suggestedName,
-          data: await readBlobAsArrayBuffer(blob),
-        });
+      if (desktopBeginSaveSnapshot) {
+        const result = await desktopBeginSaveSnapshot({ suggestedName });
         if (result.canceled === true) {
           return;
         }
+        const beginAutosaveSnapshot = window.canvaBananaDesktop?.fileMenu?.beginAutosaveSnapshot;
+        let writeId = result.writeId;
+        const writeResult = await writeSnapshotWithMediaFallbacks(
+          snapshotState,
+          async (nextSnapshotBinary) => {
+            try {
+              await writeSnapshotBinaryStreaming(nextSnapshotBinary, createDesktopSnapshotWritable(writeId));
+              await finishDesktopSnapshotWrite(writeId);
+            } catch (error) {
+              await abortDesktopSnapshotWrite(writeId);
+              throw error;
+            }
+          },
+          async () => {
+            if (typeof result.autosaveId !== 'string' || !beginAutosaveSnapshot) {
+              throw new Error('Desktop snapshot retry is unavailable.');
+            }
+            const retrySession = await beginAutosaveSnapshot({ autosaveId: result.autosaveId });
+            writeId = retrySession.writeId;
+          },
+        );
+        fallbackCount = writeResult.fallbackCount;
         const desktopAutosaveTarget = typeof result.autosaveId === 'string'
           ? { kind: 'desktop' as const, autosaveId: result.autosaveId }
           : null;
-        shouldClearError = await rememberExportedSnapshot(result.fileName, snapshotBinary, desktopAutosaveTarget, blob);
+        shouldClearError = await rememberExportedSnapshot(result.fileName, writeResult.snapshotBinary, desktopAutosaveTarget, writeResult.snapshotBlob);
       } else {
         const win = window as unknown as { showSaveFilePicker?: (options?: unknown) => Promise<any> };
         if (typeof win.showSaveFilePicker === 'function') {
@@ -626,29 +785,42 @@ export function useSnapshotIO({
               },
             ],
           });
-          await writeSnapshotToHandle(saveHandle as FileSystemFileHandle, snapshotBinary);
+          const writeResult = await writeSnapshotWithMediaFallbacks(
+            snapshotState,
+            async (nextSnapshotBinary) => {
+              await writeSnapshotToHandle(saveHandle as FileSystemFileHandle, nextSnapshotBinary);
+            },
+          );
+          fallbackCount = writeResult.fallbackCount;
 
           const sessionFileName = saveHandle.name ?? suggestedName;
-          shouldClearError = await rememberExportedSnapshot(sessionFileName, snapshotBinary, saveHandle as FileSystemFileHandle);
+          shouldClearError = await rememberExportedSnapshot(sessionFileName, writeResult.snapshotBinary, saveHandle as FileSystemFileHandle, writeResult.snapshotBlob);
         } else {
-          const blob = snapshotBinaryToBlob(snapshotBinary);
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = suggestedName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
+          const writeResult = await writeSnapshotWithMediaFallbacks(
+            snapshotState,
+            async (nextSnapshotBinary, getSnapshotBlob) => {
+              await assertSnapshotBinaryMediaReadable(nextSnapshotBinary);
+              const nextSnapshotBlob = getSnapshotBlob();
+              const url = URL.createObjectURL(nextSnapshotBlob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = suggestedName;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            },
+          );
+          fallbackCount = writeResult.fallbackCount;
 
-          shouldClearError = await rememberExportedSnapshot(suggestedName, snapshotBinary, null);
+          shouldClearError = await rememberExportedSnapshot(suggestedName, writeResult.snapshotBinary, null, writeResult.snapshotBlob);
         }
       }
 
       if (shouldClearError) {
         setError(null);
       }
-      setToastMessage('Snapshot exported');
+      setToastMessage(getSnapshotExportToast(fallbackCount));
       setTimeout(() => setToastMessage(null), 2000);
     } catch (err) {
       console.error(err);
@@ -657,11 +829,40 @@ export function useSnapshotIO({
     } finally {
       setIsFileMenuOpen(false);
     }
-  }, [buildSnapshotBinary, rememberExportedSnapshot, setError, setIsFileMenuOpen, setToastMessage, writeSnapshotToHandle]);
+  }, [
+    displayedImages,
+    displayedNotes,
+    displayedPaths,
+    displayedVideoPromptAreas,
+    displayedVideoPromptBars,
+    rememberExportedSnapshot,
+    setError,
+    setIsFileMenuOpen,
+    setToastMessage,
+    writeSnapshotToHandle,
+    writeSnapshotWithMediaFallbacks,
+  ]);
+
+  const retainSnapshotSourceForImport = useCallback(async (file: SnapshotByteSource): Promise<(() => Promise<void>) | null> => {
+    if (!('retain' in file) || typeof file.retain !== 'function' || typeof file.close !== 'function') {
+      return null;
+    }
+    await file.retain(); // Retain before restore so large lazy media cannot expire during import.
+    return file.close.bind(file);
+  }, []);
+
+  const activateImportedSnapshotSource = useCallback(async (closeCurrentSource: (() => Promise<void>) | null): Promise<void> => {
+    const previousClosers = retainedSnapshotSourceClosersRef.current;
+    retainedSnapshotSourceClosersRef.current = closeCurrentSource ? [closeCurrentSource] : [];
+    await Promise.all(previousClosers.map(close => close().catch(error => console.error(error)))); // Release media only after its replacement is ready.
+  }, []);
 
   // Restore a snapshot file into state, validating each option before applying it.
-  const importSnapshotFromFile = useCallback(async (file: File) => {
+  const importSnapshotFromFile = useCallback(async (file: SnapshotByteSource) => {
+    let retainedSourceCloser: (() => Promise<void>) | null = null;
+    let sourceActivated = false;
     try {
+      retainedSourceCloser = await retainSnapshotSourceForImport(file);
       const restored = await restoreSnapshotFromFile(file, {
         brushSize,
         eraserSize,
@@ -904,6 +1105,12 @@ export function useSnapshotIO({
         setVideoLastFrameImageId(null);
       }
 
+      if (restored.sourceRetention === 'not-required' && retainedSourceCloser) {
+        await retainedSourceCloser().catch(error => console.error(error)); // Legacy JSON media is fully materialized after restore.
+        retainedSourceCloser = null;
+      }
+      await activateImportedSnapshotSource(retainedSourceCloser); // Keep only sources that still back lazy binary media.
+      sourceActivated = true;
       setError(null);
       setToastMessage('Snapshot imported');
       setTimeout(() => setToastMessage(null), 2000);
@@ -914,6 +1121,9 @@ export function useSnapshotIO({
       } else {
         setError('Failed to import snapshot.');
       }
+      if (!sourceActivated && 'close' in file && typeof file.close === 'function') {
+        await file.close().catch(error => console.error(error)); // Failed imports should not keep desktop handles open.
+      }
     } finally {
       setIsFileMenuOpen(false);
     }
@@ -923,6 +1133,8 @@ export function useSnapshotIO({
     brushSize,
     eraserSize,
     providerAvailability,
+    activateImportedSnapshotSource,
+    retainSnapshotSourceForImport,
     resetHistory,
     handleSeedance2JimengModelVersionChange,
     setApiProvider,
@@ -989,10 +1201,8 @@ export function useSnapshotIO({
         if (result.canceled === true) {
           return;
         }
-        const file = new File([new Uint8Array(result.data)], result.fileName, {
-          type: result.fileName.endsWith('.json') ? 'application/json' : 'application/octet-stream',
-        });
-        await importSnapshotFromFile(file);
+        const source = createDesktopSnapshotSource(result);
+        await importSnapshotFromFile(source);
       } catch (err) {
         console.error(err);
         if (err instanceof Error) {

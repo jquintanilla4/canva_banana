@@ -1,5 +1,14 @@
 const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']); // Only same-machine renderers may receive preload secrets.
 
+export const SNAPSHOT_MEDIA_PROTOCOL = 'canva-banana-snapshot';
+export const SNAPSHOT_MEDIA_PROTOCOL_PRIVILEGES = Object.freeze({
+  standard: true,
+  secure: true,
+  stream: true,
+  supportFetchAPI: true,
+  corsEnabled: true,
+}); // Snapshot media is a cross-origin streaming resource in both dev and packaged builds.
+
 const isLocalDevRendererUrl = (url) => {
   try {
     const parsedUrl = new URL(url); // Use URL parsing so host checks cannot be bypassed with strings.

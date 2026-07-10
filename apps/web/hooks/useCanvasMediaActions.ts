@@ -8,6 +8,7 @@ import {
   Tool,
 } from '../types';
 import { getNaturalSize, loadMediaFromBlob } from '../services/mediaService';
+import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { loadAudioFromBlob, generateWaveformImage } from '../services/audioService';
 import { removeBackground as removeFalBackground } from '../services/falService';
 import type { AppState, CommitOverrides } from './useCanvasHistory';
@@ -244,14 +245,24 @@ export function useCanvasMediaActions({
     e.target.value = '';
   }, [handleFilesDrop]);
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     if (!hasSingleImageSelected || !primaryImageId) return;
     const imageToDownload = images.find(img => img.id === primaryImageId);
     if (!imageToDownload) return;
 
+    let realFile: File | null = null;
+    if (imageToDownload.file) {
+      try {
+        realFile = await ensureRealSnapshotFile(imageToDownload.file);
+      } catch {
+        setError('Could not read this item\'s media from the imported snapshot.');
+        return;
+      }
+    }
+
     // Handle audio downloads
     if (imageToDownload.mediaType === 'audio' && imageToDownload.audioElement) {
-      const objectUrl = imageToDownload.file ? URL.createObjectURL(imageToDownload.file) : null;
+      const objectUrl = realFile ? URL.createObjectURL(realFile) : null;
       if (!objectUrl) {
         setError('No downloadable source found for this audio.');
         return;
@@ -270,7 +281,7 @@ export function useCanvasMediaActions({
     const fallbackHref = mediaElement instanceof HTMLVideoElement
       ? (mediaElement.currentSrc || mediaElement.src)
       : mediaElement.src;
-    const objectUrl = imageToDownload.file ? URL.createObjectURL(imageToDownload.file) : null;
+    const objectUrl = realFile ? URL.createObjectURL(realFile) : null;
     const href = objectUrl || fallbackHref;
     if (!href) {
       setError('No downloadable source found for this item.');

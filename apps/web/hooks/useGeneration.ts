@@ -69,6 +69,8 @@ import {
   isSeedance15AspectRatioSelectionValue,
   isSeedance15DurationSelectionValue,
   isSeedance15ResolutionSelectionValue,
+  isWan27ImageAspectRatioSelectionValue,
+  isWan27ImageMaxImagesSelectionValue,
   isWan27VideoAspectRatioSelectionValue,
   isWan27VideoDurationSelectionValue,
   isWan27VideoResolutionSelectionValue,
@@ -77,6 +79,7 @@ import {
   isFalImageModelId,
   isFalModelMode,
   isFalVideoModelId,
+  isFlux2MaxImageSizeSelectionValue,
   isSeedreamModelId,
   isSeedreamV5LiteModelId,
   isSeedreamV5ProModelId,
@@ -106,6 +109,8 @@ import {
   type WanAnimateVariant,
   type WanCreativity,
   type Wan27VideoAudioSettingSelectionValue,
+  type Wan27ImageAspectRatioSelectionValue,
+  type Wan27ImageMaxImagesSelectionValue,
   type Wan27VideoAspectRatioSelectionValue,
   type Wan27VideoDurationSelectionValue,
   type Wan27VideoResolutionSelectionValue,
@@ -135,6 +140,7 @@ import type {
   AppMode,
   CanvasImage,
   CanvasNote,
+  GenerationFalOptions,
   GenerationInputs,
   GenerationKind,
   GenerationPlacedPayload,
@@ -148,6 +154,7 @@ import type {
 import { Tool } from '../types';
 import { getImageBounds, isOverlapping } from '../utils/canvasGeometry';
 import { getNaturalSize, isVideoFileType, loadMediaFromBlob, rasterizeImages } from '../services/mediaService';
+import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
 import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/volcengineService';
@@ -194,12 +201,29 @@ type UseGenerationArgs = {
   onGenerationPlaced?: (payload: GenerationPlacedPayload) => void;
 };
 
+type HandleGenerateOptions = {
+  retryJobId?: string; // Existing queue row to replace during retry.
+};
+
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
 const LEGACY_KLING_O1_EDIT_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/edit'; // Removed Kling O1 edit endpoint.
 const LEGACY_KLING_O1_REF_V2V_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/reference'; // Removed Kling O1 ref-v2v endpoint.
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
   !!img && img.mediaType === 'image';
+
+type ReplayableImageEditTool = Tool.SELECTION | Tool.FREE_SELECTION | Tool.ANNOTATE;
+
+const isReplayableImageEditTool = (value: unknown): value is ReplayableImageEditTool =>
+  value === Tool.SELECTION || value === Tool.FREE_SELECTION || value === Tool.ANNOTATE; // Retry stores API-level edit tools only.
+
+const getDefaultImageEditTool = (editAppMode: AppMode, value: Tool): Tool =>
+  editAppMode === 'ANNOTATE'
+    ? Tool.ANNOTATE
+    : value; // Annotate mode always builds one annotation-mask request.
+
+const clonePathsForRetry = (sourcePaths: Path[]): Path[] =>
+  sourcePaths.map(path => ({ ...path, points: path.points.map(point => ({ ...point })) })); // Detach saved paths from live canvas edits.
 
 const normalizeKrea2StyleStrength = (value: unknown): number => {
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -343,7 +367,7 @@ const buildStillImageFile = async (
   fileNameBase: string,
 ): Promise<File> => {
   if ((image.rotation ?? 0) === 0) {
-    return image.file;
+    return ensureRealSnapshotFile(image.file);
   }
   const rasterized = await rasterizeImages([image]);
   return new File([rasterized.file], `${fileNameBase}.png`, { type: rasterized.file.type || 'image/png' }); // Rotated frames need a baked file.
@@ -495,10 +519,30 @@ export const useGeneration = (args: UseGenerationArgs) => {
   } = selection;
 
   // Centralized generation orchestrator for both providers (Fal/Gemini) across text-to-image, edits, upscales, and video.
-  const handleGenerate = useCallback(async (generationOverrideOrEvent?: GenerationInputs | SyntheticEvent) => {
+  const handleGenerate = useCallback(async (generationOverrideOrEvent?: GenerationInputs | SyntheticEvent, options: HandleGenerateOptions = {}) => {
     const generationOverride = generationOverrideOrEvent && 'kind' in generationOverrideOrEvent
       ? generationOverrideOrEvent
       : undefined;
+    const retryJobId = options.retryJobId;
+    const editAppModeForRun: AppMode = generationOverride?.editAppMode === 'CANVAS' || generationOverride?.editAppMode === 'ANNOTATE'
+      ? generationOverride.editAppMode
+      : appMode; // Saved retry data should keep the original edit mode.
+    const editToolForRun = isReplayableImageEditTool(generationOverride?.editTool)
+      ? generationOverride.editTool
+      : getDefaultImageEditTool(editAppModeForRun, tool); // Saved retry data should keep the original edit intent.
+    const editPathsForRun = Array.isArray(generationOverride?.editPaths)
+      ? clonePathsForRetry(generationOverride.editPaths)
+      : paths; // Saved retry data should keep the original edit strokes.
+    const queueJob = (newJob: FalQueueJob) => {
+      setFalJobs(prev => {
+        if (!retryJobId) {
+          return [...prev.slice(-9), newJob];
+        }
+        return prev.some(job => job.id === retryJobId)
+          ? prev.map(job => job.id === retryJobId ? newJob : job)
+          : [...prev.slice(-9), newJob]; // Fall back to append if the row was dismissed.
+      });
+    }; // Replace failed rows during retry, append for normal submissions.
     const overrideKind = generationOverride?.kind;
     const overridePrompt = typeof generationOverride?.prompt === 'string' ? generationOverride.prompt : undefined;
     const basePrompt = overridePrompt ?? prompt;
@@ -526,6 +570,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const falImageSizeSelectionForRun = rawFalImageSizeSelection === 'placeholder' ? 'default' : rawFalImageSizeSelection;
     const falAspectRatioSelectionForRun = rawFalAspectRatioSelection === 'placeholder' ? 'default' : rawFalAspectRatioSelection;
     const falResolutionSelectionForRun = falOptionsOverride.resolutionSelection ?? falResolutionSelection;
+    const flux2MaxImageSizeForRun = isFlux2MaxImageSizeSelectionValue(falOptionsOverride.flux2MaxImageSize)
+      ? falOptionsOverride.flux2MaxImageSize
+      : flux2MaxImageSize; // Retry data overrides the current Flux size picker.
     const falNumImagesForRun = falOptionsOverride.numImages ?? falNumImages;
     const falScaleFactorForRun = falOptionsOverride.scaleFactor ?? falScaleFactor;
     const falNoiseScaleForRun = falOptionsOverride.noiseScale ?? falNoiseScale;
@@ -588,6 +635,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const wan27VideoAspectRatioForRun: Wan27VideoAspectRatioSelectionValue = isWan27VideoAspectRatioSelectionValue(falOptionsOverride.wan27VideoAspectRatio)
       ? falOptionsOverride.wan27VideoAspectRatio
       : wan27VideoAspectRatio;
+    const wan27ImageAspectRatioForRun: Wan27ImageAspectRatioSelectionValue = isWan27ImageAspectRatioSelectionValue(falOptionsOverride.wan27ImageAspectRatio)
+      ? falOptionsOverride.wan27ImageAspectRatio
+      : wan27ImageAspectRatio; // Retry should keep the queued image size.
+    const wan27ImageMaxImagesForRun: Wan27ImageMaxImagesSelectionValue = isWan27ImageMaxImagesSelectionValue(falOptionsOverride.wan27ImageMaxImages)
+      ? falOptionsOverride.wan27ImageMaxImages
+      : wan27ImageMaxImages; // Retry should keep the queued output count.
     const wan27VideoPromptExpansionForRun = typeof falOptionsOverride.wan27VideoPromptExpansion === 'boolean'
       ? falOptionsOverride.wan27VideoPromptExpansion
       : typeof legacyWanOptions.wan26PromptExpansion === 'boolean'
@@ -621,6 +674,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const heygenEnableDynamicDurationForRun = falOptionsOverride.heygenEnableDynamicDuration ?? heygenEnableDynamicDuration;
     const heygenDisableMusicTrackForRun = falOptionsOverride.heygenDisableMusicTrack ?? heygenDisableMusicTrack;
     const heygenEnableSpeechEnhancementForRun = falOptionsOverride.heygenEnableSpeechEnhancement ?? heygenEnableSpeechEnhancement;
+    const heygenTimingResolvedOverride = falOptionsOverride.heygenTimingResolved === true;
     const heygenStartTimeOverride = typeof falOptionsOverride.heygenStartTime === 'number' && Number.isFinite(falOptionsOverride.heygenStartTime)
       ? Math.max(0, falOptionsOverride.heygenStartTime)
       : undefined;
@@ -750,8 +804,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       orderedReferenceIds: seedanceReferenceOrderIds,
     });
     const elementImageIdsForRun = generationOverride ? generationOverride.elementImageIds ?? [] : elementImageIds;
-    const videoLastFrameImageIdForRun = generationOverride?.videoLastFrameImageId ?? videoLastFrameImageId;
-    const sourceVideoIdForRun = generationOverride?.sourceVideoId ?? sourceVideoId;
+    const videoLastFrameImageIdForRun = generationOverride ? generationOverride.videoLastFrameImageId ?? null : videoLastFrameImageId;
+    const sourceVideoIdForRun = generationOverride ? generationOverride.sourceVideoId ?? null : sourceVideoId;
     const sourceAudioIdForRun = generationOverride ? generationOverride.sourceAudioId ?? null : sourceAudioId;
     const klingO3KeepAudioForRun = typeof generationOverride?.falOptions?.klingO3KeepAudio === 'boolean'
       ? generationOverride.falOptions.klingO3KeepAudio
@@ -970,7 +1024,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       };
 
       if (usingVolcengine || usingJimeng) {
-        const backendJobId = crypto.randomUUID();
+        const backendJobId = retryJobId ?? crypto.randomUUID();
         const localBackendProvider: Extract<GenerationProviderId, 'volcengine' | 'jimeng'> = usingJimeng ? 'jimeng' : 'volcengine';
         const jobModelLabel = usingJimeng
           ? buildJimengSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun, seedance2JimengModelVersionForRun)
@@ -1032,6 +1086,38 @@ export const useGeneration = (args: UseGenerationArgs) => {
         }
         const localSeedance2GenerateAudioForRun = usingJimeng ? false : seedance2GenerateAudioForRun; // Jimeng hides and ignores audio generation.
         const localSeedance2CameraFixedForRun = usingJimeng ? false : seedance2CameraFixedForRun; // Jimeng hides and ignores fixed camera.
+        const localSeedanceRetryInputs: GenerationInputs = {
+          kind: 'video',
+          prompt: seedancePromptForRun,
+          provider: localBackendProvider,
+          modelId: falModelIdForRun,
+          modelLabel: jobModelLabel,
+          modelMode: falModelModeForRun,
+          ...(primaryImageIdForRun ? { primaryImageId: primaryImageIdForRun } : {}),
+          ...(referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
+          ...(referenceVideoIdsForRun.length ? { referenceVideoIds: referenceVideoIdsForRun } : {}),
+          ...(referenceAudioIdsForRun.length ? { referenceAudioIds: referenceAudioIdsForRun } : {}),
+          ...(activePrimary?.metadata?.generation?.originalSourceImageId
+            ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
+            : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
+          videoLastFrameImageId: videoLastFrameImageIdForRun,
+          ...(usingJimeng ? { jimengOptions: {
+            seedance2Variant: seedance2VariantForRun,
+            seedance2JimengModelVersion: seedance2JimengModelVersionForRun,
+            seedance2AspectRatio: seedance2AspectRatioForRun,
+            seedance2Resolution: seedance2ResolutionForRun,
+            seedance2Duration: seedance2DurationForRun,
+            seedance2GenerateAudio: localSeedance2GenerateAudioForRun,
+            seedance2CameraFixed: localSeedance2CameraFixedForRun,
+          } } : { volcengineOptions: {
+            seedance2Variant: seedance2VariantForRun,
+            seedance2AspectRatio: seedance2AspectRatioForRun,
+            seedance2Resolution: seedance2ResolutionForRun,
+            seedance2Duration: seedance2DurationForRun,
+            seedance2GenerateAudio: seedance2GenerateAudioForRun,
+            seedance2CameraFixed: seedance2CameraFixedForRun,
+          } }),
+        }; // Queue retry uses the same request metadata as saved videos.
 
         const tailFrame = videoLastFrameImageIdForRun
           ? images.find(img => img.id === videoLastFrameImageIdForRun) ?? null
@@ -1119,12 +1205,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
             modelId: falModelIdForRun,
             modelLabel: jobModelLabel,
             provider: localBackendProvider,
+            retryInputs: localSeedanceRetryInputs,
             status: 'IN_QUEUE',
             logs: [],
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };
-          setFalJobs(prev => [...prev.slice(-9), newJob]);
+          queueJob(newJob);
           addDebugLog({
             direction: 'outbound',
             source: localBackendProvider,
@@ -1149,15 +1236,17 @@ export const useGeneration = (args: UseGenerationArgs) => {
           const referenceImageFiles = await Promise.all(
             referenceImageCanvasItems.map((img, index) => buildStillImageFile(img, `seedance2-reference-image-${index + 1}-${Date.now()}`)),
           );
-          const referenceVideoFiles = referenceVideoCanvasItems.map((img, index) => (
-            new File([img.file], img.file.name || `seedance2-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' })
-          ));
+          const referenceVideoFiles = await Promise.all(referenceVideoCanvasItems.map(async (img, index) => {
+            const realFile = await ensureRealSnapshotFile(img.file);
+            return new File([realFile], img.file.name || `seedance2-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
+          }));
           const referenceAudioFiles = await Promise.all(referenceAudioCanvasItems.map(async (img, index) => {
-            if (img.file.type === 'audio/webm') {
-              const wavBlob = await convertAudioBlobToWav(img.file);
+            const realFile = await ensureRealSnapshotFile(img.file);
+            if (realFile.type === 'audio/webm') {
+              const wavBlob = await convertAudioBlobToWav(realFile);
               return new File([wavBlob], `seedance2-reference-audio-${index + 1}.wav`, { type: 'audio/wav' });
             }
-            return new File([img.file], img.file.name || `seedance2-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
+            return new File([realFile], img.file.name || `seedance2-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
           }));
           const jimengPrimaryImageFile = seedance2VariantForRun === 'reference' && activePrimary && referenceImageIdsForRun.includes(activePrimary.id)
             ? undefined
@@ -1348,11 +1437,143 @@ export const useGeneration = (args: UseGenerationArgs) => {
         return;
       }
 
-      const falJobId = crypto.randomUUID();
+      const falJobId = retryJobId ?? crypto.randomUUID();
 
       let videoPromptForRequest = trimmedPrompt;
+      // Start from the retry overrides; refined below by HeyGen clip-intent extraction so retry
+      // inputs and saved metadata always reflect the timing the request actually used.
+      let heygenStartTimeForRequest = heygenStartTimeOverride;
+      let heygenEndTimeForRequest = heygenEndTimeOverride;
+      let heygenTimingResolvedForRequest = heygenTimingResolvedOverride
+        || heygenStartTimeOverride !== undefined
+        || heygenEndTimeOverride !== undefined; // Legacy retries with saved bounds are already finalized.
+      // Single source of truth for the per-model video options replayed on retry and saved in
+      // generation metadata. Keep in sync with the request args passed to generateFalImageToVideo.
+      const buildVideoFalOptionsForRun = (): GenerationFalOptions => ({
+        ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
+        ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
+        ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
+        ...(isKlingV3VideoModel ? {
+          klingV3Duration: klingV3DurationForRun,
+          klingV3GenerateAudio: klingV3GenerateAudioForRun,
+          klingV3CfgScale: klingV3CfgScaleForRun,
+          klingV3MultiPromptEnabled: klingV3MultiPromptEnabledForRun,
+          klingV3MultiPrompt: klingV3MultiPromptForRun,
+          klingV3Shot1Duration: klingV3Shot1DurationForRun,
+          klingV3Shot2Duration: klingV3Shot2DurationForRun,
+        } : {}),
+        ...(isKlingO3VideoModel ? {
+          klingO3Variant: klingO3VariantForRun,
+          klingO3Duration: klingO3DurationForRun,
+          klingO3GenerateAudio: klingO3GenerateAudioForRun,
+        } : {}),
+        ...(isKlingO3EditMode ? { klingO3KeepAudio: klingO3KeepAudioForRun } : {}),
+        ...(isKlingO3ReferenceMode ? {
+          aspectRatioSelection: isKlingO3AspectRatioSelectionValue(falAspectRatioSelectionForRun) ? falAspectRatioSelectionForRun : '16:9',
+        } : {}),
+        ...(hasVideoNegativePrompt ? { negativePrompt: normalizedVideoNegativePrompt } : {}),
+        ...(isWanVisionEnhancerVideoModel ? {
+          wanTargetResolution: wanTargetResolutionForRun,
+          wanCreativity: wanCreativityForRun,
+        } : {}),
+        ...(isWanAnimateVideoModel ? {
+          wanAnimateVariant: wanAnimateVariantForRun,
+          wanAnimateSteps: wanAnimateStepsForRun,
+          wanAnimateResolution: wanAnimateResolutionForRun,
+          wanAnimateShift: wanAnimateShiftForRun,
+          wanAnimateQuality: wanAnimateQualityForRun,
+          wanAnimateUseTurbo: wanAnimateUseTurboForRun,
+        } : {}),
+        ...(isOneToAllAnimateVideoModel ? { oneToAllAnimateResolution: oneToAllAnimateResolutionForRun } : {}),
+        ...(isLipsyncVideoModel ? { lipsyncSyncMode: lipsyncSyncModeForRun } : {}),
+        ...(isHeygenV3LipsyncVideoModel ? {
+          heygenEnableCaption: heygenEnableCaptionForRun,
+          heygenEnableDynamicDuration: heygenEnableDynamicDurationForRun,
+          heygenDisableMusicTrack: heygenDisableMusicTrackForRun,
+          heygenEnableSpeechEnhancement: heygenEnableSpeechEnhancementForRun,
+          heygenTimingResolved: heygenTimingResolvedForRequest,
+          ...(heygenStartTimeForRequest !== undefined ? { heygenStartTime: heygenStartTimeForRequest } : {}),
+          ...(heygenEndTimeForRequest !== undefined ? { heygenEndTime: heygenEndTimeForRequest } : {}),
+        } : {}),
+        ...(isInfinitalkVideoModel ? {
+          infinitalkResolution: infinitalkResolutionForRun,
+          infinitalkSeed: infinitalkSeedForRun,
+          infinitalkAcceleration: infinitalkAccelerationForRun,
+          infinitalkDuration: infinitalkDurationForRun,
+        } : {}),
+        ...(isGrokImagineVideoModel ? {
+          grokImagineVideoDuration: grokImagineVideoDurationForRun,
+          grokImagineVideoResolution: grokImagineVideoResolutionForRun,
+          grokImagineVideoAspectRatio: grokImagineVideoAspectRatioForRun,
+        } : {}),
+        ...(isVeo31VideoModelForRun ? {
+          veo31Variant: veo31VariantForRun,
+          veo31Duration: veo31DurationForRun,
+          veo31Resolution: veo31ResolutionForRun,
+          veo31AspectRatio: veo31AspectRatioForRun,
+          veo31GenerateAudio: veo31GenerateAudioForRun,
+        } : {}),
+        ...(isWan27VideoModelForRun ? {
+          wan27VideoResolution: wan27VideoResolutionForRun,
+          wan27VideoDuration: wan27VideoDurationForRun,
+          wan27VideoAspectRatio: wan27VideoAspectRatioForRun,
+          wan27VideoVariant: wan27VideoVariantForRun,
+          ...(isWan27EditModeForRun ? { wan27VideoAudioSetting: wan27VideoAudioSettingForRun } : {}),
+          ...(!isWan27ReferenceModeForRun && !isWan27EditModeForRun ? { wan27VideoPromptExpansion: wan27VideoPromptExpansionForRun } : {}),
+        } : {}),
+        ...(isSeedance15VideoModel ? {
+          seedance15AspectRatio: seedance15AspectRatioForRun,
+          seedance15Resolution: seedance15ResolutionForRun,
+          seedance15Duration: seedance15DurationForRun,
+          seedance15CameraFixed: seedance15CameraFixedForRun,
+          seedance15Audio: seedance15AudioForRun,
+        } : {}),
+        ...(isFalSeedance2VideoModelForRun ? {
+          seedance2Variant: seedance2VariantForRun,
+          seedance2AspectRatio: seedance2AspectRatioForRun,
+          seedance2Resolution: seedance2ResolutionForRun,
+          seedance2Duration: seedance2DurationForRun,
+          seedance2GenerateAudio: seedance2GenerateAudioForRun,
+        } : {}),
+        ...(isKlingV3ControlVideoModel ? {
+          klingV3ControlKeepSound: klingV3ControlKeepSoundForRun,
+          klingV3ControlOrientation: klingV3ControlOrientationForRun,
+        } : {}),
+      });
+      const buildFalVideoRetryInputs = (promptForRetry = videoPromptForRequest): GenerationInputs => ({
+        kind: 'video',
+        prompt: promptForRetry,
+        provider: 'fal',
+        modelId: falModelIdForRun,
+        modelLabel: jobModelLabel,
+        modelMode: falModelModeForRun,
+        primaryImageId: isWan27ReferenceModeForRun ? undefined : primaryImageIdForRun ?? undefined,
+        ...(referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
+        ...(referenceVideoIdsForRun.length ? { referenceVideoIds: referenceVideoIdsForRun } : {}),
+        ...(referenceAudioIdsForRun.length ? { referenceAudioIds: referenceAudioIdsForRun } : {}),
+        ...(elementImageIdsForRun.length ? { elementImageIds: elementImageIdsForRun } : {}),
+        ...(activePrimary?.metadata?.generation?.originalSourceImageId
+          ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
+          : primaryImageIdForRun && !isWan27ReferenceModeForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
+        videoLastFrameImageId: videoLastFrameImageIdForRun,
+        ...((isKlingO3VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
+        ...(sourceAudioIdForRun || wan27AudioIdForRun ? { sourceAudioId: sourceAudioIdForRun ?? wan27AudioIdForRun ?? undefined } : {}),
+        falOptions: buildVideoFalOptionsForRun(),
+      }); // Retry mirrors the saved video generation metadata.
       let jobQueued = false;
+      const refreshQueuedFalVideoRetryInputs = () => {
+        if (!jobQueued) {
+          return;
+        }
+        const retryInputs = buildFalVideoRetryInputs();
+        setFalJobs(prev => prev.map(job => (
+          job.id === falJobId
+            ? { ...job, prompt: videoPromptForRequest, retryInputs, updatedAt: Date.now() }
+            : job
+        )));
+      }; // Persist refinements made after upload progress creates the queue row.
       const handleFalPhaseUpdate = (update: FalPhaseUpdate) => {
+        const wasJobQueued = jobQueued;
         if (!jobQueued) {
           jobQueued = true;
         }
@@ -1365,6 +1586,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               modelId: falModelIdForRun,
               modelLabel: jobModelLabel,
               provider: 'fal',
+              retryInputs: buildFalVideoRetryInputs(),
               status: 'IN_QUEUE',
               phase: update.phase,
               phaseMessage: update.message,
@@ -1377,7 +1599,26 @@ export const useGeneration = (args: UseGenerationArgs) => {
             return [...prev.slice(-9), newJob];
           }
           return prev.map(job => (
-            job.id === falJobId ? applyFalPhaseUpdateToJob(job, update) : job
+            job.id === falJobId
+              ? applyFalPhaseUpdateToJob(
+                retryJobId && !wasJobQueued && job.status === 'FAILED'
+                  ? {
+                    id: falJobId,
+                    prompt: videoPromptForRequest,
+                    modelId: falModelIdForRun,
+                    modelLabel: jobModelLabel,
+                    provider: 'fal',
+                    retryInputs: buildFalVideoRetryInputs(),
+                    status: 'IN_QUEUE',
+                    logs: [],
+                    phaseStartedAt: Date.now(),
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                  }
+                  : job,
+                update,
+              )
+              : job
           ));
         });
       }; // Reflect service phase changes in the queue row.
@@ -1392,6 +1633,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           modelId: falModelIdForRun,
           modelLabel: jobModelLabel,
           provider: 'fal',
+          retryInputs: buildFalVideoRetryInputs(),
           status: 'IN_QUEUE',
           phase: 'submitting',
           phaseMessage: 'Preparing request...',
@@ -1400,7 +1642,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
-        setFalJobs(prev => [...prev.slice(-9), newJob]);
+        queueJob(newJob);
         addDebugLog({
           direction: 'outbound',
           source: 'fal',
@@ -1647,7 +1889,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               throw new Error('The selected video does not have a file to upload.');
             }
             setToastMessage('Uploading video...');
-            sourceVideoUrlForRequest = await uploadVideoToFal(sourceVideo.file, {
+            sourceVideoUrlForRequest = await uploadVideoToFal(await ensureRealSnapshotFile(sourceVideo.file), {
               jobId: falJobId,
               onPhaseUpdate: handleFalPhaseUpdate,
               label: 'source video',
@@ -1674,9 +1916,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
             throw new Error('The selected audio does not have a file to upload.');
           }
           setToastMessage('Preparing audio...');
-          const audioFileForUpload = sourceAudio.file.type === 'audio/webm'
-            ? new File([await convertAudioBlobToWav(sourceAudio.file)], `fal-audio-${Date.now()}.wav`, { type: 'audio/wav' })
-            : sourceAudio.file;
+          const realSourceAudioFile = await ensureRealSnapshotFile(sourceAudio.file);
+          const audioFileForUpload = realSourceAudioFile.type === 'audio/webm'
+            ? new File([await convertAudioBlobToWav(realSourceAudioFile)], `fal-audio-${Date.now()}.wav`, { type: 'audio/wav' })
+            : realSourceAudioFile;
           setToastMessage('Uploading audio...');
           sourceAudioUrlForRequest = await uploadVideoToFal(audioFileForUpload, {
             jobId: falJobId,
@@ -1686,9 +1929,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setToastMessage(null);
         }
 
-        let heygenStartTimeForRequest = heygenStartTimeOverride;
-        let heygenEndTimeForRequest = heygenEndTimeOverride;
-        if (isHeygenV3LipsyncVideoModel && trimmedUserPrompt && heygenStartTimeForRequest === undefined && heygenEndTimeForRequest === undefined) {
+        if (isHeygenV3LipsyncVideoModel && trimmedUserPrompt && !heygenTimingResolvedForRequest) {
           const videoDurationSeconds = (sourceVideo?.element as HTMLVideoElement | undefined)?.duration;
           setToastMessage('Reading HeyGen timing intent...');
           try {
@@ -1699,6 +1940,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             });
             heygenStartTimeForRequest = clipIntent.startTime;
             heygenEndTimeForRequest = clipIntent.endTime;
+            heygenTimingResolvedForRequest = true;
+            refreshQueuedFalVideoRetryInputs();
           } finally {
             setToastMessage(null);
           }
@@ -1714,22 +1957,25 @@ export const useGeneration = (args: UseGenerationArgs) => {
           .filter(isImageCanvasMedia)
           .map(img => img.element as HTMLImageElement);
         const seedanceReferenceVideoFilesForRun = isSeedance2ReferenceModeForRun
-          ? seedanceReferenceVideoCanvasItems.map((img, index) => (
-            new File([img.file], img.file.name || `seedance2-fal-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' })
-          ))
+          ? await Promise.all(seedanceReferenceVideoCanvasItems.map(async (img, index) => {
+            const realFile = await ensureRealSnapshotFile(img.file);
+            return new File([realFile], img.file.name || `seedance2-fal-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
+          }))
           : [];
         const wan27ReferenceVideoFilesForRun = isWan27ReferenceModeForRun
-          ? wan27ReferenceVideoCanvasItems.map((img, index) => (
-            new File([img.file], img.file.name || `wan27-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' })
-          ))
+          ? await Promise.all(wan27ReferenceVideoCanvasItems.map(async (img, index) => {
+            const realFile = await ensureRealSnapshotFile(img.file);
+            return new File([realFile], img.file.name || `wan27-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
+          }))
           : [];
         const seedanceReferenceAudioFilesForRun = isSeedance2ReferenceModeForRun
           ? await Promise.all(seedanceReferenceAudioCanvasItems.map(async (img, index) => {
-            if (img.file.type === 'audio/webm') {
-              const wavBlob = await convertAudioBlobToWav(img.file);
+            const realFile = await ensureRealSnapshotFile(img.file);
+            if (realFile.type === 'audio/webm') {
+              const wavBlob = await convertAudioBlobToWav(realFile);
               return new File([wavBlob], `seedance2-fal-reference-audio-${index + 1}.wav`, { type: 'audio/wav' });
             }
-            return new File([img.file], img.file.name || `seedance2-fal-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
+            return new File([realFile], img.file.name || `seedance2-fal-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
           }))
           : [];
         const elementImagesForRun = elementImageIdsForRun
@@ -2085,100 +2331,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 ...(videoLastFrameIdForMetadata ? { videoLastFrameImageId: videoLastFrameIdForMetadata } : {}),
                 ...((isKlingO3VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
                 ...(sourceAudioIdForMetadata ? { sourceAudioId: sourceAudioIdForMetadata } : {}),
-                falOptions: {
-                  ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
-                  ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
-                  ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
-                  ...(isKlingV3VideoModel ? {
-                    klingV3Duration: klingV3DurationForRun,
-                    klingV3GenerateAudio: klingV3GenerateAudioForRun,
-                    klingV3CfgScale: klingV3CfgScaleForRun,
-                    klingV3MultiPromptEnabled: klingV3MultiPromptEnabledForRun,
-                    klingV3MultiPrompt: klingV3MultiPromptForRun,
-                    klingV3Shot1Duration: klingV3Shot1DurationForRun,
-                    klingV3Shot2Duration: klingV3Shot2DurationForRun,
-                  } : {}),
-                  ...(isKlingO3VideoModel ? {
-                    klingO3Variant: klingO3VariantForRun,
-                    klingO3Duration: klingO3DurationForRun,
-                    klingO3GenerateAudio: klingO3GenerateAudioForRun,
-                  } : {}),
-                  ...(isKlingO3EditMode ? { klingO3KeepAudio: klingO3KeepAudioForRun } : {}),
-                  ...(isKlingO3ReferenceMode ? {
-                    aspectRatioSelection: isKlingO3AspectRatioSelectionValue(falAspectRatioSelectionForRun) ? falAspectRatioSelectionForRun : '16:9',
-                  } : {}),
-                  ...(hasVideoNegativePrompt ? { negativePrompt: normalizedVideoNegativePrompt } : {}),
-                  ...(isWanVisionEnhancerVideoModel ? {
-                    wanTargetResolution: wanTargetResolutionForRun,
-                    wanCreativity: wanCreativityForRun,
-                  } : {}),
-                  ...(isWanAnimateVideoModel ? {
-                    wanAnimateVariant: wanAnimateVariantForRun,
-                    wanAnimateSteps: wanAnimateStepsForRun,
-                    wanAnimateResolution: wanAnimateResolutionForRun,
-                    wanAnimateShift: wanAnimateShiftForRun,
-                    wanAnimateQuality: wanAnimateQualityForRun,
-                    wanAnimateUseTurbo: wanAnimateUseTurboForRun,
-                  } : {}),
-                  ...(isOneToAllAnimateVideoModel ? {
-                    oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
-                  } : {}),
-                  ...(isLipsyncVideoModel ? {
-                    lipsyncSyncMode: lipsyncSyncModeForRun,
-                  } : {}),
-                  ...(isHeygenV3LipsyncVideoModel ? {
-                    heygenEnableCaption: heygenEnableCaptionForRun,
-                    heygenEnableDynamicDuration: heygenEnableDynamicDurationForRun,
-                    heygenDisableMusicTrack: heygenDisableMusicTrackForRun,
-                    heygenEnableSpeechEnhancement: heygenEnableSpeechEnhancementForRun,
-                    ...(heygenStartTimeForRequest !== undefined ? { heygenStartTime: heygenStartTimeForRequest } : {}),
-                    ...(heygenEndTimeForRequest !== undefined ? { heygenEndTime: heygenEndTimeForRequest } : {}),
-                  } : {}),
-                  ...(isInfinitalkVideoModel ? {
-                    infinitalkResolution: infinitalkResolutionForRun,
-                    infinitalkSeed: infinitalkSeedForRun,
-                    infinitalkAcceleration: infinitalkAccelerationForRun,
-                    infinitalkDuration: infinitalkDurationForRun,
-                  } : {}),
-                  ...(isGrokImagineVideoModel ? {
-                    grokImagineVideoDuration: grokImagineVideoDurationForRun,
-                    grokImagineVideoResolution: grokImagineVideoResolutionForRun,
-                    grokImagineVideoAspectRatio: grokImagineVideoAspectRatioForRun,
-                  } : {}),
-                  ...(isVeo31VideoModelForRun ? {
-                    veo31Variant: veo31VariantForRun,
-                    veo31Duration: veo31DurationForRun,
-                    veo31Resolution: veo31ResolutionForRun,
-                    veo31AspectRatio: veo31AspectRatioForRun,
-                    veo31GenerateAudio: veo31GenerateAudioForRun,
-                  } : {}),
-                  ...(isWan27VideoModelForRun ? {
-                    wan27VideoResolution: wan27VideoResolutionForRun,
-                    wan27VideoDuration: wan27VideoDurationForRun,
-                    wan27VideoAspectRatio: wan27VideoAspectRatioForRun,
-                    wan27VideoVariant: wan27VideoVariantForRun,
-                    ...(isWan27EditModeForRun ? { wan27VideoAudioSetting: wan27VideoAudioSettingForRun } : {}),
-                    ...(!isWan27ReferenceModeForRun && !isWan27EditModeForRun ? { wan27VideoPromptExpansion: wan27VideoPromptExpansionForRun } : {}),
-                  } : {}),
-                  ...(isSeedance15VideoModel ? {
-                    seedance15AspectRatio: seedance15AspectRatioForRun,
-                    seedance15Resolution: seedance15ResolutionForRun,
-                    seedance15Duration: seedance15DurationForRun,
-                    seedance15CameraFixed: seedance15CameraFixedForRun,
-                    seedance15Audio: seedance15AudioForRun,
-                  } : {}),
-                  ...(isFalSeedance2VideoModelForRun ? {
-                    seedance2Variant: seedance2VariantForRun,
-                    seedance2AspectRatio: seedance2AspectRatioForRun,
-                    seedance2Resolution: seedance2ResolutionForRun,
-                    seedance2Duration: seedance2DurationForRun,
-                    seedance2GenerateAudio: seedance2GenerateAudioForRun,
-                  } : {}),
-                  ...(isKlingV3ControlVideoModel ? {
-                    klingV3ControlKeepSound: klingV3ControlKeepSoundForRun,
-                    klingV3ControlOrientation: klingV3ControlOrientationForRun,
-                  } : {}),
-                },
+                falOptions: buildVideoFalOptionsForRun(),
               },
             },
           };
@@ -2283,7 +2436,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       }
 
       if (!isUpscaleModel) {
-        if (appMode === 'CANVAS' && tool !== Tool.SELECTION && tool !== Tool.FREE_SELECTION) {
+        if (editAppModeForRun === 'CANVAS' && editToolForRun !== Tool.SELECTION && editToolForRun !== Tool.FREE_SELECTION) {
           setError('In Canvas Mode, please use the Select tool to perform a general image edit.');
           return;
         }
@@ -2296,7 +2449,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
-    const falJobId = usingFal ? crypto.randomUUID() : null;
+    const falJobId = usingFal ? retryJobId ?? crypto.randomUUID() : null;
     const jobModelLabel = getFalModelLabel(falModelIdForRun);
     const upscaleDetails = usingFal && isUpscaleModel
       ? [
@@ -2308,6 +2461,52 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const jobPromptDescription = usingFal && isUpscaleModel
       ? `${jobModelLabel} (${upscaleDetails})`
       : trimmedPrompt;
+    // Single source of truth for the per-model image options replayed on retry and saved in
+    // generation metadata. Krea2 style strengths depend on which reference ids the caller uses.
+    const buildImageFalOptionsForRun = (referenceIdsForStrengths: string[]): GenerationFalOptions => ({
+      ...(isKrea2LargeModelForRun ? { aspectRatioSelection: krea2AspectRatioForRun } : falAspectRatioSelectionForRun ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
+      ...(normalizedFalImageSizeSelectionForRun ? { imageSizeSelection: normalizedFalImageSizeSelectionForRun } : {}),
+      ...(falResolutionSelectionForRun ? { resolutionSelection: falResolutionSelectionForRun } : {}),
+      ...(isFlux2MaxModelForRun ? { flux2MaxImageSize: flux2MaxImageSizeForRun } : {}),
+      ...(isGptImage2ModelForRun ? { gptImage2Quality: gptImage2QualityForRun } : {}),
+      ...(isKrea2LargeModelForRun ? {
+        krea2Creativity: krea2CreativityForRun,
+        krea2StyleReferenceStrengths: Object.fromEntries(referenceIdsForStrengths.map(id => [id, normalizeKrea2StyleStrength(krea2StrengthsForRun[id])])),
+      } : {}),
+      ...(generationKind === 'upscale' ? { scaleFactor: falScaleFactorForRun } : {}),
+      ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
+      ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
+      ...(isRecraftV4ProModelForRun ? {
+        recraftImageSize: recraftImageSizeForRun,
+        recraftBackgroundColor: recraftBackgroundColorForRun,
+        recraftColors: recraftColorsForRun,
+      } : {}),
+      ...(isWan27ImageModelForRun ? {
+        wan27ImageAspectRatio: wan27ImageAspectRatioForRun,
+        wan27ImageMaxImages: wan27ImageMaxImagesForRun,
+        negativePrompt: videoNegativePromptForRun.trim() || undefined,
+      } : {}),
+      ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
+    });
+    const imageRetryInputs: GenerationInputs = {
+      kind: generationKind,
+      prompt: trimmedPrompt,
+      provider: generationProviderForRun,
+      modelId: falModelIdForRun,
+      modelLabel: generationModelLabel,
+      modelMode: falModelModeForRun,
+      ...(primaryImageIdForRun ? { primaryImageId: primaryImageIdForRun } : {}),
+      ...(referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
+      ...(videoLastFrameImageIdForRun ? { videoLastFrameImageId: videoLastFrameImageIdForRun } : {}),
+      ...(primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
+      ...(generationKind === 'image_edit' && isReplayableImageEditTool(editToolForRun) ? {
+        editAppMode: editAppModeForRun,
+        editTool: editToolForRun,
+        editPaths: clonePathsForRetry(editPathsForRun),
+      } : {}),
+      falOptions: buildImageFalOptionsForRun(referenceImageIdsForRun),
+    }; // Queue retry mirrors generated-image metadata before output exists.
+    const retryableImageInputs = usingFal ? imageRetryInputs : undefined; // Fal image jobs can replay saved request inputs.
     const handleFalPhaseUpdate = (update: FalPhaseUpdate) => {
       if (!falJobId) {
         return;
@@ -2324,6 +2523,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         modelId: falModelIdForRun,
         modelLabel: jobModelLabel,
         provider: 'fal',
+        ...(retryableImageInputs ? { retryInputs: retryableImageInputs } : {}),
         status: 'IN_QUEUE',
         phase: 'submitting',
         phaseMessage: 'Preparing request...',
@@ -2332,7 +2532,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      setFalJobs(prev => [...prev.slice(-9), newJob]);
+      queueJob(newJob);
       addDebugLog({
         direction: 'outbound',
         source: 'fal',
@@ -2442,11 +2642,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(isGptImage2ModelForRun ? { imageSize: normalizedFalImageSizeSelectionForRun, gptImage2Quality: gptImage2QualityForRun } : {}),
             ...(isKrea2LargeModelForRun ? { krea2Creativity: krea2CreativityForRun, imageStyleReferences: krea2StyleReferences } : {}),
             ...(isSeedreamModel ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
-            ...(isFlux2MaxModelForRun ? { flux2MaxImageSize } : {}),
+            ...(isFlux2MaxModelForRun ? { flux2MaxImageSize: flux2MaxImageSizeForRun } : {}),
             ...(isWan27ImageModelForRun ? {
-              wan27ImageSize: wan27ImageAspectRatio,
-              wan27ImageMaxImages: wan27ImageMaxImages,
-              negativePrompt: videoNegativePrompt.trim() || undefined,
+              wan27ImageSize: wan27ImageAspectRatioForRun,
+              wan27ImageMaxImages: wan27ImageMaxImagesForRun,
+              negativePrompt: videoNegativePromptForRun.trim() || undefined,
             } : {}),
             ...(isRecraftV4ProModelForRun ? {
               recraftImageSize: recraftImageSizeForRun,
@@ -2554,7 +2754,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isFlux2MaxModelForRun || isWan27ImageModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
-              const maxReferenceImages = Math.max(0, getMaxReferenceImages(falModelIdForRun) - (isGptImage2ModelForRun && tool === Tool.ANNOTATE ? 1 : 0)); // Annotate uploads an extra canvas.
+              const maxReferenceImages = Math.max(0, getMaxReferenceImages(falModelIdForRun) - (isGptImage2ModelForRun && editToolForRun === Tool.ANNOTATE ? 1 : 0)); // Annotate uploads an extra canvas.
               const referenceCanvasImages = referenceImageIdsForRun
                 .filter(id => id !== primaryImageIdForRun)
                 .map(id => images.find(img => img.id === id))
@@ -2578,8 +2778,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const falEditResult = await generateFalImageEdit({
               prompt: trimmedPrompt,
               image: sourceImageForAPI.element,
-              tool,
-              paths,
+              tool: editToolForRun,
+              paths: editPathsForRun,
               imageDimensions: editImageDimensions,
               referenceImages: editReferenceImages,
             }, {
@@ -2591,9 +2791,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
               ...(isGptImage2ModelForRun ? { gptImage2Quality: gptImage2QualityForRun } : {}),
               ...(isWan27ImageModelForRun ? {
-                wan27ImageSize: wan27ImageAspectRatio,
-                wan27ImageMaxImages: wan27ImageMaxImages,
-                negativePrompt: videoNegativePrompt.trim() || undefined,
+                wan27ImageSize: wan27ImageAspectRatioForRun,
+                wan27ImageMaxImages: wan27ImageMaxImagesForRun,
+                negativePrompt: videoNegativePromptForRun.trim() || undefined,
               } : {}),
               numImages: normalizedFalNumImages,
               onQueueUpdate: (update) => {
@@ -2630,8 +2830,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
           const googleResult = await generateGoogleImageEdit({
             prompt: trimmedPrompt,
             image: sourceImageForAPI.element,
-            tool,
-            paths,
+            tool: editToolForRun,
+            paths: editPathsForRun,
             imageDimensions: editImageDimensions,
             mimeType: sourceImageForAPI.file.type,
           });
@@ -2696,25 +2896,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 modelMode: falModelModeForRun,
                 primaryImageId: primaryImageIdForRun ?? undefined,
                 referenceImageIds: referenceIdsUsed.length > 0 ? referenceIdsUsed : undefined,
+                ...(generationKind === 'image_edit' && isReplayableImageEditTool(editToolForRun) ? {
+                  editAppMode: editAppModeForRun,
+                  editTool: editToolForRun,
+                  editPaths: clonePathsForRetry(editPathsForRun),
+                } : {}),
                 ...(videoLastFrameImageIdForRun ? { videoLastFrameImageId: videoLastFrameImageIdForRun } : {}),
                 ...(primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 falOptions: {
-                  ...(isKrea2LargeModelForRun ? { aspectRatioSelection: krea2AspectRatioForRun } : falAspectRatioSelectionForRun ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
-                  ...(normalizedFalImageSizeSelectionForRun ? { imageSizeSelection: normalizedFalImageSizeSelectionForRun } : {}),
-                  ...(falResolutionSelectionForRun ? { resolutionSelection: falResolutionSelectionForRun } : {}),
-                  ...(isGptImage2ModelForRun ? { gptImage2Quality: gptImage2QualityForRun } : {}),
-                  ...(isKrea2LargeModelForRun ? {
-                    krea2Creativity: krea2CreativityForRun,
-                    krea2StyleReferenceStrengths: Object.fromEntries(referenceIdsUsed.map(id => [id, normalizeKrea2StyleStrength(krea2StrengthsForRun[id])])),
-                  } : {}),
-                  ...(generationKind === 'upscale' ? { scaleFactor: falScaleFactorForRun } : {}),
-                  ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
-                  ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
-                  ...(isRecraftV4ProModelForRun ? {
-                    recraftImageSize: recraftImageSizeForRun,
-                    recraftBackgroundColor: recraftBackgroundColorForRun,
-                    recraftColors: recraftColorsForRun,
-                  } : {}),
+                  ...buildImageFalOptionsForRun(referenceIdsUsed),
+                  // Saved metadata keeps video-model options too so legacy snapshot restores retain them.
                   ...(generationKind === 'video' ? { videoDuration: videoDurationForRun } : {}),
                   ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
                   ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
@@ -2734,7 +2925,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...(isOneToAllAnimateVideoModel ? {
                     oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
                   } : {}),
-                  ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
                 },
               },
             },

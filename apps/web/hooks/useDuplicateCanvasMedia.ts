@@ -2,6 +2,7 @@ import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import type { CanvasImage, CanvasNote } from '../types';
 import { loadAudioFromBlob } from '../services/audioService';
 import { loadMediaFromBlob } from '../services/mediaService';
+import { ensureRealSnapshotFile } from '../services/snapshotService';
 import type { AppState } from './useCanvasHistory';
 
 type DuplicateArgs = {
@@ -77,6 +78,7 @@ export function useDuplicateCanvasMedia({
     // Rehydrate elements from the file to avoid cloning revoked blob URLs.
     void (async () => {
       try {
+        const realFile = await ensureRealSnapshotFile(sourceImage.file);
         if (sourceImage.mediaType === 'audio') {
           let waveformElement = sourceImage.element;
           if (sourceImage.waveformImageData) {
@@ -89,18 +91,19 @@ export function useDuplicateCanvasMedia({
             waveformElement = waveformImg;
           }
 
-          const audioElement = await loadAudioFromBlob(sourceImage.file);
+          const audioElement = await loadAudioFromBlob(realFile);
           commitDuplicate({
             element: waveformElement,
             audioElement,
             isPlaying: false,
             currentPlaybackTime: 0,
+            file: realFile, // The duplicate must not depend on the snapshot read source staying open.
           });
           return;
         }
 
         const element = await loadMediaFromBlob(
-          sourceImage.file,
+          realFile,
           sourceImage.mediaType === 'video' ? 'video' : 'image',
         );
         if (element instanceof HTMLVideoElement) {
@@ -111,7 +114,7 @@ export function useDuplicateCanvasMedia({
           element.playsInline = true;
         }
 
-        commitDuplicate({ element, isPlaying: false });
+        commitDuplicate({ element, isPlaying: false, file: realFile });
       } catch (err) {
         console.error('Failed to duplicate media:', err);
       }

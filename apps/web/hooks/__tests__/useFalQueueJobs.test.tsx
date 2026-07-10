@@ -1,13 +1,13 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useFalQueueJobs } from '../useFalQueueJobs';
+import { FAL_QUEUE_COMPLETED_AUTO_DISMISS_MS, useFalQueueJobs } from '../useFalQueueJobs';
 
 describe('useFalQueueJobs', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('auto-dismisses completed jobs after one second', () => {
+  it('auto-dismisses completed jobs after the notification window', () => {
     vi.useFakeTimers();
 
     const { result } = renderHook(() => useFalQueueJobs());
@@ -27,7 +27,13 @@ describe('useFalQueueJobs', () => {
     });
 
     act(() => {
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(FAL_QUEUE_COMPLETED_AUTO_DISMISS_MS - 1);
+    });
+
+    expect(result.current.falJobs).toHaveLength(1);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
     });
 
     expect(result.current.falJobs).toHaveLength(0);

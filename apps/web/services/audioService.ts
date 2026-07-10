@@ -16,20 +16,28 @@ export const revokeAudioObjectUrl = (element: HTMLAudioElement): void => {
 export const isAudioFileType = (fileType: string): boolean =>
   typeof fileType === 'string' && /audio\//.test(fileType);
 
-export const loadAudioFromBlob = (blob: Blob): Promise<HTMLAudioElement> => {
+type AudioWaveformSource = Pick<Blob, 'arrayBuffer'>;
+
+export const loadAudioFromUrl = (audioUrl: string, trackObjectUrl = false): Promise<HTMLAudioElement> => {
   return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(blob);
     const audio = document.createElement('audio');
-    (audio as AudioWithObjectUrl)[AUDIO_OBJECT_URL_KEY] = objectUrl;
+    if (trackObjectUrl) {
+      (audio as AudioWithObjectUrl)[AUDIO_OBJECT_URL_KEY] = audioUrl;
+    }
     audio.preload = 'metadata';
-    audio.src = objectUrl;
+    audio.src = audioUrl;
     audio.onloadedmetadata = () => resolve(audio);
     audio.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
+      if (trackObjectUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
       reject(new Error('Failed to load audio.'));
     };
   });
 };
+
+export const loadAudioFromBlob = (blob: Blob): Promise<HTMLAudioElement> =>
+  loadAudioFromUrl(URL.createObjectURL(blob), true);
 
 interface WaveformOptions {
   barColor?: string;
@@ -39,7 +47,7 @@ interface WaveformOptions {
 }
 
 export const generateWaveformImage = async (
-  audioBlob: Blob,
+  audioBlob: AudioWaveformSource,
   width: number,
   height: number,
   options: WaveformOptions = {}

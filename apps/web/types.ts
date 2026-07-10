@@ -90,6 +90,7 @@ export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
 export type FalResolutionOption = '1K' | '2K' | '4K';
 export type FalGptImage2QualityOption = 'low' | 'medium' | 'high';
 export type FalKrea2CreativityOption = 'raw' | 'low' | 'medium' | 'high';
+export type Flux2MaxImageSizeOption = Extract<FalImageSizePreset, 'landscape_4_3' | 'landscape_16_9' | 'portrait_4_3' | 'portrait_16_9' | 'square' | 'square_hd'>;
 
 export type FalVideoDuration = '5' | '6' | '10';
 
@@ -103,6 +104,7 @@ export type GenerationFalOptions = Partial<{
   imageSizeSelection: FalImageSizeOption;
   aspectRatioSelection: FalAspectRatioOption;
   resolutionSelection: FalResolutionOption;
+  flux2MaxImageSize: Flux2MaxImageSizeOption; // Flux 2 Max output size replayed by retries.
   gptImage2Quality: FalGptImage2QualityOption;
   krea2Creativity: FalKrea2CreativityOption;
   krea2StyleReferenceStrengths: Record<string, number>;
@@ -141,6 +143,7 @@ export type GenerationFalOptions = Partial<{
   heygenEnableDynamicDuration: boolean;
   heygenDisableMusicTrack: boolean;
   heygenEnableSpeechEnhancement: boolean;
+  heygenTimingResolved: boolean; // True once prompt timing intent has been finalized.
   heygenStartTime: number;
   heygenEndTime: number;
   klingV3ControlKeepSound: boolean;
@@ -177,6 +180,8 @@ export type GenerationFalOptions = Partial<{
   recraftImageSize: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
+  wan27ImageAspectRatio: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
+  wan27ImageMaxImages: '1' | '2' | '3' | '4' | '5';
 }>;
 
 export type GenerationVolcengineOptions = Partial<{
@@ -202,10 +207,13 @@ export interface GenerationInputs {
   primaryImageId?: string;
   originalSourceImageId?: string;
   referenceImageIds?: string[];
+  editAppMode?: AppMode; // App mode used when replaying an edit.
+  editTool?: Tool.SELECTION | Tool.FREE_SELECTION | Tool.ANNOTATE; // Tool used to build the edit request.
+  editPaths?: Path[]; // Saved edit strokes for retry.
   referenceVideoIds?: string[];
   referenceAudioIds?: string[];
   elementImageIds?: string[];
-  videoLastFrameImageId?: string;
+  videoLastFrameImageId?: string | null;
   sourceVideoId?: string;
   sourceAudioId?: string;
   url?: string;
@@ -239,6 +247,8 @@ export interface CanvasImage {
   rotation: number;
   naturalWidth: number;
   naturalHeight: number;
+  // May be a lazy snapshot-backed pseudo-File (not a real Blob) after a desktop snapshot import;
+  // pass through ensureRealSnapshotFile() from snapshotService before using it with Blob APIs.
   file: File;
   isPlaying?: boolean;
   hasAudio?: boolean;
@@ -339,6 +349,7 @@ export interface FalQueueJob {
   modelId: string;
   modelLabel: string;
   provider: GenerationProviderId;
+  retryInputs?: GenerationInputs; // Original request inputs for queue retry.
   status: FalJobStatus;
   phase?: FalJobPhase; // Current user-visible Fal phase.
   phaseMessage?: string; // Short phase detail for the queue row.

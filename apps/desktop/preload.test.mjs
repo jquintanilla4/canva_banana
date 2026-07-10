@@ -70,8 +70,16 @@ describe('preload desktop bridge', () => {
 
   it('exposes file menu bridge commands and IPC helpers', async () => {
     const openSnapshotResult = { canceled: true };
-    const saveSnapshotResult = { canceled: false, fileName: 'snapshot.bcsnap', autosaveId: 'autosave-1' };
-    const writeSnapshotResult = { saved: true };
+    const saveSnapshotResult = { canceled: false, fileName: 'snapshot.bcsnap', writeId: 'write-1', autosaveId: 'autosave-1' };
+    const autosaveSnapshotResult = { fileName: 'snapshot.bcsnap', writeId: 'write-2' };
+    const backupSnapshotResult = { fileName: 'backup.bcsnap', writeId: 'write-3' };
+    const writeChunkResult = { written: 0 };
+    const finishWriteResult = { saved: true };
+    const abortWriteResult = { aborted: true };
+    const readRangeResult = new ArrayBuffer(0);
+    const backupSummaries = [];
+    const backupOpenResult = { sourceId: 'source-1', fileName: 'snapshot.bcsnap', size: 0, type: 'application/octet-stream' };
+    const backupDeleteResult = { deleted: true };
     const ipcRenderer = {
       sendSync: vi.fn(),
       invoke: vi.fn(async (channel) => {
@@ -80,10 +88,32 @@ describe('preload desktop bridge', () => {
             return true; // Main only acknowledges the native menu state sync.
           case 'canva-banana:file-menu-open-snapshot':
             return openSnapshotResult; // Open picker returns cancel/data metadata.
-          case 'canva-banana:file-menu-save-snapshot':
+          case 'canva-banana:file-menu-begin-save-snapshot':
             return saveSnapshotResult; // Save picker returns the autosave target metadata.
-          case 'canva-banana:file-menu-write-snapshot':
-            return writeSnapshotResult; // Autosave writes return a simple success flag.
+          case 'canva-banana:file-menu-begin-autosave-snapshot':
+            return autosaveSnapshotResult; // Autosave starts a temp-file write session.
+          case 'canva-banana:file-menu-begin-backup-snapshot':
+            return backupSnapshotResult; // Backup writes start a temp-file write session.
+          case 'canva-banana:file-menu-write-snapshot-chunk':
+            return writeChunkResult; // Snapshot chunks are written by main.
+          case 'canva-banana:file-menu-finish-snapshot-write':
+            return finishWriteResult; // Finished writes atomically replace the target.
+          case 'canva-banana:file-menu-abort-snapshot-write':
+            return abortWriteResult; // Failed writes clean up temp files.
+          case 'canva-banana:file-menu-read-snapshot-range':
+            return readRangeResult; // Import reads bounded byte ranges.
+          case 'canva-banana:file-menu-get-snapshot-media-url':
+            return 'canva-banana-snapshot://media/source-1/0/1/image.png'; // Media elements stream through main.
+          case 'canva-banana:file-menu-retain-snapshot-read':
+            return { retained: true }; // Successful imports keep their read source alive.
+          case 'canva-banana:file-menu-close-snapshot-read':
+            return { closed: true }; // Read source metadata can be released.
+          case 'canva-banana:file-menu-list-snapshot-backups':
+            return backupSummaries; // Desktop backups are listed from disk metadata.
+          case 'canva-banana:file-menu-open-backup-snapshot':
+            return backupOpenResult; // Backup restore returns a read source.
+          case 'canva-banana:file-menu-delete-backup-snapshot':
+            return backupDeleteResult; // Backup delete removes desktop files.
           default:
             throw new Error(`Unexpected IPC invoke channel: ${channel}`);
         }
@@ -117,14 +147,42 @@ describe('preload desktop bridge', () => {
       isClearingJimengCache: false,
     })).resolves.toBe(true);
     await expect(exposedApi.fileMenu.openSnapshotFile()).resolves.toBe(openSnapshotResult);
-    await expect(exposedApi.fileMenu.saveSnapshotFile({
+    await expect(exposedApi.fileMenu.beginSaveSnapshot({
       suggestedName: 'snapshot.bcsnap',
-      data: new ArrayBuffer(0),
     })).resolves.toBe(saveSnapshotResult);
-    await expect(exposedApi.fileMenu.writeSnapshotFile({
+    await expect(exposedApi.fileMenu.beginAutosaveSnapshot({
       autosaveId: 'autosave-1',
+    })).resolves.toBe(autosaveSnapshotResult);
+    await expect(exposedApi.fileMenu.beginBackupSnapshot({
+      id: 'backup-1',
+      createdAt: 1,
+      updatedAt: 2,
+      fileName: 'backup.bcsnap',
+      size: 3,
+    })).resolves.toBe(backupSnapshotResult);
+    await expect(exposedApi.fileMenu.writeSnapshotChunk({
+      writeId: 'write-1',
       data: new ArrayBuffer(0),
-    })).resolves.toBe(writeSnapshotResult);
+    })).resolves.toBe(writeChunkResult);
+    await expect(exposedApi.fileMenu.finishSnapshotWrite({ writeId: 'write-1' })).resolves.toBe(finishWriteResult);
+    await expect(exposedApi.fileMenu.abortSnapshotWrite({ writeId: 'write-1' })).resolves.toBe(abortWriteResult);
+    await expect(exposedApi.fileMenu.readSnapshotRange({
+      sourceId: 'source-1',
+      offset: 0,
+      length: 0,
+    })).resolves.toBe(readRangeResult);
+    await expect(exposedApi.fileMenu.getSnapshotMediaUrl({
+      sourceId: 'source-1',
+      offset: 0,
+      length: 1,
+      type: 'image/png',
+      fileName: 'image.png',
+    })).resolves.toBe('canva-banana-snapshot://media/source-1/0/1/image.png');
+    await expect(exposedApi.fileMenu.retainSnapshotRead({ sourceId: 'source-1' })).resolves.toEqual({ retained: true });
+    await expect(exposedApi.fileMenu.closeSnapshotRead({ sourceId: 'source-1' })).resolves.toEqual({ closed: true });
+    await expect(exposedApi.fileMenu.listSnapshotBackups()).resolves.toBe(backupSummaries);
+    await expect(exposedApi.fileMenu.openBackupSnapshot({ id: 'backup-1' })).resolves.toBe(backupOpenResult);
+    await expect(exposedApi.fileMenu.deleteBackupSnapshot({ id: 'backup-1' })).resolves.toBe(backupDeleteResult);
 
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-set-state', {
       autosaveEnabled: false,
@@ -132,13 +190,35 @@ describe('preload desktop bridge', () => {
       isClearingJimengCache: false,
     });
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-open-snapshot');
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-save-snapshot', {
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-begin-save-snapshot', {
       suggestedName: 'snapshot.bcsnap',
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-begin-autosave-snapshot', {
+      autosaveId: 'autosave-1',
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-begin-backup-snapshot', {
+      id: 'backup-1',
+      createdAt: 1,
+      updatedAt: 2,
+      fileName: 'backup.bcsnap',
+      size: 3,
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-write-snapshot-chunk', {
+      writeId: 'write-1',
       data: expect.any(ArrayBuffer),
     });
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-write-snapshot', {
-      autosaveId: 'autosave-1',
-      data: expect.any(ArrayBuffer),
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-get-snapshot-media-url', {
+      sourceId: 'source-1',
+      offset: 0,
+      length: 1,
+      type: 'image/png',
+      fileName: 'image.png',
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-retain-snapshot-read', {
+      sourceId: 'source-1',
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-delete-backup-snapshot', {
+      id: 'backup-1',
     });
   });
 
@@ -241,7 +321,7 @@ describe('preload desktop bridge', () => {
     expect(ipcRenderer.invoke).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid snapshot write payloads before IPC', async () => {
+  it('rejects invalid snapshot streaming payloads before IPC', async () => {
     const ipcRenderer = {
       sendSync: vi.fn(),
       invoke: vi.fn(),
@@ -258,15 +338,68 @@ describe('preload desktop bridge', () => {
 
     loadPreloadWithElectron({ contextBridge, ipcRenderer });
 
-    expect(() => exposedApi.fileMenu.saveSnapshotFile({
-      suggestedName: 'snapshot.bcsnap',
+    expect(() => exposedApi.fileMenu.writeSnapshotChunk({
+      writeId: 'write-1',
       data: 'not binary',
     })).toThrow(/must be binary/);
-    expect(() => exposedApi.fileMenu.writeSnapshotFile({
-      autosaveId: 'autosave-1',
+    expect(() => exposedApi.fileMenu.writeSnapshotChunk({
+      writeId: 'write-1',
       data: fakeArrayBuffer,
     })).toThrow(/must be binary/);
+    expect(() => exposedApi.fileMenu.finishSnapshotWrite({ writeId: '' })).toThrow(/write session/);
+    expect(() => exposedApi.fileMenu.readSnapshotRange({
+      sourceId: 'source-1',
+      offset: 0,
+      length: 16 * 1024 * 1024 + 1,
+    })).toThrow(/too large/);
+    expect(() => exposedApi.fileMenu.getSnapshotMediaUrl({
+      sourceId: 'source-1',
+      offset: 0,
+      length: 0,
+      type: 'video/mp4',
+      fileName: 'video.mp4',
+    })).toThrow(/media range/);
+    expect(() => exposedApi.fileMenu.retainSnapshotRead({ sourceId: '' })).toThrow(/read source/);
     expect(ipcRenderer.invoke).not.toHaveBeenCalled();
+  });
+
+  it('bounds concurrent snapshot chunk IPC and allows later sequential chunks', async () => {
+    const pendingWrites = [];
+    const ipcRenderer = {
+      sendSync: vi.fn(),
+      invoke: vi.fn((_channel, _payload) => new Promise(resolve => pendingWrites.push(resolve))),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const contextBridge = {
+      exposeInMainWorld: vi.fn((_name, api) => {
+        exposedApi = api; // Capture the safe bridge API exposed to React.
+      }),
+    };
+
+    loadPreloadWithElectron({ contextBridge, ipcRenderer });
+
+    const activeWrites = Array.from({ length: 4 }, () => exposedApi.fileMenu.writeSnapshotChunk({
+      writeId: 'write-1',
+      data: new Uint8Array([1]).buffer,
+    }));
+
+    await expect(exposedApi.fileMenu.writeSnapshotChunk({
+      writeId: 'write-1',
+      data: new Uint8Array([2]).buffer,
+    })).rejects.toThrow(/already in progress/);
+    expect(ipcRenderer.invoke).toHaveBeenCalledTimes(4);
+
+    pendingWrites.shift()({ written: 1 });
+    await activeWrites.shift();
+    const laterWrite = exposedApi.fileMenu.writeSnapshotChunk({
+      writeId: 'write-1',
+      data: new Uint8Array([3]).buffer,
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledTimes(5);
+
+    pendingWrites.splice(0).forEach(resolve => resolve({ written: 1 }));
+    await Promise.all([...activeWrites, laterWrite]);
   });
 
   it('keeps secret runtime values out of the launch-argument fallback', () => {

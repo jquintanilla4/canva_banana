@@ -1,32 +1,19 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SNAPSHOT_FILE_NAME,
+  MAX_SNAPSHOT_BACKUP_BYTES,
+  MAX_SNAPSHOT_BACKUP_STORE_BYTES,
+  MAX_SNAPSHOT_BINARY_IMPORT_BYTES,
+  MAX_SNAPSHOT_CHUNK_BYTES,
   MAX_SNAPSHOT_IMPORT_BYTES,
   MAX_SNAPSHOT_WRITE_BYTES,
+  assertSnapshotBackupSizeCanBeWritten,
   assertSnapshotDataCanBeWritten,
   assertSnapshotFileCanBeOpened,
+  getSnapshotBackupTransactionBaseBytes,
   isSupportedSnapshotFileName,
-  readSnapshotFileCapped,
   sanitizeSnapshotFileName,
 } from './file-menu-utils.mjs';
-
-let tempDirs = [];
-
-const createTempFile = async (fileName, data) => {
-  const dir = await mkdtemp(join(tmpdir(), 'canva-banana-snapshot-'));
-  tempDirs.push(dir);
-  const filePath = join(dir, fileName);
-  await writeFile(filePath, data);
-  return filePath;
-};
-
-afterEach(async () => {
-  await Promise.all(tempDirs.map(dir => rm(dir, { recursive: true, force: true })));
-  tempDirs = [];
-});
 
 describe('file-menu-utils', () => {
   it('keeps plain snapshot filenames', () => {
@@ -49,35 +36,97 @@ describe('file-menu-utils', () => {
     expect(isSupportedSnapshotFileName('movie.mp4')).toBe(false);
   });
 
-  it('rejects unsupported or oversized snapshot imports before reading', () => {
-    const oversizedReadData = Object.create(ArrayBuffer.prototype);
-    Object.defineProperty(oversizedReadData, 'byteLength', { value: MAX_SNAPSHOT_IMPORT_BYTES + 1 }); // Avoid allocating a huge test buffer.
-
+  it('rejects unsupported or invalid snapshot imports before reading', () => {
     expect(() => assertSnapshotFileCanBeOpened({ fileName: 'movie.mp4', size: 10 })).toThrow(/\.bcsnap or \.json/);
-    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'scene.bcsnap', size: MAX_SNAPSHOT_IMPORT_BYTES + 1 })).toThrow(/too large/);
-    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'scene.bcsnap', size: oversizedReadData.byteLength })).toThrow(/too large/);
-    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'scene.bcsnap', size: MAX_SNAPSHOT_IMPORT_BYTES })).not.toThrow();
+    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'scene.bcsnap', size: -1 })).toThrow(/invalid/);
+    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'scene.bcsnap', size: MAX_SNAPSHOT_IMPORT_BYTES + 1 })).not.toThrow();
+    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'scene.bcsnap', size: MAX_SNAPSHOT_BINARY_IMPORT_BYTES + 1 })).toThrow(/too large/);
+    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'legacy.json', size: MAX_SNAPSHOT_IMPORT_BYTES + 1 })).toThrow(/too large/);
+    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'legacy.json', size: MAX_SNAPSHOT_IMPORT_BYTES })).not.toThrow();
+    expect(MAX_SNAPSHOT_BINARY_IMPORT_BYTES).toBe(MAX_SNAPSHOT_WRITE_BYTES);
   });
 
-  it('rejects non-binary or oversized snapshot writes before saving', () => {
+  it('rejects non-binary or oversized snapshot chunks before saving', () => {
     const fakeArrayBuffer = Object.create(ArrayBuffer.prototype);
     Object.defineProperty(fakeArrayBuffer, 'byteLength', { value: 1 }); // Prototype spoof should still fail binary validation.
 
     expect(() => assertSnapshotDataCanBeWritten('not binary')).toThrow(/must be binary/);
     expect(() => assertSnapshotDataCanBeWritten(fakeArrayBuffer)).toThrow(/must be binary/);
     expect(() => assertSnapshotDataCanBeWritten(new ArrayBuffer(2), { maxBytes: 1 })).toThrow(/too large/);
+    expect(() => assertSnapshotDataCanBeWritten(new ArrayBuffer(MAX_SNAPSHOT_CHUNK_BYTES))).not.toThrow();
     expect(() => assertSnapshotDataCanBeWritten(new ArrayBuffer(0))).not.toThrow();
+    expect(MAX_SNAPSHOT_WRITE_BYTES).toBeGreaterThan(MAX_SNAPSHOT_IMPORT_BYTES);
   });
 
-  it('rejects snapshot imports once a capped read crosses the byte limit', async () => {
-    const filePath = await createTempFile('scene.bcsnap', Buffer.alloc(12));
+  it('bounds automatic desktop backups separately from large user exports', () => {
+    const largeSnapshotSize = MAX_SNAPSHOT_BACKUP_BYTES + 1;
 
-    await expect(readSnapshotFileCapped(filePath, { chunkBytes: 4, maxBytes: 10 })).rejects.toThrow(/too large/);
+    expect(MAX_SNAPSHOT_BACKUP_BYTES).toBe(16 * 1024 * 1024 * 1024);
+    expect(MAX_SNAPSHOT_BACKUP_STORE_BYTES).toBe(48 * 1024 * 1024 * 1024);
+    expect(() => assertSnapshotBackupSizeCanBeWritten({ size: 0 })).toThrow(/invalid/);
+    expect(() => assertSnapshotBackupSizeCanBeWritten({ size: largeSnapshotSize })).toThrow(/too large/);
+    expect(() => assertSnapshotFileCanBeOpened({ fileName: 'large.bcsnap', size: largeSnapshotSize })).not.toThrow();
+    expect(() => assertSnapshotBackupSizeCanBeWritten({
+      size: 1,
+      currentBytes: MAX_SNAPSHOT_BACKUP_STORE_BYTES,
+    })).toThrow(/quota/);
+    expect(() => assertSnapshotBackupSizeCanBeWritten({
+      size: MAX_SNAPSHOT_BACKUP_BYTES,
+      currentBytes: MAX_SNAPSHOT_BACKUP_STORE_BYTES - MAX_SNAPSHOT_BACKUP_BYTES,
+    })).not.toThrow();
+    expect(MAX_SNAPSHOT_WRITE_BYTES).toBeGreaterThan(MAX_SNAPSHOT_BACKUP_BYTES);
+    expect(MAX_SNAPSHOT_BINARY_IMPORT_BYTES).toBe(MAX_SNAPSHOT_WRITE_BYTES);
   });
 
-  it('reads snapshot imports when the capped read stays within the byte limit', async () => {
-    const filePath = await createTempFile('scene.bcsnap', Buffer.from('snapshot'));
+  it('counts every committed backup during replacement and pre-prune transactions', () => {
+    const summaries = [
+      { id: 'backup-3', createdAt: 3, updatedAt: 3, fileName: 'three.bcsnap', size: MAX_SNAPSHOT_BACKUP_BYTES },
+      { id: 'backup-2', createdAt: 2, updatedAt: 2, fileName: 'two.bcsnap', size: MAX_SNAPSHOT_BACKUP_BYTES },
+      { id: 'backup-1', createdAt: 1, updatedAt: 1, fileName: 'one.bcsnap', size: MAX_SNAPSHOT_BACKUP_BYTES },
+    ];
+    const replacementBytes = getSnapshotBackupTransactionBaseBytes({
+      summaries,
+      summary: { ...summaries[1], updatedAt: 4 },
+    });
+    const newBackupBytes = getSnapshotBackupTransactionBaseBytes({
+      summaries,
+      summary: { id: 'backup-4', createdAt: 4, updatedAt: 4, fileName: 'four.bcsnap', size: MAX_SNAPSHOT_BACKUP_BYTES },
+    });
 
-    await expect(readSnapshotFileCapped(filePath, { chunkBytes: 3, maxBytes: 8 })).resolves.toEqual(Buffer.from('snapshot'));
+    expect(replacementBytes).toBe(MAX_SNAPSHOT_BACKUP_BYTES * 3);
+    expect(newBackupBytes).toBe(MAX_SNAPSHOT_BACKUP_BYTES * 3);
+    expect(() => assertSnapshotBackupSizeCanBeWritten({
+      size: MAX_SNAPSHOT_BACKUP_BYTES,
+      currentBytes: replacementBytes,
+    })).toThrow(/quota/);
+    expect(() => assertSnapshotBackupSizeCanBeWritten({
+      size: MAX_SNAPSHOT_BACKUP_BYTES,
+      currentBytes: newBackupBytes,
+    })).toThrow(/quota/);
+  });
+
+  it('keeps the old target size in the replacement peak when sizes differ', () => {
+    const summaries = [
+      { id: 'backup-2', createdAt: 2, updatedAt: 2, fileName: 'two.bcsnap', size: 7 },
+      { id: 'backup-1', createdAt: 1, updatedAt: 1, fileName: 'one.bcsnap', size: 5 },
+    ];
+
+    expect(getSnapshotBackupTransactionBaseBytes({
+      summaries,
+      summary: { ...summaries[0], updatedAt: 3, size: 3 },
+    })).toBe(12); // The old 7-byte target remains beside the incoming 3-byte temp file.
+  });
+
+  it('rejects backup reservations that would be pruned immediately', () => {
+    const summaries = [
+      { id: 'backup-3', createdAt: 3, updatedAt: 3, fileName: 'three.bcsnap', size: 1 },
+      { id: 'backup-2', createdAt: 2, updatedAt: 2, fileName: 'two.bcsnap', size: 1 },
+      { id: 'backup-1', createdAt: 1, updatedAt: 1, fileName: 'one.bcsnap', size: 1 },
+    ];
+
+    expect(() => getSnapshotBackupTransactionBaseBytes({
+      summaries,
+      summary: { id: 'backup-0', createdAt: 0, updatedAt: 0, fileName: 'zero.bcsnap', size: 1 },
+    })).toThrow(/pruned/);
   });
 });

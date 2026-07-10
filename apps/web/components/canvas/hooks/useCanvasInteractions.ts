@@ -31,6 +31,7 @@ type UseCanvasInteractionsArgs = {
   containerRef: RefObject<HTMLDivElement | null>;
   tool: Tool;
   canCreateVideoPromptAreas: boolean;
+  canUpdateSelection: boolean; // Allows clicks to mutate selected refs and canvas objects.
   appMode: AppMode;
   images: CanvasImage[];
   notes: CanvasNote[];
@@ -89,6 +90,7 @@ export function useCanvasInteractions({
   containerRef,
   tool,
   canCreateVideoPromptAreas,
+  canUpdateSelection,
   appMode,
   images,
   notes,
@@ -340,7 +342,7 @@ export function useCanvasInteractions({
 
     const point = getTransformedPoint(e.clientX, e.clientY);
 
-    if (activeTool === Tool.FREE_SELECTION && e.button === 2) {
+    if (canUpdateSelection && activeTool === Tool.FREE_SELECTION && e.button === 2) {
       e.preventDefault();
       onVideoPromptAreaSelect(null); // Right-click is the explicit free-select deselect gesture.
       onImageSelect(null);
@@ -364,8 +366,10 @@ export function useCanvasInteractions({
       const updatedNotes = [...notes, newNote];
       onNotesChange(updatedNotes);
       onCommit({ notes: updatedNotes });
-      onVideoPromptAreaSelect(null);
-      onNoteSelect(newNote.id);
+      if (canUpdateSelection) {
+        onVideoPromptAreaSelect(null);
+        onNoteSelect(newNote.id);
+      }
       onNoteDoubleClick(newNote.id);
       return;
     }
@@ -374,16 +378,18 @@ export function useCanvasInteractions({
       if (!canCreateVideoPromptAreas) {
         return;
       }
-      onVideoPromptAreaSelect(null);
+      if (canUpdateSelection) {
+        onVideoPromptAreaSelect(null);
+      }
       setVideoPromptAreaStart(point);
       setVideoPromptAreaCurrent(point);
       return;
     }
 
-    const isMultiSelectKey = e.metaKey || e.ctrlKey;
-    const wantsTailSelection = tailSelectionEnabled && !isMultiSelectKey && e.shiftKey && !e.altKey;
-    const isElementToggle = e.altKey && !e.shiftKey && !isMultiSelectKey;
-    const isReferenceToggle = !wantsTailSelection && !isMultiSelectKey && e.shiftKey;
+    const isMultiSelectKey = canUpdateSelection && (e.metaKey || e.ctrlKey);
+    const wantsTailSelection = canUpdateSelection && tailSelectionEnabled && !isMultiSelectKey && e.shiftKey && !e.altKey;
+    const isElementToggle = canUpdateSelection && e.altKey && !e.shiftKey && !isMultiSelectKey;
+    const isReferenceToggle = canUpdateSelection && !wantsTailSelection && !isMultiSelectKey && e.shiftKey;
 
     const beginDrag = (imageIdsToDrag: string[], noteIdsToDrag: string[]) => {
       const imagePositions: Record<string, Point> = {};
@@ -411,6 +417,17 @@ export function useCanvasInteractions({
     };
 
     if (activeTool === Tool.SELECTION || activeTool === Tool.FREE_SELECTION) {
+      if (!canUpdateSelection) {
+        if (activeTool === Tool.FREE_SELECTION) {
+          const start = { x: e.clientX - pan.x, y: e.clientY - pan.y }; // Free-select can still act as a navigation hand.
+          panStartRef.current = start;
+          setPanStart(start);
+          isPanningRef.current = true;
+          setIsPanning(true);
+        }
+        return;
+      }
+
       const resizableNote = selectedNoteIds.length === 1
         ? notes.find(n => n.id === primarySelectedNoteId)
         : null;
@@ -538,7 +555,7 @@ export function useCanvasInteractions({
     }
 
     if (activeTool === Tool.PAN) {
-      if (isElementToggle || isReferenceToggle || wantsTailSelection) {
+      if (canUpdateSelection && (isElementToggle || isReferenceToggle || wantsTailSelection)) {
         const image = getImageAtPoint(point, images);
         if (image) {
           if (wantsTailSelection) {
@@ -832,7 +849,7 @@ export function useCanvasInteractions({
       return;
     }
 
-    if (isDragging && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && dragStartPoint) {
+    if (canUpdateSelection && isDragging && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && dragStartPoint) {
       const dx = (e.clientX - dragStartPoint.x) / scale;
       const dy = (e.clientY - dragStartPoint.y) / scale;
 
@@ -888,7 +905,7 @@ export function useCanvasInteractions({
           case 'scale-r': case 'scale-l': cursor = 'ew-resize'; break;
           default: cursor = 'default';
         }
-      } else if ((currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && !isDragging && !isPanning && !isResizing) {
+      } else if (canUpdateSelection && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && !isDragging && !isPanning && !isResizing) {
         const selectedNote = selectedNoteIds.length === 1
           ? notes.find(n => n.id === primarySelectedNoteId)
           : null;
@@ -944,7 +961,7 @@ export function useCanvasInteractions({
 
     const pendingMultiSelectGesture = pendingMultiSelectGestureRef.current;
 
-    if ((isMarqueeSelecting || pendingMultiSelectGesture?.didStartMarquee) && marqueeStart) {
+    if (canUpdateSelection && (isMarqueeSelecting || pendingMultiSelectGesture?.didStartMarquee) && marqueeStart) {
       const finalPoint = getTransformedPoint(e.clientX, e.clientY);
       const currentPoint = marqueeCurrent ?? finalPoint;
 
@@ -1026,7 +1043,9 @@ export function useCanvasInteractions({
       ], images);
       onVideoPromptAreasChange(nextAreas);
       onCommit({ videoPromptAreas: nextAreas });
-      onVideoPromptAreaSelect(nextAreaId);
+      if (canUpdateSelection) {
+        onVideoPromptAreaSelect(nextAreaId);
+      }
       setVideoPromptAreaStart(null);
       setVideoPromptAreaCurrent(null);
       return;
@@ -1039,7 +1058,7 @@ export function useCanvasInteractions({
     }
 
     pendingMultiSelectGestureRef.current = null; // Every mouseup ends a pending Cmd/Ctrl click-drag.
-    if (pendingMultiSelectGesture && !pendingMultiSelectGesture.didStartMarquee) {
+    if (canUpdateSelection && pendingMultiSelectGesture && !pendingMultiSelectGesture.didStartMarquee) {
       if (e.type === 'mouseleave') {
         return;
       }
@@ -1107,6 +1126,7 @@ export function useCanvasInteractions({
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!canUpdateSelection) return;
     if (cropMode) return;
     const point = getTransformedPoint(e.clientX, e.clientY);
     const note = getNoteAtPoint(point, notes);

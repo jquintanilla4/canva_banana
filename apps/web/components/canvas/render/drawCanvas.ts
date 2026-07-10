@@ -146,6 +146,7 @@ type DrawCanvasArgs = {
   transformMode: TransformModeState | null;
   renderCache?: CanvasRenderCache;
   audioPlaybackTimes?: Readonly<Record<string, number>>;
+  isPresentationMode?: boolean;
 };
 
 export function drawCanvas({
@@ -183,8 +184,10 @@ export function drawCanvas({
   transformMode,
   renderCache,
   audioPlaybackTimes,
+  isPresentationMode = false,
 }: DrawCanvasArgs) {
   // --- 1. Draw scene (images, notes, selections) ---
+  const shouldShowCanvasChrome = !isPresentationMode;
   const viewport = expandRect(getWorldViewport(canvas, pan, scale), Math.max(128 / Math.max(scale, 0.0001), 64));
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
@@ -281,7 +284,7 @@ export function drawCanvas({
 
     const overlayText = segments.join('; ');
     const hasOverlayText = overlayText.length > 0;
-    const shouldShowMetadata = showMetadataOverlay && hasOverlayText && metadata?.source !== 'imported';
+    const shouldShowMetadata = shouldShowCanvasChrome && showMetadataOverlay && hasOverlayText && metadata?.source !== 'imported';
 
     if (shouldShowMetadata) {
       const overlayHeight = image.height * 0.15;
@@ -328,31 +331,31 @@ export function drawCanvas({
     const krea2StyleReferenceIds = krea2StyleReferenceImageIds ?? referenceImageIds; // Fall back for older callers.
     const isKrea2StyleReferenceTagged = krea2StyleReferenceIds.includes(image.id); // Only actual Krea style inputs.
 
-    if (elementImageIds.includes(image.id)) {
+    if (shouldShowCanvasChrome && elementImageIds.includes(image.id)) {
       ctx.strokeStyle = '#a855f7'; // purple-500 for elements
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if ((isKlingO3VideoInputMode || isKlingV3ControlVideoInputMode || isVeo31ExtendMode) && sourceVideoId === image.id) {
+    } else if (shouldShowCanvasChrome && (isKlingO3VideoInputMode || isKlingV3ControlVideoInputMode || isVeo31ExtendMode) && sourceVideoId === image.id) {
       ctx.strokeStyle = '#f97316'; // orange-500 for source video in video input mode
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (isWanAnimateVideoInputMode && sourceVideoId === image.id) {
+    } else if (shouldShowCanvasChrome && isWanAnimateVideoInputMode && sourceVideoId === image.id) {
       ctx.strokeStyle = '#f97316'; // orange-500 for source video in WAN animate mode
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (isFflfSelectedVideo) {
+    } else if (shouldShowCanvasChrome && isFflfSelectedVideo) {
       ctx.strokeStyle = '#f97316'; // orange-500 for FFLF video selection
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (selectedImageIds.includes(image.id) && image.mediaType === 'audio') {
+    } else if (shouldShowCanvasChrome && selectedImageIds.includes(image.id) && image.mediaType === 'audio') {
       ctx.strokeStyle = '#eab308'; // yellow-500 for audio
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
@@ -389,31 +392,31 @@ export function drawCanvas({
         ctx.fillStyle = '#000000';
         ctx.fillText(durationText, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
       }
-    } else if (isWan27VideoMode && selectedImageIds.includes(image.id) && image.mediaType === 'image') {
+    } else if (shouldShowCanvasChrome && isWan27VideoMode && selectedImageIds.includes(image.id) && image.mediaType === 'image') {
       ctx.strokeStyle = '#3b82f6'; // blue-500 for images in Wan 2.7 mode
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (isKrea2StyleReferenceMode && isKrea2StyleReferenceTagged) {
+    } else if (shouldShowCanvasChrome && isKrea2StyleReferenceMode && isKrea2StyleReferenceTagged) {
       ctx.strokeStyle = '#10b981'; // emerald-500 — Krea treats every reference (incl. the primary) equally
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (selectedImageIds.includes(image.id)) {
+    } else if (shouldShowCanvasChrome && selectedImageIds.includes(image.id)) {
       ctx.strokeStyle = '#0ea5e9'; // sky-500
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (videoLastFrameImageId === image.id) {
+    } else if (shouldShowCanvasChrome && videoLastFrameImageId === image.id) {
       ctx.strokeStyle = '#f97316'; // orange-500 dashed outline for tail/end frame (aligns with Seedance)
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (isReferenceTagged) {
+    } else if (shouldShowCanvasChrome && isReferenceTagged) {
       ctx.strokeStyle = '#10b981'; // emerald-500 for reference
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
@@ -430,7 +433,7 @@ export function drawCanvas({
           : null
       : null; // Only video first/last-frame modes should label selected stills this way.
     const referenceOrderLabel = frameRoleLabel ?? (isKlingSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id]);
-    const shouldShowReferenceBadge = !!referenceOrderLabel;
+    const shouldShowReferenceBadge = shouldShowCanvasChrome && !!referenceOrderLabel;
     if (shouldShowReferenceBadge) {
       const badgeX = baseX - padding;
       const badgeY = baseY - padding - ((24 / scale) + (6 / scale) * 2) - 2 / scale;
@@ -458,7 +461,7 @@ export function drawCanvas({
     }
 
     const elementOrderLabel = elementImageOrderLabels?.[image.id];
-    if (elementOrderLabel) {
+    if (shouldShowCanvasChrome && elementOrderLabel) {
       const badgeX = baseX - padding;
       const badgeY = baseY - padding - ((24 / scale) + (6 / scale) * 2) - 2 / scale;
       drawCanvasBadge(ctx, elementOrderLabel, badgeX, badgeY, scale, {
@@ -471,7 +474,7 @@ export function drawCanvas({
     ctx.restore();
   });
 
-  if (cropMode) {
+  if (shouldShowCanvasChrome && cropMode) {
     const imageToCrop = images.find(img => img.id === cropMode.imageId);
     if (imageToCrop && rectsIntersect(getImageBounds(imageToCrop), viewport)) {
       const rotation = getImageRotation(imageToCrop);
@@ -531,7 +534,7 @@ export function drawCanvas({
   }
 
   // Draw transform handles when in transform mode
-  if (transformMode) {
+  if (shouldShowCanvasChrome && transformMode) {
     const imageToTransform = images.find(img => img.id === transformMode.imageId);
     if (imageToTransform && rectsIntersect(getImageBounds(imageToTransform), viewport)) {
       const handleSize = TRANSFORM_HANDLE_SIZE / scale;
@@ -607,7 +610,7 @@ export function drawCanvas({
     ctx.fillRect(note.x, note.y, note.width, note.height);
     ctx.shadowColor = 'transparent'; // Reset shadow for text and border
 
-    if (selectedNoteIds.includes(note.id)) {
+    if (shouldShowCanvasChrome && selectedNoteIds.includes(note.id)) {
       const padding = 5 / scale;
       ctx.strokeStyle = '#0ea5e9'; // sky-500
       ctx.lineWidth = 4 / scale;

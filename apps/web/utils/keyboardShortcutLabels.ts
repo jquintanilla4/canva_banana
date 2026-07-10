@@ -12,6 +12,7 @@ export const KEYBOARD_SHORTCUT_LABELS = {
   deleteObject: 'Delete/Backspace',
   zoomToFit: '.',
   generate: 'Cmd/Ctrl+Enter',
+  presentationMode: 'Cmd/Ctrl+Shift+P',
   cancel: 'Esc',
   confirm: 'Enter',
 } as const;

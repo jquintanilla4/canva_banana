@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { type ComponentProps } from 'react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
-import { Tool, type CanvasImage, type CanvasNote } from '../../types';
+import { Tool, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
 
 type CanvasProps = ComponentProps<typeof Canvas>;
 
@@ -174,6 +174,35 @@ const buildNote = (id = 'note-1'): CanvasNote => ({
   backgroundColor: '#fef3c7',
 });
 
+const buildVideoPromptArea = (): CanvasVideoPromptArea => ({
+  id: 'area-1',
+  sequence: 1,
+  label: 'Video prompt area 01',
+  x: 20,
+  y: 20,
+  width: 360,
+  height: 220,
+  promptBarId: 'bar-1',
+  orderedMediaIds: [],
+}); // Minimal area fixture for presentation-mode chrome checks.
+
+const buildVideoPromptBar = (): CanvasVideoPromptBar => ({
+  id: 'bar-1',
+  assignedAreaId: 'area-1',
+  x: 20,
+  y: 20,
+  width: 360,
+  height: 72,
+  prompt: 'Embedded prompt',
+  negativePrompt: '',
+  seedance2Variant: 'smart',
+  seedance2AspectRatio: '16:9',
+  seedance2Resolution: '720p',
+  seedance2Duration: '5',
+  seedance2GenerateAudio: false,
+  seedance2CameraFixed: false,
+}); // Minimal embedded prompt bar fixture.
+
 describe('Canvas selection temporary pan', () => {
   beforeAll(() => {
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -215,6 +244,98 @@ describe('Canvas selection temporary pan', () => {
 
     expect(copyButton.disabled).toBe(false);
     expect(onImagePromptCopy).toHaveBeenCalledWith('generated-1');
+  });
+
+  it('hides selected media controls in presentation mode', () => {
+    const generatedImage = {
+      ...buildImage('generated-1'),
+      metadata: {
+        source: 'generated' as const,
+        generation: {
+          kind: 'text_to_image' as const,
+          prompt: 'A saved generation prompt',
+          provider: 'fal' as const,
+        },
+      },
+    };
+
+    const { container } = render(<Canvas {...buildCanvasProps({
+      images: [generatedImage],
+      selectedImageIds: ['generated-1'],
+      isPresentationMode: true,
+    })} />);
+    const view = within(container);
+
+    expect(view.queryByRole('button', { name: 'Copy Generation Prompt' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Crop Image' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Duplicate Media' })).toBeNull();
+  });
+
+  it('hides video prompt bar controls in presentation mode', () => {
+    const area = buildVideoPromptArea();
+    const bar = buildVideoPromptBar();
+
+    const { container } = render(<Canvas {...buildCanvasProps({
+      videoPromptAreas: [area],
+      videoPromptBars: [bar],
+      selectedVideoPromptAreaId: area.id,
+      isPresentationMode: true,
+    })} />);
+    const view = within(container);
+
+    expect(view.queryByText(area.label)).toBeNull();
+    expect(view.queryByTestId('prompt-bar-inline')).toBeNull();
+    expect(view.queryByLabelText(`Delete ${area.label}`)).toBeNull();
+  });
+
+  it('pans without changing selection modifiers in presentation mode', () => {
+    const onImageSelect = vi.fn();
+    const onNoteSelect = vi.fn();
+    const onVideoPromptAreaSelect = vi.fn();
+    const { container } = render(<Canvas {...buildCanvasProps({
+      images: [buildImage()],
+      notes: [buildNote()],
+      onImageSelect,
+      onNoteSelect,
+      onVideoPromptAreaSelect,
+      tailSelectionEnabled: true,
+      isPresentationMode: true,
+    })} />);
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    dragCanvas(root, { x: 20, y: 20 }, { x: 70, y: 85 }, 0, { shiftKey: true });
+    fireEvent.mouseDown(root, { clientX: 20, clientY: 20, button: 0, altKey: true });
+    fireEvent.mouseUp(root, { clientX: 20, clientY: 20, button: 0, altKey: true });
+    dragCanvas(root, { x: 0, y: 0 }, { x: 420, y: 320 }, 0, { metaKey: true });
+
+    expect(root.style.backgroundPosition).toBe('470px 385px');
+    expect(onImageSelect).not.toHaveBeenCalled();
+    expect(onNoteSelect).not.toHaveBeenCalled();
+    expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
+  });
+
+  it('does not clear selection with Escape in presentation mode', () => {
+    const onImageSelect = vi.fn();
+    const onNoteSelect = vi.fn();
+    const onVideoPromptAreaSelect = vi.fn();
+    const { container } = render(<Canvas {...buildCanvasProps({
+      images: [buildImage()],
+      notes: [buildNote()],
+      selectedImageIds: ['image-1'],
+      selectedNoteIds: ['note-1'],
+      selectedVideoPromptAreaId: 'area-1',
+      onImageSelect,
+      onNoteSelect,
+      onVideoPromptAreaSelect,
+      isPresentationMode: true,
+    })} />);
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    fireEvent.keyDown(root, { key: 'Escape' });
+
+    expect(onImageSelect).not.toHaveBeenCalled();
+    expect(onNoteSelect).not.toHaveBeenCalled();
+    expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
   });
 
   it('temporarily pans while space is held and returns to selection on keyup', () => {

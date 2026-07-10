@@ -42,28 +42,63 @@ export const loadMediaFromBlob = (
   blob: Blob,
   mediaType: CanvasMediaType = getMediaTypeFromFileType(blob.type),
 ): Promise<HTMLImageElement | HTMLVideoElement> => {
+  const objectUrl = URL.createObjectURL(blob);
+  const revokeOnLoad = mediaType !== 'video';
+  return loadMediaFromUrl(objectUrl, mediaType, revokeOnLoad).catch(error => {
+    if (!revokeOnLoad) {
+      URL.revokeObjectURL(objectUrl); // loadMediaFromUrl only revokes when revokeOnLoad is set.
+    }
+    throw error;
+  });
+};
+
+export const loadMediaFromUrl = (
+  objectUrl: string,
+  mediaType: CanvasMediaType,
+  revokeOnLoad = false,
+  videoPreload: HTMLMediaElement['preload'] = 'auto',
+): Promise<HTMLImageElement | HTMLVideoElement> => {
   return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(blob);
     if (mediaType === 'video') {
       const video = document.createElement('video');
       (video as VideoWithObjectUrl)[VIDEO_OBJECT_URL_KEY] = objectUrl;
+      video.crossOrigin = 'anonymous'; // Desktop snapshot protocol URLs are cross-origin; without this, drawing taints the canvas.
       video.loop = true;
       video.muted = true;
       video.playsInline = true;
-      video.preload = 'auto';
-      video.src = objectUrl;
-      video.onloadeddata = () => {
+      video.preload = videoPreload;
+      const clearLoadHandlers = () => {
+        video.onloadedmetadata = null;
+        video.onloadeddata = null;
+        video.onerror = null;
+      }; // Release event closures after the one-shot load completes.
+      const resolveVideo = () => {
+        clearLoadHandlers();
         resolve(video);
       };
       video.onerror = (err) => {
-        URL.revokeObjectURL(objectUrl);
+        clearLoadHandlers();
+        if (revokeOnLoad) {
+          URL.revokeObjectURL(objectUrl);
+        }
         reject(err ?? new Error('Failed to load video.'));
       };
+      if (videoPreload === 'metadata') {
+        video.onloadedmetadata = resolveVideo; // Dimensions are ready without fetching a video frame from a large snapshot.
+      } else {
+        video.onloadeddata = resolveVideo; // Normal playback callers still wait until the first frame is ready.
+      }
+      video.src = objectUrl;
       return;
     }
 
-    const cleanup = () => URL.revokeObjectURL(objectUrl);
+    const cleanup = () => {
+      if (revokeOnLoad) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
     const img = new Image();
+    img.crossOrigin = 'anonymous'; // Desktop snapshot protocol URLs are cross-origin; without this, drawing taints the canvas.
     img.onload = () => {
       cleanup();
       resolve(img);

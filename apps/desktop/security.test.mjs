@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getDevRendererUrl, isAllowedAudioPermissionRequest } from './security.mjs';
+import {
+  SNAPSHOT_MEDIA_PROTOCOL,
+  SNAPSHOT_MEDIA_PROTOCOL_PRIVILEGES,
+  getDevRendererUrl,
+  isAllowedAudioPermissionRequest,
+} from './security.mjs';
 
 describe('desktop security helpers', () => {
   it('ignores dev renderer overrides in packaged builds', () => {
@@ -22,5 +27,16 @@ describe('desktop security helpers', () => {
     expect(isAllowedAudioPermissionRequest('media', { mediaTypes: ['video'] })).toBe(false);
     expect(isAllowedAudioPermissionRequest('media', { mediaTypes: ['audio', 'video'] })).toBe(false);
     expect(isAllowedAudioPermissionRequest('notifications', { mediaTypes: ['audio'] })).toBe(false);
+  });
+
+  it('enables CORS and streaming for snapshot media', () => {
+    expect(SNAPSHOT_MEDIA_PROTOCOL).toBe('canva-banana-snapshot');
+    expect(SNAPSHOT_MEDIA_PROTOCOL_PRIVILEGES).toMatchObject({
+      standard: true,
+      secure: true,
+      stream: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    });
   });
 });
