@@ -1,5 +1,29 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const { createSnapshotOperationBudget } = require('./snapshot-operation-budget.cjs');
+
+const createSnapshotOperationBudget = ({ maxOperations, maxBytes, errorMessage }) => {
+  let activeOperations = 0;
+  let activeBytes = 0;
+
+  const reserve = (bytes) => {
+    if (!Number.isSafeInteger(bytes) || bytes < 0) {
+      throw new Error('Snapshot operation size is invalid.');
+    }
+    if (activeOperations >= maxOperations || bytes > maxBytes - activeBytes) {
+      throw new Error(errorMessage);
+    }
+    activeOperations += 1;
+    activeBytes += bytes;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      activeOperations -= 1;
+      activeBytes -= bytes;
+    }; // Release each preload reservation once.
+  };
+
+  return { reserve }; // Sandboxed preloads cannot import local CommonJS helpers.
+};
 
 const openManageKeysChannel = 'canva-banana:open-manage-keys';
 const fileMenuCommandChannel = 'canva-banana:file-menu-command';

@@ -19,9 +19,15 @@ const setUserActivation = (isActive) => {
 };
 
 const loadPreloadWithElectron = (electronMock) => {
-  Module._load = (request, parent, isMain) => (
-    request === 'electron' ? electronMock : originalLoad.call(Module, request, parent, isMain)
-  );
+  Module._load = (request, parent, isMain) => {
+    if (request === 'electron') {
+      return electronMock; // Electron remains available inside sandboxed preloads.
+    }
+    if (parent?.filename === preloadPath) {
+      throw new Error(`Sandboxed preload cannot require ${request}`); // Mirror Electron's local-module restriction.
+    }
+    return originalLoad.call(Module, request, parent, isMain);
+  };
   delete require.cache[preloadPath];
   require(preloadPath);
 };

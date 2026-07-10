@@ -1960,13 +1960,11 @@ export default function App() {
   const activeNegativePromptSetter = fal.isWan27ImageModel ? setWan27ImageNegativePrompt : setVideoNegativePrompt;
   const isMacDesktop = runtimeConfig.isDesktop && typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
   const hasNativeFileMenuBridge = isMacDesktop && typeof window !== 'undefined' && typeof window.canvaBananaDesktop?.fileMenu?.onCommand === 'function';
-  const shouldShowReactFileMenu = !hasNativeFileMenuBridge;
+  const shouldShowReactFileMenu = !isMacDesktop; // macOS desktop uses the native application menu.
   const topControlRailStyle: React.CSSProperties = isMacDesktop
     ? { paddingLeft: '86px', paddingRight: FLOATING_EDGE_CONTROL_SIDE_OFFSET }
     : { paddingInline: FLOATING_EDGE_CONTROL_SIDE_OFFSET }; // Shift controls away from macOS traffic lights.
   const windowDragRegionStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties; // Electron-only CSS for hidden titlebar dragging.
-  // Raise the hamburger so its center lines up with the macOS traffic lights (their visual center sits ~34px from top vs the rail's 40px).
-  const fileMenuAlignStyle: React.CSSProperties = isMacDesktop ? { transform: 'translateY(-6px)' } : {};
 
   useEffect(() => {
     if (!hasNativeFileMenuBridge) {
@@ -2058,7 +2056,7 @@ export default function App() {
           className="pointer-events-none absolute inset-x-0 top-4 z-30 grid h-12 grid-cols-[1fr_auto_1fr] items-center"
           style={topControlRailStyle}
         >
-          <div className="flex items-center justify-start" style={fileMenuAlignStyle}>
+          <div className="flex items-center justify-start">
             {shouldShowReactFileMenu && (
               <FileMenu
                 isOpen={isFileMenuOpen}

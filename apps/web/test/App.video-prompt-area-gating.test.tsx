@@ -840,7 +840,7 @@ describe('App video prompt area gating', () => {
     expect(screen.getByLabelText('Canvas zoom 100%').closest('[data-testid="top-control-rail"]')).toBe(screen.getByTestId('top-control-rail'));
   });
 
-  it('keeps the hamburger menu on macOS desktop when the native file menu bridge is missing', () => {
+  it('hides the hamburger menu on macOS desktop when the native file menu bridge is missing', () => {
     Object.defineProperty(navigator, 'platform', {
       configurable: true,
       value: 'MacIntel',
@@ -850,7 +850,7 @@ describe('App video prompt area gating', () => {
 
     render(<App />);
 
-    expect(screen.getByLabelText('Snapshot menu')).toBeTruthy();
+    expect(screen.queryByLabelText('Snapshot menu')).toBeNull();
   });
 
   it('suppresses prompt chat while the snapshot menu is open', () => {
