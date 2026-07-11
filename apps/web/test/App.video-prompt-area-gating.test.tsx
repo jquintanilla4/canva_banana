@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { getJimengSetupStatus } from '../services/jimengService';
 import type { DesktopAppIconState, DesktopFileMenuCommand, DesktopSettingsKey, DesktopSettingsStatus } from '../services/runtimeConfig';
-import { Tool, type CanvasImage } from '../types';
+import { Tool, type CanvasImage, type GenerationPlacedPayload } from '../types';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
 
 const originalNavigatorPlatform = navigator.platform;
@@ -69,6 +69,7 @@ const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType']): Canv
 const mockState = vi.hoisted(() => {
   const handleGenerate = vi.fn();
   const importSnapshotWithPicker = vi.fn((callback: () => void) => callback());
+  const setSelectedImageIds = vi.fn();
   const setReferenceImageIds = vi.fn();
   const baseVideoPromptArea = {
     id: 'area-1',
@@ -284,6 +285,9 @@ const mockState = vi.hoisted(() => {
   return {
     handleGenerate,
     importSnapshotWithPicker,
+    onGenerationPlaced: null as ((payload: GenerationPlacedPayload) => void) | null,
+    selectedImageIds: [] as string[],
+    setSelectedImageIds,
     setReferenceImageIds,
     falState,
     images: [] as CanvasImage[],
@@ -410,7 +414,7 @@ vi.mock('../hooks/useCanvasHistory', () => ({
 
 vi.mock('../hooks/useSelectionState', () => ({
   useSelectionState: () => ({
-    selectedImageIds: [],
+    selectedImageIds: mockState.selectedImageIds,
     selectedNoteIds: [],
     referenceImageIds: [],
     referenceVideoIds: [],
@@ -424,7 +428,7 @@ vi.mock('../hooks/useSelectionState', () => ({
     primarySelectionMediaType: null,
     activePrimaryImage: null,
     hasSingleImageSelected: false,
-    setSelectedImageIds: vi.fn(),
+    setSelectedImageIds: mockState.setSelectedImageIds,
     setSelectedNoteIds: vi.fn(),
     setReferenceImageIds: mockState.setReferenceImageIds,
     setReferenceVideoIds: vi.fn(),
@@ -443,9 +447,10 @@ vi.mock('../hooks/useFalSettings', () => ({
 }));
 
 vi.mock('../hooks/useGeneration', () => ({
-  useGeneration: () => ({
-    handleGenerate: mockState.handleGenerate,
-  }),
+  useGeneration: (options: { onGenerationPlaced?: (payload: GenerationPlacedPayload) => void }) => {
+    mockState.onGenerationPlaced = options.onGenerationPlaced ?? null; // Expose completion so App selection behavior can be tested.
+    return { handleGenerate: mockState.handleGenerate };
+  },
 }));
 
 vi.mock('../hooks/useSnapshotIO', () => ({
@@ -605,6 +610,9 @@ afterEach(() => {
   });
   mockState.runtimeConfig.isDesktop = false;
   mockState.handleGenerate.mockClear();
+  mockState.onGenerationPlaced = null;
+  mockState.selectedImageIds = [];
+  mockState.setSelectedImageIds.mockClear();
   mockState.importSnapshotWithPicker.mockReset();
   mockState.importSnapshotWithPicker.mockImplementation((callback: () => void) => callback()); // Default tests use the hidden-input fallback path.
   mockState.setReferenceImageIds.mockClear();
@@ -640,6 +648,37 @@ afterEach(() => {
 });
 
 describe('App video prompt area gating', () => {
+  it.each([
+    { label: 'an existing multi-item selection', selectedImageIds: ['existing-image-1', 'existing-image-2'] },
+    { label: 'no existing selection', selectedImageIds: [] },
+  ])('keeps $label and the active tool until Click to view selects the generation', ({ selectedImageIds }) => {
+    mockState.selectedImageIds = selectedImageIds;
+    mockState.images = [
+      buildCanvasMedia('existing-image-1', 'image'),
+      buildCanvasMedia('existing-image-2', 'image'),
+      buildCanvasMedia('generated-image', 'image'),
+    ];
+    mockState.displayedImages = mockState.images;
+
+    render(<App />);
+
+    act(() => {
+      mockState.onGenerationPlaced?.({
+        mediaIds: ['generated-image'],
+        mediaType: 'image',
+        modelLabel: 'Test Model',
+      });
+    });
+
+    expect(mockState.setSelectedImageIds).not.toHaveBeenCalled();
+    expect(screen.getByTestId('active-tool').textContent).toBe(Tool.PAN);
+
+    fireEvent.click(screen.getByRole('button', { name: /image added to canvas.*test model.*click to view/i }));
+
+    expect(mockState.setSelectedImageIds).toHaveBeenCalledWith(['generated-image']);
+    expect(screen.getByTestId('active-tool').textContent).toBe(Tool.FREE_SELECTION);
+  });
+
   it('opens the Manage Keys modal from the native menu command', async () => {
     let fileMenuCommand: ((command: DesktopFileMenuCommand) => void) | null = null;
     Object.defineProperty(navigator, 'platform', {

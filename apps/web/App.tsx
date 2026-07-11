@@ -943,6 +943,7 @@ export default function App() {
       setSourceVideoId,
       setSourceAudioId,
       setSelectedVideoPromptAreaId,
+      setTool, // Click-to-view returns the canvas to direct selection.
     }, { mediaIds: existingTargetIds, preserveVideoSourceState: notification.mediaType === 'video' });
     setZoomToSelectionTrigger(prev => prev + 1);
   }, [
@@ -957,38 +958,13 @@ export default function App() {
     setSelectedVideoPromptAreaId,
     setSourceAudioId,
     setSourceVideoId,
+    setTool,
     setVideoLastFrameImageId,
   ]);
 
   const handleGenerationPlaced = useCallback((payload: GenerationPlacedPayload) => {
-    notifyGenerationPlaced(payload);
-    applyGenerationPlacementSelection(payload, {
-      setSelectedImageIds,
-      setSelectedNoteIds,
-      setReferenceImageIds,
-      setReferenceVideoIds,
-      setReferenceAudioIds,
-      setElementImageIds,
-      setVideoLastFrameImageId,
-      setSourceVideoId,
-      setSourceAudioId,
-      setSelectedVideoPromptAreaId,
-      setTool,
-    });
-  }, [
-    notifyGenerationPlaced,
-    setElementImageIds,
-    setReferenceAudioIds,
-    setReferenceImageIds,
-    setReferenceVideoIds,
-    setSelectedImageIds,
-    setSelectedNoteIds,
-    setSelectedVideoPromptAreaId,
-    setSourceAudioId,
-    setSourceVideoId,
-    setTool,
-    setVideoLastFrameImageId,
-  ]);
+    notifyGenerationPlaced(payload); // Arrival only announces the media; selection changes after an explicit user action.
+  }, [notifyGenerationPlaced]);
 
   const openBackupsModal = useCallback(() => {
     openAppOwnedBlockingOverlay('backups');
