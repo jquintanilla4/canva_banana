@@ -1,95 +1,225 @@
 # Canva Banana
-_Work in progress, expect bugs_
 
-Infinite canvas for AI image/video generation and editing with Fal.ai + Google Gemini.
+_Canva Banana is still in active development, so you may run into bugs._
 
-## Features
+Canva Banana is a creative workspace for making and editing images, videos, and audio with AI. Everything lives on one large canvas, so you can keep your source material, experiments, notes, and finished results together.
 
-- **Multi-provider AI generation** - Text-to-image, image edit, upscales, and video models across Fal.ai and Google
-- **Infinite canvas** - Images, videos, and audio in a single scrollable workspace (drag/drop or upload)
-- **Canvas + Annotate modes**:
-  - Selection and free-select tools
-  - Notes with adjustable colors and font sizes
-  - Brush/eraser with independent size controls
-  - Hand tool for navigation
-- **Media tools**:
-  - Crop, transform (hold Shift for free/non-uniform), resize, duplicate
-  - Layer reordering, background removal, and video frame capture
-  - Play/pause for audio/video and waveform previews
-- **Project management**:
-  - Snapshot import/export (`.bcsnap`)
-  - Autosave backups with restore after snapshot export
-  - Snapshot-based session restore
-- **Observability + experiments**:
-  - Fal queue panel with job status
-  - Metadata overlays, debug log panel
-  - Blind test mode and open-source alias mode
+## What You Can Do
 
-## Run Locally
+- **Create with different AI models:** Generate images and videos, edit existing media, upscale images, animate pictures, and create lip-synced video.
+- **Organize everything on one canvas:** Drag in images, videos, and audio, then move and arrange them freely.
+- **Edit visual content:** Crop, resize, rotate, transform, duplicate, remove backgrounds, reorder layers, and capture still frames from videos.
+- **Draw and take notes:** Use the brush, eraser, free selection, and note tools to mark up ideas directly on the canvas.
+- **Work with sound:** Preview audio, view waveforms, and record audio inside the app.
+- **Ask for prompt help:** Use the optional AI chat to develop or improve generation prompts.
+- **Compare models fairly:** Hide model names with Blind Test Mode when you want to judge results without brand bias.
+- **Save complete projects:** Export a `.bcsnap` snapshot containing your media, notes, annotations, and settings. Backups make it possible to return to earlier saved states.
+- **Follow generation progress:** View queued and running Fal.ai jobs without leaving your workspace.
 
-**Prerequisites:** Node.js/npm, `uv`, and `make`
+## A Simple First Project
 
-### Setup Steps
+1. Drag a file onto the canvas, use the upload control, or start with a written prompt.
+2. Choose the kind of result you want and select an AI model.
+3. Generate your result. You can continue working while longer jobs run.
+4. Move, resize, compare, or edit the results on the canvas.
+5. Download individual media files when they are ready.
+6. Export a project snapshot if you want to reopen the complete workspace later.
 
-1. **Install dependencies** (⚠️ Required - don't skip this!):
-   ```bash
-   npm install
-   ```
+## Running the App
 
-2. **Set up environment variables:**
-   - Set `GEMINI_API_KEY` in [.env.local](.env.local) for Google Gemini.
-   - Set `FAL_API_KEY` in [.env.local](.env.local) for the secure Node backend's Fal.ai proxy.
-   - Set `MOONSHOT_API_KEY` in [.env.local](.env.local) for the secure Node backend's Kimi K2.6 intent parsing.
-   - Set `OPENROUTER_API_KEY` in [.env.local](.env.local) for the optional prompt chatbox.
-   - Set `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` in [.env.local](.env.local) for Volcengine Seedance 2.
-   - For `Seedance 2 (JM CLI)`, start the UV Python service and complete Jimeng CLI setup from the in-app panel.
-   - Optional for web/dev: `SECURE_BACKEND_API_BASE_URL` to point the frontend at a different Node backend.
-   - Optional: `SECURE_BACKEND_ALLOWED_ORIGINS` to comma-separate trusted browser origins for the Node backend.
-   - Optional: `NODE_BACKEND_HOST` and `NODE_BACKEND_PORT` to override the Node backend bind address.
-   - Optional: `FAL_API_URL` to point the Fal SDK at a different proxy endpoint.
-   - Optional: `FAL_MODEL_ID` to override the default Fal image model.
-   
-   Fal and Moonshot keys are only read by the Node backend. They are not injected into the Vite browser bundle.
+This repository currently contains the source code rather than a one-click installer. The steps below are intended for anyone who wants to run the project on a Mac or in a web browser. You do not need to understand the code, but you will need to install a few development tools and enter commands in the Terminal app.
 
-3. **Sync the UV Python backend dependencies:**
-   ```bash
-   npm -w @canva-banana/python-backend run sync
-   ```
+### Before You Begin
 
-4. **Start the web app:**
-   ```bash
-   make dev
-   ```
+Install:
 
-   This starts the Vite dev server on `http://localhost:3000`.
+- [Node.js](https://nodejs.org/) and npm
+- [`uv`](https://docs.astral.sh/uv/) for the local video service
+- `make`, which is included with Apple's Command Line Tools on macOS
 
-5. **Start the local backends in another terminal when generation providers need them:**
-   ```bash
-   make dev-backends
-   ```
+Then open Terminal, move into this project folder, and install the project dependencies:
 
-   This starts:
-   - The secure Node backend on `http://localhost:8787`
-   - The UV Python backend for Volcengine and Jimeng on `http://localhost:8000`
+```bash
+npm install
+npm -w @canva-banana/python-backend run sync
+```
 
-   If you only need one side of the app, these fallback commands still work:
-   ```bash
-   make web-dev
-   make secure-backend-dev
-   make backend-dev
-   ```
+### Easiest Option: Mac Desktop App
 
-### Mac Desktop App
-
-For local Electron development, run:
+Run:
 
 ```bash
 npm run dev:desktop
 ```
 
-This starts the web renderer, the secure Node backend, the UV Python backend, waits for health checks, then opens the Electron mac app.
+This one command starts the app and its local services. It waits until everything is ready, then opens the desktop window.
 
-For non-interactive desktop build and packaging flows, run:
+### Browser Version
+
+Start the web app:
+
+```bash
+make dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+AI features that use the local services also need this command running in a second Terminal window:
+
+```bash
+make dev-backends
+```
+
+## Connecting AI Services
+
+Different features use different AI providers. You only need credentials for the services you plan to use.
+
+| What you want to use | What you need |
+| --- | --- |
+| Google Gemini image features | `GEMINI_API_KEY` |
+| Fal.ai image and video models | `FAL_API_KEY` |
+| Optional prompt chat | `OPENROUTER_API_KEY` |
+| HeyGen prompt timing assistance | `MOONSHOT_API_KEY` |
+| Direct Volcengine Seedance 2 | `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` |
+| Seedance 2 through Jimeng | Complete the Jimeng CLI setup shown inside the app |
+
+In the desktop app, open Settings and enter the credentials there. For browser development, create a file named `.env.local` in the project folder and add each credential on its own line:
+
+```text
+GEMINI_API_KEY=your_key_here
+FAL_API_KEY=your_key_here
+OPENROUTER_API_KEY=your_key_here
+```
+
+Only add the keys you need. Do not share this file or commit it to Git. Fal.ai, Moonshot, and OpenRouter credentials are handled by the local secure backend instead of being placed in browser-side JavaScript.
+
+## Using the Canvas
+
+### Working with Media
+
+- Select an image to crop, resize, rotate, transform, duplicate, or change its layer position.
+- Drag corner handles to scale an image, edge handles to scale one direction, and the top handle to rotate.
+- Hold `Shift` while transforming when you do not want the original proportions preserved.
+- Select audio or video to play it. Videos can also be turned into still images with frame capture.
+- Use the download action to save a selected image, video, or audio file.
+
+### Saving and Reopening a Project
+
+A project snapshot stores the complete workspace in one `.bcsnap` file, including media, notes, annotations, and settings.
+
+- Choose the snapshot export option to save the workspace.
+- Import a `.bcsnap` file to reopen it.
+- After a snapshot is exported, automatic backups begin for that project.
+- Use `File > Backups` to browse and restore available backups.
+
+Snapshots support large media projects. Saving or opening one may take longer when it contains large videos or many files.
+
+### Blind Test Mode
+
+Blind Test Mode helps you compare AI models without being influenced by their names:
+
+1. Click the spy icon near the bottom-right corner.
+2. Model names are replaced with consistent random codenames for the current session.
+3. Generate and compare the results.
+4. Click the spy icon again to reveal the real model names.
+
+Hold `Option` or `Alt` while clicking the spy icon to use neutral aliases for selected models instead of random codenames.
+
+## Keyboard Shortcuts
+
+### Moving Around
+
+| Shortcut | Action |
+| --- | --- |
+| `+` or `=` | Zoom in |
+| `-` or `_` | Zoom out |
+| `.` | Fit the canvas on screen |
+| `,` | Zoom to the selected item |
+| Hold `Space` | Temporarily pan the canvas while using the selection tool |
+
+### Tools
+
+| Shortcut | Tool |
+| --- | --- |
+| `V` | Selection |
+| `F` | Free selection |
+| `H` | Hand/pan |
+| `B` | Brush |
+| `E` | Eraser |
+| `N` | Note |
+| `[` | Make the brush or eraser smaller |
+| `]` | Make the brush or eraser larger |
+
+### Other Actions
+
+| Shortcut | Action |
+| --- | --- |
+| `Delete` or `Backspace` | Delete selected items |
+| `Shift + Z` | Undo while the canvas is focused |
+| `Shift + Y` | Redo while the canvas is focused |
+| `M` | Start or stop audio recording |
+| `Cmd/Ctrl + Enter` | Submit a focused prompt |
+
+## Troubleshooting
+
+### `vite: command not found`
+
+The project dependencies are missing. Run:
+
+```bash
+npm install
+```
+
+### An AI feature says credentials are missing
+
+Open the desktop Settings screen or check your `.env.local` file. Make sure you added the credential for that specific provider, then restart the app and local services.
+
+### Seedance or Jimeng is unavailable
+
+Make sure the Python dependencies have been installed:
+
+```bash
+npm -w @canva-banana/python-backend run sync
+```
+
+Then confirm that the local backends are running. Jimeng also requires the one-time setup shown in the app.
+
+## Developer and Maintainer Reference
+
+### Common Commands
+
+```bash
+npm run dev:web
+npm run dev:backends
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npm run preview
+```
+
+- `npm run test` runs all workspace test suites once.
+- `npm run test:watch` starts the web test watcher.
+- `npm run test:web`, `npm run test:desktop`, `npm run test:secure-backend`, and `npm run test:python-backend` run individual test suites.
+- `make web-dev`, `make secure-backend-dev`, and `make backend-dev` start individual parts of the project.
+
+### Local Services
+
+- The secure Node backend runs on `127.0.0.1:8787` by default. It handles Fal.ai, Moonshot, and OpenRouter requests.
+- The Python backend runs on `127.0.0.1:8000` by default. It supports Volcengine and Jimeng workflows.
+- Both backends read `.env.local` first and fall back to `.env`. Exported shell variables take priority.
+- More Seedance backend details are available in [apps/python-backend/backend/README.md](apps/python-backend/backend/README.md).
+
+Optional configuration:
+
+- `SECURE_BACKEND_API_BASE_URL` points the web frontend to another secure backend.
+- `SECURE_BACKEND_ALLOWED_ORIGINS` lists trusted browser origins separated by commas.
+- `NODE_BACKEND_HOST` and `NODE_BACKEND_PORT` change the secure backend address.
+- `FAL_API_URL` points the Fal SDK to another proxy.
+- `FAL_MODEL_ID` changes the default Fal image model.
+- `VOLCENGINE_FFPROBE_PATH` selects a custom `ffprobe` binary.
+
+### Building the Mac App
 
 ```bash
 npm run build:desktop
@@ -97,135 +227,28 @@ npm run package:mac
 npm run make:mac
 ```
 
-- `npm run build:desktop` prepares packaged resources and exits without launching Electron.
-- `npm run package:mac` creates the packaged macOS app output.
-- `npm run make:mac` creates distributable macOS artifacts.
-- `npm -w @canva-banana/desktop run start:built` intentionally builds first, then launches the built desktop app.
+- `npm run build:desktop` prepares the desktop resources without opening the app.
+- `npm run package:mac` creates the packaged macOS application.
+- `npm run make:mac` creates distributable artifacts.
+- `npm -w @canva-banana/desktop run start:built` builds and launches the finished desktop app.
 
-Internal macOS builds that are shared with another Mac must be signed with an Apple Developer ID certificate and notarized. Without release signing, the local `npm run make:mac` output is only ad-hoc signed and macOS Gatekeeper can show the malware warning after the artifact is downloaded or transferred.
-
-To create a shareable internal macOS build, install the `Developer ID Application` certificate in the build machine's keychain, then set:
+Local artifacts are ad-hoc signed. A build shared with another Mac must use an Apple Developer ID certificate and Apple notarization:
 
 ```bash
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Company Name (TEAMID)"
 export APPLE_NOTARIZE_KEYCHAIN_PROFILE="the-institute-notary"
+
+xcrun notarytool store-credentials "the-institute-notary" \
+  --apple-id "you@example.com" \
+  --team-id "TEAMID" \
+  --password "app-specific-password"
 ```
 
-Create that keychain profile once with:
-
-```bash
-xcrun notarytool store-credentials "the-institute-notary" --apple-id "you@example.com" --team-id "TEAMID" --password "app-specific-password"
-```
-
-CI can also notarize without a stored keychain profile by setting `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` alongside `APPLE_SIGNING_IDENTITY`. The package scripts verify the generated app's code signature, architecture, and minimum macOS version before creating distributables. After `npm run make:mac`, verify the notarized app with:
+CI may use `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` instead of a stored keychain profile. Verify a finished notarized build with:
 
 ```bash
 spctl --assess --type execute --verbose "out/The Institute-darwin-arm64/The Institute.app"
 xcrun stapler validate "out/The Institute-darwin-arm64/The Institute.app"
 ```
 
-Packaged desktop launches use the managed secure backend by default, even if `SECURE_BACKEND_API_BASE_URL` is set. QA can opt into an external secure backend by setting both `SECURE_BACKEND_API_BASE_URL` and `CANVA_BANANA_ALLOW_EXTERNAL_SECURE_BACKEND=1`; in that mode the app does not send the managed desktop auth token to the external backend. If the external backend requires desktop-origin auth, set the same shared value in `CANVA_BANANA_EXTERNAL_SECURE_BACKEND_AUTH_TOKEN` for the app and `CANVA_BANANA_DESKTOP_AUTH_TOKEN` for the external backend.
-
-### Secure Node Backend
-
-Fal.ai, Moonshot, and OpenRouter calls use the local Node backend so API keys stay out of browser-side JavaScript.
-
-```bash
-npm run secure-backend:dev
-```
-
-- `FAL_API_KEY` is used server-side for the Fal SDK proxy and Fal asset downloads.
-- `MOONSHOT_API_KEY` is used server-side for HeyGen prompt timing intent extraction with `kimi-k2.6`.
-- `OPENROUTER_API_KEY` is used server-side for the prompt chatbox.
-- The backend listens on `127.0.0.1:8787` by default and allows local web and desktop renderer origins.
-- The backend reads repo-root `.env.local` first and falls back to `.env`, while exported shell variables still win.
-
-### Seedance 2 Backend
-
-Seedance 2 uses the local FastAPI backend in [apps/python-backend/backend/README.md](apps/python-backend/backend/README.md).
-
-```bash
-npm -w @canva-banana/python-backend run sync
-npm run backend:dev
-```
-
-- `npm -w @canva-banana/python-backend run sync` installs a bundled `ffprobe` fallback for reference audio/video validation.
-- The backend now reads `.env.local` first and falls back to `.env`, so the same repo-root env file works for Vite and FastAPI.
-- If you already onboarded before this dependency was added, rerun `npm -w @canva-banana/python-backend run sync` after pulling the latest changes.
-- You can override the binary location with `VOLCENGINE_FFPROBE_PATH` if your machine already has a preferred `ffprobe` install.
-
-### Other Commands
-
-```bash
-npm run build
-npm run preview
-npm run typecheck
-npm run test
-npm run test:watch
-```
-
-- `npm run test` runs every workspace test suite once.
-- `npm run test:watch` starts the web Vitest watcher for iterative local work.
-- `npm run test:web`, `npm run test:desktop`, `npm run test:secure-backend`, and `npm run test:python-backend` run individual suites.
-
-### Dependency Maintenance Notes
-
-- `npm audit` may still report Electron Forge dev-tooling advisories through `@electron/rebuild`, `@electron/node-gyp`, `tar`, `tmp`, and `@inquirer/prompts`. As of this cleanup, latest stable Electron Forge was still `7.11.2`, and npm's suggested fix was not a safe forward upgrade. Recheck in a month or two with `npm view @electron-forge/cli version` and `npm audit`.
-
-### Troubleshooting
-
-**Error: `sh: vite: command not found`**
-- This means dependencies weren't installed. Run `npm install` first before running `npm run dev`.
-
-## Usage
-
-### Keyboard Shortcuts
-
-#### Zoom Controls
-- `+` or `=` - Zoom in
-- `-` or `_` - Zoom out
-- `.` - Zoom to fit
-- `,` - Zoom to selection
-
-#### Tool Selection
-- `B` - Brush tool (draw/paint)
-- `E` - Eraser tool
-- `V` - Selection tool
-- `F` - Free selection tool
-- `H` - Hand/Pan tool
-- `N` - Note tool
-- Hold `Space` - Temporarily pan while the canvas is focused and the selection tool is active
-
-#### Size Adjustment
-- `[` - Decrease brush/eraser size
-- `]` - Increase brush/eraser size
-
-#### Other Actions
-- `Delete` or `Backspace` - Delete selected items
-- `Shift + Z` - Undo (canvas focused)
-- `Shift + Y` - Redo (canvas focused)
-- `M` - Start/stop audio recording
-- `Cmd/Ctrl + Enter` - Submit/generate (when input is focused)
-
-### Importing and Exporting
-
-**Session Snapshots**: Export your entire workspace (media, notes, annotations, settings) as a `.bcsnap` binary snapshot. Import snapshots from the file menu to restore a saved workspace state. Exporting a snapshot starts an autosave session and enables restore from `File -> Backups`.
-
-**Individual Media**: Export selected images, videos, or audio using the download action in the toolbar.
-
-### Media Actions (Selected Item)
-- **Transform**: Select a single image to reveal the inline `Transform` button beside the crop control. Drag corners to scale, edges to scale on one axis, and the top circle to rotate. Hold Shift to free-transform.
-- **Crop**: Available for images only (videos/audio are disabled).
-- **Resize**: Select an image and use the Resize control to enter exact pixel sizes.
-- **Duplicate + Layering**: Duplicate media and adjust layer order with the inline actions.
-- **Playback**: Select audio/video and hit play to preview, or capture a still frame from video.
-
-### Blind Test Mode
-Use Blind Test Mode for unbiased model comparisons:
-- Click the spy icon (left of the info icon) in the bottom-right toolbar to enable
-- All model names in dropdowns become random codenames (e.g., "Swift Falcon", "Silent Panther")
-- Codenames stay consistent within a session but reset on page refresh
-- Click the icon again to reveal the real model names
-- Metadata overlays still show original model names for reference after testing
-
-**Open-source alias mode**: Option/Alt + click the spy icon to swap select model names for neutral aliases instead of codenames.
+Packaged desktop builds use the managed secure backend by default. QA can opt into an external backend by setting `SECURE_BACKEND_API_BASE_URL` and `CANVA_BANANA_ALLOW_EXTERNAL_SECURE_BACKEND=1`. If that backend requires desktop authentication, use the same secret for `CANVA_BANANA_EXTERNAL_SECURE_BACKEND_AUTH_TOKEN` in the app and `CANVA_BANANA_DESKTOP_AUTH_TOKEN` in the backend.

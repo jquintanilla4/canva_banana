@@ -1,5 +1,5 @@
 import { render, waitFor } from '@testing-library/react';
-import { useRef, type MutableRefObject } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { type CanvasImage } from '../../types';
 import { useCanvasPlaybackLoop } from '../canvas/hooks/useCanvasPlaybackLoop';
@@ -41,7 +41,9 @@ const PlaybackLoopHarness = ({
   observedTimesRef: MutableRefObject<Record<string, number> | null>;
 }) => {
   const audioPlaybackTimesRef = useRef<Record<string, number>>(initialTimes);
-  observedTimesRef.current = audioPlaybackTimesRef.current; // Expose the mutable cache for assertions.
+  useEffect(() => {
+    observedTimesRef.current = audioPlaybackTimesRef.current; // Expose the mutable cache for assertions.
+  }, [observedTimesRef]);
   useCanvasPlaybackLoop({ images, draw: vi.fn(), audioPlaybackTimesRef });
   return null;
 };
