@@ -58,6 +58,7 @@ import {
 } from './modelConfig';
 import { mapWithConcurrency } from '../utils/mapWithConcurrency';
 import {
+  createLazyVideoFromUrl,
   dataUrlToFile,
   getMediaTypeFromFileType,
   getNaturalSize,
@@ -68,6 +69,7 @@ import {
 import { generateWaveformImage, loadAudioFromBlob, loadAudioFromUrl } from './audioService';
 import { createSnapshotRangeCursor } from './snapshotRangeReader';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../utils/canvasColorOptions';
+import { getCanvasMediaDurationSeconds } from '../utils/canvasMediaDuration';
 
 const isVideoPromptAreaMediaRole = (value: unknown): value is CanvasVideoPromptArea['mediaRoles'][string] =>
   value === 'primary'
@@ -84,6 +86,8 @@ export type SnapshotImageManifest = {
   y: number;
   width: number;
   height: number;
+  naturalWidth?: number; // Intrinsic source width in pixels.
+  naturalHeight?: number; // Intrinsic source height in pixels.
   rotation?: number;
   fileName: string;
   fileType: string;
@@ -92,6 +96,7 @@ export type SnapshotImageManifest = {
   mediaType?: CanvasMediaType;
   isPlaying?: boolean;
   hasAudio?: boolean;
+  videoDuration?: number;
   currentPlaybackTime?: number;
   audioDuration?: number;
   fallbackForMediaType?: CanvasMediaType;
@@ -247,6 +252,8 @@ export type SerializedCanvasImageV1 = {
   y: number;
   width: number;
   height: number;
+  naturalWidth?: number; // Intrinsic source width in pixels.
+  naturalHeight?: number; // Intrinsic source height in pixels.
   rotation?: number;
   fileName: string;
   fileType: string;
@@ -255,6 +262,7 @@ export type SerializedCanvasImageV1 = {
   mediaType?: CanvasMediaType;
   isPlaying?: boolean;
   hasAudio?: boolean;
+  videoDuration?: number;
   currentPlaybackTime?: number;
 };
 
@@ -608,27 +616,50 @@ const createMediaPreviewPngBlob = async (image: CanvasImage): Promise<Blob> => {
   }
 };
 
-const buildSnapshotImageManifest = (img: CanvasImage): SnapshotImageManifest => ({
-  id: img.id,
-  x: img.x,
-  y: img.y,
-  width: img.width,
-  height: img.height,
-  rotation: img.rotation ?? 0,
-  fileName: img.file.name,
-  fileType: img.file.type || 'application/octet-stream',
-  fileSize: img.file.size,
-  metadata: img.metadata ? { ...img.metadata } : undefined,
-  mediaType: img.mediaType,
-  isPlaying: img.isPlaying ?? false,
-  hasAudio: img.hasAudio,
-  currentPlaybackTime: img.mediaType === 'audio' && typeof img.currentPlaybackTime === 'number' && Number.isFinite(img.currentPlaybackTime)
-    ? img.currentPlaybackTime
-    : undefined, // Audio restores should resume from the saved playhead.
-  audioDuration: img.mediaType === 'audio' && typeof img.audioDuration === 'number' && Number.isFinite(img.audioDuration)
-    ? img.audioDuration
-    : undefined, // Large audio can restore duration without waveform decoding.
-});
+const getPositiveSnapshotDimension = (value: unknown, fallback = 1): number => (
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+); // Snapshot dimensions must remain finite and drawable.
+
+const getSnapshotNaturalDimensions = (img: CanvasImage): { naturalWidth: number; naturalHeight: number } => {
+  const decodedNaturalWidth = img.mediaType === 'video'
+    ? (img.element as HTMLVideoElement).videoWidth
+    : (img.element as HTMLImageElement).naturalWidth;
+  const decodedNaturalHeight = img.mediaType === 'video'
+    ? (img.element as HTMLVideoElement).videoHeight
+    : (img.element as HTMLImageElement).naturalHeight;
+  return {
+    naturalWidth: getPositiveSnapshotDimension(decodedNaturalWidth, getPositiveSnapshotDimension(img.naturalWidth, getPositiveSnapshotDimension(img.width))),
+    naturalHeight: getPositiveSnapshotDimension(decodedNaturalHeight, getPositiveSnapshotDimension(img.naturalHeight, getPositiveSnapshotDimension(img.height))),
+  }; // Decoded metadata repairs legacy fallback dimensions after a video is opened.
+};
+
+const buildSnapshotImageManifest = (img: CanvasImage): SnapshotImageManifest => {
+  const { naturalWidth, naturalHeight } = getSnapshotNaturalDimensions(img);
+  return {
+    id: img.id,
+    x: img.x,
+    y: img.y,
+    width: img.width,
+    height: img.height,
+    naturalWidth,
+    naturalHeight,
+    rotation: img.rotation ?? 0,
+    fileName: img.file.name,
+    fileType: img.file.type || 'application/octet-stream',
+    fileSize: img.file.size,
+    metadata: img.metadata ? { ...img.metadata } : undefined,
+    mediaType: img.mediaType,
+    isPlaying: img.isPlaying ?? false,
+    hasAudio: img.hasAudio,
+    videoDuration: img.mediaType === 'video' ? getCanvasMediaDurationSeconds(img) ?? undefined : undefined,
+    currentPlaybackTime: img.mediaType === 'audio' && typeof img.currentPlaybackTime === 'number' && Number.isFinite(img.currentPlaybackTime)
+      ? img.currentPlaybackTime
+      : undefined, // Audio restores should resume from the saved playhead.
+    audioDuration: img.mediaType === 'audio' && typeof img.audioDuration === 'number' && Number.isFinite(img.audioDuration)
+      ? img.audioDuration
+      : undefined, // Large audio can restore duration without waveform decoding.
+  };
+};
 
 const createAudioWaveformPlaceholderDataUrl = (width: number, height: number): string => {
   const renderWidth = Math.min(Math.max(1, Math.round(width)), SNAPSHOT_MAX_WAVEFORM_WIDTH);
@@ -650,6 +681,7 @@ const buildFallbackSnapshotImage = async (img: CanvasImage): Promise<SnapshotBin
       mediaType: 'image',
       isPlaying: false,
       hasAudio: false,
+      videoDuration: undefined,
       currentPlaybackTime: undefined,
       fallbackForMediaType: img.mediaType,
       fallbackReason: 'source-unreadable',
@@ -1224,8 +1256,12 @@ export const restoreSnapshotFromFile = async (
         }
         // Non-audio media can be rehydrated directly as an image/video element.
         const objectUrl = getSnapshotBlobObjectUrl(blob);
-        const element = objectUrl
-          ? await loadMediaFromUrl(objectUrl, mediaType, false, 'metadata') // Avoid eagerly filling stream slots for every restored video.
+        const savedNaturalWidth = getPositiveSnapshotDimension(imageManifest.naturalWidth, getPositiveSnapshotDimension(imageManifest.width)); // Legacy snapshots fall back to display width.
+        const savedNaturalHeight = getPositiveSnapshotDimension(imageManifest.naturalHeight, getPositiveSnapshotDimension(imageManifest.height)); // Legacy snapshots fall back to display height.
+        const element = objectUrl && mediaType === 'video'
+          ? createLazyVideoFromUrl(objectUrl, savedNaturalWidth, savedNaturalHeight)
+          : objectUrl
+          ? await loadMediaFromUrl(objectUrl, mediaType)
           : await loadMediaFromBlob(blob as Blob, mediaType);
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
         const width = typeof imageManifest.width === 'number' ? imageManifest.width : naturalWidth;
@@ -1253,6 +1289,9 @@ export const restoreSnapshotFromFile = async (
           file: snapshotFile,
           isPlaying: mediaType === 'video' ? Boolean(imageManifest.isPlaying) : false,
           hasAudio: mediaType === 'video' ? imageManifest.hasAudio : false,
+          videoDuration: mediaType === 'video' && typeof imageManifest.videoDuration === 'number' && Number.isFinite(imageManifest.videoDuration)
+            ? imageManifest.videoDuration
+            : undefined, // Persisted metadata keeps restored videos dormant until playback.
           metadata: normalizeSnapshotImageMetadata(imageManifest.metadata),
         };
       },
@@ -1338,6 +1377,9 @@ export const restoreSnapshotFromFile = async (
           file: snapshotFile,
           isPlaying: mediaType === 'video' ? Boolean((img as SerializedCanvasImageV1).isPlaying) : false,
           hasAudio: mediaType === 'video' ? (img as SerializedCanvasImageV1).hasAudio : false,
+          videoDuration: mediaType === 'video' && typeof (img as SerializedCanvasImageV1).videoDuration === 'number' && Number.isFinite((img as SerializedCanvasImageV1).videoDuration)
+            ? (img as SerializedCanvasImageV1).videoDuration
+            : undefined,
           metadata: normalizeSnapshotImageMetadata(rawMetadata),
         };
       })

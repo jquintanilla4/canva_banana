@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getSnapshotBinaryByteLength, normalizeSnapshotImageMetadata, parseBinarySnapshotFile, restoreSnapshotFromFile, writeSnapshotBinaryStreaming, type SnapshotByteSource } from '../snapshotService';
+import { buildSnapshotBinaryFromState, getSnapshotBinaryByteLength, normalizeSnapshotImageMetadata, parseBinarySnapshotFile, restoreSnapshotFromFile, writeSnapshotBinaryStreaming, type SnapshotByteSource, type SnapshotMetaState } from '../snapshotService';
 import { createDesktopSnapshotSource } from '../desktopSnapshotSource';
 import type { CanvasImageMetadata } from '../../types';
 
@@ -43,6 +43,7 @@ const cloneArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
 }; // Returns an exact ArrayBuffer slice.
 
 afterEach(() => {
+  vi.restoreAllMocks();
   audioServiceMocks.generateWaveformImage.mockReset();
   audioServiceMocks.loadAudioFromBlob.mockReset();
   audioServiceMocks.loadAudioFromUrl.mockReset();
@@ -404,6 +405,98 @@ describe('snapshotService (binary metadata bounds)', () => {
     expect(getMediaUrl).toHaveBeenCalledTimes(imageManifests.length);
     expect(peakLoads).toBe(4);
     expect(restored.sourceRetention).toBe('required');
+  });
+
+  it('restores many desktop videos without starting their protocol streams', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {}); // jsdom does not implement media playback.
+    const videoManifests = Array.from({ length: 40 }, (_, index) => ({
+      id: `video-${index}`,
+      x: index,
+      y: index,
+      width: 640,
+      height: 360,
+      naturalWidth: index === 0 ? undefined : 1920,
+      naturalHeight: index === 0 ? undefined : 1080,
+      fileName: `video-${index}.mp4`,
+      fileType: 'video/mp4',
+      fileSize: 1,
+      mediaType: 'video' as const,
+      videoDuration: index + 2,
+    }));
+    const manifestBytes = snapshotTestEncoder.encode(JSON.stringify({
+      version: 2,
+      createdAt: '2026-07-13T00:00:00.000Z',
+      state: { images: videoManifests, notes: [], paths: [] },
+    }));
+    const videoRecords = videoManifests.flatMap(videoManifest => {
+      const metadata = snapshotTestEncoder.encode(JSON.stringify(videoManifest));
+      return [writeTestUint32BE(metadata.byteLength), metadata, writeTestUint64BE(1), new Uint8Array([1])];
+    });
+    const fixtureBytes = concatBytes([
+      snapshotMagicBytes,
+      writeTestUint32BE(manifestBytes.byteLength),
+      manifestBytes,
+      ...videoRecords,
+    ]);
+    const getMediaUrl = vi.fn(async (_offset: number, _length: number, _type: string, fileName: string) => (
+      `canva-banana-snapshot://media/source-many-videos/${fileName}`
+    ));
+    const source: SnapshotByteSource = {
+      fileName: 'many-videos.bcsnap',
+      size: fixtureBytes.byteLength,
+      type: 'application/octet-stream',
+      readRange: async (offset, length) => cloneArrayBuffer(fixtureBytes.subarray(offset, offset + length)),
+      getMediaUrl,
+    };
+
+    const restored = await restoreSnapshotFromFile(source, {
+      brushSize: 8,
+      eraserSize: 8,
+      brushColor: '#ff0000',
+    });
+
+    expect(restored.images).toHaveLength(videoManifests.length);
+    expect(restored.images.every(image => image.element instanceof HTMLVideoElement)).toBe(true);
+    expect(restored.images.every(image => (image.element as HTMLVideoElement).preload === 'none')).toBe(true);
+    expect(restored.images.every(image => image.width === 640 && image.height === 360)).toBe(true);
+    expect(restored.images.map(image => image.naturalWidth)).toEqual(videoManifests.map(image => image.naturalWidth ?? image.width));
+    expect(restored.images.map(image => image.naturalHeight)).toEqual(videoManifests.map(image => image.naturalHeight ?? image.height));
+    expect(restored.images.map(image => image.videoDuration)).toEqual(videoManifests.map(image => image.videoDuration));
+    expect(getMediaUrl).toHaveBeenCalledTimes(videoManifests.length);
+  });
+
+  it('persists loaded video metadata for future lazy restores', async () => {
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'duration', { configurable: true, value: 7.5 });
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1920 });
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 1080 });
+    const binary = await buildSnapshotBinaryFromState({
+      images: [{
+        id: 'video-duration',
+        element: video,
+        mediaType: 'video',
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        naturalWidth: 640,
+        naturalHeight: 360,
+        file: new File(['video'], 'video.mp4', { type: 'video/mp4' }),
+      }],
+      notes: [],
+      paths: [],
+      videoPromptAreas: [],
+      videoPromptBars: [],
+      meta: {} as SnapshotMetaState,
+    });
+
+    expect(binary.manifest.state.images[0]?.videoDuration).toBe(7.5);
+    expect(binary.images[0]?.manifest.videoDuration).toBe(7.5);
+    expect(binary.manifest.state.images[0]?.naturalWidth).toBe(1920);
+    expect(binary.manifest.state.images[0]?.naturalHeight).toBe(1080);
+    expect(binary.images[0]?.manifest.naturalWidth).toBe(1920);
+    expect(binary.images[0]?.manifest.naturalHeight).toBe(1080);
   });
 
   it('streams desktop URL-backed media when writing snapshots', async () => {

@@ -252,6 +252,7 @@ export interface CanvasImage {
   file: File;
   isPlaying?: boolean;
   hasAudio?: boolean;
+  videoDuration?: number; // Saved seconds keep lazy snapshot videos metadata-free on restore.
   metadata?: CanvasImageMetadata;
   // Audio-specific properties
   audioElement?: HTMLAudioElement;

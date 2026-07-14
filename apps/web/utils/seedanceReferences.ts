@@ -38,18 +38,6 @@ const orderSeedanceReferenceIds = (
   return [...preservedIds, ...appendedIds];
 };
 
-export const getCanvasMediaDurationSeconds = (canvasItem: CanvasImage): number | null => {
-  if (canvasItem.mediaType === 'video') {
-    const durationSeconds = (canvasItem.element as HTMLVideoElement | undefined)?.duration;
-    return typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) ? durationSeconds : null;
-  }
-  if (canvasItem.mediaType === 'audio') {
-    const durationSeconds = canvasItem.audioDuration ?? canvasItem.audioElement?.duration;
-    return typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) ? durationSeconds : null;
-  }
-  return null; // Still images do not have media duration.
-};
-
 export const buildEffectiveSeedanceReferenceIds = ({
   enabled,
   images,

@@ -163,7 +163,6 @@ import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
 import {
   buildEffectiveSeedanceReferenceIds,
-  getCanvasMediaDurationSeconds,
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
   SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS,
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
@@ -173,6 +172,7 @@ import {
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
 } from '../utils/seedanceReferences';
+import { getCanvasMediaDurationSeconds, resolveCanvasMediaDurationSeconds, resolveOptionalCanvasMediaDurationSeconds } from '../utils/canvasMediaDuration';
 import {
   getSeedanceReferencePromptMentionError,
   normalizeSeedanceReferencePromptMentions,
@@ -1142,7 +1142,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2 video references must be videos on the canvas.');
           return;
         }
-        const referenceVideoDurations = referenceVideoCanvasItems.map(getCanvasMediaDurationSeconds); // Seedance validates reference video duration per clip and in total.
+        const referenceVideoDurations = await Promise.all(referenceVideoCanvasItems.map(resolveCanvasMediaDurationSeconds)); // Legacy snapshots load only selected video metadata.
         if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS || durationSeconds > SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)) {
           setError(`Seedance 2 reference videos must each be between ${SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS} and ${SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS} seconds.`);
           return;
@@ -1792,7 +1792,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             setError('Seedance 2 video references must be videos on the canvas.');
             return;
           }
-          const referenceVideoDurations = seedanceReferenceVideoCanvasItems.map(getCanvasMediaDurationSeconds); // Fal Seedance validates the same video duration limits locally.
+          const referenceVideoDurations = await Promise.all(seedanceReferenceVideoCanvasItems.map(resolveCanvasMediaDurationSeconds)); // Fal validates persisted or on-demand durations.
           if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS || durationSeconds > SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)) {
             setError(`Seedance 2 reference videos must each be between ${SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS} and ${SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS} seconds.`);
             return;
@@ -1875,7 +1875,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                             : 'Select a video on the canvas to edit.');
           }
           if (isWanVisionEnhancerVideoModel) {
-            const durationSeconds = (sourceVideo.element as HTMLVideoElement | undefined)?.duration;
+            const durationSeconds = await resolveOptionalCanvasMediaDurationSeconds(sourceVideo);
             if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 16) {
               setToastMessage('Videos longer than 500 frames will have only the first 500 frames processed');
               setTimeout(() => setToastMessage(null), 10000);
@@ -1930,7 +1930,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         }
 
         if (isHeygenV3LipsyncVideoModel && trimmedUserPrompt && !heygenTimingResolvedForRequest) {
-          const videoDurationSeconds = (sourceVideo?.element as HTMLVideoElement | undefined)?.duration;
+          const videoDurationSeconds = sourceVideo ? await resolveOptionalCanvasMediaDurationSeconds(sourceVideo) : null;
           setToastMessage('Reading HeyGen timing intent...');
           try {
             const clipIntent = await extractHeygenClipIntent(trimmedUserPrompt, {

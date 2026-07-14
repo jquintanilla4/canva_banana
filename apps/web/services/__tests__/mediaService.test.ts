@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadMediaFromBlob, loadMediaFromUrl } from '../mediaService';
+import { createLazyVideoFromUrl, ensureVideoMetadataLoaded, getVideoObjectUrl, loadMediaFromBlob, loadMediaFromUrl } from '../mediaService';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -43,6 +43,44 @@ describe('loadMediaFromUrl', () => {
     video.onloadedmetadata?.(new Event('loadedmetadata'));
 
     await expect(pending).resolves.toBe(video);
+  });
+});
+
+describe('createLazyVideoFromUrl', () => {
+  it('keeps desktop snapshot videos dormant until playback starts', () => {
+    const video = createLazyVideoFromUrl('canva-banana-snapshot://media/source-1/0/1/a.mp4', 1920, 1080);
+
+    expect(video.crossOrigin).toBe('anonymous');
+    expect(video.preload).toBe('none');
+    expect(video.width).toBe(1920);
+    expect(video.height).toBe(1080);
+    expect(getVideoObjectUrl(video)).toBe('canva-banana-snapshot://media/source-1/0/1/a.mp4');
+  });
+
+  it('deduplicates on-demand metadata loads and restores the lazy preload policy', async () => {
+    const video = createLazyVideoFromUrl('canva-banana-snapshot://media/source-1/0/1/a.mp4', 1920, 1080);
+    const load = vi.spyOn(video, 'load').mockImplementation(() => {}); // Keep the simulated request pending.
+
+    const firstLoad = ensureVideoMetadataLoaded(video);
+    const secondLoad = ensureVideoMetadataLoaded(video);
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(video.preload).toBe('metadata');
+    video.dispatchEvent(new Event('loadedmetadata'));
+    await expect(Promise.all([firstLoad, secondLoad])).resolves.toEqual([undefined, undefined]);
+    expect(video.preload).toBe('none');
+  });
+
+  it('does not reset playback while waiting for metadata from an active video', async () => {
+    const video = createLazyVideoFromUrl('canva-banana-snapshot://media/source-1/0/1/a.mp4', 1920, 1080);
+    Object.defineProperty(video, 'paused', { configurable: true, value: false });
+    const load = vi.spyOn(video, 'load').mockImplementation(() => {});
+
+    const pending = ensureVideoMetadataLoaded(video);
+
+    expect(load).not.toHaveBeenCalled();
+    video.dispatchEvent(new Event('loadedmetadata'));
+    await expect(pending).resolves.toBeUndefined();
   });
 });
 

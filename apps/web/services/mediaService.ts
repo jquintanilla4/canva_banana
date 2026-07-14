@@ -13,6 +13,7 @@ export const getMediaTypeFromFileType = (fileType: string): CanvasMediaType =>
 
 const VIDEO_OBJECT_URL_KEY = '__videoObjectUrl' as const;
 type VideoWithObjectUrl = HTMLVideoElement & { [key in typeof VIDEO_OBJECT_URL_KEY]?: string };
+const pendingVideoMetadataLoads = new WeakMap<HTMLVideoElement, Promise<void>>(); // Share one metadata request per video.
 
 export const getVideoObjectUrl = (element: HTMLVideoElement): string | undefined =>
   (element as VideoWithObjectUrl)[VIDEO_OBJECT_URL_KEY];
@@ -24,6 +25,66 @@ export const revokeVideoObjectUrl = (element: HTMLVideoElement): void => {
   }
   URL.revokeObjectURL(url);
   delete (element as VideoWithObjectUrl)[VIDEO_OBJECT_URL_KEY];
+};
+
+export const createLazyVideoFromUrl = (
+  objectUrl: string,
+  naturalWidth: number,
+  naturalHeight: number,
+): HTMLVideoElement => {
+  const video = document.createElement('video');
+  (video as VideoWithObjectUrl)[VIDEO_OBJECT_URL_KEY] = objectUrl;
+  video.crossOrigin = 'anonymous'; // Snapshot URLs are cross-origin to the desktop renderer.
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'none'; // Defer every video stream until the user starts playback.
+  video.width = Number.isFinite(naturalWidth) && naturalWidth > 0 ? naturalWidth : 1; // Preserve intrinsic width before metadata loads.
+  video.height = Number.isFinite(naturalHeight) && naturalHeight > 0 ? naturalHeight : 1; // Preserve intrinsic height before metadata loads.
+  video.src = objectUrl;
+  return video;
+};
+
+export const ensureVideoMetadataLoaded = (video: HTMLVideoElement): Promise<void> => {
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    return Promise.resolve(); // Existing metadata needs no extra protocol request.
+  }
+  const existingLoad = pendingVideoMetadataLoads.get(video);
+  if (existingLoad) {
+    return existingLoad; // Concurrent duration consumers await the same stream.
+  }
+
+  const previousPreload = video.preload;
+  const metadataLoad = new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('error', handleError);
+      video.preload = previousPreload; // Preserve the caller's long-term loading policy.
+    };
+    const handleLoadedMetadata = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error('Failed to load video metadata.'));
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('error', handleError);
+    video.preload = 'metadata'; // Fetch only metadata for a selected legacy snapshot video.
+    try {
+      if (video.paused) {
+        video.load(); // A dormant video needs an explicit metadata request.
+      }
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
+  });
+  const trackedLoad = metadataLoad.finally(() => pendingVideoMetadataLoads.delete(video));
+  pendingVideoMetadataLoads.set(video, trackedLoad);
+  return trackedLoad;
 };
 
 export const getNaturalSize = (element: HTMLImageElement | HTMLVideoElement) => {

@@ -6,6 +6,7 @@ import {
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
+  WAN_VISION_ENHANCER_MODEL_ID,
 } from '../../services/modelConfig';
 import { generateImage as generateGoogleImage } from '../../services/geminiService';
 import { generateImage as generateFalImage, generateImageEdit as generateFalImageEdit, generateImageToVideo as generateFalImageToVideo, uploadVideoToFal } from '../../services/falService';
@@ -615,6 +616,91 @@ describe('useGeneration placement notifications', () => {
       prompt: 'retry text-only video',
       videoLastFrameImageId: null,
     });
+  });
+
+  it('continues Wan enhancement when optional duration metadata is unavailable', async () => {
+    const sourceVideo = buildCanvasMedia('wan-enhancer-video', 'video');
+    const videoElement = sourceVideo.element as HTMLVideoElement;
+    vi.spyOn(videoElement, 'load').mockImplementation(() => videoElement.dispatchEvent(new Event('error'))); // Legacy metadata failure must not block upload.
+    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/source-video');
+    vi.mocked(generateFalImageToVideo).mockRejectedValue(new Error('provider policy failure'));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal: createFalStub({
+        falModelMode: 'video',
+        falVideoModelId: WAN_VISION_ENHANCER_MODEL_ID,
+      }),
+      selection: createSelectionStub({ sourceVideoId: sourceVideo.id }),
+      images: [sourceVideo],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: createStateHarness().setState,
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+      onGenerationComplete: vi.fn(),
+      onGenerationPlaced: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(uploadVideoToFal).toHaveBeenCalledTimes(1);
+    expect(generateFalImageToVideo).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues HeyGen intent extraction without unavailable duration metadata', async () => {
+    const sourceVideo = buildCanvasMedia('heygen-legacy-video', 'video');
+    const sourceAudio = buildCanvasMedia('heygen-legacy-audio', 'audio');
+    const videoElement = sourceVideo.element as HTMLVideoElement;
+    vi.spyOn(videoElement, 'load').mockImplementation(() => videoElement.dispatchEvent(new Event('error'))); // Optional timing context may remain unknown.
+    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/source-media');
+    vi.mocked(extractHeygenClipIntent).mockResolvedValue({ startTime: 1, endTime: 4 });
+    vi.mocked(generateFalImageToVideo).mockRejectedValue(new Error('provider policy failure'));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'use the middle section',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal: createFalStub({
+        falModelMode: 'video',
+        falVideoModelId: HEYGEN_V3_LIPSYNC_MODEL_ID,
+      }),
+      selection: createSelectionStub({
+        sourceVideoId: sourceVideo.id,
+        sourceAudioId: sourceAudio.id,
+      }),
+      images: [sourceVideo, sourceAudio],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: createStateHarness().setState,
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+      onGenerationComplete: vi.fn(),
+      onGenerationPlaced: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(extractHeygenClipIntent).toHaveBeenCalledWith('use the middle section', {
+      videoDurationSeconds: undefined,
+    });
+    expect(generateFalImageToVideo).toHaveBeenCalledTimes(1);
   });
 
   it('replays finalized HeyGen timing after uploads queue the job early', async () => {

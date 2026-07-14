@@ -111,6 +111,32 @@ const drawCanvasBadge = (
   ctx.fillText(label, x + badgePaddingX, y + badgeHeight / 2);
 };
 
+const drawVideoPlaceholder = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  scale: number,
+): void => {
+  ctx.fillStyle = '#303744';
+  ctx.fillRect(x, y, width, height); // Keep unloaded videos visible without opening their streams.
+  ctx.strokeStyle = '#596274';
+  ctx.lineWidth = 1 / scale;
+  ctx.strokeRect(x, y, width, height); // Define the video bounds on dark canvases.
+
+  const iconSize = Math.min(width, height, 64 / scale) * 0.32;
+  const iconCenterX = x + width / 2;
+  const iconCenterY = y + height / 2;
+  ctx.fillStyle = '#d1d5db';
+  ctx.beginPath();
+  ctx.moveTo(iconCenterX - iconSize * 0.35, iconCenterY - iconSize * 0.55);
+  ctx.lineTo(iconCenterX + iconSize * 0.55, iconCenterY);
+  ctx.lineTo(iconCenterX - iconSize * 0.35, iconCenterY + iconSize * 0.55);
+  ctx.closePath();
+  ctx.fill(); // Mark the placeholder as playable media.
+};
+
 type DrawCanvasArgs = {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -219,12 +245,13 @@ export function drawCanvas({
       }
     }
 
-    if (isVideoImage(image) && image.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      ctx.restore();
-      return;
+    const isVideoWaitingForFrame = isVideoImage(image)
+      && image.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
+    if (isVideoWaitingForFrame) {
+      drawVideoPlaceholder(ctx, baseX, baseY, image.width, image.height, scale);
+    } else {
+      ctx.drawImage(image.element, baseX, baseY, image.width, image.height);
     }
-
-    ctx.drawImage(image.element, baseX, baseY, image.width, image.height);
 
     // Draw playhead for audio objects
     const audioPlaybackTime = image.mediaType === 'audio' ? getAudioPlaybackTime(image, audioPlaybackTimes) : undefined;

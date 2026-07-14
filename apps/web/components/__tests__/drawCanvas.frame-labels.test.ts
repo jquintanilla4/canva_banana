@@ -89,6 +89,24 @@ const buildAudioImage = (overrides: Partial<CanvasImage> = {}): CanvasImage => {
   }; // Audio waveform fixture with a saved fallback time.
 };
 
+const buildVideoImage = (readyState: number): CanvasImage => {
+  const element = document.createElement('video');
+  Object.defineProperty(element, 'readyState', { configurable: true, value: readyState });
+  return {
+    id: 'video-1',
+    element,
+    mediaType: 'video',
+    x: 20,
+    y: 20,
+    width: 120,
+    height: 80,
+    rotation: 0,
+    naturalWidth: 120,
+    naturalHeight: 80,
+    file: new File(['video'], 'video.mp4', { type: 'video/mp4' }),
+  }; // Video fixture can represent both lazy and decoded states.
+};
+
 describe('drawCanvas frame role labels', () => {
   it('labels the selected still as first frame and the tail still as last frame', () => {
     const canvas = buildCanvas();
@@ -279,6 +297,31 @@ describe('drawCanvas culling and path cache', () => {
     });
 
     expect(vi.mocked(ctx.drawImage)).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws a visible placeholder and selection outline for a lazy video', () => {
+    const ctx = buildContext();
+    const video = buildVideoImage(HTMLMediaElement.HAVE_NOTHING);
+
+    drawBase({
+      ctx,
+      images: [video],
+      selectedImageIds: [video.id],
+    });
+
+    expect(ctx.drawImage).not.toHaveBeenCalled();
+    expect(ctx.fillRect).toHaveBeenCalledWith(-60, -40, 120, 80);
+    expect(ctx.strokeRect).toHaveBeenCalledWith(-65, -45, 130, 90);
+  });
+
+  it('replaces the placeholder with the real video frame once decoded', () => {
+    const ctx = buildContext();
+    const video = buildVideoImage(HTMLMediaElement.HAVE_CURRENT_DATA);
+
+    drawBase({ ctx, images: [video] });
+
+    expect(ctx.drawImage).toHaveBeenCalledWith(video.element, -60, -40, 120, 80);
+    expect(ctx.fillRect).not.toHaveBeenCalled();
   });
 
   it('uses rotation-aware bounds when culling images', () => {
