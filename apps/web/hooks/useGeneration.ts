@@ -325,6 +325,51 @@ const fetchGeneratedVideoBlob = async (videoUrl: string, videoLabel: string): Pr
   return videoBlob;
 };
 
+type GeneratedMediaDebugContext = {
+  source: string;
+  modelLabel: string;
+  jobId?: string;
+  requestId?: string;
+};
+
+const logGeneratedVideoDownloaded = (
+  context: GeneratedMediaDebugContext,
+  videoBlob: Blob,
+) => {
+  addDebugLog({
+    direction: 'inbound',
+    source: context.source,
+    title: context.modelLabel,
+    message: 'Generated video downloaded for canvas.',
+    data: {
+      ...(context.jobId ? { jobId: context.jobId } : {}),
+      ...(context.requestId ? { requestId: context.requestId } : {}),
+      byteSize: videoBlob.size,
+      mimeType: videoBlob.type || 'video/mp4',
+    },
+  });
+}; // Record the successful transfer after noisy provider polling has finished.
+
+const logGeneratedMediaAppended = (
+  context: GeneratedMediaDebugContext,
+  mediaType: 'image' | 'video',
+  mediaIds: string[],
+) => {
+  addDebugLog({
+    direction: 'info',
+    source: context.source,
+    title: context.modelLabel,
+    message: 'Generated media appended to canvas state.',
+    data: {
+      ...(context.jobId ? { jobId: context.jobId } : {}),
+      ...(context.requestId ? { requestId: context.requestId } : {}),
+      mediaType,
+      mediaIds,
+      mediaCount: mediaIds.length,
+    },
+  });
+}; // Correlate provider completion with the exact canvas item IDs.
+
 const applyVolcengineQueueUpdateToJob = (
   job: FalQueueJob,
   update: VolcengineQueueUpdate | JimengQueueUpdate,
@@ -1307,6 +1352,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
           try {
             const videoBlob = await fetchGeneratedVideoBlob(videoResult.videoUrl, 'Seedance 2 result');
+            const debugContext: GeneratedMediaDebugContext = {
+              source: localBackendProvider,
+              modelLabel: jobModelLabel,
+              jobId: backendJobId,
+              requestId: videoResult.requestId,
+            };
+            logGeneratedVideoDownloaded(debugContext, videoBlob);
             const fileType = videoBlob.type || 'video/mp4';
             const extension = fileType.split('/')[1]?.split(';')[0] || 'mp4';
             const videoFileName = `generated_seedance2_video.${extension}`;
@@ -1410,6 +1462,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...prev,
               images: [...prev.images, newVideo],
             }));
+            logGeneratedMediaAppended(debugContext, 'video', [newVideo.id]);
             onGenerationPlaced?.({ mediaIds: [newVideo.id], mediaType: 'video', modelLabel: jobModelLabel });
             onGenerationComplete?.();
           } catch (loadErr) {
@@ -2241,6 +2294,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
             requestId: videoResult.requestId,
           });
           const videoBlob = await fetchGeneratedVideoBlob(videoResult.videoUrl, `${jobModelLabel} result`);
+          const debugContext: GeneratedMediaDebugContext = {
+            source: 'fal',
+            modelLabel: jobModelLabel,
+            jobId: falJobId,
+            requestId: videoResult.requestId,
+          };
+          logGeneratedVideoDownloaded(debugContext, videoBlob);
           const fileType = videoBlob.type || 'video/mp4';
           const extension = fileType.split('/')[1]?.split(';')[0] || 'mp4';
           const videoFileName = `generated_video.${extension}`;
@@ -2340,6 +2400,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...prev,
             images: [...prev.images, newVideo],
           }));
+          logGeneratedMediaAppended(debugContext, 'video', [newVideo.id]);
           setFalJobs(prev => prev.map(job => {
             if (job.id !== falJobId) {
               return job;
@@ -2939,6 +3000,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
           images: [...prev.images, ...newImages],
         }));
         if (newImages.length > 0) {
+          logGeneratedMediaAppended({
+            source: generationProviderForRun,
+            modelLabel: generationModelLabel,
+            ...(falJobId ? { jobId: falJobId } : {}),
+            ...(generationResult.requestId ? { requestId: generationResult.requestId } : {}),
+          }, 'image', newImages.map(image => image.id));
           onGenerationPlaced?.({
             mediaIds: newImages.map(image => image.id),
             mediaType: 'image',

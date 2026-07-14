@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { CanvasImage, CanvasNote, CanvasVideoPromptArea, CanvasVideoPromptBar, Path } from '../types';
+import { addDebugLog } from '../services/debugLog';
 import { getVideoObjectUrl } from '../services/mediaService';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../utils/canvasColorOptions';
+import { extendCanvasImageDraftBaseline, mergeCanvasImageDraft } from '../utils/canvasImageDraftMerge';
 
 export type AppState = {
   images: CanvasImage[];
@@ -42,6 +44,12 @@ type UseCanvasHistoryOptions = {
   maxHistory?: number;
 };
 
+type CanvasImageDraft = {
+  images: CanvasImage[];
+  baseline: CanvasImage[];
+  initialIds: Set<string>;
+}; // One draft owns the staged slice and both merge checkpoints.
+
 export const useCanvasHistory = (
   initialState: AppState = { images: [], paths: [], notes: [], videoPromptAreas: [], videoPromptBars: [] },
   options: UseCanvasHistoryOptions = {},
@@ -54,18 +62,40 @@ export const useCanvasHistory = (
 
   const prevVideoObjectUrlsRef = useRef<Set<string>>(new Set());
 
-  const [liveImages, setLiveImages] = useState<CanvasImage[] | null>(null);
+  const [imageDraft, setImageDraftState] = useState<CanvasImageDraft | null>(null);
   const [livePaths, setLivePaths] = useState<Path[] | null>(null);
   const [liveNotes, setLiveNotes] = useState<CanvasNote[] | null>(null);
   const [liveVideoPromptAreas, setLiveVideoPromptAreas] = useState<CanvasVideoPromptArea[] | null>(null);
   const [liveVideoPromptBars, setLiveVideoPromptBars] = useState<CanvasVideoPromptBar[] | null>(null);
+  const imageDraftRef = useRef<CanvasImageDraft | null>(null);
+  const currentImagesRef = useRef<CanvasImage[]>(initialState.images);
+  const pendingImageMergeLogRef = useRef<{ baselineIds: Set<string> } | null>(null);
 
   const currentState = historyState.history[historyState.index];
-  const displayedImages = liveImages ?? currentState.images;
+  const displayedImages = useMemo(() => {
+    return imageDraft
+      ? mergeCanvasImageDraft(imageDraft.baseline, imageDraft.images, currentState.images)
+      : currentState.images;
+  }, [currentState.images, imageDraft]);
   const displayedPaths = livePaths ?? currentState.paths;
   const displayedNotes = liveNotes ?? currentState.notes;
   const displayedVideoPromptAreas = liveVideoPromptAreas ?? currentState.videoPromptAreas;
   const displayedVideoPromptBars = liveVideoPromptBars ?? currentState.videoPromptBars;
+
+  useLayoutEffect(() => {
+    currentImagesRef.current = currentState.images; // Event handlers only read image state from a committed render.
+    const currentDraft = imageDraftRef.current;
+    if (!currentDraft) {
+      return;
+    }
+    const baseline = extendCanvasImageDraftBaseline(currentDraft.baseline, currentState.images);
+    if (baseline === currentDraft.baseline) {
+      return;
+    }
+    const nextDraft = { ...currentDraft, baseline };
+    imageDraftRef.current = nextDraft;
+    setImageDraftState(nextDraft); // Render from the same stable baseline used by immediate commits.
+  }, [currentState.images]);
 
   // Use functional updates so callers can mutate canvas slices without worrying about stale closures.
   const setState = useCallback((updater: (prevState: AppState) => AppState) => {
@@ -110,10 +140,40 @@ export const useCanvasHistory = (
     });
   }, []);
 
+  const setLiveImages = useCallback<Dispatch<SetStateAction<CanvasImage[] | null>>>((value) => {
+    const currentDraft = imageDraftRef.current;
+    const nextImages = typeof value === 'function' ? value(currentDraft?.images ?? null) : value;
+    if (nextImages === null) {
+      imageDraftRef.current = null;
+      setImageDraftState(null);
+      return;
+    }
+    const nextDraft: CanvasImageDraft = currentDraft
+      ? { ...currentDraft, images: nextImages }
+      : {
+          images: nextImages,
+          baseline: currentImagesRef.current,
+          initialIds: new Set(currentImagesRef.current.map(image => image.id)),
+        };
+    imageDraftRef.current = nextDraft;
+    setImageDraftState(nextDraft); // Keep render state aligned with the synchronous event-handler snapshot.
+  }, []);
+
+  const clearLiveImages = useCallback(() => {
+    imageDraftRef.current = null;
+    setImageDraftState(null);
+  }, []);
+
   // Merge any optimistic/live edits into history and clear the staging buffers.
   // Optional overrides are used when a caller already has the next slice handy (e.g., video play toggles)
   // and wants to snapshot that immediately without waiting for live state to sync.
   const commit = useCallback((overrides?: CommitOverrides) => {
+    const currentDraft = imageDraftRef.current;
+    const stagedImages = overrides?.images ?? currentDraft?.images ?? null;
+    const imageBaseline = currentDraft?.baseline
+      ?? (overrides?.images ? currentImagesRef.current : null);
+    const initialImageIds = currentDraft?.initialIds
+      ?? (overrides?.images ? new Set(currentImagesRef.current.map(image => image.id)) : null);
     const hasOverrides = Boolean(overrides && (
       overrides.images
       || overrides.paths
@@ -123,7 +183,7 @@ export const useCanvasHistory = (
     ));
     if (
       !hasOverrides
-      && liveImages === null
+      && currentDraft === null
       && livePaths === null
       && liveNotes === null
       && liveVideoPromptAreas === null
@@ -135,7 +195,9 @@ export const useCanvasHistory = (
     setHistoryState(current => {
       const prevState = current.history[current.index];
       const nextState: AppState = {
-        images: overrides?.images ?? liveImages ?? prevState.images,
+        images: stagedImages && imageBaseline
+          ? mergeCanvasImageDraft(imageBaseline, stagedImages, prevState.images)
+          : stagedImages ?? prevState.images,
         paths: overrides?.paths ?? livePaths ?? prevState.paths,
         notes: overrides?.notes ?? liveNotes ?? prevState.notes,
         videoPromptAreas: overrides?.videoPromptAreas ?? liveVideoPromptAreas ?? prevState.videoPromptAreas,
@@ -144,6 +206,12 @@ export const useCanvasHistory = (
 
       if (getStateSignature(nextState) === getStateSignature(prevState)) {
         return current;
+      }
+
+      if (stagedImages && imageBaseline && initialImageIds) {
+        pendingImageMergeLogRef.current = {
+          baselineIds: initialImageIds,
+        }; // The post-commit effect reports only additions that arrived during this draft.
       }
 
       const newHistory = current.history.slice(0, current.index + 1);
@@ -159,12 +227,12 @@ export const useCanvasHistory = (
       };
     });
 
-    setLiveImages(null);
+    clearLiveImages();
     setLivePaths(null);
     setLiveNotes(null);
     setLiveVideoPromptAreas(null);
     setLiveVideoPromptBars(null);
-  }, [liveImages, liveNotes, livePaths, liveVideoPromptAreas, liveVideoPromptBars, maxHistory]);
+  }, [clearLiveImages, liveNotes, livePaths, liveVideoPromptAreas, liveVideoPromptBars, maxHistory]);
 
   const undo = useCallback(() => {
     commit();
@@ -187,13 +255,34 @@ export const useCanvasHistory = (
   }, [commit]);
 
   const resetHistory = useCallback((nextState: AppState) => {
-    setLiveImages(null);
+    clearLiveImages();
     setLivePaths(null);
     setLiveNotes(null);
     setLiveVideoPromptAreas(null);
     setLiveVideoPromptBars(null);
     setHistoryState({ history: [nextState], index: 0 });
-  }, []);
+  }, [clearLiveImages]);
+
+  useEffect(() => {
+    const pendingMerge = pendingImageMergeLogRef.current;
+    if (!pendingMerge) {
+      return;
+    }
+    pendingImageMergeLogRef.current = null;
+    const preservedIds = currentState.images
+      .filter(image => !pendingMerge.baselineIds.has(image.id))
+      .map(image => image.id);
+    if (preservedIds.length === 0) {
+      return;
+    }
+    addDebugLog({
+      direction: 'info',
+      source: 'canvas',
+      title: 'Canvas draft merged',
+      message: 'Preserved media added while a canvas edit was active.',
+      data: { preservedMediaIds: preservedIds, imageCount: currentState.images.length },
+    });
+  }, [currentState.images]);
 
   const canUndo = historyState.index > 0;
   const canRedo = historyState.index < historyState.history.length - 1;
