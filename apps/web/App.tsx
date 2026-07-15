@@ -465,6 +465,7 @@ export default function App() {
     setSourceAudioId,
     handleImageSelection,
     handleNoteSelection,
+    replaceCanvasSelection,
   } = selection;
 
   const [krea2StyleReferenceStrengths, setKrea2StyleReferenceStrengths] = useState<Record<string, number>>({});
@@ -2158,6 +2159,7 @@ export default function App() {
           onMediaPlaybackRejected={handleMediaPlaybackRejected}
           onImageSelect={handleImageSelection}
           onNoteSelect={handleNoteSelection}
+          onSelectionReplace={replaceCanvasSelection}
           onCommit={handleCommit}
           onFilesDrop={handleFilesDrop}
           zoomToFitTrigger={zoomToFitTrigger}

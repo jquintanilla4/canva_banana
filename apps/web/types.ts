@@ -16,6 +16,11 @@ export interface Point {
   y: number;
 }
 
+export interface CanvasObjectSelection {
+  imageIds: string[]; // Canvas media selected by the gesture.
+  noteIds: string[]; // Canvas notes selected by the gesture.
+}
+
 export interface Path {
   points: Point[];
   color: string;

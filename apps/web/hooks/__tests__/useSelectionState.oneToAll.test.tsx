@@ -104,4 +104,58 @@ describe('useSelectionState (one-to-all)', () => {
     expect(onError).not.toHaveBeenCalled();
     expect(onReferenceLimit).not.toHaveBeenCalled();
   });
+
+  it('replaces canvas objects without clearing the source video role', () => {
+    const video = buildCanvasMedia('video-1', 'video');
+    const image = buildCanvasMedia('image-1', 'image');
+    const images = [video, image]; // Keep the hook input stable across state updates.
+    const fal = {
+      falModelId: ONE_TO_ALL_ANIMATE_MODEL_ID,
+      falModelMode: 'video',
+      falVideoModelId: ONE_TO_ALL_ANIMATE_MODEL_ID,
+      klingVariant: 'standard',
+      klingO3Variant: 'reference',
+      isVideoMode: true,
+      isKlingProVideoSelection: false,
+      isKlingO3VideoModel: false,
+      isKlingO3EditMode: false,
+      isLipsyncVideoModel: false,
+      isHeygenV3LipsyncVideoModel: false,
+      isInfinitalkVideoModel: false,
+      isKlingV3ControlVideoModel: false,
+      isWan27VideoModel: false,
+      isSeedance15VideoModel: false,
+      isSeedance2VideoModel: false,
+      seedance2Variant: 'smart',
+      isVeo31VideoModel: false,
+      veo31Variant: 'i2v-fflf',
+    } satisfies TestFalSettings;
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal,
+      onError: vi.fn(),
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      result.current.handleImageSelection(video.id);
+      result.current.setReferenceImageIds([image.id]);
+      result.current.setReferenceVideoIds([video.id]);
+      result.current.setElementImageIds([image.id]);
+      result.current.setVideoLastFrameImageId(image.id);
+    });
+
+    act(() => {
+      result.current.replaceCanvasSelection({ imageIds: [image.id], noteIds: ['note-1'] });
+    });
+
+    expect(result.current.selectedImageIds).toEqual([image.id]);
+    expect(result.current.selectedNoteIds).toEqual(['note-1']);
+    expect(result.current.referenceImageIds).toEqual([]);
+    expect(result.current.referenceVideoIds).toEqual([]);
+    expect(result.current.elementImageIds).toEqual([]);
+    expect(result.current.videoLastFrameImageId).toBeNull();
+    expect(result.current.sourceVideoId).toBe(video.id);
+  });
 });

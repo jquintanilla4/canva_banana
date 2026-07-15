@@ -238,6 +238,7 @@ const createSelectionStub = (overrides: Partial<SelectionStateResult> = {}): Sel
   setSourceAudioId: vi.fn(),
   handleImageSelection: vi.fn(),
   handleNoteSelection: vi.fn(),
+  replaceCanvasSelection: vi.fn(),
   ...overrides,
 });
 

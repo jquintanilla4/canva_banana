@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type React from 'react';
-import { type AppMode, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type Path, type Point, Tool, type VideoModelCapabilityProfile } from '../../../types';
+import { type AppMode, type CanvasImage, type CanvasNote, type CanvasObjectSelection, type CanvasVideoPromptArea, type Path, type Point, Tool, type VideoModelCapabilityProfile } from '../../../types';
 import { MIN_NOTE_HEIGHT, MIN_NOTE_WIDTH, RESIZE_HANDLE_SIZE } from '../constants';
 import { getImageBounds, getImageRotation, worldToImageLocal } from '../geometry';
 import {
@@ -57,6 +57,7 @@ type UseCanvasInteractionsArgs = {
   onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[]; videoPromptAreas?: CanvasVideoPromptArea[] }) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
+  onSelectionReplace: (selection: CanvasObjectSelection) => void;
   onVideoPromptAreaSelect: (id: string | null) => void;
   onFilesDrop: (files: FileList, point: Point) => void;
   onNoteDoubleClick: (id: string) => void;
@@ -116,6 +117,7 @@ export function useCanvasInteractions({
   onCommit,
   onImageSelect,
   onNoteSelect,
+  onSelectionReplace,
   onVideoPromptAreaSelect,
   onFilesDrop,
   onNoteDoubleClick,
@@ -977,8 +979,6 @@ export function useCanvasInteractions({
       const isSignificant = Math.max(pixelWidth, pixelHeight) > 3;
 
       if (isSignificant) {
-        const selectedImageIdSet = new Set(selectedImageIds);
-        const selectedNoteIdSet = new Set(selectedNoteIds);
         const imageIdsInBounds = images
           .filter(img => {
             const b = getImageBounds(img);
@@ -996,15 +996,8 @@ export function useCanvasInteractions({
             note.y + note.height > bounds.minY
           )
           .map(note => note.id);
-        if (imageIdsInBounds.length === 0 && noteIdsInBounds.length === 0) {
-          onVideoPromptAreaSelect(null);
-          onImageSelect(null);
-          onNoteSelect(null);
-        } else {
-          onVideoPromptAreaSelect(null);
-          imageIdsInBounds.filter(id => !selectedImageIdSet.has(id)).forEach(id => onImageSelect(id, { multi: true }));
-          noteIdsInBounds.filter(id => !selectedNoteIdSet.has(id)).forEach(id => onNoteSelect(id, { multi: true }));
-        }
+        onVideoPromptAreaSelect(null);
+        onSelectionReplace({ imageIds: imageIdsInBounds, noteIds: noteIdsInBounds }); // Replace object selection without clearing source media.
       }
     }
 

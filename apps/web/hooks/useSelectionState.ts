@@ -11,7 +11,7 @@ import {
   SEEDANCE_15_VIDEO_MODEL_ID,
   isKlingO3VideoModelId,
 } from '../services/modelConfig';
-import type { ApiProviderId, CanvasImage, CanvasNote } from '../types';
+import type { ApiProviderId, CanvasImage, CanvasNote, CanvasObjectSelection } from '../types';
 import type { UseFalSettingsResult } from './useFalSettings';
 import {
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
@@ -82,6 +82,7 @@ export type SelectionStateResult = {
   setSourceAudioId: Dispatch<SetStateAction<string | null>>;
   handleImageSelection: (imageId: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   handleNoteSelection: (noteId: string | null, options?: { multi?: boolean }) => void;
+  replaceCanvasSelection: (selection: CanvasObjectSelection) => void;
 };
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
@@ -789,6 +790,16 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setVideoLastFrameImageId(null);
   }, [primaryNoteId, selectedNoteIds.length]);
 
+  const replaceCanvasSelection = useCallback(({ imageIds, noteIds }: CanvasObjectSelection) => {
+    setSelectedImageIds([...imageIds]); // Replace media selection without toggling each item.
+    setSelectedNoteIds([...noteIds]); // Replace note selection in the same operation.
+    setReferenceImageIds([]); // Marquee selection exits reference-image roles.
+    setReferenceVideoIds([]); // Marquee selection exits reference-video roles.
+    setReferenceAudioIds([]); // Marquee selection exits reference-audio roles.
+    setElementImageIds([]); // Marquee selection exits element-image roles.
+    setVideoLastFrameImageId(null); // Marquee selection exits tail-frame selection.
+  }, []);
+
   return {
     selectedImageIds,
     selectedNoteIds,
@@ -817,5 +828,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setSourceAudioId,
     handleImageSelection,
     handleNoteSelection,
+    replaceCanvasSelection,
   };
 };

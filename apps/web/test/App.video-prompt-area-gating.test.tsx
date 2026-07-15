@@ -439,6 +439,7 @@ vi.mock('../hooks/useSelectionState', () => ({
     setSourceAudioId: vi.fn(),
     handleImageSelection: vi.fn(),
     handleNoteSelection: vi.fn(),
+    replaceCanvasSelection: vi.fn(),
   }),
 }));
 

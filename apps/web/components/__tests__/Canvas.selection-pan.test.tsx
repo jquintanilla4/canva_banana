@@ -48,6 +48,7 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   onMediaPlaybackRejected: vi.fn(),
   onImageSelect: vi.fn(),
   onNoteSelect: vi.fn(),
+  onSelectionReplace: vi.fn(),
   zoomToFitTrigger: 0,
   zoomToSelectionTrigger: 0,
   zoomInTrigger: 0,
@@ -436,63 +437,91 @@ describe('Canvas selection temporary pan', () => {
     expect(root.style.backgroundPosition).toBe('60px 80px');
   });
 
-  it('selects multiple canvas items with a command-drag marquee from empty canvas', () => {
+  it.each([
+    { label: 'Command in Selection', tool: Tool.SELECTION, modifiers: { metaKey: true } },
+    { label: 'Control in Free Selection', tool: Tool.FREE_SELECTION, modifiers: { ctrlKey: true } },
+  ])('selects multiple canvas items with $label marquee from empty canvas', ({ tool, modifiers }) => {
     const onImageSelect = vi.fn();
     const onNoteSelect = vi.fn();
+    const onSelectionReplace = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const secondImage = { ...buildImage('image-2'), x: 240, y: 150 };
     const { container } = render(<Canvas {...buildCanvasProps({
+      tool,
       images: [buildImage(), secondImage],
       notes: [buildNote()],
       onImageSelect,
       onNoteSelect,
+      onSelectionReplace,
       onVideoPromptAreaSelect,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
 
-    dragCanvas(root, { x: 0, y: 0 }, { x: 420, y: 320 }, 0, { metaKey: true });
+    dragCanvas(root, { x: 0, y: 0 }, { x: 420, y: 320 }, 0, modifiers);
 
     expect(onVideoPromptAreaSelect).toHaveBeenCalledWith(null);
-    expect(onImageSelect).toHaveBeenCalledWith('image-1', { multi: true });
-    expect(onImageSelect).toHaveBeenCalledWith('image-2', { multi: true });
-    expect(onNoteSelect).toHaveBeenCalledWith('note-1', { multi: true });
+    expect(onSelectionReplace).toHaveBeenCalledWith({
+      imageIds: ['image-1', 'image-2'],
+      noteIds: ['note-1'],
+    });
+    expect(onImageSelect).not.toHaveBeenCalled();
+    expect(onNoteSelect).not.toHaveBeenCalled();
   });
 
   it('starts command-drag marquee selection when the gesture begins on an image', () => {
     const onImageSelect = vi.fn();
+    const onSelectionReplace = vi.fn();
     const selectedImage = buildImage('image-1');
     const secondImage = { ...buildImage('image-2'), x: 180, y: 20 };
     const { container } = render(<Canvas {...buildCanvasProps({
       images: [selectedImage, secondImage],
       selectedImageIds: ['image-1'],
       onImageSelect,
+      onSelectionReplace,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
 
     dragCanvas(root, { x: 20, y: 20 }, { x: 300, y: 140 }, 0, { metaKey: true });
 
-    expect(onImageSelect).not.toHaveBeenCalledWith('image-1', { multi: true });
-    expect(onImageSelect).toHaveBeenCalledWith('image-2', { multi: true });
+    expect(onSelectionReplace).toHaveBeenCalledWith({
+      imageIds: ['image-1', 'image-2'],
+      noteIds: [],
+    });
+    expect(onImageSelect).not.toHaveBeenCalled();
   });
 
-  it('adds command-drag marquee matches to the selected image set', () => {
+  it('replaces prior image and note selections with command-drag marquee matches', () => {
     const onImageSelect = vi.fn();
+    const onNoteSelect = vi.fn();
+    const onSelectionReplace = vi.fn();
     const insideImage = buildImage('image-1');
     const outsideImage = { ...buildImage('image-3'), x: 520, y: 420 };
+    const outsideNote = { ...buildNote('note-3'), x: 520, y: 420 };
     const { container } = render(<Canvas {...buildCanvasProps({
       images: [insideImage, outsideImage],
+      notes: [outsideNote],
       selectedImageIds: ['image-3'],
+      selectedNoteIds: ['note-3'],
       onImageSelect,
+      onNoteSelect,
+      onSelectionReplace,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
 
     dragCanvas(root, { x: 0, y: 0 }, { x: 140, y: 120 }, 0, { metaKey: true });
 
-    expect(onImageSelect).not.toHaveBeenCalledWith('image-3', { multi: true });
-    expect(onImageSelect).toHaveBeenCalledWith('image-1', { multi: true });
+    expect(onSelectionReplace).toHaveBeenCalledWith({
+      imageIds: ['image-1'],
+      noteIds: [],
+    });
+    expect(onImageSelect).not.toHaveBeenCalled();
+    expect(onNoteSelect).not.toHaveBeenCalled();
   });
 
-  it('keeps command-click image toggles when the pointer does not drag', () => {
+  it.each([
+    { label: 'command', modifiers: { metaKey: true } },
+    { label: 'control', modifiers: { ctrlKey: true } },
+  ])('keeps $label-click image toggles when the pointer does not drag', ({ modifiers }) => {
     const onImageSelect = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       images: [buildImage()],
@@ -500,8 +529,8 @@ describe('Canvas selection temporary pan', () => {
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
 
-    fireEvent.mouseDown(root, { clientX: 20, clientY: 20, button: 0, metaKey: true });
-    fireEvent.mouseUp(root, { clientX: 20, clientY: 20, button: 0, metaKey: true });
+    fireEvent.mouseDown(root, { clientX: 20, clientY: 20, button: 0, ...modifiers });
+    fireEvent.mouseUp(root, { clientX: 20, clientY: 20, button: 0, ...modifiers });
 
     expect(onImageSelect).toHaveBeenCalledWith('image-1', { multi: true });
   });

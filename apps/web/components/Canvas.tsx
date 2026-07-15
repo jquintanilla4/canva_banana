@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
+import { Tool, Path, Point, CanvasImage, CanvasNote, CanvasObjectSelection, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
 import { JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, FontSizeDownIcon, FontSizeUpIcon, MinusIcon } from './Icons';
@@ -96,6 +96,7 @@ interface CanvasProps {
   onMediaPlaybackRejected?: (imageId: string) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
+  onSelectionReplace: (selection: CanvasObjectSelection) => void;
   zoomToFitTrigger: number;
   zoomToSelectionTrigger: number;
   zoomInTrigger: number;
@@ -223,6 +224,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onMediaPlaybackRejected,
   onImageSelect,
   onNoteSelect,
+  onSelectionReplace,
   onCommit,
   zoomToFitTrigger,
   zoomToSelectionTrigger,
@@ -437,6 +439,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     onCommit,
     onImageSelect,
     onNoteSelect,
+    onSelectionReplace,
     onVideoPromptAreaSelect,
     onFilesDrop: isPresentationMode ? () => {} : onFilesDrop,
     onNoteDoubleClick: isPresentationMode ? () => {} : onNoteDoubleClick,
