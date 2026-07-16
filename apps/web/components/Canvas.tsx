@@ -45,6 +45,7 @@ import {
 import { stopCanvasMediaPlayback, syncCanvasMediaElementPlayback } from '../utils/canvasMediaPlayback';
 import { getCanvasImagePrompt } from '../utils/canvasImagePrompt';
 import { KEYBOARD_SHORTCUT_LABELS } from '../utils/keyboardShortcutLabels';
+import { createCanvasInteractionGuard, isCanvasInteractiveTarget } from '../utils/canvasInteractionBoundary';
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -274,6 +275,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const videoPromptAreaColorPickerRef = useRef<HTMLDivElement>(null);
   const notePointerDownWhileEditingRef = useRef(false);
   const noteEditHandledRef = useRef(false);
+  const canvasInteractionGuardRef = useRef<ReturnType<typeof createCanvasInteractionGuard> | null>(null);
   const renderCacheRef = useRef(createCanvasRenderCache());
   const audioPlaybackTimesRef = useRef<Record<string, number>>({});
   const [isNoteColorPickerOpen, setIsNoteColorPickerOpen] = useState(false);
@@ -301,6 +303,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   const playbackAttemptIdsRef = useRef<Record<string, number>>({});
   const scaleRef = useRef(scale);
   const panRef = useRef(pan);
+
+  if (canvasInteractionGuardRef.current === null) {
+    canvasInteractionGuardRef.current = createCanvasInteractionGuard(); // Keeps click-through state stable across Canvas renders.
+  }
 
   const primarySelectedImageId = selectedImageIds[0] ?? null;
   const primarySelectedNoteId = selectedNoteIds[0] ?? null;
@@ -841,6 +847,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [onCommit, onNoteEditEnd]);
 
   const handleMouseDownCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (canvasInteractionGuardRef.current?.shouldIgnoreMouseDown(e.nativeEvent)) { // Stops detached UI click-through before note-edit capture changes state.
+      notePointerDownWhileEditingRef.current = false;
+      return;
+    }
     if (!editingNoteId) {
       notePointerDownWhileEditingRef.current = false;
       return;
@@ -850,6 +860,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [editingNoteId]);
 
   const handleMouseDownWithEditGuard = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (canvasInteractionGuardRef.current?.shouldIgnoreMouseDown(e.nativeEvent)) { // Reuses the capture decision for the same native event.
+      notePointerDownWhileEditingRef.current = false;
+      return;
+    }
     const suppressNoteCreation = notePointerDownWhileEditingRef.current && tool === Tool.NOTE;
     notePointerDownWhileEditingRef.current = false;
 
@@ -868,12 +882,18 @@ export const Canvas: React.FC<CanvasProps> = ({
     handleMouseDown(e);
   }, [editingNoteId, handleNoteBlur, handleMouseDown, tool]);
 
+  const handleDoubleClickWithInteractionGuard = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (canvasInteractionGuardRef.current?.shouldIgnoreDoubleClick(e.nativeEvent)) {
+      return; // Completes suppression of a picker click retargeted onto Canvas.
+    }
+    handleDoubleClick(e);
+  }, [handleDoubleClick]);
+
   const handleContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (currentTool !== Tool.FREE_SELECTION) {
       return;
     }
-    const target = event.target as HTMLElement;
-    if (target.closest('button') || target.tagName === 'TEXTAREA') {
+    if (isCanvasInteractiveTarget(event.target)) {
       return;
     }
     event.preventDefault(); // Keep free-select right-click deselect from opening the browser menu.
@@ -1326,7 +1346,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseUp={handleMouseUpWithOverlays}
       onMouseLeave={handleMouseUpWithOverlays}
       onContextMenu={handleContextMenu}
-      onDoubleClick={handleDoubleClick}
+      onDoubleClick={handleDoubleClickWithInteractionGuard}
       onKeyDown={(e) => {
         if (!isPresentationMode && e.key === 'Escape') {
           onImageSelect(null);

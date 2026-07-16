@@ -1,9 +1,15 @@
 import React, { useRef, useEffect, useLayoutEffect } from 'react';
-import { ChevronDownIcon, LayerUpIcon } from './Icons';
+import { createPortal } from 'react-dom';
+import { LayerUpIcon } from './Icons';
+import { PromptBarPicker } from './PromptBarPicker';
 import { Tooltip } from './Tooltip';
 import { getRootFontSizePx } from '../utils/uiScale';
 import { KEYBOARD_SHORTCUT_LABELS } from '../utils/keyboardShortcutLabels';
 import { PROMPT_BAR_FOOTER_MARGIN_BOTTOM, PROMPT_BAR_FOOTER_PADDING } from '../utils/promptBarFooterLayout';
+import { getIntrinsicElementSize, getViewportMenuPosition, type VerticalMenuPlacement } from '../utils/viewportMenuPosition';
+import { ANCHORED_PORTAL_TRACKING_IGNORE_ATTRIBUTE, useAnchoredPortalTracking } from '../hooks/useAnchoredPortalTracking';
+import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
+import { CANVAS_INTERACTION_BOUNDARY_PROPS } from '../utils/canvasInteractionBoundary';
 
 const PROMPT_BAR_BASE_MAX_WIDTH_REM = 69.1; // Keeps the existing desktop prompt bar width as the baseline.
 const PROMPT_BAR_MINI_MAX_WIDTH_REM = 31.5; // Mini mode mirrors the compact bar from the design reference.
@@ -48,7 +54,8 @@ type ActiveKlingMention = {
 };
 
 const ACTIVE_KLING_MENTION_REGEX = /^@[A-Za-z]*\d*$/; // Keep mention parsing limited to the autocomplete token under the caret.
-const KLING_SUGGESTION_MENU_WIDTH_PX = 160; // Match the Tailwind w-40 menu width so later mentions stay onscreen.
+const KLING_SUGGESTION_GAP_PX = 4; // Leaves space between the caret line and suggestions.
+const KLING_SUGGESTION_VIEWPORT_MARGIN_PX = 8; // Keeps suggestions inside the app window.
 const TEXTAREA_CARET_MIRROR_STYLE_PROPS = [ // Copy the text metrics that affect wrapped caret placement.
   'boxSizing',
   'width',
@@ -107,6 +114,7 @@ const getTextareaCaretPosition = (
   const marker = document.createElement('span');
 
   mirror.setAttribute('aria-hidden', 'true');
+  mirror.setAttribute(ANCHORED_PORTAL_TRACKING_IGNORE_ATTRIBUTE, ''); // Prevents temporary caret measurement from feeding portal tracking.
   mirror.style.position = 'absolute';
   mirror.style.visibility = 'hidden';
   mirror.style.pointerEvents = 'none';
@@ -125,14 +133,11 @@ const getTextareaCaretPosition = (
 
   const mirrorRect = mirror.getBoundingClientRect();
   const markerRect = marker.getBoundingClientRect();
-  const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight || '16');
-  const lineHeight = Number.isFinite(parsedLineHeight) ? parsedLineHeight : 16; // Browsers can return "normal", so keep the fallback numeric.
-
   document.body.removeChild(mirror);
 
   return {
     left: markerRect.left - mirrorRect.left - textarea.scrollLeft,
-    top: markerRect.top - mirrorRect.top - textarea.scrollTop + lineHeight,
+    top: markerRect.top - mirrorRect.top - textarea.scrollTop,
   };
 };
 
@@ -272,16 +277,30 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const multiPromptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const negativeTextareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);
-  const modelSelectRef = useRef<HTMLSelectElement>(null);
-  const controlSelectRefs = useRef<Map<string, HTMLSelectElement>>(new Map());
   const controlsViewportRef = useRef<HTMLDivElement>(null);
   const controlsStripRef = useRef<HTMLDivElement>(null);
   const promptBarOuterRef = useRef<HTMLElement | null>(null);
+  const klingSuggestionListId = React.useId();
+  const klingSuggestionListRef = useRef<HTMLDivElement>(null);
+  const klingSuggestionOptionRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const [showKlingSuggestions, setShowKlingSuggestions] = React.useState(false);
-  const [suggestionPosition, setSuggestionPosition] = React.useState<{ left: number; top: number } | null>(null);
+  const [suggestionPosition, setSuggestionPosition] = React.useState<{
+    placement: VerticalMenuPlacement;
+    left: number;
+    top: number;
+    maxWidth: number;
+    maxHeight: number;
+  } | null>(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(0);
   const [activeKlingQuery, setActiveKlingQuery] = React.useState('');
   const [promptBarMaxWidthPx, setPromptBarMaxWidthPx] = React.useState(() => getPromptBarBaseMaxWidthPx(resolvedSizeMode));
+
+  const closeKlingSuggestions = React.useCallback(() => {
+    setShowKlingSuggestions(false);
+    setActiveKlingQuery('');
+    setSuggestionPosition(null);
+    setActiveSuggestionIndex(0);
+  }, []); // Keeps every dismissal path in the same fully reset state.
 
   const handleSubmitShortcut = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -290,23 +309,6 @@ export const PromptBar: React.FC<PromptBarProps> = ({
         onSubmit();
       }
     }
-  };
-
-  const resizeSelectToContent = (selectEl: HTMLSelectElement | null) => {
-    if (!selectEl) return;
-    const selectedText = selectEl.selectedOptions?.[0]?.textContent ?? selectEl.value ?? '';
-    const computedStyle = window.getComputedStyle(selectEl);
-    const font = computedStyle.font || `${computedStyle.fontSize} ${computedStyle.fontFamily}`;
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.font = font;
-    const textWidth = context.measureText(selectedText).width;
-    const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
-    const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
-    const arrowAllowance = 12; // space for chevron icon
-    const minWidth = textWidth + paddingLeft + paddingRight + arrowAllowance;
-    selectEl.style.width = `${Math.ceil(minWidth)}px`;
   };
 
   const updatePromptBarWidth = React.useCallback(() => {
@@ -383,19 +385,6 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   }, [negativePrompt, showNegativePrompt]);
 
   useLayoutEffect(() => {
-    resizeSelectToContent(modelSelectRef.current);
-    controlSelectRefs.current.forEach(selectEl => {
-      resizeSelectToContent(selectEl);
-    });
-  }, [
-    resolvedSizeMode,
-    selectedModel,
-    modelControls
-      ?.map(getControlSignature)
-      .join('|') ?? '',
-  ]);
-
-  useLayoutEffect(() => {
     updatePromptBarWidth();
   }, [
     selectedModel,
@@ -433,9 +422,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     }
     return Array.from({ length: klingReferenceCount }, (_, idx) => `@Image${idx + 1}`);
   }, [klingReferenceCount, klingSuggestionOptions, klingSuggestionsEnabled]);
+  const klingAutocompleteAvailable = klingOptions.length > 0; // Keeps native textarea semantics until autocomplete can actually offer a choice.
 
   const filteredKlingOptions = React.useMemo(() => {
-    if (!klingSuggestionsEnabled) {
+    if (!klingAutocompleteAvailable) {
       return [];
     }
     if (activeKlingQuery.length === 0) {
@@ -443,7 +433,74 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     }
     const normalizedQuery = `@${activeKlingQuery.toLowerCase()}`;
     return klingOptions.filter(option => option.toLowerCase().startsWith(normalizedQuery)); // Keep the list open while the user types the rest of the token.
-  }, [activeKlingQuery, klingOptions, klingSuggestionsEnabled]);
+  }, [activeKlingQuery, klingAutocompleteAvailable, klingOptions]);
+  const klingSuggestionsOpen = klingAutocompleteAvailable && showKlingSuggestions && filteredKlingOptions.length > 0;
+  const activeKlingSuggestionId = klingSuggestionsOpen
+    ? `${klingSuggestionListId}-option-${activeSuggestionIndex}`
+    : undefined; // Links the focused textarea to its portaled active option.
+
+  const updateKlingSuggestionPosition = React.useCallback((value: string, caret: number) => {
+    const textarea = textareaRef.current;
+    const listbox = klingSuggestionListRef.current;
+    if (!textarea || !listbox) {
+      setSuggestionPosition(null);
+      return;
+    }
+
+    const caretPosition = getTextareaCaretPosition(textarea, value, caret);
+    if (!caretPosition) {
+      setSuggestionPosition(null);
+      return;
+    }
+
+    const textareaRect = textarea.getBoundingClientRect();
+    const scaleX = textarea.offsetWidth > 0 ? textareaRect.width / textarea.offsetWidth : 1;
+    const scaleY = textarea.offsetHeight > 0 ? textareaRect.height / textarea.offsetHeight : 1;
+    const computedStyle = window.getComputedStyle(textarea);
+    const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight);
+    const parsedFontSize = Number.parseFloat(computedStyle.fontSize);
+    const lineHeightPx = Number.isFinite(parsedLineHeight)
+      ? parsedLineHeight
+      : (Number.isFinite(parsedFontSize) ? parsedFontSize * 1.2 : 16); // Browsers can expose "normal" instead of pixels.
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const caretLineTop = textareaRect.top + (caretPosition.top * scaleY);
+    const caretLineHeight = lineHeightPx * scaleY;
+    const caretLeft = textareaRect.left + (caretPosition.left * scaleX);
+    const intrinsicSize = getIntrinsicElementSize(listbox);
+    const nextPosition = getViewportMenuPosition({
+      anchorRect: {
+        left: caretLeft,
+        top: caretLineTop,
+        bottom: caretLineTop + caretLineHeight,
+      },
+      menuWidth: intrinsicSize.width,
+      menuHeight: intrinsicSize.height,
+      viewportWidth,
+      viewportHeight,
+      gapPx: KLING_SUGGESTION_GAP_PX,
+      marginPx: KLING_SUGGESTION_VIEWPORT_MARGIN_PX,
+      preferredPlacement: 'top',
+    });
+
+    setSuggestionPosition(previous => (
+      previous
+      && previous.placement === nextPosition.placement
+      && previous.left === nextPosition.left
+      && previous.top === nextPosition.top
+      && previous.maxWidth === nextPosition.maxWidth
+      && previous.maxHeight === nextPosition.maxHeight
+        ? previous
+        : nextPosition
+    ));
+  }, []);
+
+  const refreshKlingSuggestionPosition = React.useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      updateKlingSuggestionPosition(textarea.value, textarea.selectionStart);
+    }
+  }, [updateKlingSuggestionPosition]);
 
   useEffect(() => {
     if (!showKlingSuggestions || filteredKlingOptions.length === 0) {
@@ -453,9 +510,30 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     setActiveSuggestionIndex(prev => Math.min(Math.max(prev, 0), filteredKlingOptions.length - 1));
   }, [filteredKlingOptions.length, showKlingSuggestions]);
 
+  useEffect(() => {
+    if (!showKlingSuggestions || filteredKlingOptions.length === 0) {
+      return;
+    }
+    klingSuggestionOptionRefs.current.get(activeSuggestionIndex)?.scrollIntoView?.({ block: 'nearest' }); // Keeps keyboard focus visible in clipped menus.
+  }, [activeSuggestionIndex, filteredKlingOptions.length, showKlingSuggestions]);
+
+  useLayoutEffect(() => {
+    if (!showKlingSuggestions || filteredKlingOptions.length === 0) {
+      return;
+    }
+    refreshKlingSuggestionPosition();
+  });
+
+  useAnchoredPortalTracking({
+    active: klingSuggestionsOpen,
+    anchorRef: textareaRef,
+    portalRef: klingSuggestionListRef,
+    updatePosition: refreshKlingSuggestionPosition,
+  });
+
   const handlePromptChange = (value: string, selectionStart: number | null) => {
     onPromptChange(value);
-    if (!klingSuggestionsEnabled || klingOptions.length === 0) {
+    if (!klingAutocompleteAvailable) {
       setShowKlingSuggestions(false);
       setActiveKlingQuery('');
       setActiveSuggestionIndex(0);
@@ -485,20 +563,6 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     setShowKlingSuggestions(true);
     setActiveKlingQuery(activeMention.query);
     setActiveSuggestionIndex(0);
-    const textarea = textareaRef.current;
-    if (textarea) {
-      const { offsetLeft, offsetTop } = textarea;
-      const caretPosition = getTextareaCaretPosition(textarea, value, caret);
-      if (!caretPosition) {
-        setSuggestionPosition(null);
-        return;
-      }
-      const maxLeft = Math.max(offsetLeft, offsetLeft + textarea.clientWidth - KLING_SUGGESTION_MENU_WIDTH_PX); // Clamp later mentions back inside the prompt bar.
-      setSuggestionPosition({
-        left: Math.min(offsetLeft + caretPosition.left, maxLeft),
-        top: offsetTop + caretPosition.top,
-      });
-    }
   };
 
   const handlePromptKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -530,10 +594,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       return;
     }
     if (event.key === 'Escape') {
-      setShowKlingSuggestions(false);
-      setActiveKlingQuery('');
-      setSuggestionPosition(null);
-      setActiveSuggestionIndex(0);
+      closeKlingSuggestions();
+      return;
+    }
+    if (event.key === 'Tab') {
+      closeKlingSuggestions(); // Closes the portaled popup without blocking normal Tab navigation.
       return;
     }
     handleSubmitShortcut(event);
@@ -557,11 +622,13 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       textarea.setSelectionRange(nextCaret, nextCaret);
       textarea.focus();
     });
-    setShowKlingSuggestions(false);
-    setActiveKlingQuery('');
-    setSuggestionPosition(null);
-    setActiveSuggestionIndex(0);
+    closeKlingSuggestions();
   };
+
+  const handlePromptBlur = () => {
+    closeKlingSuggestions();
+    onPromptBlur?.();
+  }; // A detached popup must close whenever its owning textarea loses focus.
 
   const resolvedPlaceholder = promptPlaceholder ?? (
     inputDisabled
@@ -578,10 +645,6 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     cameraThemeActive ? 'caret-amber-400' : ''
   }`;
 
-  const selectedModelOption = modelOptions.find(option => option.value === selectedModel);
-  const selectHighlightStyle = selectedModelOption?.highlightColor
-    ? { color: selectedModelOption.highlightColor }
-    : undefined;
   const getControlTooltip = (control: FalModelSelectControlConfig): string | undefined =>
     control.tooltip ?? control.options.find(option => option.value === control.value)?.tooltip; // Prefer selected option guidance.
 
@@ -655,24 +718,50 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               onChange={(e) => handlePromptChange(e.target.value, e.target.selectionStart)}
               onKeyDown={handlePromptKeyDown}
               onFocus={onPromptFocus}
-              onBlur={onPromptBlur}
+              onBlur={handlePromptBlur}
               placeholder={resolvedPlaceholder}
               disabled={inputDisabled || isLoading}
               rows={isMiniMode ? 1 : 3}
               className={`${promptTextareaClassName} transition-[min-height,max-height,padding-top,font-size] duration-300 ease-out ${isMiniMode ? 'pt-[0.22rem] text-[0.98rem]' : ''}`}
               style={{ minHeight: `${textareaMinHeightRem}rem`, maxHeight: `${textareaMaxHeightRem}rem`, ...textareaPaintStyle }}
               aria-label="Prompt input"
+              aria-autocomplete={klingAutocompleteAvailable ? 'list' : undefined}
+              aria-haspopup={klingAutocompleteAvailable ? 'listbox' : undefined}
+              aria-expanded={klingAutocompleteAvailable ? klingSuggestionsOpen : undefined}
+              aria-controls={klingSuggestionsOpen ? klingSuggestionListId : undefined}
+              aria-activedescendant={activeKlingSuggestionId}
             />
-            {showKlingSuggestions && filteredKlingOptions.length > 0 && suggestionPosition && (
-              <div className="absolute z-20" style={{ left: suggestionPosition.left, top: suggestionPosition.top }}>
-                <div className="mt-1 w-40 rounded-md border border-gray-700 bg-gray-800 shadow-lg" role="listbox">
+            {klingSuggestionsOpen && createPortal(
+              <div
+                {...CANVAS_INTERACTION_BOUNDARY_PROPS}
+                id={klingSuggestionListId}
+                ref={klingSuggestionListRef}
+                className={`fixed ${OVERLAY_LAYER_CLASS_NAMES.anchoredPopover} w-40 overflow-y-auto rounded-md border border-gray-700 bg-gray-800 shadow-lg`}
+                style={{
+                  left: suggestionPosition?.left ?? 0,
+                  top: suggestionPosition?.top ?? 0,
+                  maxWidth: suggestionPosition?.maxWidth,
+                  maxHeight: suggestionPosition?.maxHeight,
+                  visibility: suggestionPosition ? 'visible' : 'hidden',
+                }}
+                role="listbox"
+                data-placement={suggestionPosition?.placement}
+              >
                   {filteredKlingOptions.map((option, index) => {
                     const isActive = index === activeSuggestionIndex;
                     return (
                     <button
                       key={option}
-                      id={`kling-suggestion-${index}`}
+                      id={`${klingSuggestionListId}-option-${index}`}
+                      ref={(element) => {
+                        if (element) {
+                          klingSuggestionOptionRefs.current.set(index, element);
+                        } else {
+                          klingSuggestionOptionRefs.current.delete(index);
+                        }
+                      }}
                       type="button"
+                      tabIndex={-1}
                       onMouseDown={(e) => e.preventDefault()}
                       onMouseEnter={() => setActiveSuggestionIndex(index)}
                       onClick={() => insertKlingSuggestion(option)}
@@ -684,8 +773,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     </button>
                     );
                   })}
-                </div>
-              </div>
+              </div>,
+              document.body,
             )}
             {!isMiniMode && (
               <div className="flex flex-col gap-2 mt-[0.47rem] ml-[0.5rem]">
@@ -719,32 +808,15 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                         })}
                       </div>
                     )}
-                    <div className="relative">
-                      <label className="sr-only" htmlFor="model-select">
-                        {modelSelectLabel}
-                      </label>
-                      <select
+                    <div>
+                      <PromptBarPicker
                         id="model-select"
-                        ref={modelSelectRef}
+                        ariaLabel={modelSelectLabel}
+                        options={modelOptions}
                         value={selectedModel}
-                        onChange={(e) => onModelChange(e.target.value)}
+                        onChange={onModelChange}
                         disabled={modelSelectDisabled}
-                        className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
-                        style={selectHighlightStyle}
-                        aria-label={modelSelectLabel}
-                      >
-                        {modelOptions.map(option => (
-                          <option
-                            key={option.value}
-                            value={option.value}
-                            style={option.highlightColor ? { color: option.highlightColor } : undefined}
-                            title={option.tooltip}
-                          >
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80" aria-hidden="true" />
+                      />
                     </div>
                     {modelControls?.map(control => {
                       if (control.kind === 'action') {
@@ -790,73 +862,31 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                       <div className="relative flex items-center gap-1" key={control.id} title={controlTooltip}>
                         {control.hideSelectedValue ? (
                           <div
-                            className={`relative inline-flex items-center focus-within:outline-none ${control.disabled ? 'opacity-60' : ''}`}
+                            className={`inline-flex items-center focus-within:outline-none ${control.disabled ? 'opacity-60' : ''}`}
                             title={controlTooltip}
                           >
-                            <span
-                              className={`text-sm px-[0.4rem] pr-[1.8rem] py-[0.34rem] select-none ${control.disabled ? 'text-gray-400' : 'text-white'}`}
-                            >
-                              {control.prefixLabel ?? ''}
-                            </span>
-                            <label className="sr-only" htmlFor={control.id}>
-                              {control.ariaLabel}
-                            </label>
-                            <select
+                            <PromptBarPicker
                               id={control.id}
-                              ref={el => {
-                                if (el) {
-                                  controlSelectRefs.current.delete(control.id);
-                                }
-                              }}
+                              ariaLabel={control.ariaLabel}
+                              options={control.options}
                               value={control.value}
-                              onChange={(e) => control.onChange(e.target.value)}
+                              onChange={control.onChange}
                               disabled={control.disabled}
-                              className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 disabled:cursor-not-allowed"
-                              aria-label={control.ariaLabel}
+                              displayLabel={control.prefixLabel ?? ''}
                               title={controlTooltip}
-                            >
-                              {control.options.map(option => (
-                                <option key={option.value} value={option.value} disabled={option.disabled} title={option.tooltip}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDownIcon
-                              className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80"
-                              aria-hidden="true"
                             />
                           </div>
                         ) : (
                           <>
                             {control.prefixLabel && <span className="text-sm text-gray-200">{control.prefixLabel}</span>}
-                            <label className="sr-only" htmlFor={control.id}>
-                              {control.ariaLabel}
-                            </label>
-                            <select
+                            <PromptBarPicker
                               id={control.id}
-                              ref={el => {
-                                if (el) {
-                                  controlSelectRefs.current.set(control.id, el);
-                                } else {
-                                  controlSelectRefs.current.delete(control.id);
-                                }
-                              }}
+                              ariaLabel={control.ariaLabel}
+                              options={control.options}
                               value={control.value}
-                              onChange={(e) => control.onChange(e.target.value)}
+                              onChange={control.onChange}
                               disabled={control.disabled}
-                              className="bg-transparent text-white px-[0.4rem] pr-[1.8rem] py-[0.34rem] text-sm focus:outline-none focus:ring-0 appearance-none disabled:text-gray-400"
-                              aria-label={control.ariaLabel}
                               title={controlTooltip}
-                            >
-                              {control.options.map(option => (
-                                <option key={option.value} value={option.value} disabled={option.disabled} title={option.tooltip}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDownIcon
-                              className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-white/80"
-                              aria-hidden="true"
                             />
                           </>
                         )}

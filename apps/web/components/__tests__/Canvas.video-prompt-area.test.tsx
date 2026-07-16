@@ -4,6 +4,7 @@ import { type ComponentProps, useState } from 'react';
 import { Canvas } from '../Canvas';
 import { buildSeedance2PromptBarControls } from '../../services/promptBarConfig';
 import { Tool, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
+import { CANVAS_INTERACTION_BOUNDARY_ATTRIBUTE } from '../../utils/canvasInteractionBoundary';
 import { EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING } from '../../utils/videoPromptAreas';
 
 const buildCanvasProps = (overrides: Partial<ComponentProps<typeof Canvas>> = {}): ComponentProps<typeof Canvas> => ({
@@ -1040,6 +1041,179 @@ describe('Canvas video prompt area tool', () => {
     expect(embeddedPromptScaleShell.style.transform).toBe('scale(0.8)');
   });
 
+  it('isolates portaled prompt-bar controls from canvas focus, note edits, and file drops', () => {
+    const onFilesDrop = vi.fn();
+    const onNotesChange = vi.fn();
+    const onNoteDoubleClick = vi.fn();
+    const Harness = () => {
+      const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        prompt: '',
+        negativePrompt: '',
+        seedance2Variant: 'reference',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }]);
+
+      return (
+        <Canvas
+          {...buildCanvasProps({
+            videoPromptAreas: [{
+              id: 'area-1',
+              sequence: 1,
+              label: 'Video prompt area 01',
+              x: 40,
+              y: 60,
+              width: 2600,
+              height: 900,
+              promptBarId: 'bar-1',
+              orderedMediaIds: ['image-1'],
+            }],
+            videoPromptBars: bars,
+            onVideoPromptBarsChange: setBars,
+            notes: [{
+              id: 'note-behind-picker',
+              x: 200,
+              y: 300,
+              width: 100,
+              height: 100,
+              text: 'Behind picker',
+              backgroundColor: '#ffffff',
+            }],
+            videoPromptAreaMemberships: {
+              'area-1': {
+                orderedMediaIds: ['image-1'],
+                acceptedImageIds: ['image-1'],
+                acceptedVideoIds: [],
+                acceptedAudioIds: [],
+                elementImageIds: [],
+                ignoredMediaIds: [],
+                orderLabels: { 'image-1': '@Image1' },
+              },
+            },
+            onVideoPromptBarUpdate: (barId, updater) => {
+              setBars(currentBars => currentBars.map(bar => (
+                bar.id === barId ? updater(bar) : bar
+              )));
+            },
+            onFilesDrop,
+            onNotesChange,
+            onNoteDoubleClick,
+            tool: Tool.NOTE,
+          })}
+        />
+      );
+    };
+
+    const { container } = render(<Harness />);
+    const canvasRoot = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+    const textarea = screen.getByRole('textbox', { name: 'Prompt input' }) as HTMLTextAreaElement;
+    textarea.focus();
+    fireEvent.change(textarea, { target: { value: '@', selectionStart: 1 } });
+
+    const suggestion = screen.getByRole('option', { name: '@Image1' });
+    const droppedFile = new File(['image'], 'reference.png', { type: 'image/png' });
+    const dropEvent = { clientX: 240, clientY: 320, dataTransfer: { files: [droppedFile] } };
+    expect(suggestion.closest(`[${CANVAS_INTERACTION_BOUNDARY_ATTRIBUTE}]`)).toBeTruthy();
+    fireEvent.dragOver(suggestion, dropEvent);
+    fireEvent.drop(suggestion, dropEvent);
+    expect(onFilesDrop).not.toHaveBeenCalled();
+
+    fireEvent.mouseDown(suggestion); // Mirrors the browser event that previously let Canvas steal focus through the portal.
+
+    expect(document.activeElement).toBe(textarea);
+    expect(screen.getByRole('option', { name: '@Image1' })).toBeTruthy();
+    expect(document.activeElement).not.toBe(canvasRoot);
+
+    fireEvent.click(suggestion);
+
+    expect(textarea.value).toBe('@Image1');
+    expect(screen.queryByRole('option', { name: '@Image1' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Select video model' }));
+    const modelOption = screen.getByRole('option', { name: 'Seedance 2' });
+    expect(modelOption.closest(`[${CANVAS_INTERACTION_BOUNDARY_ATTRIBUTE}]`)).toBeTruthy();
+    fireEvent.mouseDown(modelOption, { clientX: 240, clientY: 320, detail: 1 });
+    fireEvent.mouseUp(modelOption, { clientX: 240, clientY: 320, detail: 1 });
+    fireEvent.click(modelOption, { clientX: 240, clientY: 320, detail: 1 }); // The first click selects and unmounts the portaled option.
+    expect(screen.queryByRole('option', { name: 'Seedance 2' })).toBeNull();
+
+    fireEvent.mouseDown(canvasRoot, { clientX: 240, clientY: 320, detail: 2 }); // The browser retargets the repeated click after the portal closes.
+    fireEvent.mouseUp(canvasRoot, { clientX: 240, clientY: 320, detail: 2 });
+    fireEvent.click(canvasRoot, { clientX: 240, clientY: 320, detail: 2 });
+    fireEvent.doubleClick(canvasRoot, { clientX: 240, clientY: 320, detail: 2 }); // The emitted dblclick must remain part of the suppressed sequence.
+    expect(onNotesChange).not.toHaveBeenCalled();
+    expect(onNoteDoubleClick).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(canvasRoot, { clientX: 240, clientY: 320, detail: 2 }); // Suppression must not leak into a later legitimate Canvas gesture.
+    expect(onNoteDoubleClick).toHaveBeenCalledWith('note-behind-picker');
+  });
+
+  it('keeps the browser context menu available on portaled picker padding', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 40,
+      y: 60,
+      width: 2600,
+      height: 900,
+      promptBarId: 'bar-1',
+      orderedMediaIds: [],
+    };
+    const bar: CanvasVideoPromptBar = {
+      id: 'bar-1',
+      assignedAreaId: 'area-1',
+      prompt: '',
+      negativePrompt: '',
+      seedance2Variant: 'reference',
+      seedance2AspectRatio: '16:9',
+      seedance2Resolution: '720p',
+      seedance2Duration: '5',
+      seedance2GenerateAudio: false,
+      seedance2CameraFixed: false,
+      x: 180,
+      y: 600,
+      width: 920,
+      height: 190,
+    };
+
+    render(
+      <Canvas
+        {...buildCanvasProps({
+          tool: Tool.FREE_SELECTION,
+          videoPromptAreas: [area],
+          videoPromptBars: [bar],
+          videoPromptAreaMemberships: {
+            'area-1': {
+              orderedMediaIds: [],
+              acceptedImageIds: [],
+              acceptedVideoIds: [],
+              acceptedAudioIds: [],
+              elementImageIds: [],
+              ignoredMediaIds: [],
+              orderLabels: {},
+            },
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Select video model' }));
+    const listbox = screen.getByRole('listbox', { name: 'Select video model' });
+
+    expect(listbox.parentElement).toBe(document.body);
+    expect(fireEvent.contextMenu(listbox)).toBe(true); // Canvas must not cancel detached control context menus.
+  });
+
   it('shows the shared Seedance 2 labels and updates embedded audio and camera toggles', () => {
     const Harness = () => {
       const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
@@ -1196,26 +1370,24 @@ describe('Canvas video prompt area tool', () => {
     expect(promptBar.getByText('Camera')).toBeTruthy();
     expect(promptBar.getByText('Audio')).toBeTruthy();
 
-    const audioSelect = promptBar.getByLabelText('Toggle Seedance 2 audio generation') as HTMLSelectElement;
-    expect(audioSelect.value).toBe('false');
-    expect(audioSelect.selectedOptions[0]?.textContent).toBe('Off');
+    const audioPicker = promptBar.getByRole('combobox', { name: 'Toggle Seedance 2 audio generation' });
+    expect(audioPicker.textContent).toContain('Off');
 
-    fireEvent.change(audioSelect, { target: { value: 'true' } });
+    fireEvent.click(audioPicker);
+    fireEvent.click(screen.getByRole('option', { name: 'On' }));
 
-    const updatedAudioSelect = promptBar.getByLabelText('Toggle Seedance 2 audio generation') as HTMLSelectElement;
-    expect(updatedAudioSelect.value).toBe('true');
-    expect(updatedAudioSelect.selectedOptions[0]?.textContent).toBe('On');
+    const updatedAudioPicker = promptBar.getByRole('combobox', { name: 'Toggle Seedance 2 audio generation' });
+    expect(updatedAudioPicker.textContent).toContain('On');
     expect(screen.getByTestId('seedance2-audio-state').textContent).toBe('true');
 
-    const cameraSelect = promptBar.getByLabelText('Toggle Seedance 2 camera fixed') as HTMLSelectElement;
-    expect(cameraSelect.value).toBe('false');
-    expect(cameraSelect.selectedOptions[0]?.textContent).toBe('Free');
+    const cameraPicker = promptBar.getByRole('combobox', { name: 'Toggle Seedance 2 camera fixed' });
+    expect(cameraPicker.textContent).toContain('Free');
 
-    fireEvent.change(cameraSelect, { target: { value: 'true' } });
+    fireEvent.click(cameraPicker);
+    fireEvent.click(screen.getByRole('option', { name: 'Fixed' }));
 
-    const updatedCameraSelect = promptBar.getByLabelText('Toggle Seedance 2 camera fixed') as HTMLSelectElement;
-    expect(updatedCameraSelect.value).toBe('true');
-    expect(updatedCameraSelect.selectedOptions[0]?.textContent).toBe('Fixed');
+    const updatedCameraPicker = promptBar.getByRole('combobox', { name: 'Toggle Seedance 2 camera fixed' });
+    expect(updatedCameraPicker.textContent).toContain('Fixed');
     expect(screen.getByTestId('seedance2-camera-state').textContent).toBe('true');
   });
 
@@ -1291,7 +1463,8 @@ describe('Canvas video prompt area tool', () => {
 
     render(<Harness />);
 
-    fireEvent.change(screen.getByLabelText('Select video model'), { target: { value: 'jimeng-cli/seedance-2' } });
+    fireEvent.click(screen.getByRole('combobox', { name: 'Select video model' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Seedance 2 (JM CLI)' }));
 
     const state = JSON.parse(screen.getByTestId('bar-state').textContent ?? '{}') as CanvasVideoPromptBar;
     expect(state.modelId).toBe('jimeng-cli/seedance-2');

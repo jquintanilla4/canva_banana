@@ -12,6 +12,7 @@ import {
   type TransformAction,
 } from '../hitTest';
 import { DEFAULT_NOTE_BACKGROUND, DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../../../utils/canvasColorOptions';
+import { isCanvasInteractionBoundaryTarget, isCanvasInteractiveTarget, shouldIgnoreCanvasMouseDown } from '../../../utils/canvasInteractionBoundary';
 import { buildVideoPromptAreaLabel, clampAreaRect, isPointInRect, syncVideoPromptAreaMembership } from '../../../utils/videoPromptAreas';
 
 const MIN_DRAG_PREVIEW_PX = 3; // Match marquee selection so area previews only appear after a real drag starts.
@@ -292,6 +293,7 @@ export function useCanvasInteractions({
   }, [pan, scale, videoPromptAreaCurrent, videoPromptAreaStart]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (shouldIgnoreCanvasMouseDown(e.nativeEvent)) return; // Interactive UI cannot start Canvas gestures.
     containerRef.current?.focus({ preventScroll: true });
 
     if (cropMode) {
@@ -331,9 +333,6 @@ export function useCanvasInteractions({
       }
       return;
     }
-
-    if ((e.target as HTMLElement).closest('button')) return;
-    if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
     let activeTool = currentTool; // Mouse handling should respect the active temporary override.
     if (e.button === 1) {
@@ -1119,6 +1118,7 @@ export function useCanvasInteractions({
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isCanvasInteractiveTarget(e.target)) return; // Portaled controls must not edit canvas notes underneath them.
     if (!canUpdateSelection) return;
     if (cropMode) return;
     const point = getTransformedPoint(e.clientX, e.clientY);
@@ -1128,19 +1128,32 @@ export function useCanvasInteractions({
     }
   };
 
+  const stopBoundaryDragEvent = (e: React.DragEvent<HTMLDivElement>): boolean => {
+    if (!isCanvasInteractionBoundaryTarget(e.target)) {
+      return false;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    return true;
+  }; // Keeps detached controls from becoming logical Canvas drop targets through React portals.
+
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (stopBoundaryDragEvent(e)) return;
     e.preventDefault();
     e.stopPropagation();
     if (!isDraggingOver) setIsDraggingOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (stopBoundaryDragEvent(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDraggingOver(false);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    if (stopBoundaryDragEvent(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDraggingOver(false);
