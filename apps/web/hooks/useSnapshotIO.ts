@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type {
   ApiProviderId,
@@ -106,6 +106,7 @@ type SnapshotIOArgs = {
 };
 
 type SnapshotIOResult = {
+  activeSnapshotFileName: string | null;
   exportSnapshot: () => Promise<void>;
   importSnapshotFromFile: (file: SnapshotByteSource) => Promise<void>;
   importSnapshotWithPicker: (onFallback: () => void) => Promise<void>;
@@ -116,6 +117,7 @@ type AutosaveSessionInfo = {
   id: string;
   createdAt: number;
   fileName: string;
+  primaryTarget: AutosavePrimaryTarget;
 };
 
 type DesktopAutosaveTarget = {
@@ -134,6 +136,10 @@ const isDesktopAutosaveTarget = (target: AutosavePrimaryTarget): target is Deskt
   Boolean(target) && 'kind' in target && target.kind === 'desktop';
 
 const DESKTOP_SNAPSHOT_CHUNK_BYTES = 8 * 1024 * 1024;
+
+const getSnapshotSourceFileName = (file: SnapshotByteSource): string => (
+  'fileName' in file ? file.fileName : file.name
+); // Browser files and desktop sources both expose the imported basename.
 
 export const prepareImagesForSnapshot = (images: CanvasImage[]): CanvasImage[] => images.map(image => {
   if (image.mediaType !== 'audio' || !image.isPlaying || !image.audioElement) {
@@ -239,12 +245,11 @@ export function useSnapshotIO({
     setIsFileMenuOpen,
   } = ui;
 
-  // Persist file handles so autosave can keep writing without prompting each time.
-  const autosavePrimaryHandleRef = useRef<AutosavePrimaryTarget>(null);
-  const autosaveSessionRef = useRef<AutosaveSessionInfo | null>(null);
+  const autosaveSessionRef = useRef<AutosaveSessionInfo | null>(null); // Keep document metadata and its write target together.
   const retainedSnapshotSourceClosersRef = useRef<Array<() => Promise<void>>>([]);
-  // Serialize autosave writes to avoid overlapping writes on rapid generations.
-  const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const latestSnapshotOperationIdRef = useRef(0); // Ignore stale import and export completions.
+  const [activeSnapshotFileName, setActiveSnapshotFileName] = useState<string | null>(null);
+  const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve()); // Serialize rapid autosave writes.
 
   useEffect(() => () => {
     const closers = retainedSnapshotSourceClosersRef.current;
@@ -623,7 +628,6 @@ export function useSnapshotIO({
     if (!autosaveEnabled) {
       return;
     }
-    const primaryHandle = autosavePrimaryHandleRef.current;
     const session = autosaveSessionRef.current;
     if (!session) {
       return;
@@ -640,8 +644,8 @@ export function useSnapshotIO({
     autosaveQueueRef.current = enqueueSnapshotAutosave(autosaveQueueRef.current, queuedMedia, async () => {
       const persistence = await persistAutosaveSnapshot({
         writeWithMediaFallbacks: writeAttempt => writeSnapshotWithMediaFallbacks(snapshotState, writeAttempt),
-        writePrimary: primaryHandle
-          ? snapshotBinary => writeSnapshotToPrimaryTarget(primaryHandle, snapshotBinary)
+        writePrimary: session.primaryTarget
+          ? snapshotBinary => writeSnapshotToPrimaryTarget(session.primaryTarget, snapshotBinary)
           : undefined,
         writeBackup: snapshotBinary => saveBackupSessionBinary({
           id: session.id,
@@ -652,6 +656,7 @@ export function useSnapshotIO({
         }, snapshotBinary),
         pruneBackups: () => pruneBackupSessions(3),
       });
+      if (autosaveSessionRef.current?.id !== session.id) return; // Do not publish feedback for a detached document.
       const { fallbackCount } = persistence.writeResult;
       const backupUnavailable = persistence.backup.status === 'failed';
       if (persistence.backup.status === 'failed') {
@@ -676,6 +681,7 @@ export function useSnapshotIO({
     })
       .catch(err => {
         console.error(err);
+        if (autosaveSessionRef.current?.id !== session.id) return;
         const message = err instanceof Error ? err.message : 'Autosave failed.';
         setError(message);
       });
@@ -696,18 +702,17 @@ export function useSnapshotIO({
   const rememberExportedSnapshot = useCallback(async (
     fileName: string,
     snapshotBinary: SnapshotBinary,
-    primaryHandle: AutosavePrimaryTarget,
+    primaryTarget: AutosavePrimaryTarget,
+    operationId: number,
     snapshotBlob?: Blob,
   ): Promise<boolean> => {
     const sessionId = crypto.randomUUID();
     const sessionCreatedAt = Date.now();
     const backupSize = snapshotBlob?.size ?? getSnapshotBinaryByteLength(snapshotBinary);
-    autosaveSessionRef.current = {
-      id: sessionId,
-      createdAt: sessionCreatedAt,
-      fileName,
-    };
-    autosavePrimaryHandleRef.current = primaryHandle;
+    if (latestSnapshotOperationIdRef.current === operationId) {
+      autosaveSessionRef.current = { id: sessionId, createdAt: sessionCreatedAt, fileName, primaryTarget };
+      setActiveSnapshotFileName(fileName); // Adopt the destination only after its write succeeds.
+    }
 
     try {
       // Persist the initial backup so it shows up in the Backups dialog.
@@ -722,12 +727,13 @@ export function useSnapshotIO({
       return true;
     } catch (backupError) {
       console.error(backupError);
-      setError('Snapshot exported, but the autosave backup could not be stored.');
       return false;
     }
-  }, [setError]);
+  }, []);
 
   const exportSnapshot = useCallback(async () => {
+    const operationId = latestSnapshotOperationIdRef.current + 1;
+    latestSnapshotOperationIdRef.current = operationId;
     let shouldClearError = true;
     let fallbackCount = 0;
     try {
@@ -772,7 +778,7 @@ export function useSnapshotIO({
         const desktopAutosaveTarget = typeof result.autosaveId === 'string'
           ? { kind: 'desktop' as const, autosaveId: result.autosaveId }
           : null;
-        shouldClearError = await rememberExportedSnapshot(result.fileName, writeResult.snapshotBinary, desktopAutosaveTarget, writeResult.snapshotBlob);
+        shouldClearError = await rememberExportedSnapshot(result.fileName, writeResult.snapshotBinary, desktopAutosaveTarget, operationId, writeResult.snapshotBlob);
       } else {
         const win = window as unknown as { showSaveFilePicker?: (options?: unknown) => Promise<any> };
         if (typeof win.showSaveFilePicker === 'function') {
@@ -794,7 +800,7 @@ export function useSnapshotIO({
           fallbackCount = writeResult.fallbackCount;
 
           const sessionFileName = saveHandle.name ?? suggestedName;
-          shouldClearError = await rememberExportedSnapshot(sessionFileName, writeResult.snapshotBinary, saveHandle as FileSystemFileHandle, writeResult.snapshotBlob);
+          shouldClearError = await rememberExportedSnapshot(sessionFileName, writeResult.snapshotBinary, saveHandle as FileSystemFileHandle, operationId, writeResult.snapshotBlob);
         } else {
           const writeResult = await writeSnapshotWithMediaFallbacks(
             snapshotState,
@@ -813,19 +819,21 @@ export function useSnapshotIO({
           );
           fallbackCount = writeResult.fallbackCount;
 
-          shouldClearError = await rememberExportedSnapshot(suggestedName, writeResult.snapshotBinary, null, writeResult.snapshotBlob);
+          shouldClearError = await rememberExportedSnapshot(suggestedName, writeResult.snapshotBinary, null, operationId, writeResult.snapshotBlob);
         }
       }
 
-      if (shouldClearError) {
-        setError(null);
+      if (latestSnapshotOperationIdRef.current === operationId) {
+        setError(shouldClearError ? null : 'Snapshot exported, but the autosave backup could not be stored.');
+        setToastMessage(getSnapshotExportToast(fallbackCount));
+        setTimeout(() => setToastMessage(null), 2000);
       }
-      setToastMessage(getSnapshotExportToast(fallbackCount));
-      setTimeout(() => setToastMessage(null), 2000);
     } catch (err) {
       console.error(err);
-      const message = err instanceof Error ? err.message : 'Failed to export snapshot.';
-      setError(message);
+      if (latestSnapshotOperationIdRef.current === operationId) {
+        const message = err instanceof Error ? err.message : 'Failed to export snapshot.';
+        setError(message);
+      }
     } finally {
       setIsFileMenuOpen(false);
     }
@@ -851,14 +859,10 @@ export function useSnapshotIO({
     return file.close.bind(file);
   }, []);
 
-  const activateImportedSnapshotSource = useCallback(async (closeCurrentSource: (() => Promise<void>) | null): Promise<void> => {
-    const previousClosers = retainedSnapshotSourceClosersRef.current;
-    retainedSnapshotSourceClosersRef.current = closeCurrentSource ? [closeCurrentSource] : [];
-    await Promise.all(previousClosers.map(close => close().catch(error => console.error(error)))); // Release media only after its replacement is ready.
-  }, []);
-
   // Restore a snapshot file into state, validating each option before applying it.
   const importSnapshotFromFile = useCallback(async (file: SnapshotByteSource) => {
+    const operationId = latestSnapshotOperationIdRef.current + 1;
+    latestSnapshotOperationIdRef.current = operationId;
     let retainedSourceCloser: (() => Promise<void>) | null = null;
     let sourceActivated = false;
     try {
@@ -868,6 +872,11 @@ export function useSnapshotIO({
         eraserSize,
         brushColor,
       });
+      if (latestSnapshotOperationIdRef.current !== operationId) {
+        if (retainedSourceCloser) await retainedSourceCloser().catch(error => console.error(error));
+        retainedSourceCloser = null;
+        return;
+      }
 
       const nextState: AppState = {
         images: restored.images,
@@ -1109,22 +1118,24 @@ export function useSnapshotIO({
       }
 
       if (restored.sourceRetention === 'not-required' && retainedSourceCloser) {
-        await retainedSourceCloser().catch(error => console.error(error)); // Legacy JSON media is fully materialized after restore.
+        void retainedSourceCloser().catch(error => console.error(error)); // Legacy JSON media is fully materialized after restore.
         retainedSourceCloser = null;
       }
-      await activateImportedSnapshotSource(retainedSourceCloser); // Keep only sources that still back lazy binary media.
+      const previousClosers = retainedSnapshotSourceClosersRef.current;
+      retainedSnapshotSourceClosersRef.current = retainedSourceCloser ? [retainedSourceCloser] : [];
+      autosaveSessionRef.current = null; // Imported documents must not inherit the previous file destination.
+      setActiveSnapshotFileName(getSnapshotSourceFileName(file));
       sourceActivated = true;
       setError(null);
       setToastMessage(restored.droppedLegacyNoteCount > 0
         ? `Snapshot imported — ${restored.droppedLegacyNoteCount} canvas ${restored.droppedLegacyNoteCount === 1 ? 'note' : 'notes'} from an older version could not be kept`
         : 'Snapshot imported');
       setTimeout(() => setToastMessage(null), restored.droppedLegacyNoteCount > 0 ? 5000 : 2000);
+      void Promise.all(previousClosers.map(close => close().catch(error => console.error(error)))); // Cleanup cannot delay document activation.
     } catch (err) {
       console.error(err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Failed to import snapshot.');
+      if (latestSnapshotOperationIdRef.current === operationId) {
+        setError(err instanceof Error ? err.message : 'Failed to import snapshot.');
       }
       if (!sourceActivated && 'close' in file && typeof file.close === 'function') {
         await file.close().catch(error => console.error(error)); // Failed imports should not keep desktop handles open.
@@ -1138,7 +1149,6 @@ export function useSnapshotIO({
     brushSize,
     eraserSize,
     providerAvailability,
-    activateImportedSnapshotSource,
     retainSnapshotSourceForImport,
     resetHistory,
     handleSeedance2JimengModelVersionChange,
@@ -1255,6 +1265,7 @@ export function useSnapshotIO({
   }, [importSnapshotFromFile, setError]);
 
   return {
+    activeSnapshotFileName,
     exportSnapshot,
     importSnapshotFromFile,
     importSnapshotWithPicker,

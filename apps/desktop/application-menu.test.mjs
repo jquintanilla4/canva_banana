@@ -7,6 +7,7 @@ const buildHandlers = () => ({
   openBackups: vi.fn(),
   toggleAutosave: vi.fn(),
   toggleZoomLevelBadge: vi.fn(),
+  toggleFileName: vi.fn(),
   openDebugLog: vi.fn(),
   openManageKeys: vi.fn(),
   openChangeIcon: vi.fn(),
@@ -21,6 +22,7 @@ describe('application menu template', () => {
       fileMenuState: {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
+        showFileName: true,
         isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
@@ -30,18 +32,19 @@ describe('application menu template', () => {
       'The Institute',
       'File',
       'editMenu',
-      'viewMenu',
+      'View',
       'History',
       'windowMenu',
     ]);
   });
 
-  it('adds file and display actions under File', () => {
+  it('keeps snapshot actions under File', () => {
     const template = buildApplicationMenuTemplate({
       appName: 'The Institute',
       fileMenuState: {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
+        showFileName: true,
         isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
@@ -55,7 +58,6 @@ describe('application menu template', () => {
       'Export Snapshot...',
       'Backups...',
       'Autosave',
-      'Display Zoom Level',
       'Debug Log',
     ]);
   });
@@ -66,6 +68,7 @@ describe('application menu template', () => {
       fileMenuState: {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
+        showFileName: true,
         isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
@@ -86,6 +89,7 @@ describe('application menu template', () => {
       fileMenuState: {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
+        showFileName: true,
         isClearingJimengCache: false,
       },
       handlers,
@@ -105,6 +109,7 @@ describe('application menu template', () => {
       fileMenuState: {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
+        showFileName: true,
         isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
@@ -125,19 +130,23 @@ describe('application menu template', () => {
       fileMenuState: {
         autosaveEnabled: false,
         showZoomLevelBadge: true,
+        showFileName: false,
         isClearingJimengCache: true,
       },
       handlers: buildHandlers(),
     });
 
     const fileMenu = template.find(item => item.label === 'File');
+    const viewMenu = template.find(item => item.label === 'View');
     const historyMenu = template.find(item => item.label === 'History');
     const autosaveItem = fileMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.AUTOSAVE);
-    const zoomItem = fileMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE);
+    const zoomItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE);
+    const fileNameItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.FILE_NAME);
     const cacheItem = historyMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.CLEAR_JIMENG_CACHE);
 
     expect(autosaveItem.checked).toBe(false);
     expect(zoomItem.checked).toBe(true);
+    expect(fileNameItem.checked).toBe(false);
     expect(cacheItem.enabled).toBe(false);
     expect(cacheItem.label).toBe('Clearing Jimeng Cache...');
   });

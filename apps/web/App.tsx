@@ -69,6 +69,7 @@ import { Tooltip } from './components/Tooltip';
 import { StatusBanner } from './components/StatusBanner';
 import { ImageResizeToast } from './components/ImageResizeToast';
 import { GenerationCanvasNotifications } from './components/GenerationCanvasNotifications';
+import { SnapshotFileName } from './components/SnapshotFileName';
 import { useGeneration } from './hooks/useGeneration';
 import { useCanvasHistory } from './hooks/useCanvasHistory';
 import { useSelectionState } from './hooks/useSelectionState';
@@ -88,6 +89,7 @@ import { useFalQueueJobs } from './hooks/useFalQueueJobs';
 import { useDebugLogState } from './hooks/useDebugLogState';
 import { useJimengSetup } from './hooks/useJimengSetup';
 import { useGenerationCanvasNotifications, type GenerationCanvasNotification } from './hooks/useGenerationCanvasNotifications';
+import { useFileNameVisibility } from './hooks/useFileNameVisibility';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
 import { createDesktopSnapshotSource } from './services/desktopSnapshotSource';
 import { writeClipboardText } from './services/clipboardService';
@@ -229,6 +231,7 @@ export default function App() {
   const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
   const [canvasScale, setCanvasScale] = useState(1);
   const [showZoomLevelBadge, setShowZoomLevelBadge] = useState(true);
+  const { showFileName, toggleFileName } = useFileNameVisibility(); // The user's View-menu choice survives desktop relaunches.
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const retryingFalJobIdsRef = useRef(new Set<string>());
 
@@ -569,6 +572,7 @@ export default function App() {
   );
   // Handles snapshot import/export so canvases can be saved, loaded, or shared.
   const {
+    activeSnapshotFileName,
     exportSnapshot: handleExportSnapshot,
     importSnapshotFromFile: handleImportSnapshotFromFile,
     importSnapshotWithPicker,
@@ -1911,6 +1915,9 @@ export default function App() {
         case 'toggleZoomLevelBadge':
           handleToggleZoomLevelBadge();
           break;
+        case 'toggleFileName':
+          toggleFileName();
+          break;
         case 'openDebugLog':
           openDebugLogPanel();
           break;
@@ -1940,6 +1947,7 @@ export default function App() {
     openDesktopAppIcon,
     openDebugLogPanel,
     openDesktopSettings,
+    toggleFileName,
   ]);
 
   useEffect(() => {
@@ -1949,9 +1957,10 @@ export default function App() {
     void window.canvaBananaDesktop?.fileMenu?.setState?.({
       autosaveEnabled,
       showZoomLevelBadge,
+      showFileName,
       isClearingJimengCache: jimengSetup.isClearingCache,
     });
-  }, [autosaveEnabled, hasNativeFileMenuBridge, jimengSetup.isClearingCache, showZoomLevelBadge]);
+  }, [autosaveEnabled, hasNativeFileMenuBridge, jimengSetup.isClearingCache, showFileName, showZoomLevelBadge]);
 
   // TSX (React with Tailwind CSS utility classes)
   return (
@@ -1977,10 +1986,10 @@ export default function App() {
       {!isPresentationMode && (
         <div
           data-testid="top-control-rail"
-          className="pointer-events-none absolute inset-x-0 top-4 z-30 grid h-12 grid-cols-[1fr_auto_1fr] items-center"
+          className="pointer-events-none absolute inset-x-0 top-4 z-30 grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
           style={topControlRailStyle}
         >
-          <div className="flex items-center justify-start">
+          <div className="flex min-w-0 items-center justify-start">
             {shouldShowReactFileMenu && (
               <FileMenu
                 isOpen={isFileMenuOpen}
@@ -1998,6 +2007,9 @@ export default function App() {
                 onClearJimengCache={jimengSetup.handleClearCache}
                 isClearingJimengCache={jimengSetup.isClearingCache}
               />
+            )}
+            {isMacDesktop && showFileName && activeSnapshotFileName && (
+              <SnapshotFileName fileName={activeSnapshotFileName} />
             )}
           </div>
           <div className="flex items-center justify-center">

@@ -4,6 +4,7 @@ export const FILE_MENU_COMMANDS = Object.freeze({
   OPEN_BACKUPS: 'openBackups',
   TOGGLE_AUTOSAVE: 'toggleAutosave',
   TOGGLE_ZOOM_LEVEL_BADGE: 'toggleZoomLevelBadge',
+  TOGGLE_FILE_NAME: 'toggleFileName',
   OPEN_DEBUG_LOG: 'openDebugLog',
   OPEN_MANAGE_KEYS: 'openManageKeys',
   OPEN_CHANGE_ICON: 'openChangeIcon',
@@ -13,6 +14,7 @@ export const FILE_MENU_COMMANDS = Object.freeze({
 export const APPLICATION_MENU_ITEM_IDS = Object.freeze({
   AUTOSAVE: 'canva-banana-file-autosave',
   ZOOM_LEVEL_BADGE: 'canva-banana-file-zoom-level-badge',
+  FILE_NAME: 'canva-banana-view-file-name',
   CLEAR_JIMENG_CACHE: 'canva-banana-history-clear-jimeng-cache',
 });
 
@@ -50,6 +52,21 @@ export const buildApplicationMenuTemplate = ({
         checked: fileMenuState.autosaveEnabled,
         click: handlers.toggleAutosave,
       },
+      { type: 'separator' },
+      { label: 'Debug Log', click: handlers.openDebugLog },
+    ],
+  },
+  { role: 'editMenu' },
+  {
+    label: 'View',
+    submenu: [
+      {
+        id: APPLICATION_MENU_ITEM_IDS.FILE_NAME,
+        label: 'Show File Name',
+        type: 'checkbox',
+        checked: fileMenuState.showFileName,
+        click: handlers.toggleFileName,
+      },
       {
         id: APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE,
         label: 'Display Zoom Level',
@@ -58,11 +75,17 @@ export const buildApplicationMenuTemplate = ({
         click: handlers.toggleZoomLevelBadge,
       },
       { type: 'separator' },
-      { label: 'Debug Log', click: handlers.openDebugLog },
+      { role: 'reload' },
+      { role: 'forceReload' },
+      { role: 'toggleDevTools' },
+      { type: 'separator' },
+      { role: 'resetZoom' },
+      { role: 'zoomIn' },
+      { role: 'zoomOut' },
+      { type: 'separator' },
+      { role: 'togglefullscreen' },
     ],
   },
-  { role: 'editMenu' },
-  { role: 'viewMenu' },
   {
     label: 'History',
     submenu: [

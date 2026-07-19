@@ -69,6 +69,7 @@ export type DesktopFileMenuCommand =
   | 'openBackups'
   | 'toggleAutosave'
   | 'toggleZoomLevelBadge'
+  | 'toggleFileName'
   | 'openDebugLog'
   | 'openManageKeys'
   | 'openChangeIcon'
@@ -90,6 +91,7 @@ export type DesktopAppIconState = {
 export type DesktopFileMenuState = {
   autosaveEnabled: boolean;
   showZoomLevelBadge: boolean;
+  showFileName: boolean;
   isClearingJimengCache: boolean;
 };
 

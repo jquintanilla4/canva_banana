@@ -285,6 +285,7 @@ const mockState = vi.hoisted(() => {
   return {
     handleGenerate,
     importSnapshotWithPicker,
+    activeSnapshotFileName: null as string | null,
     onGenerationPlaced: null as ((payload: GenerationPlacedPayload) => void) | null,
     selectedImageIds: [] as string[],
     setSelectedImageIds,
@@ -453,6 +454,7 @@ vi.mock('../hooks/useGeneration', () => ({
 
 vi.mock('../hooks/useSnapshotIO', () => ({
   useSnapshotIO: () => ({
+    activeSnapshotFileName: mockState.activeSnapshotFileName,
     exportSnapshot: vi.fn(),
     importSnapshotFromFile: vi.fn(),
     importSnapshotWithPicker: mockState.importSnapshotWithPicker,
@@ -613,6 +615,7 @@ afterEach(() => {
   mockState.setSelectedImageIds.mockClear();
   mockState.importSnapshotWithPicker.mockReset();
   mockState.importSnapshotWithPicker.mockImplementation((callback: () => void) => callback()); // Default tests use the hidden-input fallback path.
+  mockState.activeSnapshotFileName = null;
   mockState.setReferenceImageIds.mockClear();
   mockState.images = [];
   mockState.displayedImages = [];
@@ -622,6 +625,7 @@ afterEach(() => {
   mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar }];
   mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
   mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar }];
+  window.localStorage.clear();
   vi.mocked(getJimengSetupStatus).mockResolvedValue({
     ready: false,
     backendReachable: true,
@@ -835,6 +839,40 @@ describe('App video prompt area gating', () => {
     expect(rail.style.paddingInline).toBe(FLOATING_EDGE_CONTROL_SIDE_OFFSET);
     expect(screen.getByLabelText('Snapshot menu').closest('[data-testid="top-control-rail"]')).toBe(rail);
     expect(screen.getByLabelText('Canvas zoom 100%').closest('[data-testid="top-control-rail"]')).toBe(rail);
+  });
+
+  it('shows the active snapshot name on macOS and toggles it from the native View menu', async () => {
+    let fileMenuCommand: ((command: DesktopFileMenuCommand) => void) | null = null;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    mockState.runtimeConfig.isDesktop = true;
+    mockState.activeSnapshotFileName = 'client-concept-v12.bcsnap';
+    const setState = vi.fn();
+    window.canvaBananaDesktop = {
+      fileMenu: {
+        onCommand: vi.fn((callback: (command: DesktopFileMenuCommand) => void) => {
+          fileMenuCommand = callback; // Capture the native command so the checkbox behavior can be exercised.
+          return vi.fn();
+        }),
+        setState,
+      },
+    };
+
+    render(<App />);
+
+    const fileName = screen.getByLabelText('Current snapshot file: client-concept-v12.bcsnap');
+    expect(fileName.getAttribute('title')).toBe('client-concept-v12.bcsnap');
+    expect(fileName.querySelector('span')?.classList.contains('truncate')).toBe(true);
+    await waitFor(() => expect(setState).toHaveBeenCalledWith(expect.objectContaining({ showFileName: true })));
+
+    act(() => {
+      fileMenuCommand?.('toggleFileName');
+    });
+
+    expect(screen.queryByTestId('snapshot-file-name')).toBeNull();
+    await waitFor(() => expect(setState).toHaveBeenCalledWith(expect.objectContaining({ showFileName: false })));
   });
 
   it('toggles presentation mode from the shortcut handler and hides app chrome', () => {

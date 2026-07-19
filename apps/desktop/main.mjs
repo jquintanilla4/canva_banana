@@ -91,6 +91,7 @@ let startupPromise = null;
 let fileMenuState = {
   autosaveEnabled: true,
   showZoomLevelBadge: true,
+  showFileName: true,
   isClearingJimengCache: false,
 };
 
@@ -1244,12 +1245,16 @@ const updateFileMenuItems = () => {
   const menu = Menu.getApplicationMenu();
   const autosaveItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.AUTOSAVE);
   const zoomItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE);
+  const fileNameItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.FILE_NAME);
   const clearCacheItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.CLEAR_JIMENG_CACHE);
   if (autosaveItem) {
     autosaveItem.checked = fileMenuState.autosaveEnabled;
   }
   if (zoomItem) {
     zoomItem.checked = fileMenuState.showZoomLevelBadge;
+  }
+  if (fileNameItem) {
+    fileNameItem.checked = fileMenuState.showFileName;
   }
   if (clearCacheItem) {
     clearCacheItem.enabled = !fileMenuState.isClearingJimengCache;
@@ -1296,6 +1301,7 @@ const installApplicationMenu = () => {
       openBackups: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_BACKUPS),
       toggleAutosave: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_AUTOSAVE),
       toggleZoomLevelBadge: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_ZOOM_LEVEL_BADGE),
+      toggleFileName: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_FILE_NAME),
       openDebugLog: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_DEBUG_LOG),
       openManageKeys: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_MANAGE_KEYS),
       openChangeIcon: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_CHANGE_ICON),
@@ -1418,6 +1424,7 @@ ipcMain.handle('canva-banana:file-menu-set-state', (event, nextState) => {
   fileMenuState = {
     autosaveEnabled: typeof nextState?.autosaveEnabled === 'boolean' ? nextState.autosaveEnabled : fileMenuState.autosaveEnabled,
     showZoomLevelBadge: typeof nextState?.showZoomLevelBadge === 'boolean' ? nextState.showZoomLevelBadge : fileMenuState.showZoomLevelBadge,
+    showFileName: typeof nextState?.showFileName === 'boolean' ? nextState.showFileName : fileMenuState.showFileName,
     isClearingJimengCache: typeof nextState?.isClearingJimengCache === 'boolean' ? nextState.isClearingJimengCache : fileMenuState.isClearingJimengCache,
   };
   updateFileMenuItems();

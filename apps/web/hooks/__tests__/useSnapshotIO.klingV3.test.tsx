@@ -388,11 +388,13 @@ describe('useSnapshotIO (Kling v3)', () => {
     await act(async () => {
       await result.current.importSnapshotFromFile(desktopSource);
     });
+    expect(result.current.activeSnapshotFileName).toBe('desktop.bcsnap');
     expect(close).toHaveBeenCalledTimes(1);
     await act(async () => {
       await result.current.importSnapshotFromFile(browserFile);
     });
 
+    expect(result.current.activeSnapshotFileName).toBe('browser.json');
     expect(retain).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledTimes(1);
   });
@@ -473,6 +475,7 @@ describe('useSnapshotIO (Kling v3)', () => {
     expect(writable.abort).toHaveBeenCalledOnce();
     expect(writable.close).not.toHaveBeenCalled();
     expect(setError).toHaveBeenCalledWith(writeError.message);
+    expect(result.current.activeSnapshotFileName).toBeNull();
   });
 
   it('rejects an unretained desktop import without replacing the working session', async () => {
@@ -564,6 +567,7 @@ describe('useSnapshotIO (Kling v3)', () => {
     await act(async () => {
       await result.current.importSnapshotFromFile(currentSource);
     });
+    expect(result.current.activeSnapshotFileName).toBe('current.bcsnap');
     resetHistory.mockClear();
     setError.mockClear();
     setToastMessage.mockClear();
@@ -578,6 +582,7 @@ describe('useSnapshotIO (Kling v3)', () => {
     expect(setError).toHaveBeenCalledWith('Snapshot source retention failed.');
     expect(closeCandidate).toHaveBeenCalledTimes(1);
     expect(closeCurrent).not.toHaveBeenCalled();
+    expect(result.current.activeSnapshotFileName).toBe('current.bcsnap');
   });
 
   it('keeps a replaced desktop source leased until every queued autosave streams its original media', async () => {
@@ -601,6 +606,10 @@ describe('useSnapshotIO (Kling v3)', () => {
       return { closed: true };
     });
     const finishSnapshotWrite = vi.fn(async () => ({ saved: true }));
+    const beginAutosaveSnapshot = vi.fn(async () => {
+      autosaveSequence += 1;
+      return { fileName: 'scene.bcsnap', writeId: `autosave-write-${autosaveSequence}` };
+    });
     window.canvaBananaDesktop = {
       fileMenu: {
         beginSaveSnapshot: vi.fn(async () => ({
@@ -609,10 +618,7 @@ describe('useSnapshotIO (Kling v3)', () => {
           writeId: 'export-write-1',
           autosaveId: 'desktop-target-1',
         })),
-        beginAutosaveSnapshot: vi.fn(async () => {
-          autosaveSequence += 1;
-          return { fileName: 'scene.bcsnap', writeId: `autosave-write-${autosaveSequence}` };
-        }),
+        beginAutosaveSnapshot,
         writeSnapshotChunk: vi.fn(async ({ writeId, data }: { writeId: string; data: ArrayBuffer }) => {
           if (writeId === 'autosave-write-1' && !writtenChunks.has(writeId)) {
             writtenChunks.set(writeId, []);
@@ -711,9 +717,11 @@ describe('useSnapshotIO (Kling v3)', () => {
     await act(async () => {
       await result.current.importSnapshotFromFile(activationSource);
     });
+    expect(result.current.activeSnapshotFileName).toBe('desktop.bcsnap');
     await act(async () => {
       await result.current.exportSnapshot(); // Establishes the autosave session.
     });
+    expect(result.current.activeSnapshotFileName).toBe('scene.bcsnap');
     act(() => {
       result.current.autosaveSnapshot();
     });
@@ -738,11 +746,17 @@ describe('useSnapshotIO (Kling v3)', () => {
     await waitFor(() => expect(finishSnapshotWrite).toHaveBeenCalledTimes(3));
 
     expect(closeSnapshotRead).toHaveBeenCalledTimes(1);
+    expect(result.current.activeSnapshotFileName).toBe('replacement.json');
     const secondAutosaveFile = fileFromChunks(writtenChunks.get('autosave-write-2') ?? [], 'autosave-2.bcsnap');
     const secondAutosave = await parseBinarySnapshotFile(secondAutosaveFile);
     expect(secondAutosave.manifest.state.images[0]).not.toHaveProperty('fallbackReason');
     const restoredMedia = await readSnapshotBlobPartAsArrayBuffer(secondAutosave.images[0].blob, 0, secondAutosave.images[0].blob.size);
     expect(new Uint8Array(restoredMedia)).toEqual(originalMedia);
+    act(() => {
+      result.current.autosaveSnapshot(); // The imported document has no destination until it is explicitly saved.
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(beginAutosaveSnapshot).toHaveBeenCalledTimes(2);
   });
 
   it('keeps native primary autosaves successful when backup quota is unavailable', async () => {
@@ -834,6 +848,7 @@ describe('useSnapshotIO (Kling v3)', () => {
     await act(async () => {
       await result.current.exportSnapshot();
     });
+    expect(result.current.activeSnapshotFileName).toBe('scene.bcsnap');
     setError.mockClear();
     setToastMessage.mockClear();
     vi.mocked(saveBackupSessionBinary).mockRejectedValueOnce(new Error('Snapshot backup storage quota exceeded.'));
@@ -843,6 +858,7 @@ describe('useSnapshotIO (Kling v3)', () => {
 
     await waitFor(() => expect(beginAutosaveSnapshot).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(setToastMessage).toHaveBeenCalledWith('Autosaved; backup unavailable'));
+    expect(result.current.activeSnapshotFileName).toBe('scene.bcsnap');
     expect(beginSaveSnapshot).toHaveBeenCalledWith({
       suggestedName: expect.stringMatching(/^banana-canvas-snapshot-.*\.bcsnap$/),
     });
