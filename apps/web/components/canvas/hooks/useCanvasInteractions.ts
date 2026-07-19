@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type React from 'react';
-import { type AppMode, type CanvasImage, type CanvasNote, type CanvasObjectSelection, type CanvasVideoPromptArea, type Path, type Point, Tool, type VideoModelCapabilityProfile } from '../../../types';
-import { MIN_NOTE_HEIGHT, MIN_NOTE_WIDTH, RESIZE_HANDLE_SIZE } from '../constants';
+import { type AppMode, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type Path, type Point, Tool, type VideoModelCapabilityProfile } from '../../../types';
 import { getImageBounds, getImageRotation, worldToImageLocal } from '../geometry';
 import {
   getCropActionForPoint,
   getImageAtPoint,
-  getNoteAtPoint,
+  getNoteAnchorAtPoint,
   getTransformActionForPoint,
   type CropAction,
   type TransformAction,
 } from '../hitTest';
-import { DEFAULT_NOTE_BACKGROUND, DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../../../utils/canvasColorOptions';
+import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../../../utils/canvasColorOptions';
 import { isCanvasInteractionBoundaryTarget, isCanvasInteractiveTarget, shouldIgnoreCanvasMouseDown } from '../../../utils/canvasInteractionBoundary';
 import { buildVideoPromptAreaLabel, clampAreaRect, isPointInRect, syncVideoPromptAreaMembership } from '../../../utils/videoPromptAreas';
 
@@ -23,8 +22,14 @@ type PendingMultiSelectGesture = {
   startPoint: Point;
   startClientPoint: Point;
   targetImageId: string | null;
-  targetNoteId: string | null;
   didStartMarquee: boolean;
+} | null;
+
+type PinDragState = {
+  noteId: string;
+  startClientPoint: Point;
+  startAnchor: Point;
+  moved: boolean;
 } | null;
 
 type UseCanvasInteractionsArgs = {
@@ -39,15 +44,12 @@ type UseCanvasInteractionsArgs = {
   videoPromptAreas: CanvasVideoPromptArea[];
   videoPromptAreaProfiles?: Record<string, VideoModelCapabilityProfile>;
   paths: Path[];
-  isNoteEditing: boolean;
   pan: Point;
   scale: number;
   brushSize: number;
   eraserSize: number;
   brushColor: string;
   selectedImageIds: string[];
-  selectedNoteIds: string[];
-  primarySelectedNoteId: string | null;
   tailSelectionEnabled: boolean;
   cropMode: CropModeState;
   transformMode: TransformModeState;
@@ -57,11 +59,11 @@ type UseCanvasInteractionsArgs = {
   onPathsChange: (paths: Path[]) => void;
   onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[]; videoPromptAreas?: CanvasVideoPromptArea[] }) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
-  onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
-  onSelectionReplace: (selection: CanvasObjectSelection) => void;
+  onSelectionReplace: (imageIds: string[]) => void;
   onVideoPromptAreaSelect: (id: string | null) => void;
   onFilesDrop: (files: FileList, point: Point) => void;
-  onNoteDoubleClick: (id: string) => void;
+  onAnchorNoteCreate: (point: Point) => void;
+  onAnchorClick: (noteId: string) => void;
   onCropRectChange: (rect: { x: number; y: number; width: number; height: number }) => void;
   setPanSmoothly: (nextPan: Point) => Point;
 };
@@ -72,7 +74,6 @@ type UseCanvasInteractionsResult = {
   isDrawing: boolean;
   isPanning: boolean;
   isDragging: boolean;
-  isResizing: boolean;
   isMarqueeSelecting: boolean;
   isDraggingOver: boolean;
   brushPreviewPosition: { x: number; y: number } | null;
@@ -99,15 +100,12 @@ export function useCanvasInteractions({
   videoPromptAreas,
   videoPromptAreaProfiles,
   paths,
-  isNoteEditing,
   pan,
   scale,
   brushSize,
   eraserSize,
   brushColor,
   selectedImageIds,
-  selectedNoteIds,
-  primarySelectedNoteId,
   tailSelectionEnabled,
   cropMode,
   transformMode,
@@ -117,11 +115,11 @@ export function useCanvasInteractions({
   onPathsChange,
   onCommit,
   onImageSelect,
-  onNoteSelect,
   onSelectionReplace,
   onVideoPromptAreaSelect,
   onFilesDrop,
-  onNoteDoubleClick,
+  onAnchorNoteCreate,
+  onAnchorClick,
   onCropRectChange,
   setPanSmoothly,
 }: UseCanvasInteractionsArgs): UseCanvasInteractionsResult {
@@ -136,13 +134,10 @@ export function useCanvasInteractions({
   const keyboardTemporaryToolRef = useRef<Tool | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
   const [draggedImageIds, setDraggedImageIds] = useState<string[]>([]);
-  const [draggedNoteIds, setDraggedNoteIds] = useState<string[]>([]);
   const [dragStartPoint, setDragStartPoint] = useState<Point | null>(null);
   const [dragStartImagePositions, setDragStartImagePositions] = useState<Record<string, Point> | null>(null);
-  const [dragStartNotePositions, setDragStartNotePositions] = useState<Record<string, Point> | null>(null);
-  const [resizeStartDimensions, setResizeStartDimensions] = useState<{ width: number; height: number } | null>(null);
+  const pinDragRef = useRef<PinDragState>(null);
 
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeStart, setMarqueeStart] = useState<Point | null>(null);
@@ -347,31 +342,19 @@ export function useCanvasInteractions({
       e.preventDefault();
       onVideoPromptAreaSelect(null); // Right-click is the explicit free-select deselect gesture.
       onImageSelect(null);
-      onNoteSelect(null);
       return;
     }
 
     if (activeTool === Tool.NOTE) {
-      if (isNoteEditing) {
+      if (e.button !== 0) {
+        return; // Only left-click places or opens pins; right/middle clicks keep their defaults.
+      }
+      const existingPin = getNoteAnchorAtPoint(point, notes, scale);
+      if (existingPin) {
+        onAnchorClick(existingPin.id);
         return;
       }
-      const newNote: CanvasNote = {
-        id: crypto.randomUUID(),
-        x: point.x - 300,
-        y: point.y - 150,
-        width: 600,
-        height: 300,
-        text: '',
-        backgroundColor: DEFAULT_NOTE_BACKGROUND,
-      };
-      const updatedNotes = [...notes, newNote];
-      onNotesChange(updatedNotes);
-      onCommit({ notes: updatedNotes });
-      if (canUpdateSelection) {
-        onVideoPromptAreaSelect(null);
-        onNoteSelect(newNote.id);
-      }
-      onNoteDoubleClick(newNote.id);
+      onAnchorNoteCreate(point);
       return;
     }
 
@@ -392,7 +375,7 @@ export function useCanvasInteractions({
     const isElementToggle = canUpdateSelection && e.altKey && !e.shiftKey && !isMultiSelectKey;
     const isReferenceToggle = canUpdateSelection && !wantsTailSelection && !isMultiSelectKey && e.shiftKey;
 
-    const beginDrag = (imageIdsToDrag: string[], noteIdsToDrag: string[]) => {
+    const beginDrag = (imageIdsToDrag: string[]) => {
       const imagePositions: Record<string, Point> = {};
       imageIdsToDrag.forEach(id => {
         const img = images.find(image => image.id === id);
@@ -401,20 +384,10 @@ export function useCanvasInteractions({
         }
       });
 
-      const notePositions: Record<string, Point> = {};
-      noteIdsToDrag.forEach(id => {
-        const noteItem = notes.find(n => n.id === id);
-        if (noteItem) {
-          notePositions[id] = { x: noteItem.x, y: noteItem.y };
-        }
-      });
-
       setIsDragging(true);
       setDragStartPoint({ x: e.clientX, y: e.clientY });
       setDraggedImageIds(imageIdsToDrag);
-      setDraggedNoteIds(noteIdsToDrag);
       setDragStartImagePositions(Object.keys(imagePositions).length ? imagePositions : null);
-      setDragStartNotePositions(Object.keys(notePositions).length ? notePositions : null);
     };
 
     if (activeTool === Tool.SELECTION || activeTool === Tool.FREE_SELECTION) {
@@ -429,63 +402,30 @@ export function useCanvasInteractions({
         return;
       }
 
-      const resizableNote = selectedNoteIds.length === 1
-        ? notes.find(n => n.id === primarySelectedNoteId)
-        : null;
-      if (resizableNote) {
-        const handleSize = RESIZE_HANDLE_SIZE / scale;
-        const resizeHandleX = resizableNote.x + resizableNote.width - handleSize;
-        const resizeHandleY = resizableNote.y + resizableNote.height - handleSize;
-
-        if (point.x >= resizeHandleX && point.x <= resizableNote.x + resizableNote.width &&
-          point.y >= resizeHandleY && point.y <= resizableNote.y + resizableNote.height) {
-          setIsResizing(true);
-          setDraggedNoteIds([resizableNote.id]);
-          setDragStartPoint({ x: e.clientX, y: e.clientY });
-          setResizeStartDimensions({ width: resizableNote.width, height: resizableNote.height });
-          return;
-        }
+      // Note anchor pins sit above images: click opens the note, drag repositions the pin.
+      const pin = getNoteAnchorAtPoint(point, notes, scale);
+      if (pin?.anchor && e.button === 0) {
+        pinDragRef.current = {
+          noteId: pin.id,
+          startClientPoint: { x: e.clientX, y: e.clientY },
+          startAnchor: { ...pin.anchor },
+          moved: false,
+        };
+        return;
       }
-    }
 
-    if (activeTool === Tool.SELECTION || activeTool === Tool.FREE_SELECTION) {
       if (isMultiSelectKey && e.button === 0) {
-        const note = getNoteAtPoint(point, notes);
-        const image = note ? null : getImageAtPoint(point, images);
-        if (note || image) {
+        const image = getImageAtPoint(point, images);
+        if (image) {
           onVideoPromptAreaSelect(null);
           pendingMultiSelectGestureRef.current = {
             startPoint: point,
             startClientPoint: { x: e.clientX, y: e.clientY },
-            targetImageId: image?.id ?? null,
-            targetNoteId: note?.id ?? null,
+            targetImageId: image.id,
             didStartMarquee: false,
           }; // Defer Cmd/Ctrl toggles until we know this was not a drag.
           return;
         }
-      }
-
-      const note = getNoteAtPoint(point, notes);
-      if (note) {
-        const wantsNoteMultiSelect = isMultiSelectKey || e.shiftKey;
-        if (wantsNoteMultiSelect) {
-          onVideoPromptAreaSelect(null);
-          onNoteSelect(note.id, { multi: true });
-          return;
-        }
-
-        const noteAlreadySelected = selectedNoteIds.includes(note.id);
-        if (!noteAlreadySelected) {
-          onVideoPromptAreaSelect(null);
-          onNoteSelect(note.id);
-        }
-
-        const noteIdsToDrag = noteAlreadySelected ? selectedNoteIds : [note.id];
-        const imageIdsToDrag = noteAlreadySelected ? selectedImageIds : [];
-
-        onVideoPromptAreaSelect(null);
-        beginDrag(imageIdsToDrag, noteIdsToDrag);
-        return;
       }
 
       const image = getImageAtPoint(point, images);
@@ -518,17 +458,15 @@ export function useCanvasInteractions({
         }
 
         const imageIdsToDrag = imageAlreadySelected ? selectedImageIds : [image.id];
-        const noteIdsToDrag = imageAlreadySelected ? selectedNoteIds : [];
 
         onVideoPromptAreaSelect(null);
-        beginDrag(imageIdsToDrag, noteIdsToDrag);
+        beginDrag(imageIdsToDrag);
         return;
       }
 
       const area = [...videoPromptAreas].reverse().find(currentArea => isPointInRect(point, currentArea));
       if (area && !isMultiSelectKey) {
         onImageSelect(null);
-        onNoteSelect(null);
         onVideoPromptAreaSelect(area.id);
         return;
       }
@@ -536,7 +474,6 @@ export function useCanvasInteractions({
       if (!isMultiSelectKey && activeTool === Tool.SELECTION) {
         onVideoPromptAreaSelect(null);
         onImageSelect(null);
-        onNoteSelect(null);
       }
       if (isMultiSelectKey) {
         setIsMarqueeSelecting(true);
@@ -626,6 +563,22 @@ export function useCanvasInteractions({
       }
     } else if (hoveredVideoId !== null) {
       setHoveredVideoId(null);
+    }
+
+    const pinDrag = pinDragRef.current;
+    if (pinDrag) {
+      const dx = e.clientX - pinDrag.startClientPoint.x;
+      const dy = e.clientY - pinDrag.startClientPoint.y;
+      if (!pinDrag.moved && Math.max(Math.abs(dx), Math.abs(dy)) <= MIN_DRAG_PREVIEW_PX) {
+        return; // Still a click candidate.
+      }
+      pinDrag.moved = true;
+      const nextAnchor = {
+        x: pinDrag.startAnchor.x + dx / scale,
+        y: pinDrag.startAnchor.y + dy / scale,
+      };
+      onNotesChange(notes.map(note => (note.id === pinDrag.noteId ? { ...note, anchor: nextAnchor } : note)));
+      return;
     }
 
     const pendingMultiSelectGesture = pendingMultiSelectGestureRef.current;
@@ -827,23 +780,6 @@ export function useCanvasInteractions({
       return;
     }
 
-    if (isResizing && draggedNoteIds.length === 1 && dragStartPoint && resizeStartDimensions) {
-      const noteId = draggedNoteIds[0];
-      const dx = (e.clientX - dragStartPoint.x) / scale;
-      const dy = (e.clientY - dragStartPoint.y) / scale;
-
-      const newWidth = Math.max(MIN_NOTE_WIDTH, resizeStartDimensions.width + dx);
-      const newHeight = Math.max(MIN_NOTE_HEIGHT, resizeStartDimensions.height + dy);
-
-      const noteIndex = notes.findIndex(n => n.id === noteId);
-      if (noteIndex === -1) return;
-
-      const newNotes = [...notes];
-      newNotes[noteIndex] = { ...newNotes[noteIndex], width: newWidth, height: newHeight };
-      onNotesChange(newNotes);
-      return;
-    }
-
     if (isPanningRef.current) {
       const start = panStartRef.current;
       setPanSmoothly({ x: e.clientX - start.x, y: e.clientY - start.y });
@@ -864,18 +800,6 @@ export function useCanvasInteractions({
           return { ...image, x: nextX, y: nextY };
         });
         onImagesChange(updatedImages);
-      }
-
-      if (draggedNoteIds.length && dragStartNotePositions) {
-        const updatedNotes = notes.map(noteItem => {
-          if (!draggedNoteIds.includes(noteItem.id)) return noteItem;
-          const startPosition = dragStartNotePositions[noteItem.id];
-          if (!startPosition) return noteItem;
-          const nextX = startPosition.x + dx;
-          const nextY = startPosition.y + dy;
-          return { ...noteItem, x: nextX, y: nextY };
-        });
-        onNotesChange(updatedNotes);
       }
       return;
     }
@@ -906,29 +830,10 @@ export function useCanvasInteractions({
           case 'scale-r': case 'scale-l': cursor = 'ew-resize'; break;
           default: cursor = 'default';
         }
-      } else if (canUpdateSelection && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && !isDragging && !isPanning && !isResizing) {
-        const selectedNote = selectedNoteIds.length === 1
-          ? notes.find(n => n.id === primarySelectedNoteId)
-          : null;
-        let onResizeHandle = false;
-
-        if (selectedNote) {
-          const handleSize = RESIZE_HANDLE_SIZE / scale;
-          const resizeHandleX = selectedNote.x + selectedNote.width - handleSize;
-          const resizeHandleY = selectedNote.y + selectedNote.height - handleSize;
-          if (point.x >= resizeHandleX && point.x <= selectedNote.x + selectedNote.width &&
-            point.y >= resizeHandleY && point.y <= selectedNote.y + selectedNote.height) {
-            onResizeHandle = true;
-          }
-        }
-
-        if (onResizeHandle) {
-          cursor = 'nwse-resize';
-        } else {
-          const objectOnPoint = getImageAtPoint(point, images) || getNoteAtPoint(point, notes);
-          const baseCursor = currentTool === Tool.SELECTION ? 'default' : 'grab';
-          cursor = objectOnPoint ? 'pointer' : baseCursor;
-        }
+      } else if (canUpdateSelection && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && !isDragging && !isPanning) {
+        const objectOnPoint = getNoteAnchorAtPoint(point, notes, scale) || getImageAtPoint(point, images);
+        const baseCursor = currentTool === Tool.SELECTION ? 'default' : 'grab';
+        cursor = objectOnPoint ? 'pointer' : baseCursor;
       }
       containerRef.current.style.cursor = cursor;
     }
@@ -960,6 +865,17 @@ export function useCanvasInteractions({
       return;
     }
 
+    const pinDrag = pinDragRef.current;
+    if (pinDrag) {
+      pinDragRef.current = null;
+      if (pinDrag.moved) {
+        onCommit(); // Merge the live anchor position into history.
+      } else if (e.type !== 'mouseleave') {
+        onAnchorClick(pinDrag.noteId); // A stationary press-release opens the note.
+      }
+      return;
+    }
+
     const pendingMultiSelectGesture = pendingMultiSelectGestureRef.current;
 
     if (canUpdateSelection && (isMarqueeSelecting || pendingMultiSelectGesture?.didStartMarquee) && marqueeStart) {
@@ -987,16 +903,8 @@ export function useCanvasInteractions({
               b.maxY > bounds.minY;
           })
           .map(img => img.id);
-        const noteIdsInBounds = notes
-          .filter(note =>
-            note.x < bounds.maxX &&
-            note.x + note.width > bounds.minX &&
-            note.y < bounds.maxY &&
-            note.y + note.height > bounds.minY
-          )
-          .map(note => note.id);
         onVideoPromptAreaSelect(null);
-        onSelectionReplace({ imageIds: imageIdsInBounds, noteIds: noteIdsInBounds }); // Replace object selection without clearing source media.
+        onSelectionReplace(imageIdsInBounds); // Replace image selection without clearing source media.
       }
     }
 
@@ -1058,9 +966,6 @@ export function useCanvasInteractions({
       if (pendingMultiSelectGesture.targetImageId) {
         onImageSelect(pendingMultiSelectGesture.targetImageId, { multi: true });
       }
-      if (pendingMultiSelectGesture.targetNoteId) {
-        onNoteSelect(pendingMultiSelectGesture.targetNoteId, { multi: true });
-      }
       return;
     }
 
@@ -1078,8 +983,6 @@ export function useCanvasInteractions({
         setDragStartPoint(null);
         setDragStartImagePositions(null);
         setDraggedImageIds([]);
-        setDragStartNotePositions(null);
-        setDraggedNoteIds([]);
       }
       return;
     }
@@ -1088,20 +991,16 @@ export function useCanvasInteractions({
       setPointerTemporaryTool(null);
     }
 
-    const wasActive = isDrawing || isDragging || isResizing;
+    const wasActive = isDrawing || isDragging;
 
     setIsDrawing(false);
     isPanningRef.current = false;
     setIsPanning(false);
     setIsDragging(false);
-    setIsResizing(false);
 
     setDragStartPoint(null);
     setDragStartImagePositions(null);
     setDraggedImageIds([]);
-    setDragStartNotePositions(null);
-    setDraggedNoteIds([]);
-    setResizeStartDimensions(null);
 
     if (wasActive) {
       if (draggedImageIds.length > 0) {
@@ -1118,13 +1017,13 @@ export function useCanvasInteractions({
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isCanvasInteractiveTarget(e.target)) return; // Portaled controls must not edit canvas notes underneath them.
+    if (isCanvasInteractiveTarget(e.target)) return; // Portaled controls must not act on the canvas underneath them.
     if (!canUpdateSelection) return;
     if (cropMode) return;
     const point = getTransformedPoint(e.clientX, e.clientY);
-    const note = getNoteAtPoint(point, notes);
-    if (note) {
-      onNoteDoubleClick(note.id);
+    const pin = getNoteAnchorAtPoint(point, notes, scale);
+    if (pin) {
+      onAnchorClick(pin.id);
     }
   };
 
@@ -1170,7 +1069,6 @@ export function useCanvasInteractions({
     isDrawing,
     isPanning,
     isDragging,
-    isResizing,
     isMarqueeSelecting,
     isDraggingOver,
     brushPreviewPosition,

@@ -30,7 +30,7 @@ const getStateSignature = (state: AppState): string => {
     .map(img => `${img.id},${img.mediaType},${img.isPlaying ? 1 : 0},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height},${(img.rotation ?? 0).toFixed(3)},${getFileSignature(img.file)}`)
     .join(';');
   const pathSignature = state.paths.map(p => `${p.points.length},${p.tool}`).join(',');
-  const noteSignature = state.notes.map(n => `${n.id},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.width.toFixed(0)},${n.height.toFixed(0)},${n.text.length},${n.fontSize ?? ''},${n.backgroundColor}`).join(';');
+  const noteSignature = state.notes.map(n => `${n.id},${n.label ?? ''},${n.anchor ? `${n.anchor.x.toFixed(2)},${n.anchor.y.toFixed(2)}` : 'na'},${getTextSignature(n.text)}`).join(';');
   const videoPromptAreaSignature = state.videoPromptAreas
     .map(area => `${area.id},${area.sequence},${area.x.toFixed(2)},${area.y.toFixed(2)},${area.width.toFixed(2)},${area.height.toFixed(2)},${area.borderColor ?? DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR},${area.promptBarId ?? ''},${area.orderedMediaIds.join(',')},${JSON.stringify(area.mediaRoles ?? {})}`)
     .join(';');

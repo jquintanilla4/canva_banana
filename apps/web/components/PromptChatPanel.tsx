@@ -21,8 +21,16 @@ import {
   type ChatConversation,
   type ChatFolder,
 } from '../services/chatHistoryService';
-import { PROMPT_BAR_FOOTER_MARGIN_BOTTOM } from '../utils/promptBarFooterLayout';
 import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
+import {
+  SIDE_PANEL_BOTTOM_OFFSET,
+  SIDE_PANEL_EDGE_INSET,
+  SIDE_PANEL_TOGGLE_SIZE_REM,
+  SIDE_PANEL_TOGGLE_VIEWPORT_GAP,
+  SIDE_PANEL_TOP_OFFSET,
+  SIDE_PANEL_WIDTH,
+} from '../utils/floatingPanelLayout';
+import { resizeTextareaToContent } from '../utils/textareaAutosize';
 
 type PromptChatPanelProps = {
   isOpen: boolean;
@@ -31,12 +39,13 @@ type PromptChatPanelProps = {
   onToggle: () => void;
 };
 
-const PANEL_WIDTH = 'clamp(380px, 33vw, 620px)'; // Keep the overlay near one-third of desktop width.
-const PANEL_LEFT_INSET = '0.625rem'; // Leaves a visible edge away from the app window.
-const PANEL_TOP_OFFSET = 'calc(3.25rem + 14px)'; // Aligns below the lower edge of the top toolbar.
-const PANEL_BOTTOM_OFFSET = `calc(${PROMPT_BAR_FOOTER_MARGIN_BOTTOM} + 5px)`; // Lifts the panel to the prompt bar bottom edge.
-const CHAT_ACTION_BUTTON_SIZE_REM = 2.64; // Matches the normal prompt bar submit button.
-const TOGGLE_VIEWPORT_RIGHT_GAP = '1rem'; // Keeps the toggle reachable on narrow screens.
+// Panel geometry is shared with the notes panel via utils/floatingPanelLayout.ts.
+const PANEL_WIDTH = SIDE_PANEL_WIDTH;
+const PANEL_LEFT_INSET = SIDE_PANEL_EDGE_INSET;
+const PANEL_TOP_OFFSET = SIDE_PANEL_TOP_OFFSET;
+const PANEL_BOTTOM_OFFSET = SIDE_PANEL_BOTTOM_OFFSET;
+const CHAT_ACTION_BUTTON_SIZE_REM = SIDE_PANEL_TOGGLE_SIZE_REM;
+const TOGGLE_VIEWPORT_RIGHT_GAP = SIDE_PANEL_TOGGLE_VIEWPORT_GAP;
 const COPY_STATUS_TIMEOUT_MS = 1600;
 const HEADER_TOP_OFFSET_PX = 12; // Mirrors the absolute header's top-3 offset.
 const HEADER_BODY_GAP_PX = 12; // Keeps scroll content clear of the floating header shadow.
@@ -67,11 +76,7 @@ const capPromptChatMessages = (messages: OpenRouterChatMessage[]) => {
 const MENU_ITEM_CLASS = 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-gray-200 transition-colors hover:bg-white/10'; // Shared row-menu item style.
 
 const resizeDraftTextarea = (textarea: HTMLTextAreaElement, panelHeight: number) => {
-  const maxHeight = Math.max(96, Math.floor(panelHeight / 3)); // Composer grows until it uses one third of the panel.
-  textarea.style.height = 'auto';
-  textarea.style.maxHeight = `${maxHeight}px`;
-  textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
-  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+  resizeTextareaToContent(textarea, Math.max(96, Math.floor(panelHeight / 3))); // Composer grows until it uses one third of the panel.
 };
 
 // Self-contained inline rename field: owns its draft, autoselects, and commits on Enter/blur (Escape cancels).

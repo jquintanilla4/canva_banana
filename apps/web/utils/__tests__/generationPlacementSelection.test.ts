@@ -4,7 +4,6 @@ import { applyGenerationPlacementSelection, type GenerationPlacementSelectionAct
 
 const createActions = (): GenerationPlacementSelectionActions => ({
   setSelectedImageIds: vi.fn(),
-  setSelectedNoteIds: vi.fn(),
   setReferenceImageIds: vi.fn(),
   setReferenceVideoIds: vi.fn(),
   setReferenceAudioIds: vi.fn(),
@@ -23,7 +22,6 @@ describe('applyGenerationPlacementSelection', () => {
     applyGenerationPlacementSelection({ mediaIds: ['image-1', 'image-2'], mediaType: 'image', modelLabel: 'Model' }, actions);
 
     expect(actions.setSelectedImageIds).toHaveBeenCalledWith(['image-1', 'image-2']);
-    expect(actions.setSelectedNoteIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceImageIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceVideoIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceAudioIds).toHaveBeenCalledWith([]);
@@ -41,7 +39,6 @@ describe('applyGenerationPlacementSelection', () => {
     applyGenerationPlacementSelection({ mediaIds: ['video-1'], mediaType: 'video', modelLabel: 'Model' }, actions);
 
     expect(actions.setSelectedImageIds).toHaveBeenCalledWith(['video-1']);
-    expect(actions.setSelectedNoteIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceImageIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceVideoIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceAudioIds).toHaveBeenCalledWith([]);
@@ -63,7 +60,6 @@ describe('applyGenerationPlacementSelection', () => {
     );
 
     expect(actions.setSelectedImageIds).toHaveBeenCalledWith(['video-1']);
-    expect(actions.setSelectedNoteIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceImageIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceVideoIds).toHaveBeenCalledWith([]);
     expect(actions.setReferenceAudioIds).toHaveBeenCalledWith([]);

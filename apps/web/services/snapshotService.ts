@@ -173,7 +173,7 @@ export type SnapshotManifestV2 = {
         klingV3Shot1Duration?: string;
         klingV3Shot2Duration?: string;
 	      selectedImageIds: string[];
-	      selectedNoteIds: string[];
+	      noteLabelCounter?: number;
 	      referenceImageIds: string[];
       referenceVideoIds?: string[];
       referenceAudioIds?: string[];
@@ -342,7 +342,7 @@ export type SnapshotMetaState = {
   klingV3Shot1Duration?: string;
   klingV3Shot2Duration?: string;
   selectedImageIds: string[];
-  selectedNoteIds: string[];
+  noteLabelCounter?: number;
   referenceImageIds: string[];
   referenceVideoIds?: string[];
   referenceAudioIds?: string[];
@@ -359,9 +359,8 @@ export type RestoredSnapshotState = {
   videoPromptBars: CanvasVideoPromptBar[];
   meta?: SerializedSnapshotV1['state']['meta'];
   sourceRetention: 'required' | 'not-required'; // Lazy desktop binary media keeps its range source open.
+  droppedLegacyNoteCount: number; // Pre-pin sticky notes are dropped on load; callers should tell the user.
 };
-
-export const DEFAULT_NOTE_BACKGROUND = '#1f2937';
 
 const SNAPSHOT_MAGIC = 'BANANA_SNAPSHOT_V2\n';
 const snapshotEncoder = new TextEncoder();
@@ -1136,10 +1135,9 @@ export const restoreSnapshotFromFile = async (
     brushSize: number;
     eraserSize: number;
     brushColor: string;
-    defaultNoteBackground?: string;
   },
 ): Promise<RestoredSnapshotState> => {
-  const { brushSize, eraserSize, brushColor, defaultNoteBackground = DEFAULT_NOTE_BACKGROUND } = options;
+  const { brushSize, eraserSize, brushColor } = options;
   const isBinarySnapshot = await isBinarySnapshotFile(file).catch(() => false);
 
   let restoredImages: CanvasImage[] = [];
@@ -1401,17 +1399,29 @@ export const restoreSnapshotFromFile = async (
     meta = parsedMeta as SerializedSnapshotV1['state']['meta'];
   }
 
-  const sanitizedNotes: CanvasNote[] = snapshotNotes.map(note => ({
-    id: typeof note?.id === 'string' && note.id.length > 0 ? note.id : crypto.randomUUID(),
-    x: typeof note?.x === 'number' ? note.x : 0,
-    y: typeof note?.y === 'number' ? note.y : 0,
-    width: typeof note?.width === 'number' ? note.width : 200,
-    height: typeof note?.height === 'number' ? note.height : 120,
-    text: typeof note?.text === 'string' ? note.text : '',
-    backgroundColor: typeof note?.backgroundColor === 'string' && note.backgroundColor.length > 0
-      ? note.backgroundColor
-      : defaultNoteBackground,
-  }));
+  // Legacy canvas-rectangle notes (pre side-panel) are dropped rather than migrated.
+  const isLegacyNote = (note: CanvasNote) => !note || typeof note !== 'object' || 'width' in note || 'backgroundColor' in note;
+  const droppedLegacyNoteCount = snapshotNotes.filter(isLegacyNote).length;
+  const sanitizedNotes: CanvasNote[] = snapshotNotes
+    .filter(note => !isLegacyNote(note))
+    .map(note => {
+      const rawAnchor = (note as { anchor?: unknown }).anchor as { x?: unknown; y?: unknown } | undefined;
+      const anchor = rawAnchor
+        && typeof rawAnchor.x === 'number' && Number.isFinite(rawAnchor.x)
+        && typeof rawAnchor.y === 'number' && Number.isFinite(rawAnchor.y)
+        ? { x: rawAnchor.x, y: rawAnchor.y }
+        : undefined;
+      const rawLabel = (note as { label?: unknown }).label;
+      const label = anchor && typeof rawLabel === 'number' && Number.isInteger(rawLabel) && rawLabel > 0
+        ? rawLabel
+        : undefined;
+      const pinnedFields = anchor && label !== undefined ? { label, anchor } : {}; // Keep pin identity and position atomic.
+      return {
+        id: typeof note?.id === 'string' && note.id.length > 0 ? note.id : crypto.randomUUID(),
+        text: typeof note?.text === 'string' ? note.text : '',
+        ...pinnedFields,
+      };
+    });
 
   const sanitizedPaths: Path[] = snapshotPaths.map(path => {
     const rawPoints = Array.isArray(path?.points) ? path.points : [];
@@ -1508,6 +1518,7 @@ export const restoreSnapshotFromFile = async (
     videoPromptBars: sanitizedVideoPromptBars,
     meta,
     sourceRetention: sourceRetentionRequired ? 'required' : 'not-required', // Empty, materialized, and legacy imports no longer own a source handle.
+    droppedLegacyNoteCount,
   };
 };
 

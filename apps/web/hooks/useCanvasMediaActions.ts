@@ -23,7 +23,6 @@ type UseCanvasMediaActionsArgs = {
   primaryImageId: string | null;
   setState: Dispatch<SetStateAction<AppState>>;
   setSelectedImageIds: (ids: string[]) => void;
-  setSelectedNoteIds: (ids: string[]) => void;
   setReferenceImageIds: (ids: string[]) => void;
   setTool: (tool: Tool) => void;
   setError: (message: string | null) => void;
@@ -59,7 +58,6 @@ export function useCanvasMediaActions({
   primaryImageId,
   setState,
   setSelectedImageIds,
-  setSelectedNoteIds,
   setReferenceImageIds,
   setTool,
   setError,
@@ -225,7 +223,6 @@ export function useCanvasMediaActions({
           paths: [],
         }));
         setSelectedImageIds(lastAddedMediaId ? [lastAddedMediaId] : []);
-        setSelectedNoteIds([]);
         setReferenceImageIds([]);
         setTool(Tool.SELECTION);
       }
@@ -234,7 +231,7 @@ export function useCanvasMediaActions({
     mediaFiles.forEach((file, index) => {
       processFile(file, index);
     });
-  }, [setReferenceImageIds, setSelectedImageIds, setSelectedNoteIds, setState, setTool]);
+  }, [setReferenceImageIds, setSelectedImageIds, setState, setTool]);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;

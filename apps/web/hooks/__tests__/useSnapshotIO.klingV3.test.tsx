@@ -41,7 +41,6 @@ const buildMeta = (): SnapshotMetaState => ({
   klingV3Shot2Duration: '6',
   seedance2JimengModelVersion: 'seedance2.0_vip',
   selectedImageIds: [],
-  selectedNoteIds: [],
   referenceImageIds: [],
 });
 
@@ -279,7 +278,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
-        selectedNoteIds: [],
         referenceImageIds: [],
         referenceVideoIds: [],
         referenceAudioIds: [],
@@ -288,6 +286,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         videoLastFrameImageId: null,
         ...selectionSetters,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages: [],
       displayedNotes: [],
       displayedPaths: [],
@@ -366,7 +365,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       fal: {} as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
-        selectedNoteIds: [],
         referenceImageIds: [],
         referenceVideoIds: [],
         referenceAudioIds: [],
@@ -375,6 +373,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         videoLastFrameImageId: null,
         ...selectionSetters,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages: [],
       displayedNotes: [],
       displayedPaths: [],
@@ -445,7 +444,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       fal: {} as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
-        selectedNoteIds: [],
         referenceImageIds: [],
         referenceVideoIds: [],
         referenceAudioIds: [],
@@ -454,6 +452,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         videoLastFrameImageId: null,
         ...selectionSetters,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages: [],
       displayedNotes: [],
       displayedPaths: [],
@@ -542,7 +541,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       fal: {} as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
-        selectedNoteIds: [],
         referenceImageIds: [],
         referenceVideoIds: [],
         referenceAudioIds: [],
@@ -551,6 +549,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         videoLastFrameImageId: null,
         ...selectionSetters,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages: [],
       displayedNotes: [],
       displayedPaths: [],
@@ -689,7 +688,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       fal: {} as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
-        selectedNoteIds: [],
         referenceImageIds: [],
         referenceVideoIds: [],
         referenceAudioIds: [],
@@ -698,6 +696,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         videoLastFrameImageId: null,
         ...selectionSetters,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages: [buildImage({ id: 'source-image-1', file: lazyFile })],
       displayedNotes: [],
       displayedPaths: [],
@@ -813,7 +812,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
-        selectedNoteIds: [],
         referenceImageIds: [],
         referenceVideoIds: [],
         referenceAudioIds: [],
@@ -821,6 +819,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         elementImageIds: [],
         videoLastFrameImageId: null,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages: [],
       displayedNotes: [],
       displayedPaths: [],
@@ -947,7 +946,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
-        selectedNoteIds: [],
         referenceImageIds: [],
         referenceVideoIds: [],
         referenceAudioIds: [],
@@ -955,6 +953,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         elementImageIds: [],
         videoLastFrameImageId: null,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages: [buildImage({
         id: 'missing-image-1',
         file: missingSourceFile,
@@ -1070,7 +1069,6 @@ describe('useSnapshotIO (Kling v3)', () => {
         } as unknown as UseFalSettingsResult,
         selection: {
           selectedImageIds: [],
-          selectedNoteIds: [],
           referenceImageIds: [],
           referenceVideoIds: [],
           referenceAudioIds: [],
@@ -1078,6 +1076,7 @@ describe('useSnapshotIO (Kling v3)', () => {
           elementImageIds: [],
           videoLastFrameImageId: null,
         } as unknown as SelectionStateResult,
+        noteLabelCounterRef: { current: 1 },
         displayedImages: [buildImage({
           id: 'missing-image-1',
           file: missingSourceFile,
@@ -1188,7 +1187,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
-        selectedNoteIds: [],
         referenceImageIds: [],
         referenceVideoIds: [],
         referenceAudioIds: [],
@@ -1196,6 +1194,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         elementImageIds: [],
         videoLastFrameImageId: null,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages: [audioImage],
       displayedNotes: [],
       displayedPaths: [],
@@ -1305,7 +1304,6 @@ describe('useSnapshotIO (Kling v3)', () => {
       fal,
       selection: {
         selectedImageIds: emptyIds,
-        selectedNoteIds: emptyIds,
         referenceImageIds: emptyIds,
         referenceVideoIds: emptyIds,
         referenceAudioIds: emptyIds,
@@ -1314,6 +1312,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         videoLastFrameImageId: null,
         ...selectionSetters,
       } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
       displayedImages,
       displayedNotes,
       displayedPaths,

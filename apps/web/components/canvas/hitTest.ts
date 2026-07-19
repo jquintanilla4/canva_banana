@@ -1,6 +1,6 @@
 import type { CanvasImage, CanvasNote, Point } from '../../types';
 import { CROP_HANDLE_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from './constants';
-import { imageLocalToWorld, worldToImageLocal } from './geometry';
+import { getNotePinGeometry, imageLocalToWorld, worldToImageLocal } from './geometry';
 
 // FIX: Added 'resize-l' to the CropAction type to support left-side cropping and fix a type error.
 export type CropAction =
@@ -25,10 +25,21 @@ export type TransformAction =
   | 'scale-l'
   | 'rotate';
 
-export function getNoteAtPoint(point: Point, notes: CanvasNote[]): CanvasNote | null {
+export function getNoteAnchorAtPoint(point: Point, notes: CanvasNote[], scale: number): CanvasNote | null {
   for (let i = notes.length - 1; i >= 0; i--) {
     const note = notes[i];
-    if (point.x >= note.x && point.x <= note.x + note.width && point.y >= note.y && point.y <= note.y + note.height) {
+    if (!note.anchor) continue;
+    const pin = getNotePinGeometry(note.anchor, scale);
+    const dx = point.x - pin.headCenterX;
+    const dy = point.y - pin.headCenterY;
+    if (dx * dx + dy * dy <= pin.headRadius * pin.headRadius) {
+      return note;
+    }
+    // Tail: slim bbox between the head and the anchor tip.
+    if (
+      point.x >= note.anchor.x - pin.tailHalfWidth && point.x <= note.anchor.x + pin.tailHalfWidth &&
+      point.y >= pin.headCenterY && point.y <= note.anchor.y
+    ) {
       return note;
     }
   }

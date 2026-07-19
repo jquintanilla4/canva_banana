@@ -147,11 +147,10 @@ describe('useSelectionState (one-to-all)', () => {
     });
 
     act(() => {
-      result.current.replaceCanvasSelection({ imageIds: [image.id], noteIds: ['note-1'] });
+      result.current.replaceCanvasSelection([image.id]);
     });
 
     expect(result.current.selectedImageIds).toEqual([image.id]);
-    expect(result.current.selectedNoteIds).toEqual(['note-1']);
     expect(result.current.referenceImageIds).toEqual([]);
     expect(result.current.referenceVideoIds).toEqual([]);
     expect(result.current.elementImageIds).toEqual([]);

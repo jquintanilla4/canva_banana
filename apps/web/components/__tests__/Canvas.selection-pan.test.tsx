@@ -26,7 +26,6 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   eraserSize: 10,
   brushColor: '#000000',
   selectedImageIds: [],
-  selectedNoteIds: [],
   referenceImageIds: [],
   referenceVideoIds: [],
   referenceAudioIds: [],
@@ -47,17 +46,15 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   onError: vi.fn(),
   onMediaPlaybackRejected: vi.fn(),
   onImageSelect: vi.fn(),
-  onNoteSelect: vi.fn(),
   onSelectionReplace: vi.fn(),
   zoomToFitTrigger: 0,
   zoomToSelectionTrigger: 0,
   zoomInTrigger: 0,
   zoomOutTrigger: 0,
+  panToAnchorRequest: null,
   onFilesDrop: vi.fn(),
-  editingNoteId: null,
-  onNoteDoubleClick: vi.fn(),
-  onNoteTextChange: vi.fn(),
-  onNoteEditEnd: vi.fn(),
+  onAnchorNoteCreate: vi.fn(),
+  onAnchorClick: vi.fn(),
   onImageOrderChange: vi.fn(),
   isImageOverlapping: false,
   canMoveUp: false,
@@ -67,10 +64,6 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   onStartCrop: vi.fn(),
   onConfirmCrop: vi.fn(),
   onCancelCrop: vi.fn(),
-  onNoteCopy: vi.fn(),
-  onNoteDuplicate: vi.fn(),
-  onNoteFontSizeChange: vi.fn(),
-  onNoteColorChange: vi.fn(),
   onImagePromptCopy: vi.fn(),
   onImageDuplicate: vi.fn(),
   onRerunGeneration: vi.fn(),
@@ -167,12 +160,9 @@ const buildAudio = (id = 'audio-1'): CanvasImage => {
 
 const buildNote = (id = 'note-1'): CanvasNote => ({
   id,
-  x: 160,
-  y: 80,
-  width: 160,
-  height: 120,
   text: 'Selected note',
-  backgroundColor: '#fef3c7',
+  label: 1,
+  anchor: { x: 240, y: 140 },
 });
 
 const buildVideoPromptArea = (): CanvasVideoPromptArea => ({
@@ -291,13 +281,11 @@ describe('Canvas selection temporary pan', () => {
 
   it('pans without changing selection modifiers in presentation mode', () => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       images: [buildImage()],
       notes: [buildNote()],
       onImageSelect,
-      onNoteSelect,
       onVideoPromptAreaSelect,
       tailSelectionEnabled: true,
       isPresentationMode: true,
@@ -311,22 +299,18 @@ describe('Canvas selection temporary pan', () => {
 
     expect(root.style.backgroundPosition).toBe('470px 385px');
     expect(onImageSelect).not.toHaveBeenCalled();
-    expect(onNoteSelect).not.toHaveBeenCalled();
     expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
   });
 
   it('does not clear selection with Escape in presentation mode', () => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       images: [buildImage()],
       notes: [buildNote()],
       selectedImageIds: ['image-1'],
-      selectedNoteIds: ['note-1'],
       selectedVideoPromptAreaId: 'area-1',
       onImageSelect,
-      onNoteSelect,
       onVideoPromptAreaSelect,
       isPresentationMode: true,
     })} />);
@@ -335,7 +319,6 @@ describe('Canvas selection temporary pan', () => {
     fireEvent.keyDown(root, { key: 'Escape' });
 
     expect(onImageSelect).not.toHaveBeenCalled();
-    expect(onNoteSelect).not.toHaveBeenCalled();
     expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
   });
 
@@ -442,16 +425,13 @@ describe('Canvas selection temporary pan', () => {
     { label: 'Control in Free Selection', tool: Tool.FREE_SELECTION, modifiers: { ctrlKey: true } },
   ])('selects multiple canvas items with $label marquee from empty canvas', ({ tool, modifiers }) => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onSelectionReplace = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const secondImage = { ...buildImage('image-2'), x: 240, y: 150 };
     const { container } = render(<Canvas {...buildCanvasProps({
       tool,
       images: [buildImage(), secondImage],
-      notes: [buildNote()],
       onImageSelect,
-      onNoteSelect,
       onSelectionReplace,
       onVideoPromptAreaSelect,
     })} />);
@@ -460,12 +440,8 @@ describe('Canvas selection temporary pan', () => {
     dragCanvas(root, { x: 0, y: 0 }, { x: 420, y: 320 }, 0, modifiers);
 
     expect(onVideoPromptAreaSelect).toHaveBeenCalledWith(null);
-    expect(onSelectionReplace).toHaveBeenCalledWith({
-      imageIds: ['image-1', 'image-2'],
-      noteIds: ['note-1'],
-    });
+    expect(onSelectionReplace).toHaveBeenCalledWith(['image-1', 'image-2']);
     expect(onImageSelect).not.toHaveBeenCalled();
-    expect(onNoteSelect).not.toHaveBeenCalled();
   });
 
   it('starts command-drag marquee selection when the gesture begins on an image', () => {
@@ -483,39 +459,29 @@ describe('Canvas selection temporary pan', () => {
 
     dragCanvas(root, { x: 20, y: 20 }, { x: 300, y: 140 }, 0, { metaKey: true });
 
-    expect(onSelectionReplace).toHaveBeenCalledWith({
-      imageIds: ['image-1', 'image-2'],
-      noteIds: [],
-    });
+    expect(onSelectionReplace).toHaveBeenCalledWith(['image-1', 'image-2']);
     expect(onImageSelect).not.toHaveBeenCalled();
   });
 
-  it('replaces prior image and note selections with command-drag marquee matches', () => {
+  it('replaces prior image selections with command-drag marquee matches', () => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onSelectionReplace = vi.fn();
     const insideImage = buildImage('image-1');
     const outsideImage = { ...buildImage('image-3'), x: 520, y: 420 };
-    const outsideNote = { ...buildNote('note-3'), x: 520, y: 420 };
+    const outsideNote = { ...buildNote('note-3'), anchor: { x: 520, y: 420 } };
     const { container } = render(<Canvas {...buildCanvasProps({
       images: [insideImage, outsideImage],
       notes: [outsideNote],
       selectedImageIds: ['image-3'],
-      selectedNoteIds: ['note-3'],
       onImageSelect,
-      onNoteSelect,
       onSelectionReplace,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
 
     dragCanvas(root, { x: 0, y: 0 }, { x: 140, y: 120 }, 0, { metaKey: true });
 
-    expect(onSelectionReplace).toHaveBeenCalledWith({
-      imageIds: ['image-1'],
-      noteIds: [],
-    });
+    expect(onSelectionReplace).toHaveBeenCalledWith(['image-1']);
     expect(onImageSelect).not.toHaveBeenCalled();
-    expect(onNoteSelect).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -535,33 +501,30 @@ describe('Canvas selection temporary pan', () => {
     expect(onImageSelect).toHaveBeenCalledWith('image-1', { multi: true });
   });
 
-  it('keeps command-click note toggles when the pointer does not drag', () => {
-    const onNoteSelect = vi.fn();
+  it('opens the note when its pin is command-clicked without dragging', () => {
+    const onAnchorClick = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       notes: [buildNote()],
-      onNoteSelect,
+      onAnchorClick,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
 
-    fireEvent.mouseDown(root, { clientX: 170, clientY: 90, button: 0, metaKey: true });
-    fireEvent.mouseUp(root, { clientX: 170, clientY: 90, button: 0, metaKey: true });
+    fireEvent.mouseDown(root, { clientX: 240, clientY: 120, button: 0, metaKey: true });
+    fireEvent.mouseUp(root, { clientX: 240, clientY: 120, button: 0, metaKey: true });
 
-    expect(onNoteSelect).toHaveBeenCalledWith('note-1', { multi: true });
+    expect(onAnchorClick).toHaveBeenCalledWith('note-1');
   });
 
   it('keeps free-selection selections while left-dragging empty canvas', () => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       tool: Tool.FREE_SELECTION,
       images: [buildImage()],
       notes: [buildNote()],
       selectedImageIds: ['image-1'],
-      selectedNoteIds: ['note-1'],
       selectedVideoPromptAreaId: 'area-1',
       onImageSelect,
-      onNoteSelect,
       onVideoPromptAreaSelect,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
@@ -570,21 +533,17 @@ describe('Canvas selection temporary pan', () => {
 
     expect(root.style.backgroundPosition).toBe('50px 60px');
     expect(onImageSelect).not.toHaveBeenCalled();
-    expect(onNoteSelect).not.toHaveBeenCalled();
     expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
   });
 
   it('keeps free-selection selections on left-click empty canvas', () => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       tool: Tool.FREE_SELECTION,
       selectedImageIds: ['image-1'],
-      selectedNoteIds: ['note-1'],
       selectedVideoPromptAreaId: 'area-1',
       onImageSelect,
-      onNoteSelect,
       onVideoPromptAreaSelect,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
@@ -595,22 +554,18 @@ describe('Canvas selection temporary pan', () => {
     expect(root.style.backgroundPosition).toBe('0px 0px');
     expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
     expect(onImageSelect).not.toHaveBeenCalled();
-    expect(onNoteSelect).not.toHaveBeenCalled();
   });
 
   it('clears free-selection selections with right-click anywhere on the canvas surface', () => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       tool: Tool.FREE_SELECTION,
       images: [buildImage()],
       notes: [buildNote()],
       selectedImageIds: ['image-1'],
-      selectedNoteIds: ['note-1'],
       selectedVideoPromptAreaId: 'area-1',
       onImageSelect,
-      onNoteSelect,
       onVideoPromptAreaSelect,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
@@ -620,20 +575,16 @@ describe('Canvas selection temporary pan', () => {
 
     expect(onVideoPromptAreaSelect).toHaveBeenCalledWith(null);
     expect(onImageSelect).toHaveBeenCalledWith(null);
-    expect(onNoteSelect).toHaveBeenCalledWith(null);
   });
 
   it('clears free-selection selections with right-drag without panning', () => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       tool: Tool.FREE_SELECTION,
       selectedImageIds: ['image-1'],
-      selectedNoteIds: ['note-1'],
       selectedVideoPromptAreaId: 'area-1',
       onImageSelect,
-      onNoteSelect,
       onVideoPromptAreaSelect,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
@@ -643,7 +594,6 @@ describe('Canvas selection temporary pan', () => {
     expect(root.style.backgroundPosition).toBe('0px 0px');
     expect(onVideoPromptAreaSelect).toHaveBeenCalledTimes(1);
     expect(onImageSelect).toHaveBeenCalledTimes(1);
-    expect(onNoteSelect).toHaveBeenCalledTimes(1);
   });
 
   it('prevents the browser context menu during free-selection right-click deselect', () => {
@@ -658,14 +608,11 @@ describe('Canvas selection temporary pan', () => {
 
   it('still clears selections on selection-tool left-click empty canvas', () => {
     const onImageSelect = vi.fn();
-    const onNoteSelect = vi.fn();
     const onVideoPromptAreaSelect = vi.fn();
     const { container } = render(<Canvas {...buildCanvasProps({
       selectedImageIds: ['image-1'],
-      selectedNoteIds: ['note-1'],
       selectedVideoPromptAreaId: 'area-1',
       onImageSelect,
-      onNoteSelect,
       onVideoPromptAreaSelect,
     })} />);
     const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
@@ -674,7 +621,6 @@ describe('Canvas selection temporary pan', () => {
 
     expect(onVideoPromptAreaSelect).toHaveBeenCalledWith(null);
     expect(onImageSelect).toHaveBeenCalledWith(null);
-    expect(onNoteSelect).toHaveBeenCalledWith(null);
   });
 
   it('stops video playback without changing audio settings when a video is removed from the canvas', async () => {

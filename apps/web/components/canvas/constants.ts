@@ -1,12 +1,12 @@
-export const RESIZE_HANDLE_SIZE = 12;
 export const CROP_HANDLE_SIZE = 10;
 export const TRANSFORM_HANDLE_SIZE = 10;
 export const ROTATION_HANDLE_DISTANCE = 30;
-export const MIN_NOTE_WIDTH = 100;
-export const MIN_NOTE_HEIGHT = 50;
-export const DEFAULT_NOTE_FONT_SIZE = 16;
-export const MIN_NOTE_FONT_SIZE = 8;
-export const MAX_NOTE_FONT_SIZE = 72;
+// Note anchor pins render at constant screen size (divide by scale for world units).
+export const NOTE_PIN_HEAD_RADIUS = 12;
+export const NOTE_PIN_HEAD_OFFSET = 22; // Screen px from the anchor tip up to the head center.
+export const NOTE_PIN_LABEL_FONT_SIZE = 12;
+export const NOTE_PIN_FILL = '#0ea5e9';
+export const NOTE_PIN_BORDER = '#f8fafc';
 export const MIN_SCALE = 0.001; // allow zooming far out to keep huge layouts visible
 export const MAX_SCALE = 10;
 export const GRID_BASE_SIZE = 300;

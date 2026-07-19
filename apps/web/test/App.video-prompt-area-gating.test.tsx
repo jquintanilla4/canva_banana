@@ -415,7 +415,6 @@ vi.mock('../hooks/useCanvasHistory', () => ({
 vi.mock('../hooks/useSelectionState', () => ({
   useSelectionState: () => ({
     selectedImageIds: mockState.selectedImageIds,
-    selectedNoteIds: [],
     referenceImageIds: [],
     referenceVideoIds: [],
     referenceAudioIds: [],
@@ -429,7 +428,6 @@ vi.mock('../hooks/useSelectionState', () => ({
     activePrimaryImage: null,
     hasSingleImageSelected: false,
     setSelectedImageIds: mockState.setSelectedImageIds,
-    setSelectedNoteIds: vi.fn(),
     setReferenceImageIds: mockState.setReferenceImageIds,
     setReferenceVideoIds: vi.fn(),
     setReferenceAudioIds: vi.fn(),
@@ -438,7 +436,6 @@ vi.mock('../hooks/useSelectionState', () => ({
     setSourceVideoId: vi.fn(),
     setSourceAudioId: vi.fn(),
     handleImageSelection: vi.fn(),
-    handleNoteSelection: vi.fn(),
     replaceCanvasSelection: vi.fn(),
   }),
 }));

@@ -1,10 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Tool, Path, Point, CanvasImage, CanvasNote, CanvasObjectSelection, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
+import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
 import { JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, FontSizeDownIcon, FontSizeUpIcon, MinusIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, MinusIcon } from './Icons';
 import {
-  DEFAULT_NOTE_FONT_SIZE,
   DOT_BASE_SIZE,
   DOT_MAX_SIZE,
   DOT_MIN_SIZE,
@@ -14,20 +13,14 @@ import {
   GRID_VISUAL_SCALE,
   KEYBOARD_ZOOM_MULTIPLIER,
   KEYBOARD_ZOOM_OUT_MULTIPLIER,
-  MAX_NOTE_FONT_SIZE,
   MAX_SCALE,
-  MIN_NOTE_FONT_SIZE,
-  MIN_NOTE_HEIGHT,
-  MIN_NOTE_WIDTH,
   MIN_SCALE,
-  RESIZE_HANDLE_SIZE,
   WHEEL_ZOOM_MULTIPLIER,
 } from './canvas/constants';
 import { getImageBounds } from './canvas/geometry';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { createCanvasRenderCache, drawCanvas } from './canvas/render/drawCanvas';
-import { getNoteTextColor } from './canvas/noteColors';
-import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, NOTE_COLOR_OPTIONS, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
+import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
 import { useCanvasPlaybackLoop } from './canvas/hooks/useCanvasPlaybackLoop';
 import { PromptBar, type PromptBarControlConfig } from './PromptBar';
@@ -46,6 +39,9 @@ import { stopCanvasMediaPlayback, syncCanvasMediaElementPlayback } from '../util
 import { getCanvasImagePrompt } from '../utils/canvasImagePrompt';
 import { KEYBOARD_SHORTCUT_LABELS } from '../utils/keyboardShortcutLabels';
 import { createCanvasInteractionGuard, isCanvasInteractiveTarget } from '../utils/canvasInteractionBoundary';
+
+// One-shot request to center a world point; a new token marks a fresh request.
+export type PanToAnchorRequest = Point & { token: number };
 
 interface CanvasProps {
   images: CanvasImage[];
@@ -71,7 +67,6 @@ interface CanvasProps {
   eraserSize: number;
   brushColor: string;
   selectedImageIds: string[];
-  selectedNoteIds: string[];
   referenceImageIds: string[];
   referenceVideoIds: string[];
   referenceAudioIds: string[];
@@ -96,17 +91,15 @@ interface CanvasProps {
   onError?: (message: string) => void;
   onMediaPlaybackRejected?: (imageId: string) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
-  onNoteSelect: (id: string | null, options?: { multi?: boolean }) => void;
-  onSelectionReplace: (selection: CanvasObjectSelection) => void;
+  onSelectionReplace: (imageIds: string[]) => void;
   zoomToFitTrigger: number;
   zoomToSelectionTrigger: number;
   zoomInTrigger: number;
   zoomOutTrigger: number;
+  panToAnchorRequest: PanToAnchorRequest | null;
   onFilesDrop: (files: FileList, point: Point) => void;
-  editingNoteId: string | null;
-  onNoteDoubleClick: (id: string) => void;
-  onNoteTextChange: (id: string, text: string) => void;
-  onNoteEditEnd: () => void;
+  onAnchorNoteCreate: (point: Point) => void;
+  onAnchorClick: (noteId: string) => void;
   onImageOrderChange: (id: string, direction: 'up' | 'down') => void;
   isImageOverlapping: boolean;
   canMoveUp: boolean;
@@ -116,10 +109,6 @@ interface CanvasProps {
   onStartCrop: (imageId: string) => void;
   onConfirmCrop: () => void;
   onCancelCrop: () => void;
-  onNoteCopy: (noteId: string) => void;
-  onNoteDuplicate: (noteId: string) => void;
-  onNoteFontSizeChange: (noteId: string, delta: number) => void;
-  onNoteColorChange: (noteId: string, color: string) => void;
   onVideoPromptAreaBorderColorChange?: (areaId: string, color: string) => void;
   onImagePromptCopy: (imageId: string) => void;
   onImageDuplicate: (imageId: string) => void;
@@ -199,7 +188,6 @@ export const Canvas: React.FC<CanvasProps> = ({
   eraserSize,
   brushColor,
   selectedImageIds,
-  selectedNoteIds,
   referenceImageIds,
   referenceVideoIds,
   referenceAudioIds,
@@ -224,18 +212,16 @@ export const Canvas: React.FC<CanvasProps> = ({
   onError,
   onMediaPlaybackRejected,
   onImageSelect,
-  onNoteSelect,
   onSelectionReplace,
   onCommit,
   zoomToFitTrigger,
   zoomToSelectionTrigger,
   zoomInTrigger,
   zoomOutTrigger,
+  panToAnchorRequest,
   onFilesDrop,
-  editingNoteId,
-  onNoteDoubleClick,
-  onNoteTextChange,
-  onNoteEditEnd,
+  onAnchorNoteCreate,
+  onAnchorClick,
   onImageOrderChange,
   isImageOverlapping,
   canMoveUp,
@@ -245,10 +231,6 @@ export const Canvas: React.FC<CanvasProps> = ({
   onStartCrop,
   onConfirmCrop,
   onCancelCrop,
-  onNoteCopy,
-  onNoteDuplicate,
-  onNoteFontSizeChange,
-  onNoteColorChange,
   onVideoPromptAreaBorderColorChange,
   onImagePromptCopy,
   onImageDuplicate,
@@ -270,15 +252,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   type VideoPromptAreaDragMode = 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br'; // Area resizing should track which corner the user grabbed.
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const noteColorPickerRef = useRef<HTMLDivElement>(null);
   const videoPromptAreaColorPickerRef = useRef<HTMLDivElement>(null);
-  const notePointerDownWhileEditingRef = useRef(false);
-  const noteEditHandledRef = useRef(false);
   const canvasInteractionGuardRef = useRef<ReturnType<typeof createCanvasInteractionGuard> | null>(null);
   const renderCacheRef = useRef(createCanvasRenderCache());
   const audioPlaybackTimesRef = useRef<Record<string, number>>({});
-  const [isNoteColorPickerOpen, setIsNoteColorPickerOpen] = useState(false);
   const [isVideoPromptAreaColorPickerOpen, setIsVideoPromptAreaColorPickerOpen] = useState(false);
   const [videoPromptAreaDragState, setVideoPromptAreaDragState] = useState<{
     areaId: string;
@@ -309,12 +286,12 @@ export const Canvas: React.FC<CanvasProps> = ({
   }
 
   const primarySelectedImageId = selectedImageIds[0] ?? null;
-  const primarySelectedNoteId = selectedNoteIds[0] ?? null;
   const isAreaSelectionTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
   const areaLabelFontSize = Math.max(11, Math.min(16, 11 / Math.max(scale, 0.7))); // Keep area titles readable even when the canvas is zoomed far out.
   const effectiveTool = isPresentationMode ? Tool.PAN : tool; // Presentation mode keeps the canvas navigable only.
   const effectiveCropMode = isPresentationMode ? null : cropMode; // Hidden crop handles should not remain interactive.
   const effectiveTransformMode = isPresentationMode ? null : transformMode; // Hidden transform handles should not remain interactive.
+  const hasCanvasVisualContent = images.length > 0 || notes.some(note => note.anchor); // Panel-only notes have no canvas footprint.
 
   const getCanvasContext = () => canvasRef.current?.getContext('2d');
 
@@ -401,7 +378,6 @@ export const Canvas: React.FC<CanvasProps> = ({
     hoveredVideoId,
     isPanning,
     isDragging,
-    isResizing,
     isMarqueeSelecting,
     isDraggingOver,
     brushPreviewPosition,
@@ -426,15 +402,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     videoPromptAreas,
     videoPromptAreaProfiles,
     paths,
-    isNoteEditing: !isPresentationMode && Boolean(editingNoteId),
     pan,
     scale,
     brushSize,
     eraserSize,
     brushColor,
     selectedImageIds,
-    selectedNoteIds,
-    primarySelectedNoteId,
     tailSelectionEnabled,
     cropMode: effectiveCropMode,
     transformMode: effectiveTransformMode,
@@ -444,11 +417,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     onPathsChange,
     onCommit,
     onImageSelect,
-    onNoteSelect,
     onSelectionReplace,
     onVideoPromptAreaSelect,
     onFilesDrop: isPresentationMode ? () => {} : onFilesDrop,
-    onNoteDoubleClick: isPresentationMode ? () => {} : onNoteDoubleClick,
+    onAnchorNoteCreate: isPresentationMode ? () => {} : onAnchorNoteCreate,
+    onAnchorClick: isPresentationMode ? () => {} : onAnchorClick,
     onCropRectChange,
     setPanSmoothly,
   });
@@ -491,8 +464,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       notes,
       paths,
       selectedImageIds,
-      selectedNoteIds,
-      primarySelectedNoteId,
       referenceImageIds,
       krea2StyleReferenceImageIds,
       referenceVideoIds,
@@ -519,7 +490,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       audioPlaybackTimes: audioPlaybackTimesRef.current,
       isPresentationMode,
     });
-  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, primarySelectedNoteId, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, selectedNoteIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
+  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {
@@ -539,11 +510,14 @@ export const Canvas: React.FC<CanvasProps> = ({
       maxY = Math.max(maxY, bounds.maxY);
     });
 
+    // Pins are screen-constant, so their world footprint depends on the (yet unknown)
+    // final zoom; treat them as anchor points and let zoomToBounds' padding frame them.
     targetNotes.forEach(note => {
-      minX = Math.min(minX, note.x);
-      minY = Math.min(minY, note.y);
-      maxX = Math.max(maxX, note.x + note.width);
-      maxY = Math.max(maxY, note.y + note.height);
+      if (!note.anchor) return; // Panel-only notes have no canvas footprint.
+      minX = Math.min(minX, note.anchor.x);
+      minY = Math.min(minY, note.anchor.y);
+      maxX = Math.max(maxX, note.anchor.x);
+      maxY = Math.max(maxY, note.anchor.y);
     });
 
     if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
@@ -562,10 +536,6 @@ export const Canvas: React.FC<CanvasProps> = ({
     const bboxWidth = bounds.maxX - bounds.minX;
     const bboxHeight = bounds.maxY - bounds.minY;
 
-    if (bboxWidth === 0 || bboxHeight === 0) {
-      return;
-    }
-
     const canvasWidth = canvas.clientWidth;
     const canvasHeight = canvas.clientHeight;
 
@@ -573,18 +543,28 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
+    if (bboxWidth === 0 || bboxHeight === 0) {
+      // Degenerate bounds (a single pin, or collinear pins): center them at the current
+      // zoom instead of fitting a zero-area box.
+      setPanSmoothly({
+        x: canvasWidth / 2 - (bounds.minX + bboxWidth / 2) * scaleRef.current,
+        y: canvasHeight / 2 - (bounds.minY + bboxHeight / 2) * scaleRef.current,
+      });
+      return;
+    }
+
     const padding = 0.9; // 10% padding
     const scaleX = canvasWidth / bboxWidth;
     const scaleY = canvasHeight / bboxHeight;
     const newScale = Math.min(scaleX, scaleY) * padding;
+    const clampedScale = Math.max(MIN_SCALE, Math.min(newScale, MAX_SCALE));
 
     const bboxCenterX = bounds.minX + bboxWidth / 2;
     const bboxCenterY = bounds.minY + bboxHeight / 2;
 
-    const newPanX = canvasWidth / 2 - bboxCenterX * newScale;
-    const newPanY = canvasHeight / 2 - bboxCenterY * newScale;
+    const newPanX = canvasWidth / 2 - bboxCenterX * clampedScale;
+    const newPanY = canvasHeight / 2 - bboxCenterY * clampedScale;
 
-    const clampedScale = Math.max(MIN_SCALE, Math.min(newScale, MAX_SCALE));
     scaleRef.current = clampedScale;
     setScale(clampedScale);
     setPanSmoothly({ x: newPanX, y: newPanY });
@@ -599,20 +579,18 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [getBoundsForItems, images, notes, zoomToBounds]);
 
   const zoomToSelection = useCallback(() => {
-    if (selectedImageIds.length === 0 && selectedNoteIds.length === 0) {
+    if (selectedImageIds.length === 0) {
       return;
     }
 
     const selectedImageSet = new Set(selectedImageIds);
-    const selectedNoteSet = new Set(selectedNoteIds);
     const selectedImages = images.filter(img => selectedImageSet.has(img.id));
-    const selectedNotes = notes.filter(note => selectedNoteSet.has(note.id));
-    const bounds = getBoundsForItems(selectedImages, selectedNotes);
+    const bounds = getBoundsForItems(selectedImages, []);
     if (!bounds) {
       return;
     }
     zoomToBounds(bounds);
-  }, [getBoundsForItems, images, notes, selectedImageIds, selectedNoteIds, zoomToBounds]);
+  }, [getBoundsForItems, images, selectedImageIds, zoomToBounds]);
 
   useEffect(() => {
     if (zoomToFitTrigger > prevZoomToFitTrigger.current) {
@@ -641,6 +619,23 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
     prevZoomOutTrigger.current = zoomOutTrigger;
   }, [zoomOutTrigger, applyZoom]);
+
+  const prevPanToAnchorToken = useRef(0);
+  useEffect(() => {
+    if (!panToAnchorRequest || panToAnchorRequest.token === prevPanToAnchorToken.current) {
+      return;
+    }
+    prevPanToAnchorToken.current = panToAnchorRequest.token;
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+    const currentScale = scaleRef.current; // Center the anchor without changing zoom.
+    setPanSmoothly({
+      x: canvas.clientWidth / 2 - panToAnchorRequest.x * currentScale,
+      y: canvas.clientHeight / 2 - panToAnchorRequest.y * currentScale,
+    });
+  }, [panToAnchorRequest, setPanSmoothly]);
 
   useEffect(() => {
     scaleRef.current = scale;
@@ -800,8 +795,6 @@ export const Canvas: React.FC<CanvasProps> = ({
         cursor = 'crosshair'; // Default for crop mode
       } else if (effectiveTransformMode) {
         cursor = 'default'; // Default for transform mode, will be updated on mouse move
-      } else if (isResizing) {
-        cursor = 'nwse-resize';
       } else if (isMarqueeSelecting) {
         cursor = 'crosshair';
       } else {
@@ -819,68 +812,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
       containerRef.current.style.cursor = cursor;
     }
-  }, [currentTool, effectiveCropMode, effectiveTransformMode, isPanning, isDragging, isResizing, isMarqueeSelecting]);
-
-  useEffect(() => {
-    if (!editingNoteId) return;
-    if (!notes.some(note => note.id === editingNoteId)) return;
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    if (document.activeElement !== textarea) {
-      textarea.focus();
-    }
-  }, [editingNoteId, notes]);
-
-  useEffect(() => {
-    if (editingNoteId) {
-      noteEditHandledRef.current = false;
-    }
-  }, [editingNoteId]);
-
-  const handleNoteBlur = useCallback(() => {
-    if (noteEditHandledRef.current) {
-      return;
-    }
-    noteEditHandledRef.current = true;
-    onCommit();
-    onNoteEditEnd();
-  }, [onCommit, onNoteEditEnd]);
+  }, [currentTool, effectiveCropMode, effectiveTransformMode, isPanning, isDragging, isMarqueeSelecting]);
 
   const handleMouseDownCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (canvasInteractionGuardRef.current?.shouldIgnoreMouseDown(e.nativeEvent)) { // Stops detached UI click-through before note-edit capture changes state.
-      notePointerDownWhileEditingRef.current = false;
-      return;
-    }
-    if (!editingNoteId) {
-      notePointerDownWhileEditingRef.current = false;
-      return;
-    }
-    const target = e.target as HTMLElement;
-    notePointerDownWhileEditingRef.current = target.tagName !== 'TEXTAREA';
-  }, [editingNoteId]);
+    canvasInteractionGuardRef.current?.shouldIgnoreMouseDown(e.nativeEvent); // Record the capture decision for the same native event.
+  }, []);
 
-  const handleMouseDownWithEditGuard = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseDownWithInteractionGuard = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (canvasInteractionGuardRef.current?.shouldIgnoreMouseDown(e.nativeEvent)) { // Reuses the capture decision for the same native event.
-      notePointerDownWhileEditingRef.current = false;
-      return;
-    }
-    const suppressNoteCreation = notePointerDownWhileEditingRef.current && tool === Tool.NOTE;
-    notePointerDownWhileEditingRef.current = false;
-
-    if (editingNoteId) {
-      const target = e.target as HTMLElement;
-      if (target.tagName !== 'TEXTAREA') {
-        handleNoteBlur();
-        if (tool === Tool.NOTE) {
-          return;
-        }
-      }
-    }
-    if (suppressNoteCreation) {
       return;
     }
     handleMouseDown(e);
-  }, [editingNoteId, handleNoteBlur, handleMouseDown, tool]);
+  }, [handleMouseDown]);
 
   const handleDoubleClickWithInteractionGuard = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (canvasInteractionGuardRef.current?.shouldIgnoreDoubleClick(e.nativeEvent)) {
@@ -899,48 +842,16 @@ export const Canvas: React.FC<CanvasProps> = ({
     event.preventDefault(); // Keep free-select right-click deselect from opening the browser menu.
   }, [currentTool]);
 
-  const editingNote = useMemo(() => editingNoteId ? notes.find(n => n.id === editingNoteId) : null, [notes, editingNoteId]);
-  const selectedNote = useMemo(() => {
-    if (editingNoteId) return null;
-    if (selectedNoteIds.length !== 1) return null;
-    const targetId = primarySelectedNoteId;
-    if (!targetId) return null;
-    return notes.find(n => n.id === targetId) || null;
-  }, [notes, primarySelectedNoteId, editingNoteId, selectedNoteIds.length]);
   const selectedVideoPromptArea = useMemo(() => {
-    if (!selectedVideoPromptAreaId || selectedNote || selectedImageIds.length > 0) {
+    if (!selectedVideoPromptAreaId || selectedImageIds.length > 0) {
       return null;
     }
     return videoPromptAreas.find(area => area.id === selectedVideoPromptAreaId) ?? null;
-  }, [selectedImageIds.length, selectedNote, selectedVideoPromptAreaId, videoPromptAreas]);
-
-  useEffect(() => {
-    setIsNoteColorPickerOpen(false);
-  }, [editingNoteId, selectedNote?.id]);
+  }, [selectedImageIds.length, selectedVideoPromptAreaId, videoPromptAreas]);
 
   useEffect(() => {
     setIsVideoPromptAreaColorPickerOpen(false);
   }, [selectedVideoPromptArea?.id]);
-
-  useEffect(() => {
-    if (!isNoteColorPickerOpen) {
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      const container = noteColorPickerRef.current;
-      const target = event.target as Node | null;
-      if (!container || !target) {
-        return;
-      }
-      if (!container.contains(target)) {
-        setIsNoteColorPickerOpen(false);
-      }
-    };
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [isNoteColorPickerOpen]);
 
   useEffect(() => {
     if (!isVideoPromptAreaColorPickerOpen) {
@@ -1341,7 +1252,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         backgroundPosition: `${pan.x}px ${pan.y}px`,
       }}
       onMouseDownCapture={handleMouseDownCapture}
-      onMouseDown={handleMouseDownWithEditGuard}
+      onMouseDown={handleMouseDownWithInteractionGuard}
       onMouseMove={handleMouseMoveWithOverlays}
       onMouseUp={handleMouseUpWithOverlays}
       onMouseLeave={handleMouseUpWithOverlays}
@@ -1350,7 +1261,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       onKeyDown={(e) => {
         if (!isPresentationMode && e.key === 'Escape') {
           onImageSelect(null);
-          onNoteSelect(null);
           onVideoPromptAreaSelect(null);
         }
       }}
@@ -1637,113 +1547,6 @@ export const Canvas: React.FC<CanvasProps> = ({
           }}
         />
       )}
-      {!isPresentationMode && editingNote && (
-        <textarea
-          ref={textareaRef}
-          value={editingNote.text}
-          onChange={(e) => onNoteTextChange(editingNote.id, e.target.value)}
-          onBlur={handleNoteBlur}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              (e.target as HTMLTextAreaElement).blur();
-            }
-          }}
-          style={{
-            position: 'absolute',
-            left: `${editingNote.x * scale + pan.x}px`,
-            top: `${editingNote.y * scale + pan.y}px`,
-            width: `${editingNote.width * scale}px`,
-            height: `${editingNote.height * scale}px`,
-            backgroundColor: editingNote.backgroundColor,
-            color: getNoteTextColor(editingNote.backgroundColor),
-            border: `2px solid #0ea5e9`,
-            borderRadius: '4px',
-            padding: `${10 * scale}px`,
-            fontSize: `${(editingNote.fontSize ?? DEFAULT_NOTE_FONT_SIZE) * scale}px`,
-            fontFamily: 'sans-serif',
-            resize: 'none',
-            outline: 'none',
-            boxSizing: 'border-box',
-          }}
-        />
-      )}
-      {!isPresentationMode && selectedNote && (
-        <div
-          className="flex items-center space-x-2"
-          style={{
-            position: 'absolute',
-            left: `${(selectedNote.x + selectedNote.width / 2) * scale + pan.x}px`,
-            top: `${(selectedNote.y + selectedNote.height) * scale + pan.y + 14}px`,
-            transform: 'translateX(-50%)',
-            zIndex: 100,
-          }}
-        >
-          {selectedNote.text && (
-            <>
-              <ActionButton
-                onClick={() => onNoteFontSizeChange(selectedNote.id, -2)}
-                disabled={(selectedNote.fontSize ?? DEFAULT_NOTE_FONT_SIZE) <= MIN_NOTE_FONT_SIZE}
-                title="Decrease Font Size"
-              >
-                <FontSizeDownIcon className="w-4 h-4" />
-              </ActionButton>
-              <ActionButton
-                onClick={() => onNoteFontSizeChange(selectedNote.id, 2)}
-                disabled={(selectedNote.fontSize ?? DEFAULT_NOTE_FONT_SIZE) >= MAX_NOTE_FONT_SIZE}
-                title="Increase Font Size"
-              >
-                <FontSizeUpIcon className="w-4 h-4" />
-              </ActionButton>
-            </>
-          )}
-          <div className="relative" ref={noteColorPickerRef}>
-            <ActionButton
-              onClick={() => setIsNoteColorPickerOpen(prev => !prev)}
-              disabled={false}
-              title="Note Color"
-            >
-              <span
-                className="block h-4 w-4 rounded-sm border border-white/70"
-                style={{ backgroundColor: selectedNote.backgroundColor }}
-              />
-            </ActionButton>
-            {isNoteColorPickerOpen && (
-              <div className="absolute left-1/2 -translate-x-1/2 mt-2 flex items-center gap-2 rounded-md border border-gray-600 bg-gray-900/95 p-2 shadow-xl">
-                {NOTE_COLOR_OPTIONS.map(option => {
-                  const isActive = option.value === selectedNote.backgroundColor;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      title={option.label}
-                      onClick={() => {
-                        onNoteColorChange(selectedNote.id, option.value);
-                        setIsNoteColorPickerOpen(false);
-                      }}
-                      className={`h-6 w-6 rounded-sm border ${isActive ? 'border-white' : 'border-gray-500'} shadow`}
-                      style={{ backgroundColor: option.value }}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <ActionButton
-            onClick={() => onNoteCopy(selectedNote.id)}
-            disabled={!selectedNote.text}
-            title="Copy Text"
-          >
-            <CopyIcon className="w-4 h-4" />
-          </ActionButton>
-          <ActionButton
-            onClick={() => onNoteDuplicate(selectedNote.id)}
-            disabled={false}
-            title="Duplicate Note"
-          >
-            <DuplicateIcon className="w-4 h-4" />
-          </ActionButton>
-        </div>
-      )}
       {!isPresentationMode && selectedVideoPromptArea && (
         <div
           className="flex items-center space-x-2"
@@ -1948,11 +1751,11 @@ export const Canvas: React.FC<CanvasProps> = ({
           </Tooltip>
         </div>
       )}
-      {!isPresentationMode && images.length === 0 && notes.length === 0 && !isDraggingOver && (
+      {!isPresentationMode && !hasCanvasVisualContent && !isDraggingOver && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center px-4 sm:px-6">
           <div className="w-full max-w-xl text-center p-6 sm:p-8 bg-black/30 rounded-lg backdrop-blur-sm">
             <h2 className="text-xl sm:text-2xl font-bold text-white">Welcome to the Infinite Canvas</h2>
-            <p className="text-sm sm:text-base text-gray-300 mt-2">Click "Upload Image", create a Note, or drag &amp; drop to start.</p>
+            <p className="text-sm sm:text-base text-gray-300 mt-2">Click "Upload Image", drop a note pin, or drag &amp; drop to start.</p>
           </div>
         </div>
       )}

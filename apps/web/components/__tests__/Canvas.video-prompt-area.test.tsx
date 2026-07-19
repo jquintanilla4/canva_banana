@@ -27,7 +27,7 @@ const buildCanvasProps = (overrides: Partial<ComponentProps<typeof Canvas>> = {}
   eraserSize: 10,
   brushColor: '#000000',
   selectedImageIds: [],
-  selectedNoteIds: [],
+  panToAnchorRequest: null,
   referenceImageIds: [],
   referenceVideoIds: [],
   referenceAudioIds: [],
@@ -47,17 +47,14 @@ const buildCanvasProps = (overrides: Partial<ComponentProps<typeof Canvas>> = {}
   isWan27VideoMode: false,
   onError: vi.fn(),
   onImageSelect: vi.fn(),
-  onNoteSelect: vi.fn(),
+  onAnchorNoteCreate: vi.fn(),
   onSelectionReplace: vi.fn(),
   zoomToFitTrigger: 0,
   zoomToSelectionTrigger: 0,
   zoomInTrigger: 0,
   zoomOutTrigger: 0,
   onFilesDrop: vi.fn(),
-  editingNoteId: null,
-  onNoteDoubleClick: vi.fn(),
-  onNoteTextChange: vi.fn(),
-  onNoteEditEnd: vi.fn(),
+  onAnchorClick: vi.fn(),
   onImageOrderChange: vi.fn(),
   isImageOverlapping: false,
   canMoveUp: false,
@@ -67,10 +64,6 @@ const buildCanvasProps = (overrides: Partial<ComponentProps<typeof Canvas>> = {}
   onStartCrop: vi.fn(),
   onConfirmCrop: vi.fn(),
   onCancelCrop: vi.fn(),
-  onNoteCopy: vi.fn(),
-  onNoteDuplicate: vi.fn(),
-  onNoteFontSizeChange: vi.fn(),
-  onNoteColorChange: vi.fn(),
   onImagePromptCopy: vi.fn(),
   onImageDuplicate: vi.fn(),
   onRerunGeneration: vi.fn(),
@@ -121,7 +114,7 @@ describe('Canvas video prompt area tool', () => {
           eraserSize={10}
           brushColor="#000000"
           selectedImageIds={[]}
-          selectedNoteIds={[]}
+          panToAnchorRequest={null}
           referenceImageIds={[]}
           referenceVideoIds={[]}
           referenceAudioIds={[]}
@@ -141,17 +134,14 @@ describe('Canvas video prompt area tool', () => {
           isWan27VideoMode={false}
           onError={vi.fn()}
           onImageSelect={vi.fn()}
-          onNoteSelect={vi.fn()}
+          onAnchorNoteCreate={vi.fn()}
           onSelectionReplace={vi.fn()}
           zoomToFitTrigger={0}
           zoomToSelectionTrigger={0}
           zoomInTrigger={0}
           zoomOutTrigger={0}
           onFilesDrop={vi.fn()}
-          editingNoteId={null}
-          onNoteDoubleClick={vi.fn()}
-          onNoteTextChange={vi.fn()}
-          onNoteEditEnd={vi.fn()}
+          onAnchorClick={vi.fn()}
           onImageOrderChange={vi.fn()}
           isImageOverlapping={false}
           canMoveUp={false}
@@ -161,10 +151,6 @@ describe('Canvas video prompt area tool', () => {
           onStartCrop={vi.fn()}
           onConfirmCrop={vi.fn()}
           onCancelCrop={vi.fn()}
-          onNoteCopy={vi.fn()}
-          onNoteDuplicate={vi.fn()}
-          onNoteFontSizeChange={vi.fn()}
-          onNoteColorChange={vi.fn()}
           onImagePromptCopy={vi.fn()}
           onImageDuplicate={vi.fn()}
           onRerunGeneration={vi.fn()}
@@ -231,7 +217,7 @@ describe('Canvas video prompt area tool', () => {
         eraserSize={10}
         brushColor="#000000"
         selectedImageIds={[]}
-        selectedNoteIds={[]}
+        panToAnchorRequest={null}
         referenceImageIds={[]}
         referenceVideoIds={[]}
         referenceAudioIds={[]}
@@ -251,17 +237,14 @@ describe('Canvas video prompt area tool', () => {
         isWan27VideoMode={false}
         onError={vi.fn()}
         onImageSelect={vi.fn()}
-        onNoteSelect={vi.fn()}
+        onAnchorNoteCreate={vi.fn()}
         onSelectionReplace={vi.fn()}
         zoomToFitTrigger={0}
         zoomToSelectionTrigger={0}
         zoomInTrigger={0}
         zoomOutTrigger={0}
         onFilesDrop={vi.fn()}
-        editingNoteId={null}
-        onNoteDoubleClick={vi.fn()}
-        onNoteTextChange={vi.fn()}
-        onNoteEditEnd={vi.fn()}
+        onAnchorClick={vi.fn()}
         onImageOrderChange={vi.fn()}
         isImageOverlapping={false}
         canMoveUp={false}
@@ -271,10 +254,6 @@ describe('Canvas video prompt area tool', () => {
         onStartCrop={vi.fn()}
         onConfirmCrop={vi.fn()}
         onCancelCrop={vi.fn()}
-        onNoteCopy={vi.fn()}
-        onNoteDuplicate={vi.fn()}
-        onNoteFontSizeChange={vi.fn()}
-        onNoteColorChange={vi.fn()}
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
@@ -469,7 +448,7 @@ describe('Canvas video prompt area tool', () => {
           eraserSize={10}
           brushColor="#000000"
           selectedImageIds={[]}
-          selectedNoteIds={[]}
+          panToAnchorRequest={null}
           referenceImageIds={[]}
           referenceVideoIds={[]}
           referenceAudioIds={[]}
@@ -489,17 +468,14 @@ describe('Canvas video prompt area tool', () => {
           isWan27VideoMode={false}
           onError={vi.fn()}
           onImageSelect={vi.fn()}
-          onNoteSelect={vi.fn()}
+          onAnchorNoteCreate={vi.fn()}
           onSelectionReplace={vi.fn()}
           zoomToFitTrigger={0}
           zoomToSelectionTrigger={0}
           zoomInTrigger={0}
           zoomOutTrigger={0}
           onFilesDrop={vi.fn()}
-          editingNoteId={null}
-          onNoteDoubleClick={vi.fn()}
-          onNoteTextChange={vi.fn()}
-          onNoteEditEnd={vi.fn()}
+          onAnchorClick={vi.fn()}
           onImageOrderChange={vi.fn()}
           isImageOverlapping={false}
           canMoveUp={false}
@@ -509,10 +485,6 @@ describe('Canvas video prompt area tool', () => {
           onStartCrop={vi.fn()}
           onConfirmCrop={vi.fn()}
           onCancelCrop={vi.fn()}
-          onNoteCopy={vi.fn()}
-          onNoteDuplicate={vi.fn()}
-          onNoteFontSizeChange={vi.fn()}
-          onNoteColorChange={vi.fn()}
           onImagePromptCopy={vi.fn()}
           onImageDuplicate={vi.fn()}
           onRerunGeneration={vi.fn()}
@@ -581,7 +553,7 @@ describe('Canvas video prompt area tool', () => {
         eraserSize={10}
         brushColor="#000000"
         selectedImageIds={[]}
-        selectedNoteIds={[]}
+        panToAnchorRequest={null}
         referenceImageIds={[]}
         referenceVideoIds={[]}
         referenceAudioIds={[]}
@@ -601,17 +573,14 @@ describe('Canvas video prompt area tool', () => {
         isWan27VideoMode={false}
         onError={vi.fn()}
         onImageSelect={vi.fn()}
-        onNoteSelect={vi.fn()}
+        onAnchorNoteCreate={vi.fn()}
         onSelectionReplace={vi.fn()}
         zoomToFitTrigger={0}
         zoomToSelectionTrigger={0}
         zoomInTrigger={0}
         zoomOutTrigger={0}
         onFilesDrop={vi.fn()}
-        editingNoteId={null}
-        onNoteDoubleClick={vi.fn()}
-        onNoteTextChange={vi.fn()}
-        onNoteEditEnd={vi.fn()}
+        onAnchorClick={vi.fn()}
         onImageOrderChange={vi.fn()}
         isImageOverlapping={false}
         canMoveUp={false}
@@ -621,10 +590,6 @@ describe('Canvas video prompt area tool', () => {
         onStartCrop={vi.fn()}
         onConfirmCrop={vi.fn()}
         onCancelCrop={vi.fn()}
-        onNoteCopy={vi.fn()}
-        onNoteDuplicate={vi.fn()}
-        onNoteFontSizeChange={vi.fn()}
-        onNoteColorChange={vi.fn()}
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
@@ -681,7 +646,7 @@ describe('Canvas video prompt area tool', () => {
           eraserSize={10}
           brushColor="#000000"
           selectedImageIds={[]}
-          selectedNoteIds={[]}
+          panToAnchorRequest={null}
           referenceImageIds={[]}
           referenceVideoIds={[]}
           referenceAudioIds={[]}
@@ -701,17 +666,14 @@ describe('Canvas video prompt area tool', () => {
           isWan27VideoMode={false}
           onError={vi.fn()}
           onImageSelect={vi.fn()}
-          onNoteSelect={vi.fn()}
+          onAnchorNoteCreate={vi.fn()}
           onSelectionReplace={vi.fn()}
           zoomToFitTrigger={0}
           zoomToSelectionTrigger={0}
           zoomInTrigger={0}
           zoomOutTrigger={0}
           onFilesDrop={vi.fn()}
-          editingNoteId={null}
-          onNoteDoubleClick={vi.fn()}
-          onNoteTextChange={vi.fn()}
-          onNoteEditEnd={vi.fn()}
+          onAnchorClick={vi.fn()}
           onImageOrderChange={vi.fn()}
           isImageOverlapping={false}
           canMoveUp={false}
@@ -721,10 +683,6 @@ describe('Canvas video prompt area tool', () => {
           onStartCrop={vi.fn()}
           onConfirmCrop={vi.fn()}
           onCancelCrop={vi.fn()}
-          onNoteCopy={vi.fn()}
-          onNoteDuplicate={vi.fn()}
-          onNoteFontSizeChange={vi.fn()}
-          onNoteColorChange={vi.fn()}
           onImagePromptCopy={vi.fn()}
           onImageDuplicate={vi.fn()}
           onRerunGeneration={vi.fn()}
@@ -799,7 +757,7 @@ describe('Canvas video prompt area tool', () => {
           eraserSize={10}
           brushColor="#000000"
           selectedImageIds={[]}
-          selectedNoteIds={[]}
+          panToAnchorRequest={null}
           referenceImageIds={[]}
           referenceVideoIds={[]}
           referenceAudioIds={[]}
@@ -819,17 +777,14 @@ describe('Canvas video prompt area tool', () => {
           isWan27VideoMode={false}
           onError={vi.fn()}
           onImageSelect={vi.fn()}
-          onNoteSelect={vi.fn()}
+          onAnchorNoteCreate={vi.fn()}
           onSelectionReplace={vi.fn()}
           zoomToFitTrigger={0}
           zoomToSelectionTrigger={0}
           zoomInTrigger={0}
           zoomOutTrigger={0}
           onFilesDrop={vi.fn()}
-          editingNoteId={null}
-          onNoteDoubleClick={vi.fn()}
-          onNoteTextChange={vi.fn()}
-          onNoteEditEnd={vi.fn()}
+          onAnchorClick={vi.fn()}
           onImageOrderChange={vi.fn()}
           isImageOverlapping={false}
           canMoveUp={false}
@@ -839,10 +794,6 @@ describe('Canvas video prompt area tool', () => {
           onStartCrop={vi.fn()}
           onConfirmCrop={vi.fn()}
           onCancelCrop={vi.fn()}
-          onNoteCopy={vi.fn()}
-          onNoteDuplicate={vi.fn()}
-          onNoteFontSizeChange={vi.fn()}
-          onNoteColorChange={vi.fn()}
           onVideoPromptAreaBorderColorChange={handleAreaBorderColorChange}
           onImagePromptCopy={vi.fn()}
           onImageDuplicate={vi.fn()}
@@ -940,7 +891,7 @@ describe('Canvas video prompt area tool', () => {
         eraserSize={10}
         brushColor="#000000"
         selectedImageIds={[]}
-        selectedNoteIds={[]}
+        panToAnchorRequest={null}
         referenceImageIds={[]}
         referenceVideoIds={[]}
         referenceAudioIds={[]}
@@ -960,17 +911,14 @@ describe('Canvas video prompt area tool', () => {
         isWan27VideoMode={false}
         onError={vi.fn()}
         onImageSelect={vi.fn()}
-        onNoteSelect={vi.fn()}
+        onAnchorNoteCreate={vi.fn()}
         onSelectionReplace={vi.fn()}
         zoomToFitTrigger={0}
         zoomToSelectionTrigger={0}
         zoomInTrigger={0}
         zoomOutTrigger={0}
         onFilesDrop={vi.fn()}
-        editingNoteId={null}
-        onNoteDoubleClick={vi.fn()}
-        onNoteTextChange={vi.fn()}
-        onNoteEditEnd={vi.fn()}
+        onAnchorClick={vi.fn()}
         onImageOrderChange={vi.fn()}
         isImageOverlapping={false}
         canMoveUp={false}
@@ -980,10 +928,6 @@ describe('Canvas video prompt area tool', () => {
         onStartCrop={vi.fn()}
         onConfirmCrop={vi.fn()}
         onCancelCrop={vi.fn()}
-        onNoteCopy={vi.fn()}
-        onNoteDuplicate={vi.fn()}
-        onNoteFontSizeChange={vi.fn()}
-        onNoteColorChange={vi.fn()}
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
@@ -1041,10 +985,10 @@ describe('Canvas video prompt area tool', () => {
     expect(embeddedPromptScaleShell.style.transform).toBe('scale(0.8)');
   });
 
-  it('isolates portaled prompt-bar controls from canvas focus, note edits, and file drops', () => {
+  it('isolates portaled prompt-bar controls from canvas focus, note pins, and file drops', () => {
     const onFilesDrop = vi.fn();
     const onNotesChange = vi.fn();
-    const onNoteDoubleClick = vi.fn();
+    const onAnchorClick = vi.fn();
     const Harness = () => {
       const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
         id: 'bar-1',
@@ -1081,12 +1025,9 @@ describe('Canvas video prompt area tool', () => {
             onVideoPromptBarsChange: setBars,
             notes: [{
               id: 'note-behind-picker',
-              x: 200,
-              y: 300,
-              width: 100,
-              height: 100,
               text: 'Behind picker',
-              backgroundColor: '#ffffff',
+              label: 1,
+              anchor: { x: 240, y: 340 },
             }],
             videoPromptAreaMemberships: {
               'area-1': {
@@ -1106,7 +1047,7 @@ describe('Canvas video prompt area tool', () => {
             },
             onFilesDrop,
             onNotesChange,
-            onNoteDoubleClick,
+            onAnchorClick,
             tool: Tool.NOTE,
           })}
         />
@@ -1151,10 +1092,10 @@ describe('Canvas video prompt area tool', () => {
     fireEvent.click(canvasRoot, { clientX: 240, clientY: 320, detail: 2 });
     fireEvent.doubleClick(canvasRoot, { clientX: 240, clientY: 320, detail: 2 }); // The emitted dblclick must remain part of the suppressed sequence.
     expect(onNotesChange).not.toHaveBeenCalled();
-    expect(onNoteDoubleClick).not.toHaveBeenCalled();
+    expect(onAnchorClick).not.toHaveBeenCalled();
 
     fireEvent.doubleClick(canvasRoot, { clientX: 240, clientY: 320, detail: 2 }); // Suppression must not leak into a later legitimate Canvas gesture.
-    expect(onNoteDoubleClick).toHaveBeenCalledWith('note-behind-picker');
+    expect(onAnchorClick).toHaveBeenCalledWith('note-behind-picker');
   });
 
   it('keeps the browser context menu available on portaled picker padding', () => {
@@ -1283,7 +1224,7 @@ describe('Canvas video prompt area tool', () => {
             eraserSize={10}
             brushColor="#000000"
             selectedImageIds={[]}
-            selectedNoteIds={[]}
+            panToAnchorRequest={null}
             referenceImageIds={[]}
             referenceVideoIds={[]}
             referenceAudioIds={[]}
@@ -1303,17 +1244,14 @@ describe('Canvas video prompt area tool', () => {
             isWan27VideoMode={false}
             onError={vi.fn()}
             onImageSelect={vi.fn()}
-            onNoteSelect={vi.fn()}
+            onAnchorNoteCreate={vi.fn()}
             onSelectionReplace={vi.fn()}
             zoomToFitTrigger={0}
             zoomToSelectionTrigger={0}
             zoomInTrigger={0}
             zoomOutTrigger={0}
             onFilesDrop={vi.fn()}
-            editingNoteId={null}
-            onNoteDoubleClick={vi.fn()}
-            onNoteTextChange={vi.fn()}
-            onNoteEditEnd={vi.fn()}
+            onAnchorClick={vi.fn()}
             onImageOrderChange={vi.fn()}
             isImageOverlapping={false}
             canMoveUp={false}
@@ -1323,10 +1261,6 @@ describe('Canvas video prompt area tool', () => {
             onStartCrop={vi.fn()}
             onConfirmCrop={vi.fn()}
             onCancelCrop={vi.fn()}
-            onNoteCopy={vi.fn()}
-            onNoteDuplicate={vi.fn()}
-            onNoteFontSizeChange={vi.fn()}
-            onNoteColorChange={vi.fn()}
             onImagePromptCopy={vi.fn()}
             onImageDuplicate={vi.fn()}
             onRerunGeneration={vi.fn()}
@@ -1531,7 +1465,7 @@ describe('Canvas video prompt area tool', () => {
         eraserSize={10}
         brushColor="#000000"
         selectedImageIds={[]}
-        selectedNoteIds={[]}
+        panToAnchorRequest={null}
         referenceImageIds={[]}
         referenceVideoIds={[]}
         referenceAudioIds={[]}
@@ -1551,17 +1485,14 @@ describe('Canvas video prompt area tool', () => {
         isWan27VideoMode={false}
         onError={vi.fn()}
         onImageSelect={vi.fn()}
-        onNoteSelect={vi.fn()}
+        onAnchorNoteCreate={vi.fn()}
         onSelectionReplace={vi.fn()}
         zoomToFitTrigger={0}
         zoomToSelectionTrigger={0}
         zoomInTrigger={0}
         zoomOutTrigger={0}
         onFilesDrop={vi.fn()}
-        editingNoteId={null}
-        onNoteDoubleClick={vi.fn()}
-        onNoteTextChange={vi.fn()}
-        onNoteEditEnd={vi.fn()}
+        onAnchorClick={vi.fn()}
         onImageOrderChange={vi.fn()}
         isImageOverlapping={false}
         canMoveUp={false}
@@ -1571,10 +1502,6 @@ describe('Canvas video prompt area tool', () => {
         onStartCrop={vi.fn()}
         onConfirmCrop={vi.fn()}
         onCancelCrop={vi.fn()}
-        onNoteCopy={vi.fn()}
-        onNoteDuplicate={vi.fn()}
-        onNoteFontSizeChange={vi.fn()}
-        onNoteColorChange={vi.fn()}
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
@@ -1659,7 +1586,7 @@ describe('Canvas video prompt area tool', () => {
         eraserSize={10}
         brushColor="#000000"
         selectedImageIds={[]}
-        selectedNoteIds={[]}
+        panToAnchorRequest={null}
         referenceImageIds={[]}
         referenceVideoIds={[]}
         referenceAudioIds={[]}
@@ -1679,17 +1606,14 @@ describe('Canvas video prompt area tool', () => {
         isWan27VideoMode={false}
         onError={vi.fn()}
         onImageSelect={vi.fn()}
-        onNoteSelect={vi.fn()}
+        onAnchorNoteCreate={vi.fn()}
         onSelectionReplace={vi.fn()}
         zoomToFitTrigger={0}
         zoomToSelectionTrigger={0}
         zoomInTrigger={0}
         zoomOutTrigger={0}
         onFilesDrop={vi.fn()}
-        editingNoteId={null}
-        onNoteDoubleClick={vi.fn()}
-        onNoteTextChange={vi.fn()}
-        onNoteEditEnd={vi.fn()}
+        onAnchorClick={vi.fn()}
         onImageOrderChange={vi.fn()}
         isImageOverlapping={false}
         canMoveUp={false}
@@ -1699,10 +1623,6 @@ describe('Canvas video prompt area tool', () => {
         onStartCrop={vi.fn()}
         onConfirmCrop={vi.fn()}
         onCancelCrop={vi.fn()}
-        onNoteCopy={vi.fn()}
-        onNoteDuplicate={vi.fn()}
-        onNoteFontSizeChange={vi.fn()}
-        onNoteColorChange={vi.fn()}
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
@@ -1794,7 +1714,7 @@ describe('Canvas video prompt area tool', () => {
         eraserSize={10}
         brushColor="#000000"
         selectedImageIds={[]}
-        selectedNoteIds={[]}
+        panToAnchorRequest={null}
         referenceImageIds={[]}
         referenceVideoIds={[]}
         referenceAudioIds={[]}
@@ -1814,17 +1734,14 @@ describe('Canvas video prompt area tool', () => {
         isWan27VideoMode={false}
         onError={vi.fn()}
         onImageSelect={vi.fn()}
-        onNoteSelect={vi.fn()}
+        onAnchorNoteCreate={vi.fn()}
         onSelectionReplace={vi.fn()}
         zoomToFitTrigger={0}
         zoomToSelectionTrigger={0}
         zoomInTrigger={0}
         zoomOutTrigger={0}
         onFilesDrop={vi.fn()}
-        editingNoteId={null}
-        onNoteDoubleClick={vi.fn()}
-        onNoteTextChange={vi.fn()}
-        onNoteEditEnd={vi.fn()}
+        onAnchorClick={vi.fn()}
         onImageOrderChange={vi.fn()}
         isImageOverlapping={false}
         canMoveUp={false}
@@ -1834,10 +1751,6 @@ describe('Canvas video prompt area tool', () => {
         onStartCrop={vi.fn()}
         onConfirmCrop={vi.fn()}
         onCancelCrop={vi.fn()}
-        onNoteCopy={vi.fn()}
-        onNoteDuplicate={vi.fn()}
-        onNoteFontSizeChange={vi.fn()}
-        onNoteColorChange={vi.fn()}
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}

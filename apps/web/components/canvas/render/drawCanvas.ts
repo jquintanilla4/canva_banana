@@ -1,10 +1,9 @@
 import { formatDuration } from '../../../services/audioService';
 import { Tool, type CanvasImage, type CanvasNote, type Path, type Point } from '../../../types';
-import { getNoteTextColor } from '../noteColors';
-import { CROP_HANDLE_SIZE, DEFAULT_NOTE_FONT_SIZE, RESIZE_HANDLE_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
-import { getImageBounds, getImageCenter, getImageRotation } from '../geometry';
+import { CROP_HANDLE_SIZE, NOTE_PIN_BORDER, NOTE_PIN_FILL, NOTE_PIN_LABEL_FONT_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
+import { getImageBounds, getImageCenter, getImageRotation, getNotePinGeometry } from '../geometry';
 import { isVideoImage } from '../mediaGuards';
-import { fitTextWithinBox, wrapText } from './text';
+import { fitTextWithinBox } from './text';
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
 type TransformModeState = { imageId: string; };
@@ -41,13 +40,6 @@ const expandRect = (rect: CanvasRect, amount: number): CanvasRect => ({
 const rectsIntersect = (a: CanvasRect, b: CanvasRect): boolean => (
   a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
 );
-
-const getNoteBounds = (note: CanvasNote): CanvasRect => ({
-  minX: note.x,
-  minY: note.y,
-  maxX: note.x + note.width,
-  maxY: note.y + note.height,
-});
 
 const getAudioPlaybackTime = (
   image: CanvasImage,
@@ -146,8 +138,6 @@ type DrawCanvasArgs = {
   notes: CanvasNote[];
   paths: Path[];
   selectedImageIds: string[];
-  selectedNoteIds: string[];
-  primarySelectedNoteId: string | null;
   referenceImageIds: string[];
   krea2StyleReferenceImageIds?: string[];
   referenceVideoIds: string[];
@@ -184,8 +174,6 @@ export function drawCanvas({
   notes,
   paths,
   selectedImageIds,
-  selectedNoteIds,
-  primarySelectedNoteId,
   referenceImageIds,
   krea2StyleReferenceImageIds,
   referenceVideoIds,
@@ -624,52 +612,53 @@ export function drawCanvas({
     }
   }
 
-  // Draw notes
-  notes.forEach(note => {
-    if (!rectsIntersect(getNoteBounds(note), viewport)) {
-      return; // Skip fully offscreen notes.
-    }
-    ctx.fillStyle = note.backgroundColor;
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 10 / scale;
-    ctx.shadowOffsetX = 5 / scale;
-    ctx.shadowOffsetY = 5 / scale;
-    ctx.fillRect(note.x, note.y, note.width, note.height);
-    ctx.shadowColor = 'transparent'; // Reset shadow for text and border
-
-    if (shouldShowCanvasChrome && selectedNoteIds.includes(note.id)) {
-      const padding = 5 / scale;
-      ctx.strokeStyle = '#0ea5e9'; // sky-500
-      ctx.lineWidth = 4 / scale;
-      ctx.strokeRect(note.x - padding, note.y - padding, note.width + padding * 2, note.height + padding * 2);
-
-      if (selectedNoteIds.length === 1 && primarySelectedNoteId === note.id) {
-        // Draw resize handle for single-note selection
-        const handleSize = RESIZE_HANDLE_SIZE / scale;
-        ctx.fillStyle = '#0ea5e9';
-        ctx.fillRect(note.x + note.width - handleSize / 2, note.y + note.height - handleSize / 2, handleSize, handleSize);
-      }
-    }
-
+  // Draw note anchor pins (constant screen size — dimensions divide by scale).
+  // Pins are content annotations, not selection chrome, so they stay visible in presentation mode.
+  if (notes.length > 0) {
     ctx.save();
+    ctx.font = `bold ${NOTE_PIN_LABEL_FONT_SIZE / scale}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 2 / scale;
+    ctx.strokeStyle = NOTE_PIN_BORDER;
 
-    const textPadding = 10 / scale;
-    ctx.beginPath();
-    ctx.rect(
-      note.x + textPadding,
-      note.y + textPadding,
-      note.width - (2 * textPadding),
-      note.height - (2 * textPadding),
-    );
-    ctx.clip();
+    notes.forEach(note => {
+      if (!note.anchor) {
+        return; // Non-anchored notes live only in the side panel.
+      }
+      const pin = getNotePinGeometry(note.anchor, scale);
+      if (!rectsIntersect(pin.bounds, viewport)) {
+        return; // Skip fully offscreen pins.
+      }
 
-    ctx.fillStyle = getNoteTextColor(note.backgroundColor);
-    const fontSize = (note.fontSize ?? DEFAULT_NOTE_FONT_SIZE) / scale;
-    ctx.font = `${fontSize}px sans-serif`;
-    wrapText(ctx, note.text, note.x + textPadding, note.y + textPadding + fontSize, note.width - (2 * textPadding), fontSize * 1.2);
+      ctx.shadowColor = 'rgba(0,0,0,0.45)';
+      ctx.shadowBlur = 6 / scale;
+      ctx.shadowOffsetY = 2 / scale;
+
+      // Tail: triangle from the head down to the anchor tip.
+      ctx.beginPath();
+      ctx.moveTo(pin.headCenterX - pin.tailHalfWidth, pin.headCenterY + pin.headRadius * 0.6);
+      ctx.lineTo(pin.headCenterX + pin.tailHalfWidth, pin.headCenterY + pin.headRadius * 0.6);
+      ctx.lineTo(note.anchor.x, note.anchor.y);
+      ctx.closePath();
+      ctx.fillStyle = NOTE_PIN_FILL;
+      ctx.fill();
+
+      // Head: filled circle with a light border.
+      ctx.beginPath();
+      ctx.arc(pin.headCenterX, pin.headCenterY, pin.headRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.stroke();
+
+      if (note.label !== undefined) {
+        ctx.fillStyle = NOTE_PIN_BORDER;
+        ctx.fillText(String(note.label), pin.headCenterX, pin.headCenterY);
+      }
+    });
 
     ctx.restore();
-  });
+  }
 
   ctx.restore(); // Restore main context transform
 

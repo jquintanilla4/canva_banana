@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type {
   ApiProviderId,
   AppMode,
@@ -93,6 +93,7 @@ type SnapshotIOArgs = {
   ui: SnapshotUIBindings;
   fal: UseFalSettingsResult;
   selection: SelectionStateResult;
+  noteLabelCounterRef: MutableRefObject<number>;
   displayedImages: CanvasImage[];
   displayedNotes: CanvasNote[];
   displayedPaths: Path[];
@@ -207,6 +208,7 @@ export function useSnapshotIO({
   ui,
   fal,
   selection,
+  noteLabelCounterRef,
   displayedImages,
   displayedNotes,
   displayedPaths,
@@ -361,7 +363,6 @@ export function useSnapshotIO({
 
   const {
     selectedImageIds,
-    selectedNoteIds,
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
@@ -369,7 +370,6 @@ export function useSnapshotIO({
     elementImageIds,
     videoLastFrameImageId,
     setSelectedImageIds,
-    setSelectedNoteIds,
     setReferenceImageIds,
     setReferenceVideoIds,
     setReferenceAudioIds,
@@ -447,7 +447,7 @@ export function useSnapshotIO({
       klingV3Shot1Duration,
       klingV3Shot2Duration,
       selectedImageIds: [...selectedImageIds],
-      selectedNoteIds: [...selectedNoteIds],
+      noteLabelCounter: noteLabelCounterRef.current,
       referenceImageIds: [...referenceImageIds],
       ...(referenceVideoIds.length ? { referenceVideoIds: [...referenceVideoIds] } : {}),
       ...(referenceAudioIds.length ? { referenceAudioIds: [...referenceAudioIds] } : {}),
@@ -534,7 +534,7 @@ export function useSnapshotIO({
     referenceVideoIds,
     seedanceReferenceOrderIds,
     selectedImageIds,
-    selectedNoteIds,
+    noteLabelCounterRef,
     tool,
     videoLastFrameImageId,
   ]);
@@ -880,6 +880,11 @@ export function useSnapshotIO({
       resetHistory(nextState);
 
       const meta = restored.meta;
+      const maxRestoredNoteLabel = restored.notes.reduce((max, note) => Math.max(max, note.label ?? 0), 0);
+      const restoredNoteLabelCounter = typeof meta?.noteLabelCounter === 'number' && Number.isFinite(meta.noteLabelCounter)
+        ? Math.floor(meta.noteLabelCounter)
+        : 1;
+      noteLabelCounterRef.current = Math.max(restoredNoteLabelCounter, maxRestoredNoteLabel + 1, 1);
       if (meta) {
         const validAppMode: AppMode =
           meta.appMode === 'CANVAS'
@@ -1083,7 +1088,6 @@ export function useSnapshotIO({
           setKlingV3Shot2Duration(meta.klingV3Shot2Duration);
         }
         setSelectedImageIds(Array.isArray(meta.selectedImageIds) ? [...meta.selectedImageIds] : []);
-        setSelectedNoteIds(Array.isArray(meta.selectedNoteIds) ? [...meta.selectedNoteIds] : []);
         setReferenceImageIds(Array.isArray(meta.referenceImageIds) ? [...meta.referenceImageIds] : []);
         setReferenceVideoIds(Array.isArray(meta.referenceVideoIds) ? [...meta.referenceVideoIds] : []);
         setReferenceAudioIds(Array.isArray(meta.referenceAudioIds) ? [...meta.referenceAudioIds] : []);
@@ -1096,7 +1100,6 @@ export function useSnapshotIO({
         }
       } else {
         setSelectedImageIds([]);
-        setSelectedNoteIds([]);
         setReferenceImageIds([]);
         setReferenceVideoIds([]);
         setReferenceAudioIds([]);
@@ -1112,8 +1115,10 @@ export function useSnapshotIO({
       await activateImportedSnapshotSource(retainedSourceCloser); // Keep only sources that still back lazy binary media.
       sourceActivated = true;
       setError(null);
-      setToastMessage('Snapshot imported');
-      setTimeout(() => setToastMessage(null), 2000);
+      setToastMessage(restored.droppedLegacyNoteCount > 0
+        ? `Snapshot imported — ${restored.droppedLegacyNoteCount} canvas ${restored.droppedLegacyNoteCount === 1 ? 'note' : 'notes'} from an older version could not be kept`
+        : 'Snapshot imported');
+      setTimeout(() => setToastMessage(null), restored.droppedLegacyNoteCount > 0 ? 5000 : 2000);
     } catch (err) {
       console.error(err);
       if (err instanceof Error) {
@@ -1184,7 +1189,7 @@ export function useSnapshotIO({
     setReferenceVideoIds,
     setElementImageIds,
     setSelectedImageIds,
-    setSelectedNoteIds,
+    noteLabelCounterRef,
     setTool,
     setVideoLastFrameImageId,
     setError,

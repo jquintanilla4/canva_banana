@@ -6,7 +6,6 @@ type SetTool = (tool: Tool) => void;
 
 export type GenerationPlacementSelectionActions = {
   setSelectedImageIds: SetStringIds;
-  setSelectedNoteIds: SetStringIds;
   setReferenceImageIds: SetStringIds;
   setReferenceVideoIds: SetStringIds;
   setReferenceAudioIds: SetStringIds;
@@ -30,7 +29,6 @@ export const applyGenerationPlacementSelection = (
 ) => {
   const selectedMediaIds = options.mediaIds ?? payload.mediaIds; // Allow notification activation to skip deleted media.
   actions.setSelectedImageIds(selectedMediaIds);
-  actions.setSelectedNoteIds([]);
   actions.setReferenceImageIds([]);
   actions.setReferenceVideoIds([]);
   actions.setReferenceAudioIds([]);

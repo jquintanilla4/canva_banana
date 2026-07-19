@@ -1,4 +1,32 @@
 import type { CanvasImage, Point } from '../../types';
+import { NOTE_PIN_HEAD_OFFSET, NOTE_PIN_HEAD_RADIUS } from './constants';
+
+export type NotePinGeometry = {
+  headCenterX: number;
+  headCenterY: number;
+  headRadius: number;
+  tailHalfWidth: number;
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+};
+
+// World-space geometry of a screen-constant anchor pin (dimensions divide by scale).
+// Single source of truth for rendering, hit-testing, and zoom-to-fit bounds.
+export const getNotePinGeometry = (anchor: Point, scale: number): NotePinGeometry => {
+  const headRadius = NOTE_PIN_HEAD_RADIUS / scale;
+  const headCenterY = anchor.y - NOTE_PIN_HEAD_OFFSET / scale;
+  return {
+    headCenterX: anchor.x,
+    headCenterY,
+    headRadius,
+    tailHalfWidth: headRadius * 0.45,
+    bounds: {
+      minX: anchor.x - headRadius,
+      minY: headCenterY - headRadius,
+      maxX: anchor.x + headRadius,
+      maxY: anchor.y,
+    },
+  };
+};
 
 export const getImageRotation = (image: CanvasImage): number => image.rotation ?? 0;
 

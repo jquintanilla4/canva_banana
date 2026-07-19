@@ -11,7 +11,7 @@ import {
   SEEDANCE_15_VIDEO_MODEL_ID,
   isKlingO3VideoModelId,
 } from '../services/modelConfig';
-import type { ApiProviderId, CanvasImage, CanvasNote, CanvasObjectSelection } from '../types';
+import type { ApiProviderId, CanvasImage } from '../types';
 import type { UseFalSettingsResult } from './useFalSettings';
 import {
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
@@ -56,7 +56,6 @@ type SelectionOptions = {
 
 export type SelectionStateResult = {
   selectedImageIds: string[];
-  selectedNoteIds: string[];
   referenceImageIds: string[];
   referenceVideoIds: string[];
   referenceAudioIds: string[];
@@ -71,7 +70,6 @@ export type SelectionStateResult = {
   activePrimaryImage: (CanvasImage & { element: HTMLImageElement }) | null;
   hasSingleImageSelected: boolean;
   setSelectedImageIds: Dispatch<SetStateAction<string[]>>;
-  setSelectedNoteIds: Dispatch<SetStateAction<string[]>>;
   setReferenceImageIds: Dispatch<SetStateAction<string[]>>;
   setReferenceVideoIds: Dispatch<SetStateAction<string[]>>;
   setReferenceAudioIds: Dispatch<SetStateAction<string[]>>;
@@ -81,8 +79,7 @@ export type SelectionStateResult = {
   setSourceVideoId: Dispatch<SetStateAction<string | null>>;
   setSourceAudioId: Dispatch<SetStateAction<string | null>>;
   handleImageSelection: (imageId: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
-  handleNoteSelection: (noteId: string | null, options?: { multi?: boolean }) => void;
-  replaceCanvasSelection: (selection: CanvasObjectSelection) => void;
+  replaceCanvasSelection: (imageIds: string[]) => void;
 };
 
 const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasImage & { element: HTMLImageElement } =>
@@ -170,7 +167,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const isVeo31TailCapable = isVeo31VideoModel && veo31Variant === 'i2v-fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
-  const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
   const [referenceImageIds, setReferenceImageIds] = useState<string[]>([]);
   const [referenceVideoIds, setReferenceVideoIds] = useState<string[]>([]);
   const [referenceAudioIds, setReferenceAudioIds] = useState<string[]>([]);
@@ -181,7 +177,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const [sourceAudioId, setSourceAudioId] = useState<string | null>(null);
 
   const primaryImageId = useMemo(() => selectedImageIds[0] ?? null, [selectedImageIds]);
-  const primaryNoteId = useMemo(() => selectedNoteIds[0] ?? null, [selectedNoteIds]);
   const hasSingleImageSelected = selectedImageIds.length === 1;
 
   const primaryImage = useMemo(() => {
@@ -604,7 +599,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (!imageId) {
       if (!multi) {
         setSelectedImageIds([]);
-        setSelectedNoteIds([]);
         setReferenceImageIds([]);
         setReferenceVideoIds([]);
         setReferenceAudioIds([]);
@@ -648,7 +642,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (primaryImageId === imageId && selectedImageIds.length === 1) {
-      setSelectedNoteIds([]);
       setReferenceImageIds([]);
       if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
         setReferenceVideoIds([]);
@@ -676,7 +669,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (isVideoInputMode && targetImage?.mediaType === 'video') {
       setSourceVideoId(imageId);
       setSelectedImageIds([imageId]);
-      setSelectedNoteIds([]);
       return;
     }
 
@@ -684,12 +676,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     if (isAudioInputMode && targetImage?.mediaType === 'audio') {
       setSourceAudioId(imageId);
       setSelectedImageIds([imageId]);
-      setSelectedNoteIds([]);
       return;
     }
 
     setSelectedImageIds([imageId]);
-    setSelectedNoteIds([]);
     if (isWan27VideoModel && targetImage?.mediaType !== 'audio') {
       setSourceAudioId(null);
     }
@@ -744,55 +734,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     referenceImageSlotOffset,
   ]);
 
-  const handleNoteSelection = useCallback((
-    noteId: string | null,
-    selectionOptions: { multi?: boolean } = {},
-  ) => {
-    const { multi = false } = selectionOptions;
-
-    if (!noteId) {
-      if (!multi) {
-        setSelectedNoteIds([]);
-        setSelectedImageIds([]);
-        setReferenceImageIds([]);
-        setReferenceVideoIds([]);
-        setReferenceAudioIds([]);
-        setElementImageIds([]);
-        setVideoLastFrameImageId(null);
-      }
-      return;
-    }
-
-    if (multi) {
-      setSelectedNoteIds(prevIds => {
-        if (prevIds.includes(noteId)) {
-          return prevIds.filter(id => id !== noteId);
-        }
-        return [...prevIds, noteId];
-      });
-      return;
-    }
-
-    if (primaryNoteId === noteId && selectedNoteIds.length === 1) {
-      setSelectedImageIds([]);
-      setReferenceImageIds([]);
-      setReferenceVideoIds([]);
-      setReferenceAudioIds([]);
-      setElementImageIds([]);
-      setVideoLastFrameImageId(null);
-      return;
-    }
-
-    setSelectedNoteIds([noteId]);
-    setSelectedImageIds([]);
-    setReferenceImageIds([]);
-    setElementImageIds([]);
-    setVideoLastFrameImageId(null);
-  }, [primaryNoteId, selectedNoteIds.length]);
-
-  const replaceCanvasSelection = useCallback(({ imageIds, noteIds }: CanvasObjectSelection) => {
+  const replaceCanvasSelection = useCallback((imageIds: string[]) => {
     setSelectedImageIds([...imageIds]); // Replace media selection without toggling each item.
-    setSelectedNoteIds([...noteIds]); // Replace note selection in the same operation.
     setReferenceImageIds([]); // Marquee selection exits reference-image roles.
     setReferenceVideoIds([]); // Marquee selection exits reference-video roles.
     setReferenceAudioIds([]); // Marquee selection exits reference-audio roles.
@@ -802,7 +745,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
 
   return {
     selectedImageIds,
-    selectedNoteIds,
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
@@ -817,7 +759,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     activePrimaryImage,
     hasSingleImageSelected,
     setSelectedImageIds,
-    setSelectedNoteIds,
     setReferenceImageIds,
     setReferenceVideoIds,
     setReferenceAudioIds,
@@ -827,7 +768,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setSourceVideoId,
     setSourceAudioId,
     handleImageSelection,
-    handleNoteSelection,
     replaceCanvasSelection,
   };
 };

@@ -123,8 +123,6 @@ describe('drawCanvas frame role labels', () => {
       notes: [],
       paths: [],
       selectedImageIds: [firstFrame.id],
-      selectedNoteIds: [],
-      primarySelectedNoteId: null,
       referenceImageIds: [],
       referenceVideoIds: [],
       referenceAudioIds: [],
@@ -167,8 +165,6 @@ describe('drawCanvas frame role labels', () => {
       notes: [],
       paths: [],
       selectedImageIds: [selectedImage.id],
-      selectedNoteIds: [],
-      primarySelectedNoteId: null,
       referenceImageIds: [],
       referenceVideoIds: [],
       referenceAudioIds: [],
@@ -211,8 +207,6 @@ describe('drawCanvas frame role labels', () => {
       notes: [],
       paths: [],
       selectedImageIds: [firstFrame.id],
-      selectedNoteIds: [],
-      primarySelectedNoteId: null,
       referenceImageIds: [],
       referenceVideoIds: [],
       referenceAudioIds: [],
@@ -258,8 +252,6 @@ describe('drawCanvas culling and path cache', () => {
       notes: [],
       paths: [],
       selectedImageIds: [],
-      selectedNoteIds: [],
-      primarySelectedNoteId: null,
       referenceImageIds: [],
       referenceVideoIds: [],
       referenceAudioIds: [],
@@ -337,22 +329,66 @@ describe('drawCanvas culling and path cache', () => {
     expect(vi.mocked(ctx.drawImage)).toHaveBeenCalledTimes(1);
   });
 
-  it('skips fully offscreen notes', () => {
+  it('draws visible note pins with their label', () => {
     const ctx = buildContext();
     drawBase({
       ctx,
       notes: [{
         id: 'note-1',
-        x: 1000,
-        y: 1000,
-        width: 200,
-        height: 120,
-        text: 'offscreen note',
-        backgroundColor: '#111827',
+        text: 'visible note',
+        label: 7,
+        anchor: { x: 100, y: 60 },
       }],
     });
 
-    expect(vi.mocked(ctx.fillRect)).not.toHaveBeenCalled();
+    expect(vi.mocked(ctx.arc)).toHaveBeenCalled();
+    expect(vi.mocked(ctx.fillText)).toHaveBeenCalledWith('7', 100, 38);
+  });
+
+  it('keeps note pins visible in presentation mode', () => {
+    const ctx = buildContext();
+    drawBase({
+      ctx,
+      isPresentationMode: true,
+      notes: [{
+        id: 'note-1',
+        text: 'presented note',
+        label: 2,
+        anchor: { x: 100, y: 60 },
+      }],
+    });
+
+    expect(vi.mocked(ctx.arc)).toHaveBeenCalled();
+    expect(vi.mocked(ctx.fillText)).toHaveBeenCalledWith('2', 100, 38);
+  });
+
+  it('skips panel-only notes without an anchor', () => {
+    const ctx = buildContext();
+    drawBase({
+      ctx,
+      notes: [{
+        id: 'note-1',
+        text: 'panel-only note',
+      }],
+    });
+
+    expect(vi.mocked(ctx.arc)).not.toHaveBeenCalled();
+    expect(vi.mocked(ctx.fillText)).not.toHaveBeenCalled();
+  });
+
+  it('skips fully offscreen note pins', () => {
+    const ctx = buildContext();
+    drawBase({
+      ctx,
+      notes: [{
+        id: 'note-1',
+        text: 'offscreen note',
+        label: 1,
+        anchor: { x: 10000, y: 10000 },
+      }],
+    });
+
+    expect(vi.mocked(ctx.arc)).not.toHaveBeenCalled();
     expect(vi.mocked(ctx.fillText)).not.toHaveBeenCalled();
   });
 

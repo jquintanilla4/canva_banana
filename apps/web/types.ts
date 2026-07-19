@@ -16,10 +16,6 @@ export interface Point {
   y: number;
 }
 
-export interface CanvasObjectSelection {
-  imageIds: string[]; // Canvas media selected by the gesture.
-  noteIds: string[]; // Canvas notes selected by the gesture.
-}
 
 export interface Path {
   points: Point[];
@@ -268,13 +264,9 @@ export interface CanvasImage {
 
 export interface CanvasNote {
   id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
   text: string;
-  backgroundColor: string;
-  fontSize?: number;
+  label?: number; // Sequential pin number — present iff anchored.
+  anchor?: Point; // World coords of the pin tip — present iff anchored.
 }
 
 export interface CanvasRect {

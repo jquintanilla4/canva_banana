@@ -152,7 +152,6 @@ const createFalStub = (): UseFalSettingsResult => ({
 
 const createSelectionStub = (overrides: Partial<SelectionStateResult> = {}): SelectionStateResult => ({
   selectedImageIds: [],
-  selectedNoteIds: [],
   referenceImageIds: [],
   referenceVideoIds: [],
   referenceAudioIds: [],
@@ -167,7 +166,6 @@ const createSelectionStub = (overrides: Partial<SelectionStateResult> = {}): Sel
   activePrimaryImage: null,
   hasSingleImageSelected: false,
   setSelectedImageIds: vi.fn(),
-  setSelectedNoteIds: vi.fn(),
   setReferenceImageIds: vi.fn(),
   setReferenceVideoIds: vi.fn(),
   setReferenceAudioIds: vi.fn(),
@@ -177,7 +175,6 @@ const createSelectionStub = (overrides: Partial<SelectionStateResult> = {}): Sel
   setSourceVideoId: vi.fn(),
   setSourceAudioId: vi.fn(),
   handleImageSelection: vi.fn(),
-  handleNoteSelection: vi.fn(),
   replaceCanvasSelection: vi.fn(),
   ...overrides,
 });

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
-import { Canvas } from './components/Canvas';
-import { DEFAULT_NOTE_FONT_SIZE, MIN_NOTE_FONT_SIZE, MAX_NOTE_FONT_SIZE, MIN_STROKE_SIZE, MAX_STROKE_SIZE, KEYBOARD_STROKE_STEP } from './components/canvas/constants';
+import { Canvas, type PanToAnchorRequest } from './components/Canvas';
+import { MIN_STROKE_SIZE, MAX_STROKE_SIZE, KEYBOARD_STROKE_STEP } from './components/canvas/constants';
 import { RecordingOverlay } from './components/RecordingOverlay';
 import { BackupsModal } from './components/BackupsModal';
 import {
@@ -11,6 +11,7 @@ import {
   ApiProviderId,
   type CanvasNote,
   type CanvasImage,
+  type Point,
   type CanvasVideoPromptArea,
   type CanvasVideoPromptBar,
   type GenerationPlacedPayload,
@@ -23,6 +24,7 @@ import { JimengSetupPanel } from './components/JimengSetupPanel';
 import { DesktopSettingsModal } from './components/DesktopSettingsModal';
 import { DesktopAppIconModal } from './components/DesktopAppIconModal';
 import { PromptChatPanel } from './components/PromptChatPanel';
+import { NotesPanel, type NotesPanelFocusRequest } from './components/NotesPanel';
 import {
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
@@ -200,6 +202,7 @@ export default function App() {
     canRedo,               // Whether redo is currently possible
     resetHistory,          // Reset canvas state and undo/redo stack
   } = useCanvasHistory({ images: [], paths: [], notes: [], videoPromptAreas: [], videoPromptBars: [] });
+  const hasCanvasVisualContent = displayedImages.length > 0 || displayedNotes.some(note => note.anchor); // Panel-only notes leave the canvas empty.
 
   // Brush/annotate layers (paths) are the only things we clear with the eraser button.
   const hasClearablePaths = displayedPaths.some(
@@ -207,9 +210,11 @@ export default function App() {
       path.tool === Tool.ANNOTATE &&
       path.points.length > 0
   );
-  // State for note editing (currently edited note's ID or null if none)
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const pendingNoteEditIdRef = useRef<string | null>(null);
+  // Notes side panel state: open/close, focus-a-note requests, canvas pan-to-pin requests, and the pin label counter.
+  const [isNotesPanelOpen, setIsNotesPanelOpen] = useState(false);
+  const [notesPanelFocusRequest, setNotesPanelFocusRequest] = useState<NotesPanelFocusRequest | null>(null);
+  const [panToAnchorRequest, setPanToAnchorRequest] = useState<PanToAnchorRequest | null>(null);
+  const noteLabelCounterRef = useRef(1); // Monotonic — labels are never reused after deletion.
 
   // State to track if the app is currently performing a loading operation
   const [isLoading, setIsLoading] = useState(false);
@@ -441,7 +446,6 @@ export default function App() {
 
   const {
     selectedImageIds,
-    selectedNoteIds,
     referenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
@@ -455,7 +459,6 @@ export default function App() {
     activePrimaryImage,
     hasSingleImageSelected,
     setSelectedImageIds,
-    setSelectedNoteIds,
     setReferenceImageIds,
     setReferenceVideoIds,
     setReferenceAudioIds,
@@ -464,7 +467,6 @@ export default function App() {
     setSourceVideoId,
     setSourceAudioId,
     handleImageSelection,
-    handleNoteSelection,
     replaceCanvasSelection,
   } = selection;
 
@@ -485,11 +487,11 @@ export default function App() {
   }, []);
 
   const requestZoomToSelection = useCallback(() => {
-    if (selectedImageIds.length === 0 && selectedNoteIds.length === 0) {
+    if (selectedImageIds.length === 0) {
       return;
     }
     setZoomToSelectionTrigger(prev => prev + 1);
-  }, [selectedImageIds.length, selectedNoteIds.length]);
+  }, [selectedImageIds.length]);
 
   const handleVideoPromptAreasChange = useCallback((nextAreas: CanvasVideoPromptArea[]) => {
     setLiveVideoPromptAreas(nextAreas);
@@ -593,6 +595,7 @@ export default function App() {
     },
     fal,
     selection,
+    noteLabelCounterRef,
     displayedImages,
     displayedNotes,
     displayedPaths,
@@ -628,7 +631,6 @@ export default function App() {
     primaryImageId,
     setState,
     setSelectedImageIds,
-    setSelectedNoteIds,
     setReferenceImageIds,
     setTool,
     setError,
@@ -660,14 +662,11 @@ export default function App() {
   });
 
   const {
-    duplicateNote: handleDuplicateNote,
     duplicateImage: handleDuplicateImage,
   } = useDuplicateCanvasMedia({
     displayedImages,
-    displayedNotes,
     setState,
     setSelectedImageIds,
-    setSelectedNoteIds,
     setReferenceImageIds,
     setVideoLastFrameImageId,
   });
@@ -708,37 +707,27 @@ export default function App() {
   }, [appMode, handleClear]);
 
   const handleDelete = useCallback(() => {
-    if (selectedImageIds.length === 0 && selectedNoteIds.length === 0) {
+    if (selectedImageIds.length === 0) {
       return;
     }
 
     stopCanvasMediaPlaybackByIds(images, selectedImageIds); // Stop videos/audio before their canvas nodes disappear.
 
-    // Remove selected images/notes while keeping other canvas content untouched.
+    // Remove selected images while keeping other canvas content untouched.
     setState(prevState => ({
       ...prevState,
-      images: selectedImageIds.length
-        ? prevState.images.filter(img => !selectedImageIds.includes(img.id))
-        : prevState.images,
-      notes: selectedNoteIds.length
-        ? prevState.notes.filter(note => !selectedNoteIds.includes(note.id))
-        : prevState.notes,
+      images: prevState.images.filter(img => !selectedImageIds.includes(img.id)),
       videoPromptAreas: prevState.videoPromptAreas.map(area => ({
         ...area,
         orderedMediaIds: area.orderedMediaIds.filter(mediaId => !selectedImageIds.includes(mediaId)),
       })),
     }));
 
-    if (selectedImageIds.length) {
-      setSelectedImageIds([]);
-      setReferenceImageIds([]);
-      setElementImageIds([]);
-      setVideoLastFrameImageId(null);
-    }
-    if (selectedNoteIds.length) {
-      setSelectedNoteIds([]);
-    }
-  }, [images, selectedImageIds, selectedNoteIds, setState]);
+    setSelectedImageIds([]);
+    setReferenceImageIds([]);
+    setElementImageIds([]);
+    setVideoLastFrameImageId(null);
+  }, [images, selectedImageIds, setState]);
 
   const handleMediaPlaybackRejected = useCallback((imageId: string) => {
     setLiveImages((currentImages: CanvasImage[] | null) =>
@@ -809,7 +798,6 @@ export default function App() {
             images: [...prevState.images, newCanvasAudio],
           }));
           setSelectedImageIds([newCanvasAudio.id]);
-          setSelectedNoteIds([]);
           setReferenceImageIds([]);
           setTool(Tool.SELECTION);
           setToastMessage('Recording saved');
@@ -846,22 +834,6 @@ export default function App() {
       return { ...prevState, images: newImages };
     });
   }, [setState]);
-
-  const handleNoteCopy = useCallback((noteId: string) => {
-    const note = displayedNotes.find(n => n.id === noteId);
-    if (note && note.text) {
-      writeClipboardText(note.text)
-        .then(() => {
-          setToastMessage("Copied to clipboard!");
-          setTimeout(() => setToastMessage(null), 2000);
-        })
-        .catch(err => {
-          console.error('Failed to copy text: ', err);
-          setToastMessage("Failed to copy text.");
-          setTimeout(() => setToastMessage(null), 2000);
-        });
-    }
-  }, [displayedNotes]);
 
   const handleImagePromptCopy = useCallback((imageId: string) => {
     const image = displayedImages.find(img => img.id === imageId);
@@ -935,7 +907,6 @@ export default function App() {
     }
     applyGenerationPlacementSelection(notification, {
       setSelectedImageIds,
-      setSelectedNoteIds,
       setReferenceImageIds,
       setReferenceVideoIds,
       setReferenceAudioIds,
@@ -955,7 +926,6 @@ export default function App() {
     setReferenceImageIds,
     setReferenceVideoIds,
     setSelectedImageIds,
-    setSelectedNoteIds,
     setSelectedVideoPromptAreaId,
     setSourceAudioId,
     setSourceVideoId,
@@ -1054,16 +1024,12 @@ export default function App() {
     if (newTool === Tool.VIDEO_PROMPT_AREA && !canCreateVideoPromptAreas) {
       return;
     }
-    // Changing tools finalizes any in-progress note edits or crop sessions to keep state consistent.
+    // Changing tools finalizes any in-progress crop sessions to keep state consistent.
     setTool(newTool);
-    if (editingNoteId) {
-      setEditingNoteId(null);
-      handleCommit();
-    }
     if (cropMode) {
       handleCancelCrop();
     }
-  }, [canCreateVideoPromptAreas, editingNoteId, handleCommit, cropMode, handleCancelCrop]);
+  }, [canCreateVideoPromptAreas, cropMode, handleCancelCrop]);
 
   useEffect(() => {
     if (!canCreateVideoPromptAreas && tool === Tool.VIDEO_PROMPT_AREA) {
@@ -1235,61 +1201,42 @@ export default function App() {
     setLiveNotes(newNotes);
   }, [displayedNotes, setLiveNotes]);
 
-  const handleNotesChange = useCallback((nextNotes: CanvasNote[]) => {
-    setLiveNotes(nextNotes);
-    if (tool !== Tool.NOTE || editingNoteId) {
-      return;
-    }
-    const prevIds = new Set(displayedNotes.map(note => note.id));
-    const addedNote = nextNotes.find(note => !prevIds.has(note.id));
-    if (addedNote && addedNote.text === '') {
-      pendingNoteEditIdRef.current = addedNote.id;
-    }
-  }, [displayedNotes, editingNoteId, setLiveNotes, tool]);
+  const focusNoteInPanel = useCallback((noteId: string) => {
+    setIsNotesPanelOpen(true);
+    setNotesPanelFocusRequest(prev => ({ noteId, token: (prev?.token ?? 0) + 1 }));
+  }, []);
 
-  useEffect(() => {
-    const pendingId = pendingNoteEditIdRef.current;
-    if (!pendingId || editingNoteId || tool !== Tool.NOTE) {
-      return;
-    }
-    if (!displayedNotes.some(note => note.id === pendingId)) {
-      return;
-    }
-    setEditingNoteId(pendingId);
-    pendingNoteEditIdRef.current = null;
-  }, [displayedNotes, editingNoteId, tool]);
+  // Creates a note and opens it in the panel. With an anchor (NOTE-tool canvas click) it
+  // becomes a numbered pin; without one ("+" in the panel) it lives only in the panel.
+  // Both mutations commit on top of displayedNotes so un-blurred textarea edits staged in
+  // liveNotes land in the same history entry instead of overwriting the mutation later.
+  const createNote = useCallback((anchor?: Point) => {
+    const newNote: CanvasNote = {
+      id: crypto.randomUUID(),
+      text: '',
+      ...(anchor ? { label: noteLabelCounterRef.current++, anchor: { ...anchor } } : {}),
+    };
+    handleCommit({ notes: [...displayedNotes, newNote] });
+    focusNoteInPanel(newNote.id);
+  }, [displayedNotes, focusNoteInPanel, handleCommit]);
 
-  useEffect(() => {
-    if (tool !== Tool.NOTE && pendingNoteEditIdRef.current) {
-      pendingNoteEditIdRef.current = null;
-    }
-  }, [tool]);
+  const handleAddPanelNote = useCallback(() => {
+    createNote();
+  }, [createNote]);
 
+  const handleDeleteNote = useCallback((noteId: string) => {
+    // Undoable; removes the canvas pin along with the note.
+    handleCommit({ notes: displayedNotes.filter(note => note.id !== noteId) });
+  }, [displayedNotes, handleCommit]);
 
-  const handleNoteFontSizeChange = useCallback((noteId: string, delta: number) => {
-    const noteIndex = notes.findIndex(n => n.id === noteId);
-    if (noteIndex === -1) return;
-    const currentFontSize = notes[noteIndex].fontSize ?? DEFAULT_NOTE_FONT_SIZE;
-    const newFontSize = Math.max(MIN_NOTE_FONT_SIZE, Math.min(MAX_NOTE_FONT_SIZE, currentFontSize + delta));
-    if (newFontSize === currentFontSize) return;
-    setState(prevState => {
-      const newNotes = [...prevState.notes];
-      newNotes[noteIndex] = { ...newNotes[noteIndex], fontSize: newFontSize };
-      return { ...prevState, notes: newNotes };
-    });
-  }, [notes, setState]);
+  // Clicking a note's pin badge in the panel pans the canvas to its anchor.
+  const handleJumpToAnchor = useCallback((anchor: Point) => {
+    setPanToAnchorRequest(prev => ({ x: anchor.x, y: anchor.y, token: (prev?.token ?? 0) + 1 }));
+  }, []);
 
-  const handleNoteColorChange = useCallback((noteId: string, color: string) => {
-    setState(prevState => {
-      const noteIndex = prevState.notes.findIndex(note => note.id === noteId);
-      if (noteIndex === -1) {
-        return prevState;
-      }
-      const newNotes = [...prevState.notes];
-      newNotes[noteIndex] = { ...newNotes[noteIndex], backgroundColor: color };
-      return { ...prevState, notes: newNotes };
-    });
-  }, [setState]);
+  const toggleNotesPanel = useCallback(() => {
+    setIsNotesPanelOpen(prev => !prev);
+  }, []);
 
   const handleVideoPromptAreaBorderColorChange = useCallback((areaId: string, color: string) => {
     setState(prevState => {
@@ -2077,7 +2024,7 @@ export default function App() {
                 canRedo={canRedo}
                 onDownload={handleDownload}
                 isImageSelected={hasSingleImageSelected}
-                isObjectSelected={selectedImageIds.length > 0 || selectedNoteIds.length > 0}
+                isObjectSelected={selectedImageIds.length > 0}
                 onDelete={handleDelete}
                 onResize={openResizeToast}
                 isResizeDisabled={!canResize || isRemovingBackground || isResizing || isLoading}
@@ -2115,7 +2062,7 @@ export default function App() {
           images={displayedImages}
           onImagesChange={setLiveImages}
           notes={displayedNotes}
-          onNotesChange={handleNotesChange}
+          onNotesChange={setLiveNotes}
           videoPromptAreas={displayedVideoPromptAreas}
           onVideoPromptAreasChange={handleVideoPromptAreasChange}
           videoPromptBars={displayedVideoPromptBars}
@@ -2133,7 +2080,6 @@ export default function App() {
           eraserSize={eraserSize}
           brushColor={brushColor}
           selectedImageIds={selectedImageIds}
-          selectedNoteIds={selectedNoteIds}
           referenceImageIds={canvasReferenceImageIds}
           referenceVideoIds={canvasReferenceVideoIds}
           referenceAudioIds={canvasReferenceAudioIds}
@@ -2158,7 +2104,6 @@ export default function App() {
           onError={setError}
           onMediaPlaybackRejected={handleMediaPlaybackRejected}
           onImageSelect={handleImageSelection}
-          onNoteSelect={handleNoteSelection}
           onSelectionReplace={replaceCanvasSelection}
           onCommit={handleCommit}
           onFilesDrop={handleFilesDrop}
@@ -2166,11 +2111,10 @@ export default function App() {
           zoomToSelectionTrigger={zoomToSelectionTrigger}
           zoomInTrigger={zoomInTrigger}
           zoomOutTrigger={zoomOutTrigger}
+          panToAnchorRequest={panToAnchorRequest}
           onScaleChange={setCanvasScale}
-          editingNoteId={editingNoteId}
-          onNoteDoubleClick={setEditingNoteId}
-          onNoteTextChange={handleNoteTextChange}
-          onNoteEditEnd={() => setEditingNoteId(null)}
+          onAnchorNoteCreate={createNote}
+          onAnchorClick={focusNoteInPanel}
           onImageOrderChange={handleImageOrderChange}
           isImageOverlapping={isImageOverlapping}
           canMoveUp={canMoveUp}
@@ -2180,10 +2124,6 @@ export default function App() {
           onCropRectChange={handleCropRectChange}
           onConfirmCrop={handleConfirmCrop}
           onCancelCrop={handleCancelCrop}
-          onNoteCopy={handleNoteCopy}
-          onNoteDuplicate={handleDuplicateNote}
-          onNoteFontSizeChange={handleNoteFontSizeChange}
-          onNoteColorChange={handleNoteColorChange}
           onVideoPromptAreaBorderColorChange={handleVideoPromptAreaBorderColorChange}
           onImagePromptCopy={handleImagePromptCopy}
           onImageDuplicate={handleDuplicateImage}
@@ -2206,7 +2146,7 @@ export default function App() {
         {!isPresentationMode && (
           <ViewToolbar
             onZoomToFit={handleZoomToFit}
-            disabled={images.length === 0 && notes.length === 0}
+            disabled={!hasCanvasVisualContent}
             metadataVisible={showMetadataOverlay}
             onToggleMetadata={() => setShowMetadataOverlay(prev => !prev)}
             blindTestEnabled={blindTestEnabled}
@@ -2224,6 +2164,18 @@ export default function App() {
           isSuppressed={hasBlockingOverlay}
           currentPrompt={prompt}
           onToggle={() => setIsPromptChatOpen(prev => !prev)}
+        />
+        <NotesPanel
+          isOpen={isNotesPanelOpen}
+          isSuppressed={hasBlockingOverlay}
+          notes={displayedNotes}
+          focusRequest={notesPanelFocusRequest}
+          onToggle={toggleNotesPanel}
+          onTextChange={handleNoteTextChange}
+          onTextCommit={handleCommit}
+          onAddNote={handleAddPanelNote}
+          onDeleteNote={handleDeleteNote}
+          onJumpToAnchor={handleJumpToAnchor}
         />
 
       {/* Error/status banners */}
