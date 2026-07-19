@@ -992,11 +992,12 @@ export const readSnapshotBlobPartAsArrayBuffer = (blob: SnapshotMediaBlob, start
   return readSnapshotBlobAsArrayBuffer(part);
 };
 
-const getSnapshotBlobObjectUrl = (blob: SnapshotMediaBlob): string | undefined => (
-  typeof blob.snapshotObjectUrl === 'string' && blob.snapshotObjectUrl.length > 0
-    ? blob.snapshotObjectUrl
+export const getSnapshotMediaObjectUrl = (blob: File | SnapshotMediaBlob): string | undefined => {
+  const objectUrl = (blob as { snapshotObjectUrl?: unknown }).snapshotObjectUrl;
+  return typeof objectUrl === 'string' && objectUrl.length > 0
+    ? objectUrl
     : undefined
-);
+}; // Desktop snapshot media keeps a source-scoped URL for lazy reuse.
 
 const createRestoredSnapshotFile = (blob: SnapshotMediaBlob, fileName: string, fileType: string): File => {
   if (blob instanceof Blob) {
@@ -1244,7 +1245,7 @@ export const restoreSnapshotFromFile = async (
         const snapshotFile = createRestoredSnapshotFile(blob, fileName, fileType);
         // Audio snapshots are stored as blobs but must be rehydrated as waveform images.
         if (mediaType === 'audio') {
-          const objectUrl = getSnapshotBlobObjectUrl(blob);
+          const objectUrl = getSnapshotMediaObjectUrl(blob);
           return restoreAudioImage({
             img: imageManifest,
             file: snapshotFile,
@@ -1253,7 +1254,7 @@ export const restoreSnapshotFromFile = async (
           });
         }
         // Non-audio media can be rehydrated directly as an image/video element.
-        const objectUrl = getSnapshotBlobObjectUrl(blob);
+        const objectUrl = getSnapshotMediaObjectUrl(blob);
         const savedNaturalWidth = getPositiveSnapshotDimension(imageManifest.naturalWidth, getPositiveSnapshotDimension(imageManifest.width)); // Legacy snapshots fall back to display width.
         const savedNaturalHeight = getPositiveSnapshotDimension(imageManifest.naturalHeight, getPositiveSnapshotDimension(imageManifest.height)); // Legacy snapshots fall back to display height.
         const element = objectUrl && mediaType === 'video'

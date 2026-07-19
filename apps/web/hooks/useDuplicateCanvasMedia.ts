@@ -1,8 +1,8 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import type { CanvasImage } from '../types';
-import { loadAudioFromBlob } from '../services/audioService';
-import { loadMediaFromBlob } from '../services/mediaService';
-import { ensureRealSnapshotFile } from '../services/snapshotService';
+import { loadAudioFromBlob, loadAudioFromUrl } from '../services/audioService';
+import { loadMediaFromBlob, loadMediaFromUrl } from '../services/mediaService';
+import { ensureRealSnapshotFile, getSnapshotMediaObjectUrl } from '../services/snapshotService';
 import type { AppState } from './useCanvasHistory';
 
 type DuplicateArgs = {
@@ -50,10 +50,10 @@ export function useDuplicateCanvasMedia({
       focusSelection({ imageId: duplicatedImage.id });
     };
 
-    // Rehydrate elements from the file to avoid cloning revoked blob URLs.
+    // Rehydrate elements without cloning revoked blob URLs or eagerly reading large snapshots.
     void (async () => {
       try {
-        const realFile = await ensureRealSnapshotFile(sourceImage.file);
+        const snapshotObjectUrl = getSnapshotMediaObjectUrl(sourceImage.file); // Restored desktop media already has a retained lazy URL.
         if (sourceImage.mediaType === 'audio') {
           let waveformElement = sourceImage.element;
           if (sourceImage.waveformImageData) {
@@ -66,21 +66,25 @@ export function useDuplicateCanvasMedia({
             waveformElement = waveformImg;
           }
 
-          const audioElement = await loadAudioFromBlob(realFile);
+          const duplicateFile = snapshotObjectUrl ? sourceImage.file : await ensureRealSnapshotFile(sourceImage.file);
+          const audioElement = snapshotObjectUrl
+            ? await loadAudioFromUrl(snapshotObjectUrl)
+            : await loadAudioFromBlob(duplicateFile);
           commitDuplicate({
             element: waveformElement,
             audioElement,
             isPlaying: false,
             currentPlaybackTime: 0,
-            file: realFile, // The duplicate must not depend on the snapshot read source staying open.
+            file: duplicateFile, // Lazy duplicates reuse the active document's retained snapshot source.
           });
           return;
         }
 
-        const element = await loadMediaFromBlob(
-          realFile,
-          sourceImage.mediaType === 'video' ? 'video' : 'image',
-        );
+        const mediaType = sourceImage.mediaType === 'video' ? 'video' : 'image';
+        const realFile = snapshotObjectUrl ? sourceImage.file : await ensureRealSnapshotFile(sourceImage.file);
+        const element = snapshotObjectUrl
+          ? await loadMediaFromUrl(snapshotObjectUrl, mediaType)
+          : await loadMediaFromBlob(realFile, mediaType);
         if (element instanceof HTMLVideoElement) {
           element.currentTime = 0;
           element.pause();
