@@ -295,6 +295,8 @@ const mockState = vi.hoisted(() => {
     displayedImages: [] as CanvasImage[],
     lastCanvasProps: null as Record<string, unknown> | null,
     keyboardShortcuts: null as { onGenerate: () => void; onTogglePresentationMode?: () => void; isPresentationMode?: boolean } | null,
+    cropMode: null as { imageId: string; rect: { x: number; y: number; width: number; height: number } } | null,
+    transformMode: null as { imageId: string } | null,
     baseVideoPromptArea,
     baseVideoPromptBar,
     videoPromptAreas: [{ ...baseVideoPromptArea }],
@@ -464,8 +466,8 @@ vi.mock('../hooks/useSnapshotIO', () => ({
 
 vi.mock('../hooks/useCanvasMediaActions', () => ({
   useCanvasMediaActions: () => ({
-    cropMode: null,
-    transformMode: null,
+    cropMode: mockState.cropMode,
+    transformMode: mockState.transformMode,
     isRemovingBackground: false,
     handleFilesDrop: vi.fn(),
     handleFileChange: vi.fn(),
@@ -621,6 +623,8 @@ afterEach(() => {
   mockState.displayedImages = [];
   mockState.lastCanvasProps = null;
   mockState.keyboardShortcuts = null;
+  mockState.cropMode = null;
+  mockState.transformMode = null;
   mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
   mockState.videoPromptBars = [{ ...mockState.baseVideoPromptBar }];
   mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
@@ -838,7 +842,41 @@ describe('App video prompt area gating', () => {
     expect(rail.classList.contains('items-center')).toBe(true);
     expect(rail.style.paddingInline).toBe(FLOATING_EDGE_CONTROL_SIDE_OFFSET);
     expect(screen.getByLabelText('Snapshot menu').closest('[data-testid="top-control-rail"]')).toBe(rail);
+    expect(screen.getByTestId('top-control-rail-leading').classList.contains('justify-start')).toBe(true);
+    expect(screen.getByTestId('top-control-rail-leading').classList.contains('justify-center')).toBe(false);
     expect(screen.getByLabelText('Canvas zoom 100%').closest('[data-testid="top-control-rail"]')).toBe(rail);
+  });
+
+  it('retains the toolbar grid track while crop and transform modes suppress its controls', () => {
+    const { rerender } = render(<App />);
+
+    let toolbarSlot = screen.getByTestId('top-control-rail-toolbar');
+    expect(toolbarSlot.classList.contains('invisible')).toBe(false);
+    expect(toolbarSlot.hasAttribute('inert')).toBe(false);
+
+    mockState.cropMode = { imageId: 'image-1', rect: { x: 0, y: 0, width: 100, height: 100 } };
+    rerender(<App />);
+
+    toolbarSlot = screen.getByTestId('top-control-rail-toolbar');
+    expect(toolbarSlot.classList.contains('invisible')).toBe(true);
+    expect(toolbarSlot.getAttribute('aria-hidden')).toBe('true');
+    expect(toolbarSlot.hasAttribute('inert')).toBe(true);
+    expect(screen.getByTestId('active-tool').closest('[data-testid="top-control-rail-toolbar"]')).toBe(toolbarSlot);
+
+    mockState.cropMode = null;
+    mockState.transformMode = { imageId: 'image-1' };
+    rerender(<App />);
+
+    toolbarSlot = screen.getByTestId('top-control-rail-toolbar');
+    expect(toolbarSlot.classList.contains('invisible')).toBe(true);
+    expect(toolbarSlot.hasAttribute('inert')).toBe(true);
+
+    mockState.transformMode = null;
+    rerender(<App />);
+
+    toolbarSlot = screen.getByTestId('top-control-rail-toolbar');
+    expect(toolbarSlot.classList.contains('invisible')).toBe(false);
+    expect(toolbarSlot.hasAttribute('inert')).toBe(false);
   });
 
   it('shows the active snapshot name on macOS and toggles it from the native View menu', async () => {
@@ -864,7 +902,16 @@ describe('App video prompt area gating', () => {
 
     const fileName = screen.getByLabelText('Current snapshot file: client-concept-v12.bcsnap');
     expect(fileName.getAttribute('title')).toBe('client-concept-v12.bcsnap');
-    expect(fileName.querySelector('span')?.classList.contains('truncate')).toBe(true);
+    expect(screen.getByTestId('top-control-rail-leading').classList.contains('justify-center')).toBe(true);
+    expect(screen.getByTestId('top-control-rail-leading').classList.contains('justify-start')).toBe(false);
+    expect(fileName.classList.contains('text-[15px]')).toBe(true);
+    expect(fileName.classList.contains('border')).toBe(false);
+    expect([...fileName.classList].some(className => className.startsWith('bg-'))).toBe(false);
+    const fileNameText = fileName.querySelector('span');
+    expect(fileNameText?.classList.contains('truncate')).toBe(true);
+    expect(fileNameText?.style.webkitTextStroke).toBe('2px rgba(3, 7, 18, 0.92)');
+    expect(fileNameText?.style.paintOrder).toBe('stroke fill');
+    expect(fileNameText?.style.textShadow).toContain('rgba(0, 0, 0, 0.95)');
     await waitFor(() => expect(setState).toHaveBeenCalledWith(expect.objectContaining({ showFileName: true })));
 
     act(() => {

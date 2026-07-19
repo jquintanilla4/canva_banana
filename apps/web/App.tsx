@@ -1889,6 +1889,8 @@ export default function App() {
   const isMacDesktop = runtimeConfig.isDesktop && typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
   const hasNativeFileMenuBridge = isMacDesktop && typeof window !== 'undefined' && typeof window.canvaBananaDesktop?.fileMenu?.onCommand === 'function';
   const shouldShowReactFileMenu = !isMacDesktop; // macOS desktop uses the native application menu.
+  const leadingRailJustificationClass = isMacDesktop ? 'justify-center' : 'justify-start'; // Center the macOS filename without moving the cross-platform menu.
+  const isTopToolbarSuppressed = cropMode !== null || transformMode !== null; // Keep its grid width while crop or transform controls take over.
   const topControlRailStyle: React.CSSProperties = isMacDesktop
     ? { paddingLeft: '86px', paddingRight: FLOATING_EDGE_CONTROL_SIDE_OFFSET }
     : { paddingInline: FLOATING_EDGE_CONTROL_SIDE_OFFSET }; // Shift controls away from macOS traffic lights.
@@ -1989,7 +1991,10 @@ export default function App() {
           className="pointer-events-none absolute inset-x-0 top-4 z-30 grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
           style={topControlRailStyle}
         >
-          <div className="flex min-w-0 items-center justify-start">
+          <div
+            className={`flex min-w-0 items-center ${leadingRailJustificationClass}`}
+            data-testid="top-control-rail-leading"
+          >
             {shouldShowReactFileMenu && (
               <FileMenu
                 isOpen={isFileMenuOpen}
@@ -2012,45 +2017,47 @@ export default function App() {
               <SnapshotFileName fileName={activeSnapshotFileName} />
             )}
           </div>
-          <div className="flex items-center justify-center">
-            {/* Main toolbar, hidden during crop/transform */}
-            {!cropMode && !transformMode && (
-              <Toolbar
-                activeTool={tool}
-                onToolChange={handleToolChange}
-                isVideoPromptAreaToolEnabled={canCreateVideoPromptAreas}
-                appMode={appMode}
-                onModeChange={handleModeChange}
-                brushSize={brushSize}
-                eraserSize={eraserSize}
-                onBrushSizeChange={setBrushSize}
-                onEraserSizeChange={setEraserSize}
-                brushColor={brushColor}
-                onBrushColorChange={setBrushColor}
-                onClear={handleClear}
-                hasClearablePaths={hasClearablePaths}
-                onUploadClick={handleUploadClick}
-                onUndo={undo}
-                onRedo={redo}
-                canUndo={canUndo}
-                canRedo={canRedo}
-                onDownload={handleDownload}
-                isImageSelected={hasSingleImageSelected}
-                isObjectSelected={selectedImageIds.length > 0}
-                onDelete={handleDelete}
-                onResize={openResizeToast}
-                isResizeDisabled={!canResize || isRemovingBackground || isResizing || isLoading}
-                onRemoveBackground={handleBackgroundRemoval}
-                isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
-                isBackgroundRemovalLoading={isRemovingBackground}
-                isAnnotateModeDisabled={isAnnotateModeDisabled}
-                isRecording={isRecording}
-                onRecordToggle={handleRecordToggle}
-                cameraSettings={cameraSettings}
-                onCameraSettingsChange={setCameraSettings}
-                cameraSettingsEnabled={isCameraSettingsEnabled}
-              />
-            )}
+          <div
+            aria-hidden={isTopToolbarSuppressed || undefined}
+            className={`flex items-center justify-center ${isTopToolbarSuppressed ? 'invisible' : ''}`}
+            data-testid="top-control-rail-toolbar"
+            inert={isTopToolbarSuppressed || undefined}
+          >
+            <Toolbar
+              activeTool={tool}
+              onToolChange={handleToolChange}
+              isVideoPromptAreaToolEnabled={canCreateVideoPromptAreas}
+              appMode={appMode}
+              onModeChange={handleModeChange}
+              brushSize={brushSize}
+              eraserSize={eraserSize}
+              onBrushSizeChange={setBrushSize}
+              onEraserSizeChange={setEraserSize}
+              brushColor={brushColor}
+              onBrushColorChange={setBrushColor}
+              onClear={handleClear}
+              hasClearablePaths={hasClearablePaths}
+              onUploadClick={handleUploadClick}
+              onUndo={undo}
+              onRedo={redo}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onDownload={handleDownload}
+              isImageSelected={hasSingleImageSelected}
+              isObjectSelected={selectedImageIds.length > 0}
+              onDelete={handleDelete}
+              onResize={openResizeToast}
+              isResizeDisabled={!canResize || isRemovingBackground || isResizing || isLoading}
+              onRemoveBackground={handleBackgroundRemoval}
+              isBackgroundRemovalDisabled={!hasSingleImageSelected || isRemovingBackground || isLoading}
+              isBackgroundRemovalLoading={isRemovingBackground}
+              isAnnotateModeDisabled={isAnnotateModeDisabled}
+              isRecording={isRecording}
+              onRecordToggle={handleRecordToggle}
+              cameraSettings={cameraSettings}
+              onCameraSettingsChange={setCameraSettings}
+              cameraSettingsEnabled={isCameraSettingsEnabled}
+            />
           </div>
           <div className="flex items-center justify-end">
             {showZoomLevelBadge && (
