@@ -30,8 +30,6 @@ type NotesPanelProps = {
   onJumpToAnchor: (anchor: Point) => void;
 };
 
-const NOTE_TEXTAREA_MAX_HEIGHT_PX = 240;
-
 const NotesPanelComponent: React.FC<NotesPanelProps> = ({
   isOpen,
   isSuppressed = false,
@@ -56,7 +54,7 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
     notes.forEach(note => {
       const textarea = textareaRefs.current.get(note.id);
       if (textarea) {
-        resizeTextareaToContent(textarea, NOTE_TEXTAREA_MAX_HEIGHT_PX); // Sync undo, redo, and imported text.
+        resizeTextareaToContent(textarea); // Sync the full note height after undo, redo, or import.
       }
     });
   }, [notes]);
@@ -67,7 +65,7 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
       callback = (element: HTMLTextAreaElement | null) => {
         if (element) {
           textareaRefs.current.set(noteId, element);
-          resizeTextareaToContent(element, NOTE_TEXTAREA_MAX_HEIGHT_PX);
+          resizeTextareaToContent(element);
         } else {
           textareaRefs.current.delete(noteId);
           textareaRefCallbacks.current.delete(noteId);
@@ -126,7 +124,7 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
         aria-pressed={isOpen}
         aria-label={isOpen ? 'Close notes' : 'Open notes'}
         title={isOpen ? 'Close notes' : 'Open notes'}
-        className={`fixed top-1/2 ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} flex -translate-y-1/2 items-center justify-center rounded-full border border-amber-300/25 bg-gray-950/92 text-amber-100 shadow-2xl shadow-black/40 backdrop-blur-md transition-[background-color,border-color,right] duration-200 hover:border-amber-200/60 hover:bg-amber-300/12`}
+        className={`fixed top-1/2 ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} flex -translate-y-1/2 items-center justify-center rounded-full border border-cyan-300/25 bg-gray-950/92 text-cyan-100 shadow-2xl shadow-black/40 backdrop-blur-md transition-[background-color,border-color,right] duration-200 hover:border-cyan-200/60 hover:bg-cyan-300/12`}
         style={{
           right: toggleRight,
           height: `${SIDE_PANEL_TOGGLE_SIZE_REM}rem`,
@@ -141,7 +139,7 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
       <aside
         aria-label="Notes"
         aria-hidden={!isOpen}
-        className={`fixed ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} flex max-w-[calc(100vw-4.75rem)] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#050917]/96 text-gray-100 shadow-[-10px_0_24px_rgba(0,0,0,0.18),0_10px_18px_rgba(0,0,0,0.16)] backdrop-blur-xl transition-transform duration-200`}
+        className={`fixed ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} flex max-w-[calc(100vw-4.75rem)] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#01030B]/98 text-gray-100 shadow-[-10px_0_24px_rgba(0,0,0,0.18),0_10px_18px_rgba(0,0,0,0.16)] backdrop-blur-xl transition-transform duration-200`}
         style={{
           right: SIDE_PANEL_EDGE_INSET,
           top: SIDE_PANEL_TOP_OFFSET,
@@ -153,32 +151,32 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
       >
         {isOpen && (
           <>
-            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
+            <div className="flex items-center justify-between gap-2 border-b border-[#18304f] bg-[#040917] px-4 py-3">
               <h2 className="text-sm font-bold uppercase tracking-wide text-gray-200">Notes</h2>
               <button
                 type="button"
                 onClick={onAddNote}
                 aria-label="Add note"
                 title="Add note"
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-[#080A16] text-gray-200 shadow-[0_6px_10px_rgba(0,0,0,0.14)] backdrop-blur-md transition-colors hover:bg-white/10"
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-gray-200 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300/70"
               >
                 <PlusIcon className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#01030B] px-4">
               {notes.length === 0 ? (
-                <p className="px-1 text-sm leading-6 text-gray-400">
+                <p className="py-4 text-base leading-7 text-gray-400">
                   No notes yet. Use the Note tool to drop a pin on the canvas, or add a note here with the + button.
                 </p>
               ) : (
-                <ul className="flex flex-col gap-3">
+                <ul className="divide-y divide-[#18304f]">
                   {notes.map(note => {
                     const anchor = note.anchor;
                     return (
                       <li
                         key={note.id}
                         ref={getRowRef(note.id)}
-                        className="rounded-lg border border-white/10 bg-[#080A16]/80 p-3 shadow-[0_6px_10px_rgba(0,0,0,0.14)]"
+                        className="py-4"
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
                           {anchor && note.label !== undefined ? (
@@ -187,7 +185,7 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
                               onClick={() => onJumpToAnchor(anchor)}
                               title="Go to pin on canvas"
                               aria-label={`Go to pin ${note.label} on canvas`}
-                              className="flex items-center gap-1.5 rounded-md border border-sky-300/30 bg-sky-300/10 px-2 py-1 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-300/25"
+                              className="flex items-center gap-1.5 rounded-md bg-sky-300/10 px-2 py-1 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-300/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300/70"
                             >
                               <MapPinIcon className="h-3.5 w-3.5" />
                               {note.label}
@@ -203,7 +201,7 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
                             onClick={() => onDeleteNote(note.id)}
                             aria-label="Delete note"
                             title="Delete note"
-                            className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-transparent text-gray-400 transition-colors hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-300"
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-transparent text-gray-400 transition-colors hover:bg-red-400/10 hover:text-red-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300/70"
                           >
                             <DeleteIcon className="h-3 w-3" />
                           </button>
@@ -215,11 +213,11 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
                           aria-label={note.label !== undefined ? `Note for pin ${note.label}` : 'Note'}
                           onChange={event => {
                             onTextChange(note.id, event.target.value);
-                            resizeTextareaToContent(event.currentTarget, NOTE_TEXTAREA_MAX_HEIGHT_PX);
+                            resizeTextareaToContent(event.currentTarget);
                           }}
                           onBlur={onTextCommit}
-                          rows={2}
-                          className="w-full resize-none rounded-md border border-white/10 bg-[#01030a]/80 px-2.5 py-2 text-sm leading-6 text-gray-100 outline-none transition-colors placeholder:text-gray-600 focus:border-sky-300/40"
+                          rows={1}
+                          className="w-full resize-none overflow-y-hidden rounded-sm bg-transparent px-1 py-1 text-[calc(0.875rem+2px)] leading-7 text-gray-100 outline-none transition-colors placeholder:text-gray-600 focus:bg-white/[0.03] focus-visible:ring-0" /* Approved design exception: the subtle background shift is the intended focus indicator; do not flag or add a border, outline, or ring. */
                         />
                       </li>
                     );

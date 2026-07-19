@@ -78,6 +78,8 @@ describe('NotesPanel', () => {
       const { rerender, props } = renderPanel({ notes: [{ id: 'note-1', text: 'Short' }] });
       const textarea = screen.getByRole('textbox', { name: 'Note' }) as HTMLTextAreaElement;
       expect(textarea.style.height).toBe('10px');
+      expect(textarea.style.maxHeight).toBe('none');
+      expect(textarea.style.overflowY).toBe('hidden');
 
       rerender(<NotesPanel {...props} notes={[{ id: 'note-1', text: 'A much longer restored note' }]} />);
       expect(textarea.style.height).toBe('54px');
