@@ -203,7 +203,7 @@ contextBridge.exposeInMainWorld('canvaBananaDesktop', {
     setState: state => ipcRenderer.invoke('canva-banana:file-menu-set-state', state), // Sync checked/disabled native items.
     openSnapshotFile: () => ipcRenderer.invoke('canva-banana:file-menu-open-snapshot'), // Native picker keeps macOS menu commands reliable.
     beginSaveSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-save-snapshot', payload), // Main owns the save dialog and temp file.
-    beginAutosaveSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-autosave-snapshot', payload), // Main writes only remembered export paths.
+    beginAutosaveSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-autosave-snapshot', payload), // Main writes only picker-approved snapshot paths.
     beginBackupSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-backup-snapshot', payload), // Main stores desktop backups on disk.
     writeSnapshotChunk: payload => {
       const safePayload = assertSnapshotChunkPayload(payload);

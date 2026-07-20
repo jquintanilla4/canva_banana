@@ -57,15 +57,70 @@ describe('persistAutosaveSnapshot', () => {
     expect(result.maintenanceError).toBe(maintenanceError);
   });
 
-  it('does not attempt a backup after the required primary write fails', async () => {
+  it('preserves a backup when the required primary write fails', async () => {
     const writeBackup = vi.fn(async () => {});
+    const pruneBackups = vi.fn(async () => {});
 
     await expect(persistAutosaveSnapshot({
       writeWithMediaFallbacks,
       writePrimary: vi.fn(async () => { throw new Error('Primary write failed.'); }),
       writeBackup,
-      pruneBackups: vi.fn(async () => {}),
+      pruneBackups,
     })).rejects.toThrow('Primary write failed.');
-    expect(writeBackup).not.toHaveBeenCalled();
+    expect(writeBackup).toHaveBeenCalledWith(snapshotBinary);
+    expect(pruneBackups).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the primary failure when recovery backup cleanup fails', async () => {
+    const primaryError = new Error('Primary write failed.');
+    const pruneBackups = vi.fn(async () => { throw new Error('Backup cleanup failed.'); });
+
+    await expect(persistAutosaveSnapshot({
+      writeWithMediaFallbacks,
+      writePrimary: vi.fn(async () => { throw primaryError; }),
+      writeBackup: vi.fn(async () => {}),
+      pruneBackups,
+    })).rejects.toBe(primaryError);
+    expect(pruneBackups).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the primary failure when both destinations fail', async () => {
+    const primaryError = new Error('Primary write failed.');
+    const writeBackup = vi.fn(async () => { throw new Error('Backup write failed.'); });
+    const pruneBackups = vi.fn(async () => {});
+
+    await expect(persistAutosaveSnapshot({
+      writeWithMediaFallbacks,
+      writePrimary: vi.fn(async () => { throw primaryError; }),
+      writeBackup,
+      pruneBackups,
+    })).rejects.toBe(primaryError);
+    expect(writeBackup).toHaveBeenCalledWith(snapshotBinary);
+    expect(pruneBackups).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the backup after a recoverable primary attempt fails', async () => {
+    const recoveredSnapshotBinary = { images: ['fallback'] } as unknown as SnapshotBinary;
+    const writePrimary = vi.fn()
+      .mockRejectedValueOnce(new Error('Lazy media read failed.'))
+      .mockResolvedValueOnce(undefined);
+    const writeBackup = vi.fn(async () => {});
+    const pruneBackups = vi.fn(async () => {});
+    const retryWithMediaFallback = async (writeAttempt: (binary: SnapshotBinary) => Promise<void>) => {
+      await writeAttempt(snapshotBinary).catch(() => {}); // The snapshot builder retries with fallback media.
+      await writeAttempt(recoveredSnapshotBinary);
+      return { snapshotBinary: recoveredSnapshotBinary, fallbackCount: 1 };
+    };
+
+    await persistAutosaveSnapshot({
+      writeWithMediaFallbacks: retryWithMediaFallback,
+      writePrimary,
+      writeBackup,
+      pruneBackups,
+    });
+
+    expect(writeBackup).toHaveBeenNthCalledWith(1, snapshotBinary);
+    expect(writeBackup).toHaveBeenNthCalledWith(2, recoveredSnapshotBinary);
+    expect(pruneBackups).toHaveBeenCalledTimes(1);
   });
 });

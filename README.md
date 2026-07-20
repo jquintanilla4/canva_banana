@@ -109,7 +109,8 @@ A project snapshot stores the complete workspace in one `.bcsnap` file, includin
 
 - Choose the snapshot export option to save the workspace.
 - Import a `.bcsnap` file to reopen it.
-- After a snapshot is exported, automatic backups begin for that project.
+- After a writable `.bcsnap` snapshot is exported or imported, automatic backups begin for that project.
+- Legacy JSON snapshots, including ones renamed to `.bcsnap`, and read-only imports must be exported before autosave can update them.
 - Use `File > Backups` to browse and restore available backups.
 
 Snapshots support large media projects. Saving or opening one may take longer when it contains large videos or many files.

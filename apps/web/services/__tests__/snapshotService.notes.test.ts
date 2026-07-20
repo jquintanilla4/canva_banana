@@ -3,13 +3,13 @@ import { restoreSnapshotFromFile } from '../snapshotService';
 
 const RESTORE_OPTIONS = { brushSize: 10, eraserSize: 10, brushColor: '#000000' };
 
-const buildSnapshotFile = (notes: unknown[]) => {
+const buildSnapshotFile = (notes: unknown[], fileName = 'snapshot.json') => {
   const json = JSON.stringify({
     version: 1,
     createdAt: new Date(0).toISOString(),
     state: { images: [], notes, paths: [] },
   });
-  const file = new File([json], 'snapshot.json', { type: 'application/json' });
+  const file = new File([json], fileName, { type: 'application/json' });
   if (typeof file.text !== 'function') {
     Object.defineProperty(file, 'text', { value: () => Promise.resolve(json) }); // jsdom File lacks text().
   }
@@ -17,6 +17,12 @@ const buildSnapshotFile = (notes: unknown[]) => {
 };
 
 describe('snapshotService note sanitization', () => {
+  it('reports legacy JSON from its content even when the file has a binary extension', async () => {
+    const restored = await restoreSnapshotFromFile(buildSnapshotFile([], 'renamed-legacy.bcsnap'), RESTORE_OPTIONS);
+
+    expect(restored.sourceFormat).toBe('legacy-json');
+  });
+
   it('drops legacy canvas-rectangle notes on load', async () => {
     const file = buildSnapshotFile([
       { id: 'legacy-1', x: 10, y: 20, width: 200, height: 120, text: 'old sticky', backgroundColor: '#1f2937' },

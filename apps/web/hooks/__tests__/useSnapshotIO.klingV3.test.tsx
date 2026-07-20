@@ -188,14 +188,450 @@ const stubSuccessfulImageLoad = (): void => {
   } as unknown as typeof Image);
 }; // Lets lazy desktop image fixtures complete URL loading in jsdom.
 
+const installBrowserSnapshotWorkingStorage = (options: { beforeWrite?: () => Promise<void> } = {}) => {
+  let stagedBytes = new Uint8Array();
+  const stagedWrites: Uint8Array[] = [];
+  const workingWritable = {
+    write: vi.fn(async (data: Uint8Array<ArrayBuffer>) => {
+      await options.beforeWrite?.();
+      stagedWrites.push(new Uint8Array(data));
+    }),
+    close: vi.fn(async () => {
+      const size = stagedWrites.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+      stagedBytes = new Uint8Array(size);
+      let offset = 0;
+      stagedWrites.forEach(chunk => {
+        stagedBytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      });
+    }),
+    abort: vi.fn(async () => {}),
+  };
+  const workingFileHandle = {
+    createWritable: vi.fn(async () => workingWritable),
+    getFile: vi.fn(async () => new File([stagedBytes], 'working.bcsnap', { type: 'application/octet-stream' })),
+  };
+  const workingDirectory = {
+    entries: vi.fn(() => (async function* () {})()),
+    getFileHandle: vi.fn(async () => workingFileHandle),
+    removeEntry: vi.fn(async () => {}),
+  };
+  const root = { getDirectoryHandle: vi.fn(async () => workingDirectory) };
+  Object.defineProperty(navigator, 'storage', {
+    configurable: true,
+    value: { getDirectory: vi.fn(async () => root) },
+  });
+  const heldLocks = new Set<string>();
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: {
+      request: vi.fn(async <T,>(
+        name: string,
+        options: { mode: 'exclusive'; ifAvailable?: boolean },
+        callback: (lock: { name: string } | null) => T | Promise<T>,
+      ): Promise<T> => {
+        if (options.ifAvailable && heldLocks.has(name)) return callback(null);
+        heldLocks.add(name);
+        try {
+          return await callback({ name });
+        } finally {
+          heldLocks.delete(name);
+        }
+      }),
+    },
+  });
+  return { workingDirectory, workingWritable };
+}; // Mimics an OPFS file without materializing the whole snapshot in hook code.
+
+const renderEmptySnapshotIO = (autosaveEnabled: boolean) => {
+  const setError = vi.fn();
+  const selectionSetters = {
+    setSelectedImageIds: vi.fn(),
+    setSelectedNoteIds: vi.fn(),
+    setReferenceImageIds: vi.fn(),
+    setReferenceVideoIds: vi.fn(),
+    setReferenceAudioIds: vi.fn(),
+    setSeedanceReferenceOrderIds: vi.fn(),
+    setElementImageIds: vi.fn(),
+    setVideoLastFrameImageId: vi.fn(),
+  };
+  const rendered = renderHook(({ enabled }: { enabled: boolean }) => useSnapshotIO({
+    ui: {
+      appMode: 'CANVAS',
+      tool: Tool.PAN,
+      brushSize: 20,
+      eraserSize: 20,
+      brushColor: '#ff0000',
+      prompt: '',
+      apiProvider: 'fal',
+      setAppMode: vi.fn(),
+      setTool: vi.fn(),
+      setBrushSize: vi.fn(),
+      setEraserSize: vi.fn(),
+      setBrushColor: vi.fn(),
+      setPrompt: vi.fn(),
+      setApiProvider: vi.fn(),
+      setError,
+      setToastMessage: vi.fn(),
+      setIsFileMenuOpen: vi.fn(),
+    },
+    fal: {} as unknown as UseFalSettingsResult,
+    selection: {
+      selectedImageIds: [],
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+      seedanceReferenceOrderIds: [],
+      elementImageIds: [],
+      videoLastFrameImageId: null,
+      ...selectionSetters,
+    } as unknown as SelectionStateResult,
+    noteLabelCounterRef: { current: 1 },
+    displayedImages: [],
+    displayedNotes: [],
+    displayedPaths: [],
+    displayedVideoPromptAreas: [],
+    displayedVideoPromptBars: [],
+    resetHistory: vi.fn(),
+    providerAvailability: { google: true, fal: true },
+    availableProviders: ['google', 'fal'],
+    autosaveEnabled: enabled,
+  }), { initialProps: { enabled: autosaveEnabled } });
+  return { ...rendered, setError }; // Expose persistent import feedback for read-only regression checks.
+};
+
 afterEach(() => {
   delete window.canvaBananaDesktop;
   Reflect.deleteProperty(window, 'showSaveFilePicker');
+  Reflect.deleteProperty(window, 'showOpenFilePicker');
+  Reflect.deleteProperty(navigator, 'locks');
+  Reflect.deleteProperty(navigator, 'storage');
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('useSnapshotIO (Kling v3)', () => {
+  it('adopts the scoped desktop target after a successful native snapshot import', async () => {
+    const snapshotBytes = buildEmptyBinarySnapshotFileBytes();
+    const beginAutosaveSnapshot = vi.fn(async () => ({ fileName: 'imported-scene.bcsnap', writeId: 'autosave-write-1' }));
+    const finishSnapshotWrite = vi.fn(async () => ({ saved: true }));
+    window.canvaBananaDesktop = {
+      fileMenu: {
+        openSnapshotFile: vi.fn(async () => ({
+          canceled: false as const,
+          sourceId: 'import-source-1',
+          fileName: 'imported-scene.bcsnap',
+          size: snapshotBytes.byteLength,
+          type: 'application/octet-stream',
+          autosaveId: 'import-target-1',
+        })),
+        beginAutosaveSnapshot,
+        writeSnapshotChunk: vi.fn(async ({ data }: { data: ArrayBuffer }) => ({ written: data.byteLength })),
+        finishSnapshotWrite,
+        abortSnapshotWrite: vi.fn(async () => ({ aborted: true })),
+        readSnapshotRange: vi.fn(async ({ offset, length }: { offset: number; length: number }) => (
+          cloneArrayBuffer(snapshotBytes.subarray(offset, offset + length))
+        )),
+        retainSnapshotRead: vi.fn(async () => ({ retained: true })),
+        closeSnapshotRead: vi.fn(async () => ({ closed: true })),
+      },
+    };
+    const { result } = renderEmptySnapshotIO(true);
+
+    await act(async () => {
+      await result.current.importSnapshotWithPicker(vi.fn());
+    });
+    expect(beginAutosaveSnapshot).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await waitFor(() => expect(finishSnapshotWrite).toHaveBeenCalledTimes(1));
+
+    expect(beginAutosaveSnapshot).toHaveBeenCalledWith({ autosaveId: 'import-target-1' });
+    expect(result.current.activeSnapshotFileName).toBe('imported-scene.bcsnap');
+  });
+
+  it('retains a browser import handle while autosave is disabled and uses it after autosave is enabled', async () => {
+    installBrowserSnapshotWorkingStorage();
+    const snapshotFile = new File([buildEmptyBinarySnapshotFileBytes()], 'browser-scene.bcsnap', { type: 'application/octet-stream' });
+    const writable = {
+      write: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+      abort: vi.fn(async () => {}),
+    };
+    const createWritable = vi.fn(async () => writable);
+    const requestPermission = vi.fn(async () => 'granted' as PermissionState);
+    const getFile = vi.fn(async () => snapshotFile);
+    const fileHandle = { name: snapshotFile.name, getFile, createWritable, requestPermission };
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: vi.fn(async () => [fileHandle]),
+    });
+    const { result, rerender, setError } = renderEmptySnapshotIO(false);
+
+    await act(async () => {
+      await result.current.importSnapshotWithPicker(vi.fn());
+    });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(createWritable).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await waitFor(() => expect(writable.close).toHaveBeenCalledTimes(1));
+
+    expect(createWritable).toHaveBeenCalledTimes(1);
+    expect(writable.write).toHaveBeenCalled();
+    expect(requestPermission).toHaveBeenCalledWith({ mode: 'readwrite' });
+    expect(requestPermission.mock.invocationCallOrder[0]).toBeLessThan(getFile.mock.invocationCallOrder[0]); // Permission is requested before import work can consume picker activation.
+    expect(setError).toHaveBeenLastCalledWith(null); // Writable imports clear any stale read-only warning.
+  });
+
+  it('keeps a writable browser import read-only when stable working storage is unavailable', async () => {
+    const snapshotFile = new File([buildEmptyBinarySnapshotFileBytes()], 'browser-scene.bcsnap', { type: 'application/octet-stream' });
+    const createWritable = vi.fn(async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() }));
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: vi.fn(async () => [{
+        name: snapshotFile.name,
+        getFile: vi.fn(async () => snapshotFile),
+        createWritable,
+        requestPermission: vi.fn(async () => 'granted' as PermissionState),
+      }]),
+    });
+    const { result, setError } = renderEmptySnapshotIO(true);
+
+    await act(async () => {
+      await result.current.importSnapshotWithPicker(vi.fn());
+    });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(result.current.activeSnapshotFileName).toBe('browser-scene.bcsnap');
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith(
+      'Writable snapshot import could not create a stable browser working copy.',
+      expect.objectContaining({ message: 'Browser snapshot working storage is unavailable.' }),
+    );
+    expect(setError).toHaveBeenLastCalledWith(
+      'Snapshot imported read-only. Export it to a new .bcsnap file before making changes to enable autosave.',
+    );
+  });
+
+  it('imports a browser snapshot as read-only when write permission is denied', async () => {
+    const snapshotFile = new File([buildEmptyBinarySnapshotFileBytes()], 'browser-read-only.bcsnap', { type: 'application/octet-stream' });
+    const createWritable = vi.fn(async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() }));
+    const requestPermission = vi.fn(async () => 'denied' as PermissionState);
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: vi.fn(async () => [{
+        name: snapshotFile.name,
+        getFile: vi.fn(async () => snapshotFile),
+        createWritable,
+        requestPermission,
+      }]),
+    });
+    const { result, setError } = renderEmptySnapshotIO(true);
+
+    await act(async () => {
+      await result.current.importSnapshotWithPicker(vi.fn());
+    });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(result.current.activeSnapshotFileName).toBe('browser-read-only.bcsnap');
+    expect(requestPermission).toHaveBeenCalledWith({ mode: 'readwrite' });
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(
+      'Snapshot imported read-only. Export it to a new .bcsnap file before making changes to enable autosave.',
+    );
+  });
+
+  it('keeps legacy JSON and read-only binary imports detached from autosave destinations', async () => {
+    const snapshotJson = JSON.stringify({
+      version: 1,
+      createdAt: '2026-07-09T00:00:00.000Z',
+      state: { images: [], notes: [], paths: [] },
+    });
+    const jsonFile = new File([snapshotJson], 'legacy.json', { type: 'application/json' }) as File & { text: () => Promise<string> };
+    jsonFile.text = () => Promise.resolve(snapshotJson); // Node's test File polyfill does not always include text().
+    const createWritable = vi.fn(async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() }));
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: vi.fn(async () => [{ name: jsonFile.name, getFile: vi.fn(async () => jsonFile), createWritable }]),
+    });
+    const { result, setError } = renderEmptySnapshotIO(true);
+
+    await act(async () => {
+      await result.current.importSnapshotWithPicker(vi.fn());
+    });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(null); // Legacy JSON remains read-only without claiming current snapshot autosave support.
+
+    const readOnlyBinary = new File([buildEmptyBinarySnapshotFileBytes()], 'read-only.bcsnap', { type: 'application/octet-stream' });
+    await act(async () => {
+      await result.current.importSnapshotFromFile(readOnlyBinary); // Hidden inputs and restored backups do not provide a write handle.
+    });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(
+      'Snapshot imported read-only. Export it to a new .bcsnap file before making changes to enable autosave.',
+    );
+  });
+
+  it('does not adopt an autosave target for legacy JSON content renamed to .bcsnap', async () => {
+    installBrowserSnapshotWorkingStorage();
+    const snapshotJson = JSON.stringify({
+      version: 1,
+      createdAt: '2026-07-09T00:00:00.000Z',
+      state: { images: [], notes: [], paths: [] },
+    });
+    const renamedLegacyFile = new File([snapshotJson], 'renamed-legacy.bcsnap', { type: 'application/octet-stream' }) as File & { text: () => Promise<string> };
+    renamedLegacyFile.text = () => Promise.resolve(snapshotJson); // Node's test File polyfill does not always include text().
+    const createWritable = vi.fn(async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() }));
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: vi.fn(async () => [{
+        name: renamedLegacyFile.name,
+        getFile: vi.fn(async () => renamedLegacyFile),
+        createWritable,
+        requestPermission: vi.fn(async () => 'granted' as PermissionState),
+      }]),
+    });
+    const { result, setError } = renderEmptySnapshotIO(true);
+
+    await act(async () => {
+      await result.current.importSnapshotWithPicker(vi.fn());
+    });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(createWritable).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(
+      'Snapshot imported read-only. Export it to a new .bcsnap file before making changes to enable autosave.',
+    );
+  });
+
+  it('keeps the newest writable destination when an older import completes late', async () => {
+    const snapshotBytes = buildEmptyBinarySnapshotFileBytes();
+    let releaseOlderRead: () => void = () => {};
+    const olderReadGate = new Promise<void>(resolve => { releaseOlderRead = resolve; });
+    const closeOlderSource = vi.fn(async () => {});
+    const olderSource: SnapshotByteSource = {
+      fileName: 'older.bcsnap',
+      size: snapshotBytes.byteLength,
+      type: 'application/octet-stream',
+      readRange: async (offset, length) => {
+        await olderReadGate;
+        return cloneArrayBuffer(snapshotBytes.subarray(offset, offset + length));
+      },
+      close: closeOlderSource,
+    };
+    const newerSource: SnapshotByteSource = {
+      fileName: 'newer.bcsnap',
+      size: snapshotBytes.byteLength,
+      type: 'application/octet-stream',
+      readRange: async (offset, length) => cloneArrayBuffer(snapshotBytes.subarray(offset, offset + length)),
+    };
+    const beginAutosaveSnapshot = vi.fn(async () => ({ fileName: 'newer.bcsnap', writeId: 'newer-write-1' }));
+    const finishSnapshotWrite = vi.fn(async () => ({ saved: true }));
+    window.canvaBananaDesktop = {
+      fileMenu: {
+        beginAutosaveSnapshot,
+        writeSnapshotChunk: vi.fn(async ({ data }: { data: ArrayBuffer }) => ({ written: data.byteLength })),
+        finishSnapshotWrite,
+        abortSnapshotWrite: vi.fn(async () => ({ aborted: true })),
+      },
+    };
+    const { result } = renderEmptySnapshotIO(true);
+    let olderImport: Promise<void> = Promise.resolve();
+
+    act(() => {
+      olderImport = result.current.importSnapshotFromFile(olderSource, {
+        autosaveTarget: { kind: 'desktop', autosaveId: 'older-target-1' },
+      });
+    });
+    await act(async () => {
+      await result.current.importSnapshotFromFile(newerSource, {
+        autosaveTarget: { kind: 'desktop', autosaveId: 'newer-target-1' },
+      });
+    });
+    releaseOlderRead();
+    await act(async () => {
+      await olderImport;
+    });
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await waitFor(() => expect(finishSnapshotWrite).toHaveBeenCalledTimes(1));
+
+    expect(result.current.activeSnapshotFileName).toBe('newer.bcsnap');
+    expect(beginAutosaveSnapshot).toHaveBeenCalledWith({ autosaveId: 'newer-target-1' });
+    expect(closeOlderSource).toHaveBeenCalledTimes(1); // Stale unretained sources use the same cleanup contract as staged picker files.
+  });
+
+  it('keeps a later restore active when an older picker working-copy stage completes late', async () => {
+    let releaseOlderStage: () => void = () => {};
+    const olderStageGate = new Promise<void>(resolve => { releaseOlderStage = resolve; });
+    const { workingDirectory, workingWritable } = installBrowserSnapshotWorkingStorage({
+      beforeWrite: () => olderStageGate,
+    });
+    const snapshotBytes = buildEmptyBinarySnapshotFileBytes();
+    const olderFile = new File([snapshotBytes], 'older-picker.bcsnap', { type: 'application/octet-stream' });
+    const newerFile = new File([snapshotBytes], 'newer-restore.bcsnap', { type: 'application/octet-stream' });
+    const selectedCreateWritable = vi.fn(async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() }));
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: vi.fn(async () => [{
+        name: olderFile.name,
+        getFile: vi.fn(async () => olderFile),
+        createWritable: selectedCreateWritable,
+        requestPermission: vi.fn(async () => 'granted' as PermissionState),
+      }]),
+    });
+    const { result, setError } = renderEmptySnapshotIO(true);
+    let olderImport: Promise<void> = Promise.resolve();
+
+    act(() => {
+      olderImport = result.current.importSnapshotWithPicker(vi.fn());
+    });
+    await waitFor(() => expect(workingWritable.write).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.importSnapshotFromFile(newerFile); // A backup restore starts after the picker source was selected.
+    });
+    releaseOlderStage();
+    await act(async () => {
+      await olderImport;
+    });
+
+    expect(result.current.activeSnapshotFileName).toBe('newer-restore.bcsnap');
+    expect(selectedCreateWritable).not.toHaveBeenCalled();
+    expect(workingDirectory.removeEntry).toHaveBeenCalledTimes(1); // The stale OPFS copy is released instead of being adopted.
+    expect(setError).toHaveBeenLastCalledWith(
+      'Snapshot imported read-only. Export it to a new .bcsnap file before making changes to enable autosave.',
+    );
+  });
+
   it('restores saved global Kling v3 settings from snapshot metadata', async () => {
     const meta = buildMeta();
     const file = {
@@ -511,6 +947,16 @@ describe('useSnapshotIO (Kling v3)', () => {
     const resetHistory = vi.fn();
     const setError = vi.fn();
     const setToastMessage = vi.fn();
+    const beginAutosaveSnapshot = vi.fn(async () => ({ fileName: 'current.bcsnap', writeId: 'current-write-1' }));
+    const finishSnapshotWrite = vi.fn(async () => ({ saved: true }));
+    window.canvaBananaDesktop = {
+      fileMenu: {
+        beginAutosaveSnapshot,
+        writeSnapshotChunk: vi.fn(async ({ data }: { data: ArrayBuffer }) => ({ written: data.byteLength })),
+        finishSnapshotWrite,
+        abortSnapshotWrite: vi.fn(async () => ({ aborted: true })),
+      },
+    };
     const selectionSetters = {
       setSelectedImageIds: vi.fn(),
       setSelectedNoteIds: vi.fn(),
@@ -561,11 +1007,13 @@ describe('useSnapshotIO (Kling v3)', () => {
       resetHistory,
       providerAvailability: { google: true, fal: true },
       availableProviders: ['google', 'fal'],
-      autosaveEnabled: false,
+      autosaveEnabled: true,
     }));
 
     await act(async () => {
-      await result.current.importSnapshotFromFile(currentSource);
+      await result.current.importSnapshotFromFile(currentSource, {
+        autosaveTarget: { kind: 'desktop', autosaveId: 'current-target-1' },
+      });
     });
     expect(result.current.activeSnapshotFileName).toBe('current.bcsnap');
     resetHistory.mockClear();
@@ -583,6 +1031,11 @@ describe('useSnapshotIO (Kling v3)', () => {
     expect(closeCandidate).toHaveBeenCalledTimes(1);
     expect(closeCurrent).not.toHaveBeenCalled();
     expect(result.current.activeSnapshotFileName).toBe('current.bcsnap');
+    act(() => {
+      result.current.autosaveSnapshot();
+    });
+    await waitFor(() => expect(finishSnapshotWrite).toHaveBeenCalledTimes(1));
+    expect(beginAutosaveSnapshot).toHaveBeenCalledWith({ autosaveId: 'current-target-1' });
   });
 
   it('keeps a replaced desktop source leased until every queued autosave streams its original media', async () => {
@@ -612,12 +1065,6 @@ describe('useSnapshotIO (Kling v3)', () => {
     });
     window.canvaBananaDesktop = {
       fileMenu: {
-        beginSaveSnapshot: vi.fn(async () => ({
-          canceled: false as const,
-          fileName: 'scene.bcsnap',
-          writeId: 'export-write-1',
-          autosaveId: 'desktop-target-1',
-        })),
         beginAutosaveSnapshot,
         writeSnapshotChunk: vi.fn(async ({ writeId, data }: { writeId: string; data: ArrayBuffer }) => {
           if (writeId === 'autosave-write-1' && !writtenChunks.has(writeId)) {
@@ -715,13 +1162,11 @@ describe('useSnapshotIO (Kling v3)', () => {
     }));
 
     await act(async () => {
-      await result.current.importSnapshotFromFile(activationSource);
+      await result.current.importSnapshotFromFile(activationSource, {
+        autosaveTarget: { kind: 'desktop', autosaveId: 'desktop-target-1' },
+      });
     });
     expect(result.current.activeSnapshotFileName).toBe('desktop.bcsnap');
-    await act(async () => {
-      await result.current.exportSnapshot(); // Establishes the autosave session.
-    });
-    expect(result.current.activeSnapshotFileName).toBe('scene.bcsnap');
     act(() => {
       result.current.autosaveSnapshot();
     });
@@ -743,7 +1188,7 @@ describe('useSnapshotIO (Kling v3)', () => {
     await act(async () => {
       await importB;
     });
-    await waitFor(() => expect(finishSnapshotWrite).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(finishSnapshotWrite).toHaveBeenCalledTimes(2));
 
     expect(closeSnapshotRead).toHaveBeenCalledTimes(1);
     expect(result.current.activeSnapshotFileName).toBe('replacement.json');

@@ -28,8 +28,10 @@ import {
 } from '../services/snapshotService';
 import { pruneBackupSessions, saveBackupSessionBinary } from '../services/backupService';
 import { createDesktopSnapshotSource } from '../services/desktopSnapshotSource';
+import { createBrowserSnapshotWorkingSource } from '../services/browserSnapshotWorkingSource';
 import { persistAutosaveSnapshot } from '../services/autosavePersistence';
 import { enqueueSnapshotAutosave } from '../services/snapshotAutosaveQueue';
+import { getAutosaveApprovedFileHandle, isFileSystemFileHandle } from '../services/fileSystemHandlePermissions';
 import {
   getFalNumImageMaxForModel,
   isFalAspectRatioSelectionValue,
@@ -108,10 +110,12 @@ type SnapshotIOArgs = {
 type SnapshotIOResult = {
   activeSnapshotFileName: string | null;
   exportSnapshot: () => Promise<void>;
-  importSnapshotFromFile: (file: SnapshotByteSource) => Promise<void>;
+  importSnapshotFromFile: (file: SnapshotByteSource, options?: SnapshotImportOptions) => Promise<void>;
   importSnapshotWithPicker: (onFallback: () => void) => Promise<void>;
   autosaveSnapshot: (stateOverride?: AppState) => void;
 };
+
+type SnapshotOperationId = number; // Orders imports and exports across every asynchronous preparation phase.
 
 type AutosaveSessionInfo = {
   id: string;
@@ -126,6 +130,9 @@ type DesktopAutosaveTarget = {
 };
 
 type AutosavePrimaryTarget = FileSystemFileHandle | DesktopAutosaveTarget | null;
+type SnapshotImportOptions = {
+  autosaveTarget?: Exclude<AutosavePrimaryTarget, null>; // Writable picker imports may become the active autosave destination.
+};
 type SnapshotFallbackWriteResult = {
   snapshotBinary: SnapshotBinary;
   snapshotBlob?: Blob;
@@ -136,10 +143,20 @@ const isDesktopAutosaveTarget = (target: AutosavePrimaryTarget): target is Deskt
   Boolean(target) && 'kind' in target && target.kind === 'desktop';
 
 const DESKTOP_SNAPSHOT_CHUNK_BYTES = 8 * 1024 * 1024;
+const READ_ONLY_SNAPSHOT_IMPORT_ERROR = 'Snapshot imported read-only. Export it to a new .bcsnap file before making changes to enable autosave.';
 
-const getSnapshotSourceFileName = (file: SnapshotByteSource): string => (
-  'fileName' in file ? file.fileName : file.name
-); // Browser files and desktop sources both expose the imported basename.
+const getSnapshotSourceFileName = (file: SnapshotByteSource): string => {
+  const fileName = 'fileName' in file ? file.fileName : file.name;
+  return typeof fileName === 'string' && fileName.length > 0 ? fileName : 'imported-snapshot'; // Dynamic and legacy test sources may omit a basename.
+};
+
+const isCurrentSnapshotFileName = (fileName: string): boolean => fileName.toLowerCase().endsWith('.bcsnap'); // Legacy JSON imports stay read-only.
+
+const closeSnapshotByteSource = async (file: SnapshotByteSource): Promise<void> => {
+  if ('close' in file && typeof file.close === 'function') {
+    await file.close();
+  }
+}; // Releases staged and desktop sources that never become the active document.
 
 export const prepareImagesForSnapshot = (images: CanvasImage[]): CanvasImage[] => images.map(image => {
   if (image.mediaType !== 'audio' || !image.isPlaying || !image.audioElement) {
@@ -250,6 +267,14 @@ export function useSnapshotIO({
   const latestSnapshotOperationIdRef = useRef(0); // Ignore stale import and export completions.
   const [activeSnapshotFileName, setActiveSnapshotFileName] = useState<string | null>(null);
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve()); // Serialize rapid autosave writes.
+  const reserveSnapshotOperation = useCallback((): SnapshotOperationId => {
+    const operationId = latestSnapshotOperationIdRef.current + 1;
+    latestSnapshotOperationIdRef.current = operationId;
+    return operationId;
+  }, []); // Reserve before slow picker preparation so later user work always wins.
+  const isSnapshotOperationCurrent = useCallback((operationId: SnapshotOperationId): boolean => (
+    latestSnapshotOperationIdRef.current === operationId
+  ), []); // Stale work may clean up but cannot activate state or publish feedback.
 
   useEffect(() => () => {
     const closers = retainedSnapshotSourceClosersRef.current;
@@ -732,8 +757,7 @@ export function useSnapshotIO({
   }, []);
 
   const exportSnapshot = useCallback(async () => {
-    const operationId = latestSnapshotOperationIdRef.current + 1;
-    latestSnapshotOperationIdRef.current = operationId;
+    const operationId = reserveSnapshotOperation();
     let shouldClearError = true;
     let fallbackCount = 0;
     try {
@@ -835,7 +859,9 @@ export function useSnapshotIO({
         setError(message);
       }
     } finally {
-      setIsFileMenuOpen(false);
+      if (isSnapshotOperationCurrent(operationId)) {
+        setIsFileMenuOpen(false);
+      }
     }
   }, [
     displayedImages,
@@ -843,7 +869,9 @@ export function useSnapshotIO({
     displayedPaths,
     displayedVideoPromptAreas,
     displayedVideoPromptBars,
+    isSnapshotOperationCurrent,
     rememberExportedSnapshot,
+    reserveSnapshotOperation,
     setError,
     setIsFileMenuOpen,
     setToastMessage,
@@ -860,21 +888,38 @@ export function useSnapshotIO({
   }, []);
 
   // Restore a snapshot file into state, validating each option before applying it.
-  const importSnapshotFromFile = useCallback(async (file: SnapshotByteSource) => {
-    const operationId = latestSnapshotOperationIdRef.current + 1;
-    latestSnapshotOperationIdRef.current = operationId;
+  const importSnapshotFromFileForOperation = useCallback(async (
+    file: SnapshotByteSource,
+    operationId: SnapshotOperationId,
+    options?: SnapshotImportOptions,
+  ) => {
     let retainedSourceCloser: (() => Promise<void>) | null = null;
     let sourceActivated = false;
+    let sourceClosed = false;
+    const closeUnactivatedSource = async (): Promise<void> => {
+      if (sourceClosed) return;
+      sourceClosed = true;
+      const closeSource = retainedSourceCloser ?? (() => closeSnapshotByteSource(file));
+      await closeSource().catch(error => console.error(error));
+      retainedSourceCloser = null;
+    }; // One cleanup path covers retained, unretained, staged, and desktop sources.
     try {
+      if (!isSnapshotOperationCurrent(operationId)) {
+        await closeUnactivatedSource();
+        return;
+      }
       retainedSourceCloser = await retainSnapshotSourceForImport(file);
+      if (!isSnapshotOperationCurrent(operationId)) {
+        await closeUnactivatedSource();
+        return;
+      }
       const restored = await restoreSnapshotFromFile(file, {
         brushSize,
         eraserSize,
         brushColor,
       });
-      if (latestSnapshotOperationIdRef.current !== operationId) {
-        if (retainedSourceCloser) await retainedSourceCloser().catch(error => console.error(error));
-        retainedSourceCloser = null;
+      if (!isSnapshotOperationCurrent(operationId)) {
+        await closeUnactivatedSource();
         return;
       }
 
@@ -1123,10 +1168,23 @@ export function useSnapshotIO({
       }
       const previousClosers = retainedSnapshotSourceClosersRef.current;
       retainedSnapshotSourceClosersRef.current = retainedSourceCloser ? [retainedSourceCloser] : [];
-      autosaveSessionRef.current = null; // Imported documents must not inherit the previous file destination.
-      setActiveSnapshotFileName(getSnapshotSourceFileName(file));
+      const importedFileName = getSnapshotSourceFileName(file);
+      const importedAutosaveTarget = restored.sourceFormat === 'binary-v2' && isCurrentSnapshotFileName(importedFileName)
+        ? options?.autosaveTarget ?? null
+        : null; // Only content verified as the current binary format may be overwritten in place.
+      autosaveSessionRef.current = importedAutosaveTarget
+        ? {
+            id: crypto.randomUUID(),
+            createdAt: Date.now(),
+            fileName: importedFileName,
+            primaryTarget: importedAutosaveTarget,
+          }
+        : null; // Read-only and legacy imports must not inherit the previous file destination.
+      setActiveSnapshotFileName(importedFileName);
       sourceActivated = true;
-      setError(null);
+      setError(isCurrentSnapshotFileName(importedFileName) && !importedAutosaveTarget
+        ? READ_ONLY_SNAPSHOT_IMPORT_ERROR
+        : null); // Keep every targetless .bcsnap import visibly read-only, regardless of its detected format.
       setToastMessage(restored.droppedLegacyNoteCount > 0
         ? `Snapshot imported — ${restored.droppedLegacyNoteCount} canvas ${restored.droppedLegacyNoteCount === 1 ? 'note' : 'notes'} from an older version could not be kept`
         : 'Snapshot imported');
@@ -1134,14 +1192,16 @@ export function useSnapshotIO({
       void Promise.all(previousClosers.map(close => close().catch(error => console.error(error)))); // Cleanup cannot delay document activation.
     } catch (err) {
       console.error(err);
-      if (latestSnapshotOperationIdRef.current === operationId) {
+      if (isSnapshotOperationCurrent(operationId)) {
         setError(err instanceof Error ? err.message : 'Failed to import snapshot.');
       }
-      if (!sourceActivated && 'close' in file && typeof file.close === 'function') {
-        await file.close().catch(error => console.error(error)); // Failed imports should not keep desktop handles open.
+      if (!sourceActivated) {
+        await closeUnactivatedSource(); // Failed imports should not keep staged or desktop handles open.
       }
     } finally {
-      setIsFileMenuOpen(false);
+      if (isSnapshotOperationCurrent(operationId)) {
+        setIsFileMenuOpen(false);
+      }
     }
   }, [
     availableProviders,
@@ -1149,6 +1209,7 @@ export function useSnapshotIO({
     brushSize,
     eraserSize,
     providerAvailability,
+    isSnapshotOperationCurrent,
     retainSnapshotSourceForImport,
     resetHistory,
     handleSeedance2JimengModelVersionChange,
@@ -1207,8 +1268,18 @@ export function useSnapshotIO({
     setIsFileMenuOpen,
   ]);
 
+  const importSnapshotFromFile = useCallback((file: SnapshotByteSource, options?: SnapshotImportOptions): Promise<void> => {
+    const operationId = reserveSnapshotOperation();
+    return importSnapshotFromFileForOperation(file, operationId, options);
+  }, [importSnapshotFromFileForOperation, reserveSnapshotOperation]); // Direct restores reserve immediately because no picker preparation precedes them.
+
   // Use File System Access API when available; fall back to hidden input for older browsers.
   const importSnapshotWithPicker = useCallback(async (onFallback: () => void) => {
+    const pickerStartOperationId = latestSnapshotOperationIdRef.current;
+    let operationId: SnapshotOperationId | null = null;
+    const canPublishPickerFeedback = (): boolean => operationId === null
+      ? latestSnapshotOperationIdRef.current === pickerStartOperationId
+      : isSnapshotOperationCurrent(operationId); // Older picker failures cannot overwrite feedback from newer work.
     const desktopOpenSnapshotFile = window.canvaBananaDesktop?.fileMenu?.openSnapshotFile;
     if (desktopOpenSnapshotFile) {
       try {
@@ -1216,9 +1287,14 @@ export function useSnapshotIO({
         if (result.canceled === true) {
           return;
         }
+        operationId = reserveSnapshotOperation(); // Selection commits this import before source preparation begins.
         const source = createDesktopSnapshotSource(result);
-        await importSnapshotFromFile(source);
+        const autosaveTarget = typeof result.autosaveId === 'string'
+          ? { kind: 'desktop' as const, autosaveId: result.autosaveId }
+          : undefined;
+        await importSnapshotFromFileForOperation(source, operationId, { autosaveTarget });
       } catch (err) {
+        if (!canPublishPickerFeedback()) return;
         console.error(err);
         if (err instanceof Error) {
           setError(err.message);
@@ -1229,10 +1305,10 @@ export function useSnapshotIO({
       return;
     }
 
-    const win = window as unknown as { showOpenFilePicker?: (options?: unknown) => Promise<any[]> };
+    const win = window as unknown as { showOpenFilePicker?: (options?: unknown) => Promise<unknown[]> };
     if (typeof win.showOpenFilePicker === 'function') {
       try {
-        const [fileHandle] = await win.showOpenFilePicker({
+        const [pickerResult] = await win.showOpenFilePicker({
           multiple: false,
           types: [
             {
@@ -1244,14 +1320,36 @@ export function useSnapshotIO({
             },
           ],
         });
-        if (fileHandle) {
+        if (pickerResult) {
+          if (!isFileSystemFileHandle(pickerResult)) {
+            throw new Error('Selected snapshot file handle is unavailable.');
+          }
+          operationId = reserveSnapshotOperation(); // Reserve before permission, file reads, and OPFS staging can yield.
+          const fileHandle = pickerResult;
+          const approvedAutosaveTarget = isCurrentSnapshotFileName(fileHandle.name)
+            ? await getAutosaveApprovedFileHandle(fileHandle)
+            : null; // Ask while picker activation is current; denied imports remain read-only.
+          if (!isSnapshotOperationCurrent(operationId)) return;
           const file = await fileHandle.getFile();
-          await importSnapshotFromFile(file);
+          if (!isSnapshotOperationCurrent(operationId)) return;
+          let importSource: SnapshotByteSource = file;
+          let autosaveTarget: FileSystemFileHandle | undefined;
+          if (approvedAutosaveTarget) {
+            try {
+              importSource = await createBrowserSnapshotWorkingSource(file); // Keep lazy media stable while autosave replaces the selected file.
+              autosaveTarget = approvedAutosaveTarget;
+            } catch (workingSourceError) {
+              if (!isSnapshotOperationCurrent(operationId)) return;
+              console.warn('Writable snapshot import could not create a stable browser working copy.', workingSourceError); // Safe fallback keeps the import read-only.
+            }
+          }
+          await importSnapshotFromFileForOperation(importSource, operationId, { autosaveTarget });
         }
       } catch (err) {
         if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
           return;
         }
+        if (!canPublishPickerFeedback()) return;
         console.error(err);
         if (err instanceof Error) {
           setError(err.message);
@@ -1262,7 +1360,7 @@ export function useSnapshotIO({
     } else {
       onFallback();
     }
-  }, [importSnapshotFromFile, setError]);
+  }, [importSnapshotFromFileForOperation, isSnapshotOperationCurrent, reserveSnapshotOperation, setError]);
 
   return {
     activeSnapshotFileName,

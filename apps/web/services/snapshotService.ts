@@ -351,6 +351,8 @@ export type SnapshotMetaState = {
   videoLastFrameImageId?: string | null;
 };
 
+export type SnapshotSourceFormat = 'binary-v2' | 'legacy-json';
+
 export type RestoredSnapshotState = {
   images: CanvasImage[];
   notes: CanvasNote[];
@@ -358,6 +360,7 @@ export type RestoredSnapshotState = {
   videoPromptAreas: CanvasVideoPromptArea[];
   videoPromptBars: CanvasVideoPromptBar[];
   meta?: SerializedSnapshotV1['state']['meta'];
+  sourceFormat: SnapshotSourceFormat; // Records the detected content format instead of trusting the filename.
   sourceRetention: 'required' | 'not-required'; // Lazy desktop binary media keeps its range source open.
   droppedLegacyNoteCount: number; // Pre-pin sticky notes are dropped on load; callers should tell the user.
 };
@@ -1518,6 +1521,7 @@ export const restoreSnapshotFromFile = async (
     videoPromptAreas: sanitizedVideoPromptAreas,
     videoPromptBars: sanitizedVideoPromptBars,
     meta,
+    sourceFormat: isBinarySnapshot ? 'binary-v2' : 'legacy-json', // Callers use the parsed format for safe write decisions.
     sourceRetention: sourceRetentionRequired ? 'required' : 'not-required', // Empty, materialized, and legacy imports no longer own a source handle.
     droppedLegacyNoteCount,
   };

@@ -75,7 +75,14 @@ describe('preload desktop bridge', () => {
   });
 
   it('exposes file menu bridge commands and IPC helpers', async () => {
-    const openSnapshotResult = { canceled: true };
+    const openSnapshotResult = {
+      canceled: false,
+      sourceId: 'source-import-1',
+      fileName: 'imported.bcsnap',
+      size: 10,
+      type: 'application/octet-stream',
+      autosaveId: 'autosave-import-1',
+    };
     const saveSnapshotResult = { canceled: false, fileName: 'snapshot.bcsnap', writeId: 'write-1', autosaveId: 'autosave-1' };
     const autosaveSnapshotResult = { fileName: 'snapshot.bcsnap', writeId: 'write-2' };
     const backupSnapshotResult = { fileName: 'backup.bcsnap', writeId: 'write-3' };

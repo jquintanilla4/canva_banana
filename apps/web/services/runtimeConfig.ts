@@ -97,7 +97,7 @@ export type DesktopFileMenuState = {
 
 export type DesktopOpenSnapshotResult =
   | { canceled: true }
-  | { canceled: false; sourceId: string; fileName: string; size: number; type: string; mediaUrlBase?: string };
+  | { canceled: false; sourceId: string; fileName: string; size: number; type: string; mediaUrlBase?: string; autosaveId?: string };
 
 export type DesktopBeginSaveSnapshotPayload = {
   suggestedName: string;

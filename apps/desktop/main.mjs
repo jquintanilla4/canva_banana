@@ -33,6 +33,7 @@ import { createSnapshotBackupCoordinator } from './snapshot-backup-coordinator.m
 import { openSnapshotBackupSource } from './snapshot-backup-open.mjs';
 import { reconcileSnapshotBackupDirectory } from './snapshot-backup-recovery.mjs';
 import { createSnapshotMediaStreamController, isSnapshotMediaStreamBusyError } from './snapshot-media-stream-controller.mjs';
+import { canReplaceSnapshotAutosaveTarget } from './snapshot-autosave-target.mjs';
 import { createRendererResourceEpochs } from './renderer-resource-epochs.mjs';
 import snapshotOperationBudget from './snapshot-operation-budget.cjs';
 import {
@@ -43,6 +44,7 @@ import {
   assertSnapshotDataCanBeWritten,
   assertSnapshotFileCanBeOpened,
   getSnapshotBackupTransactionBaseBytes,
+  isAutosaveEligibleSnapshotFileName,
   sanitizeSnapshotFileName,
 } from './file-menu-utils.mjs';
 import { resolveSecureBackendRuntime, shouldUseExternalSecureBackend } from './secure-backend-runtime.mjs';
@@ -1447,7 +1449,12 @@ ipcMain.handle('canva-banana:file-menu-open-snapshot', async (event) => {
     return { canceled: true };
   }
   rendererResourceEpochs.assertCurrent(owner, 'Snapshot open dialog belongs to an inactive renderer document.');
-  return { canceled: false, ...await rememberSnapshotReadSource(result.filePaths[0], owner) };
+  const filePath = result.filePaths[0];
+  const source = await rememberSnapshotReadSource(filePath, owner);
+  const autosaveEligible = isAutosaveEligibleSnapshotFileName(source.fileName)
+    && await canReplaceSnapshotAutosaveTarget(filePath);
+  const autosaveId = autosaveEligible ? rememberSnapshotAutosaveTarget(filePath) : undefined; // Read-only and legacy imports require export first.
+  return { canceled: false, ...source, ...(autosaveId ? { autosaveId } : {}) };
 });
 
 ipcMain.handle('canva-banana:file-menu-begin-save-snapshot', async (event, payload) => {

@@ -30,6 +30,10 @@ export const isSupportedSnapshotFileName = (value) => (
   typeof value === 'string' && SNAPSHOT_IMPORT_EXTENSIONS.has(extname(value).toLowerCase())
 );
 
+export const isAutosaveEligibleSnapshotFileName = (value) => (
+  typeof value === 'string' && extname(value).toLowerCase() === '.bcsnap'
+); // Only current binary snapshots may be overwritten by autosave.
+
 export const assertSnapshotFileCanBeOpened = ({
   fileName,
   size,

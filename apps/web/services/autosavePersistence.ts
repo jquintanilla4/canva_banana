@@ -29,7 +29,29 @@ export const persistAutosaveSnapshot = async <TWriteResult extends SnapshotWrite
   writeBackup,
   pruneBackups,
 }: PersistAutosaveSnapshotOptions<TWriteResult>): Promise<AutosavePersistenceResult<TWriteResult>> => {
-  const writeResult = await writeWithMediaFallbacks(writePrimary ?? writeBackup); // Only the required destination controls autosave success.
+  let recoveryBackupSaved = false; // Tracks recovery data that needs retention cleanup if the required write still fails.
+  const writeRequiredDestination = writePrimary
+    ? async (snapshotBinary: SnapshotBinary) => {
+        try {
+          await writePrimary(snapshotBinary);
+        } catch (primaryError) {
+          try {
+            await writeBackup(snapshotBinary); // Preserve recovery data when a remembered target becomes unavailable.
+            recoveryBackupSaved = true;
+          } catch { /* The primary error remains the clearest action for the user. */ }
+          throw primaryError;
+        }
+      }
+    : writeBackup;
+  let writeResult: TWriteResult;
+  try {
+    writeResult = await writeWithMediaFallbacks(writeRequiredDestination); // The required destination still controls autosave success.
+  } catch (requiredWriteError) {
+    if (recoveryBackupSaved) {
+      await pruneBackups().catch(() => undefined); // Enforce retention without replacing the actionable primary error.
+    }
+    throw requiredWriteError;
+  }
   let backup: AutosaveBackupOutcome = { status: 'saved' };
 
   if (writePrimary) {

@@ -404,6 +404,7 @@ describe('snapshotService (binary metadata bounds)', () => {
     expect(restored.images.map(image => image.id)).toEqual(imageManifests.map(image => image.id));
     expect(getMediaUrl).toHaveBeenCalledTimes(imageManifests.length);
     expect(peakLoads).toBe(4);
+    expect(restored.sourceFormat).toBe('binary-v2');
     expect(restored.sourceRetention).toBe('required');
   });
 

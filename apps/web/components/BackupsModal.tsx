@@ -102,7 +102,7 @@ export const BackupsModal: React.FC<BackupsModalProps> = ({
           )}
           {!isLoading && sessions.length === 0 && (
             <p className="text-sm text-gray-400">
-              No backups yet. Export a snapshot to start autosaving.
+              No backups yet. Export or import a writable .bcsnap file to start autosaving.
             </p>
           )}
           {!isLoading && sessions.length > 0 && (

@@ -11,6 +11,7 @@ import {
   assertSnapshotDataCanBeWritten,
   assertSnapshotFileCanBeOpened,
   getSnapshotBackupTransactionBaseBytes,
+  isAutosaveEligibleSnapshotFileName,
   isSupportedSnapshotFileName,
   sanitizeSnapshotFileName,
 } from './file-menu-utils.mjs';
@@ -34,6 +35,12 @@ describe('file-menu-utils', () => {
     expect(isSupportedSnapshotFileName('scene.bcsnap')).toBe(true);
     expect(isSupportedSnapshotFileName('legacy.JSON')).toBe(true);
     expect(isSupportedSnapshotFileName('movie.mp4')).toBe(false);
+  });
+
+  it('allows autosave only for current binary snapshot names', () => {
+    expect(isAutosaveEligibleSnapshotFileName('scene.bcsnap')).toBe(true);
+    expect(isAutosaveEligibleSnapshotFileName('scene.BCSNAP')).toBe(true);
+    expect(isAutosaveEligibleSnapshotFileName('legacy.json')).toBe(false);
   });
 
   it('rejects unsupported or invalid snapshot imports before reading', () => {
