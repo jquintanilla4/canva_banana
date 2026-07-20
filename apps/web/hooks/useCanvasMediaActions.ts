@@ -8,9 +8,9 @@ import {
   Tool,
 } from '../types';
 import { getNaturalSize, loadMediaFromBlob } from '../services/mediaService';
-import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { loadAudioFromBlob, generateWaveformImage } from '../services/audioService';
 import { removeBackground as removeFalBackground } from '../services/falService';
+import { downloadCanvasMedia } from '../services/canvasMediaDownloadService';
 import type { AppState, CommitOverrides } from './useCanvasHistory';
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
@@ -246,58 +246,10 @@ export function useCanvasMediaActions({
     if (!hasSingleImageSelected || !primaryImageId) return;
     const imageToDownload = images.find(img => img.id === primaryImageId);
     if (!imageToDownload) return;
-
-    let realFile: File | null = null;
-    if (imageToDownload.file) {
-      try {
-        realFile = await ensureRealSnapshotFile(imageToDownload.file);
-      } catch {
-        setError('Could not read this item\'s media from the imported snapshot.');
-        return;
-      }
-    }
-
-    // Handle audio downloads
-    if (imageToDownload.mediaType === 'audio' && imageToDownload.audioElement) {
-      const objectUrl = realFile ? URL.createObjectURL(realFile) : null;
-      if (!objectUrl) {
-        setError('No downloadable source found for this audio.');
-        return;
-      }
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = imageToDownload.file.name || 'audio.webm';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-      return;
-    }
-
-    const mediaElement = imageToDownload.element;
-    const fallbackHref = mediaElement instanceof HTMLVideoElement
-      ? (mediaElement.currentSrc || mediaElement.src)
-      : mediaElement.src;
-    const objectUrl = realFile ? URL.createObjectURL(realFile) : null;
-    const href = objectUrl || fallbackHref;
-    if (!href) {
-      setError('No downloadable source found for this item.');
-      return;
-    }
-
-    const link = document.createElement('a');
-    link.href = href;
-    const getDownloadName = () => {
-      if (imageToDownload.file.name) return imageToDownload.file.name;
-      if (imageToDownload.mediaType === 'video') return 'video.mp4';
-      return 'download.png';
-    };
-    link.download = getDownloadName();
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    if (objectUrl) {
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    try {
+      await downloadCanvasMedia(imageToDownload);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'No downloadable source found for this item.');
     }
   }, [hasSingleImageSelected, images, primaryImageId, setError]);
 

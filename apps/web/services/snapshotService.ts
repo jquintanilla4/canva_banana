@@ -383,6 +383,8 @@ const SNAPSHOT_READ_AHEAD_MAX_MEDIA_BYTES = 4 * 1024; // Large images and videos
 const SNAPSHOT_MIN_BINARY_IMAGE_RECORD_BYTES = 14; // Four length bytes, one metadata byte, eight size bytes, and one media byte.
 const SNAPSHOT_PARSE_YIELD_INTERVAL = 1_000; // Large valid manifests periodically return control to the browser.
 const SNAPSHOT_MEDIA_RESTORE_CONCURRENCY = 4; // Match the preload read budget while every valid media item waits its turn.
+const SNAPSHOT_MEDIA_PROBE_CONCURRENCY = 4; // Find unavailable media without flooding the preload read budget.
+const SNAPSHOT_FALLBACK_RENDER_CONCURRENCY = 2; // Limit simultaneous PNG encodes when many source files disappear.
 const fallbackPngBytes = new Uint8Array([
   137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
   0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
@@ -1005,6 +1007,19 @@ export const getSnapshotMediaObjectUrl = (blob: File | SnapshotMediaBlob): strin
     : undefined
 }; // Desktop snapshot media keeps a source-scoped URL for lazy reuse.
 
+export const getSnapshotMediaDownloadUrl = (blob: File | SnapshotMediaBlob, fileName: string): string | undefined => {
+  const objectUrl = getSnapshotMediaObjectUrl(blob);
+  if (!objectUrl) return undefined;
+  try {
+    const downloadUrl = new URL(objectUrl);
+    downloadUrl.searchParams.set('download', '1');
+    downloadUrl.searchParams.set('fileName', fileName || blob.name || 'snapshot-media');
+    return downloadUrl.toString();
+  } catch {
+    return objectUrl;
+  }
+}; // Explicit attachment parameters let Electron stream lazy media without materializing it.
+
 const createRestoredSnapshotFile = (blob: SnapshotMediaBlob, fileName: string, fileType: string): File => {
   if (blob instanceof Blob) {
     return new File([blob], fileName, { type: fileType });
@@ -1032,6 +1047,25 @@ export const assertSnapshotBinaryMediaReadable = async (binary: SnapshotBinary):
       await readSnapshotMediaProbe(blob, manifest, blob.size - 1);
     }
   }
+};
+
+export const getUnreadableSnapshotMediaIds = async (binary: SnapshotBinary): Promise<Set<string>> => {
+  const results = await mapWithConcurrency(
+    binary.images,
+    SNAPSHOT_MEDIA_PROBE_CONCURRENCY,
+    async ({ manifest, blob }): Promise<string | null> => {
+      try {
+        await readSnapshotMediaProbe(blob, manifest, 0);
+        if (blob.size > 1) {
+          await readSnapshotMediaProbe(blob, manifest, blob.size - 1);
+        }
+        return null;
+      } catch {
+        return manifest.id;
+      }
+    },
+  );
+  return new Set(results.filter((id): id is string => id !== null)); // One preflight reports every unavailable canvas item.
 };
 
 const isMissingSourceFileError = (error: unknown): boolean => {
@@ -1106,15 +1140,17 @@ export const buildSnapshotBinaryFromState = async (params: {
   meta: SnapshotMetaState;
 }, options: SnapshotBuildOptions = {}): Promise<SnapshotBinary> => {
   const { images, notes, paths, videoPromptAreas, videoPromptBars, meta } = params;
-  const imagesWithManifests: SnapshotBinary['images'] = await Promise.all(
-    images.map(async (img) => {
+  const imagesWithManifests: SnapshotBinary['images'] = await mapWithConcurrency(
+    images,
+    SNAPSHOT_FALLBACK_RENDER_CONCURRENCY,
+    async (img) => {
       if (options.fallbackMediaIds?.has(img.id)) {
         return buildFallbackSnapshotImage(img);
       }
       const manifest = buildSnapshotImageManifest(img);
 
       return { manifest, blob: img.file };
-    })
+    },
   );
 
   const manifest: SnapshotManifestV2 = {

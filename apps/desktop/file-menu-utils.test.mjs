@@ -10,6 +10,7 @@ import {
   assertSnapshotBackupSizeCanBeWritten,
   assertSnapshotDataCanBeWritten,
   assertSnapshotFileCanBeOpened,
+  getAttachmentContentDisposition,
   getSnapshotBackupTransactionBaseBytes,
   isAutosaveEligibleSnapshotFileName,
   isSupportedSnapshotFileName,
@@ -29,6 +30,13 @@ describe('file-menu-utils', () => {
   it('falls back for empty and sentinel names', () => {
     expect(sanitizeSnapshotFileName('')).toBe(DEFAULT_SNAPSHOT_FILE_NAME);
     expect(sanitizeSnapshotFileName('..')).toBe(DEFAULT_SNAPSHOT_FILE_NAME);
+  });
+
+  it('builds safe Unicode attachment filenames', () => {
+    expect(getAttachmentContentDisposition('café image.png')).toBe(
+      'attachment; filename="caf_ image.png"; filename*=UTF-8\'\'caf%C3%A9%20image.png',
+    );
+    expect(getAttachmentContentDisposition('image"\r\nX-Test: yes.png')).not.toMatch(/[\r\n]/);
   });
 
   it('accepts only snapshot import extensions', () => {

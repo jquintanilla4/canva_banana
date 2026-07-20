@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   SnapshotMediaReadError,
   ensureRealSnapshotFile,
+  getUnreadableSnapshotMediaIds,
   parseBinarySnapshotFile,
   restoreSnapshotFromFile,
   snapshotBinaryToBlob,
@@ -149,6 +150,42 @@ describe('snapshot metadata write-time caps', () => {
 
   it('rejects oversized manifests in the browser download fallback path', () => {
     expect(() => snapshotBinaryToBlob(buildOversizedBinary())).toThrow('too large to export and re-import');
+  });
+});
+
+describe('snapshot media preflight', () => {
+  it('reports every unreadable media id in one bounded pass', async () => {
+    const buildManifest = (id: string): SnapshotBinary['images'][number]['manifest'] => ({
+      id,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      fileName: `${id}.png`,
+      fileType: 'image/png',
+      fileSize: 4,
+      mediaType: 'image',
+    });
+    const buildBlob = (readable: boolean) => ({
+      size: 4,
+      type: 'image/png',
+      slice: vi.fn(() => ({
+        size: 1,
+        arrayBuffer: readable
+          ? async () => new Uint8Array([1]).buffer
+          : async () => { throw new Error('Source file disappeared.'); },
+      })),
+    });
+    const binary = {
+      manifest: { version: 2, createdAt: '2026-07-20T00:00:00.000Z', state: { images: [], notes: [], paths: [] } },
+      images: [
+        { manifest: buildManifest('readable'), blob: buildBlob(true) },
+        { manifest: buildManifest('missing-1'), blob: buildBlob(false) },
+        { manifest: buildManifest('missing-2'), blob: buildBlob(false) },
+      ],
+    } as unknown as SnapshotBinary;
+
+    await expect(getUnreadableSnapshotMediaIds(binary)).resolves.toEqual(new Set(['missing-1', 'missing-2']));
   });
 });
 

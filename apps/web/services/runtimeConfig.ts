@@ -201,6 +201,7 @@ declare global {
         abortSnapshotWrite?: (payload: DesktopSnapshotWriteIdPayload) => Promise<{ aborted: boolean }>;
         readSnapshotRange?: (payload: DesktopSnapshotReadRangePayload) => Promise<ArrayBuffer>;
         getSnapshotMediaUrl?: (payload: DesktopSnapshotMediaUrlPayload) => Promise<string>;
+        downloadSnapshotMedia?: (payload: { url: string }) => Promise<{ started: boolean }>;
         retainSnapshotRead?: (payload: { sourceId: string }) => Promise<{ retained: boolean }>;
         closeSnapshotRead?: (payload: { sourceId: string }) => Promise<{ closed: boolean }>;
         listSnapshotBackups?: () => Promise<DesktopSnapshotBackupSummary[]>;

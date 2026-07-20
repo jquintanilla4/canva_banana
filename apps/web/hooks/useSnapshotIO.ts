@@ -12,6 +12,7 @@ import type {
 import { Tool } from '../types';
 import {
   assertSnapshotBinaryMediaReadable,
+  getUnreadableSnapshotMediaIds,
   getSnapshotBinaryByteLength,
   isSnapshotMediaBlob,
   readSnapshotBlobPartAsArrayBuffer,
@@ -575,14 +576,34 @@ export function useSnapshotIO({
     afterMediaFallback?: () => Promise<void>,
   ): Promise<SnapshotFallbackWriteResult> => {
     const fallbackMediaIds = new Set<string>();
+    let shouldProbeAllMedia = true;
+    let shouldResetDestination = false;
 
     while (true) {
       const snapshotBinary = await buildSnapshotBinary(snapshotState, fallbackMediaIds);
+      if (shouldProbeAllMedia) {
+        const unreadableMediaIds = await getUnreadableSnapshotMediaIds(snapshotBinary);
+        shouldProbeAllMedia = false;
+        let discoveredFallback = false;
+        unreadableMediaIds.forEach(mediaId => {
+          if (fallbackMediaIds.has(mediaId)) return;
+          fallbackMediaIds.add(mediaId);
+          discoveredFallback = true;
+        });
+        if (discoveredFallback) {
+          shouldResetDestination = true;
+          continue;
+        }
+      }
       let snapshotBlob: Blob | undefined;
       const getSnapshotBlob = () => {
         snapshotBlob ??= snapshotBinaryToBlob(snapshotBinary);
         return snapshotBlob;
       };
+      if (shouldResetDestination) {
+        await afterMediaFallback?.();
+        shouldResetDestination = false;
+      }
       try {
         await writeAttempt(snapshotBinary, getSnapshotBlob);
         return { snapshotBinary, snapshotBlob, fallbackCount: fallbackMediaIds.size };
@@ -591,7 +612,8 @@ export function useSnapshotIO({
           throw error;
         }
         fallbackMediaIds.add(error.mediaId);
-        await afterMediaFallback?.();
+        shouldProbeAllMedia = true;
+        shouldResetDestination = true;
       }
     }
   }, [buildSnapshotBinary]);
@@ -794,6 +816,7 @@ export function useSnapshotIO({
             if (typeof result.autosaveId !== 'string' || !beginAutosaveSnapshot) {
               throw new Error('Desktop snapshot retry is unavailable.');
             }
+            await abortDesktopSnapshotWrite(writeId); // Preflight fallbacks replace the picker-created empty session too.
             const retrySession = await beginAutosaveSnapshot({ autosaveId: result.autosaveId });
             writeId = retrySession.writeId;
           },

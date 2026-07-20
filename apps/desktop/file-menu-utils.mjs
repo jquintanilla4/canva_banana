@@ -26,6 +26,13 @@ export const sanitizeSnapshotFileName = (value) => {
   return basename(winName) || DEFAULT_SNAPSHOT_FILE_NAME;
 };
 
+export const getAttachmentContentDisposition = (value) => {
+  const safeName = sanitizeSnapshotFileName(value).replace(/[\u0000-\u001f\u007f"\\]/g, '_');
+  const asciiName = safeName.replace(/[^\x20-\x7e]/g, '_');
+  const encodedName = encodeURIComponent(safeName).replace(/['()*]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`;
+}; // Attachment names cannot inject headers and preserve Unicode through filename*.
+
 export const isSupportedSnapshotFileName = (value) => (
   typeof value === 'string' && SNAPSHOT_IMPORT_EXTENSIONS.has(extname(value).toLowerCase())
 );

@@ -139,6 +139,11 @@ const assertSnapshotMediaUrlPayload = (payload) => {
   return payload;
 };
 
+const assertSnapshotMediaDownloadPayload = (payload) => {
+  assertNonEmptyString(payload?.url, 'Snapshot media download URL is invalid.');
+  return payload;
+};
+
 const assertSnapshotReadSourcePayload = (payload) => {
   assertNonEmptyString(payload?.sourceId, 'Snapshot read source is invalid.');
   return payload;
@@ -216,6 +221,7 @@ contextBridge.exposeInMainWorld('canvaBananaDesktop', {
       return invokeWithSnapshotBudget(snapshotReadOperationBudget, safePayload.length, 'canva-banana:file-menu-read-snapshot-range', safePayload);
     }, // Imports read bounded ranges with concurrent backpressure.
     getSnapshotMediaUrl: payload => ipcRenderer.invoke('canva-banana:file-menu-get-snapshot-media-url', assertSnapshotMediaUrlPayload(payload)), // Media elements stream through a scoped URL.
+    downloadSnapshotMedia: payload => ipcRenderer.invoke('canva-banana:file-menu-download-snapshot-media', assertSnapshotMediaDownloadPayload(payload)), // Main starts custom-protocol downloads without renderer navigation.
     retainSnapshotRead: payload => ipcRenderer.invoke('canva-banana:file-menu-retain-snapshot-read', assertSnapshotReadSourcePayload(payload)), // Imported media keeps its read source.
     closeSnapshotRead: payload => ipcRenderer.invoke('canva-banana:file-menu-close-snapshot-read', assertSnapshotReadSourcePayload(payload)), // Release main-side read metadata.
     listSnapshotBackups: () => ipcRenderer.invoke('canva-banana:file-menu-list-snapshot-backups'), // Desktop backups live outside IndexedDB.

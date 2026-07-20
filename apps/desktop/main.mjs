@@ -33,6 +33,8 @@ import { createSnapshotBackupCoordinator } from './snapshot-backup-coordinator.m
 import { openSnapshotBackupSource } from './snapshot-backup-open.mjs';
 import { reconcileSnapshotBackupDirectory } from './snapshot-backup-recovery.mjs';
 import { createSnapshotMediaStreamController, isSnapshotMediaStreamBusyError } from './snapshot-media-stream-controller.mjs';
+import { createDeferredCloseLease } from './deferred-close-lease.mjs';
+import { SNAPSHOT_DOWNLOAD_TOKEN_PARAM, createSnapshotDownloadCoordinator } from './snapshot-download-coordinator.mjs';
 import { canReplaceSnapshotAutosaveTarget } from './snapshot-autosave-target.mjs';
 import { createRendererResourceEpochs } from './renderer-resource-epochs.mjs';
 import snapshotOperationBudget from './snapshot-operation-budget.cjs';
@@ -43,6 +45,7 @@ import {
   assertSnapshotBackupSizeCanBeWritten,
   assertSnapshotDataCanBeWritten,
   assertSnapshotFileCanBeOpened,
+  getAttachmentContentDisposition,
   getSnapshotBackupTransactionBaseBytes,
   isAutosaveEligibleSnapshotFileName,
   sanitizeSnapshotFileName,
@@ -158,6 +161,9 @@ const snapshotBackupCoordinator = createSnapshotBackupCoordinator({
   maxPending: maxSnapshotPendingBackupOperations,
   busyErrorMessage: 'Too many snapshot backup operations are waiting.',
 }); // Serializes backup state changes without buffering snapshot bytes.
+const snapshotDownloadCoordinator = createSnapshotDownloadCoordinator({
+  createToken: () => randomBytes(18).toString('base64url'),
+}); // Download tokens keep exact retained ranges alive beyond their renderer document.
 
 const toBinaryBuffer = (data) => {
   assertSnapshotDataCanBeWritten(data);
@@ -219,6 +225,10 @@ const parseSnapshotMediaProtocolUrl = (requestUrl) => {
     offset,
     length,
     type: parsedUrl.searchParams.get('type') || 'application/octet-stream',
+    downloadFileName: parsedUrl.searchParams.get('download') === '1'
+      ? parsedUrl.searchParams.get('fileName')
+      : null,
+    downloadToken: parsedUrl.searchParams.get(SNAPSHOT_DOWNLOAD_TOKEN_PARAM),
   };
 };
 
@@ -237,7 +247,7 @@ const parseHttpRangeHeader = (value, size) => {
 
 const handleSnapshotMediaProtocolRequest = async (request) => {
   const media = parseSnapshotMediaProtocolUrl(request.url);
-  const source = getSnapshotReadSource(media.sourceId);
+  const source = getSnapshotReadSourceForProtocol(media);
   if (media.offset + media.length > source.size) {
     return new Response('Snapshot media range is invalid.', { status: 416 });
   }
@@ -257,6 +267,9 @@ const handleSnapshotMediaProtocolRequest = async (request) => {
   });
   if (byteRange.partial) {
     headers.set('Content-Range', `bytes ${byteRange.start}-${byteRange.end}/${media.length}`);
+  }
+  if (media.downloadFileName) {
+    headers.set('Content-Disposition', getAttachmentContentDisposition(media.downloadFileName));
   }
   let body;
   try {
@@ -659,7 +672,7 @@ const rememberSnapshotReadSource = async (filePath, owner) => {
     assertSnapshotFileCanBeOpened({ fileName, size: fileStats.size });
     rendererResourceEpochs.assertCurrent(owner, 'Snapshot read request is no longer active.');
     const sourceId = randomBytes(18).toString('base64url');
-    snapshotReadSources.set(sourceId, {
+    const source = {
       handle,
       owner,
       filePath,
@@ -678,8 +691,19 @@ const rememberSnapshotReadSource = async (filePath, owner) => {
         closedErrorMessage: 'Snapshot read source is no longer available.',
         busyErrorMessage: 'Too many snapshot media streams are waiting.',
       }),
-    });
-    refreshSnapshotReadSourceTimeout(sourceId, snapshotReadSources.get(sourceId));
+      closeLease: null,
+    };
+    source.closeLease = createDeferredCloseLease({
+      close: async () => {
+        if (snapshotReadSources.get(sourceId) === source) {
+          snapshotReadSources.delete(sourceId);
+        }
+        source.mediaStreamController.close();
+        await source.handle.close().catch(() => {});
+      },
+    }); // Active native downloads defer handle closure without keeping renderer access alive.
+    snapshotReadSources.set(sourceId, source);
+    refreshSnapshotReadSourceTimeout(sourceId, source);
     return {
       sourceId,
       fileName,
@@ -697,7 +721,7 @@ const rememberSnapshotReadSource = async (filePath, owner) => {
 
 const getSnapshotReadSource = (sourceId, owner) => {
   const source = snapshotReadSources.get(assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.'));
-  if (!source) {
+  if (!source || source.closeLease.isClosing()) {
     throw new Error('Snapshot read source is no longer available.');
   }
   if (!rendererResourceEpochs.isCurrent(source.owner) || (owner && !rendererResourceEpochs.isSame(source.owner, owner))) {
@@ -705,6 +729,19 @@ const getSnapshotReadSource = (sourceId, owner) => {
   }
   return source;
 };
+
+const getSnapshotReadSourceForProtocol = (media) => {
+  if (snapshotDownloadCoordinator.isAuthorized({
+    token: media.downloadToken,
+    sourceId: media.sourceId,
+    offset: media.offset,
+    length: media.length,
+  })) {
+    const source = snapshotReadSources.get(media.sourceId);
+    if (source) return source;
+  }
+  return getSnapshotReadSource(media.sourceId);
+}; // A reserved download may finish after its renderer generation is invalidated.
 
 const readSnapshotSourceRange = async ({ sourceId, offset, length, owner }) => {
   const id = assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.');
@@ -738,14 +775,15 @@ const readSnapshotSourceRange = async ({ sourceId, offset, length, owner }) => {
 
 const closeSnapshotReadSource = async (sourceId, owner) => {
   const id = assertSnapshotSessionId(sourceId, 'Snapshot read source is invalid.');
-  const existingSource = snapshotReadSources.get(id);
-  const source = owner && existingSource ? getSnapshotReadSource(id, owner) : existingSource;
-  snapshotReadSources.delete(id);
+  const source = snapshotReadSources.get(id);
+  if (owner && source && !rendererResourceEpochs.isSame(source.owner, owner)) {
+    throw new Error('Snapshot read source belongs to an inactive renderer document.');
+  }
   if (source?.timeout) {
     clearTimeout(source.timeout);
+    source.timeout = null;
   }
-  source?.mediaStreamController.close(); // Stop active and queued protocol reads before closing the shared handle.
-  await source?.handle.close().catch(() => {});
+  await source?.closeLease.requestClose(); // Physical closure waits for native downloads but blocks new renderer work now.
   return { closed: true };
 };
 
@@ -1385,6 +1423,13 @@ const startDesktopApp = async () => {
   await reconcileSnapshotBackupDirectory(getSnapshotBackupDir()).catch(error => console.error('Snapshot backup recovery failed.', error));
   await pruneSnapshotBackups(MAX_SNAPSHOT_BACKUP_COUNT).catch(error => console.error('Snapshot backup pruning failed.', error));
   session.defaultSession.protocol.handle(SNAPSHOT_MEDIA_PROTOCOL, handleSnapshotMediaProtocolRequest);
+  session.defaultSession.on('will-download', (_event, item, webContents) => {
+    snapshotDownloadCoordinator.claim({
+      url: item.getURL(),
+      webContentsId: webContents.id,
+      item,
+    });
+  }); // DownloadItem completion owns the terminal release for each source lease.
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(webContents === mainWindow?.webContents && isAllowedAudioPermissionRequest(permission, details)); // Trust only the app window's microphone requests.
   });
@@ -1548,6 +1593,39 @@ ipcMain.handle('canva-banana:file-menu-get-snapshot-media-url', async (event, pa
   return getSnapshotMediaProtocolUrl(payload); // Issue URLs only for sources owned by this renderer document.
 });
 
+ipcMain.handle('canva-banana:file-menu-download-snapshot-media', (event, payload) => {
+  const requestUrl = assertNonEmptyString(payload?.url, 'Snapshot media download URL is invalid.');
+  const media = parseSnapshotMediaProtocolUrl(requestUrl);
+  if (!media.downloadFileName) {
+    throw new Error('Snapshot media download filename is invalid.');
+  }
+  const source = getSnapshotReadSource(media.sourceId, rendererResourceEpochs.capture(event.sender.id));
+  if (media.offset + media.length > source.size) {
+    throw new Error('Snapshot media range is invalid.');
+  }
+  const releaseSource = source.closeLease.acquire();
+  let reservation;
+  try {
+    reservation = snapshotDownloadCoordinator.reserve({
+      requestUrl,
+      sourceId: media.sourceId,
+      offset: media.offset,
+      length: media.length,
+      webContentsId: event.sender.id,
+      releaseSource,
+    });
+    event.sender.downloadURL(reservation.url);
+  } catch (error) {
+    if (reservation) {
+      snapshotDownloadCoordinator.release(reservation.token);
+    } else {
+      releaseSource();
+    }
+    throw error;
+  }
+  return { started: true };
+}); // Main validates the retained source capability before Chromium streams it to disk.
+
 ipcMain.handle('canva-banana:file-menu-retain-snapshot-read', (event, payload) => (
   retainSnapshotReadSource(payload?.sourceId, rendererResourceEpochs.capture(event.sender.id))
 ));
@@ -1662,6 +1740,7 @@ app.on('window-all-closed', () => {
 });
 
 const cleanupBeforeQuit = async () => {
+  snapshotDownloadCoordinator.cancelAll(); // Quit interrupts downloads so deferred source closure cannot stall shutdown.
   const results = await Promise.allSettled([
     managedServiceLifecycle.shutdown(),
     abortAllSnapshotWriteSessions(),

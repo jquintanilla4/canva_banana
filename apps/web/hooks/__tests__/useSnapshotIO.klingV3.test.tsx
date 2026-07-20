@@ -1321,7 +1321,7 @@ describe('useSnapshotIO (Kling v3)', () => {
     );
   });
 
-  it('retries desktop exports with a PNG fallback when source media cannot be read', async () => {
+  it('preflights unavailable media and writes all PNG fallbacks in one desktop retry', async () => {
     const chunksByWriteId = new Map<string, Uint8Array[]>();
     const beginSaveSnapshot = vi.fn(async () => ({
       canceled: false as const,
@@ -1329,10 +1329,11 @@ describe('useSnapshotIO (Kling v3)', () => {
       writeId: 'export-write-1',
       autosaveId: 'desktop-target-1',
     }));
-    const beginAutosaveSnapshot = vi.fn(async () => ({
-      fileName: 'scene.bcsnap',
-      writeId: 'retry-write-1',
-    }));
+    let retrySequence = 0;
+    const beginAutosaveSnapshot = vi.fn(async () => {
+      retrySequence += 1;
+      return { fileName: 'scene.bcsnap', writeId: `retry-write-${retrySequence}` };
+    });
     const writeSnapshotChunk = vi.fn(async (payload: { writeId: string; data: ArrayBuffer }) => {
       const chunks = chunksByWriteId.get(payload.writeId) ?? [];
       chunks.push(new Uint8Array(payload.data));
@@ -1343,17 +1344,20 @@ describe('useSnapshotIO (Kling v3)', () => {
     const abortSnapshotWrite = vi.fn(async () => ({ aborted: true }));
     const setError = vi.fn();
     const setToastMessage = vi.fn();
-    const missingSourceFile = new File(['missing'], 'missing.png', { type: 'image/png' });
-    Object.defineProperty(missingSourceFile, 'slice', {
-      configurable: true,
-      value: vi.fn(() => ({
-        size: 1,
-        arrayBuffer: () => Promise.reject(new DOMException(
-          'A requested file or directory could not be found at the time an operation was processed.',
-          'NotFoundError',
-        )),
-      })),
-    }); // Simulate Chromium's lazy file-read failure for deleted source media.
+    const buildMissingSourceFile = (name: string): File => {
+      const missingSourceFile = new File(['missing'], name, { type: 'image/png' });
+      Object.defineProperty(missingSourceFile, 'slice', {
+        configurable: true,
+        value: vi.fn(() => ({
+          size: 1,
+          arrayBuffer: () => Promise.reject(new DOMException(
+            'A requested file or directory could not be found at the time an operation was processed.',
+            'NotFoundError',
+          )),
+        })),
+      });
+      return missingSourceFile;
+    }; // Simulate multiple Chromium file handles disappearing together.
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback: BlobCallback): void => {
       callback(new Blob(['fallback-preview'], { type: 'image/png' }));
     });
@@ -1415,10 +1419,10 @@ describe('useSnapshotIO (Kling v3)', () => {
         videoLastFrameImageId: null,
       } as unknown as SelectionStateResult,
       noteLabelCounterRef: { current: 1 },
-      displayedImages: [buildImage({
-        id: 'missing-image-1',
-        file: missingSourceFile,
-      })],
+      displayedImages: [
+        buildImage({ id: 'missing-image-1', file: buildMissingSourceFile('missing-1.png') }),
+        buildImage({ id: 'missing-image-2', file: buildMissingSourceFile('missing-2.png') }),
+      ],
       displayedNotes: [],
       displayedPaths: [],
       displayedVideoPromptAreas: [],
@@ -1437,11 +1441,13 @@ describe('useSnapshotIO (Kling v3)', () => {
 
     expect(abortSnapshotWrite).toHaveBeenCalledWith({ writeId: 'export-write-1' });
     expect(beginAutosaveSnapshot).toHaveBeenCalledWith({ autosaveId: 'desktop-target-1' });
+    expect(beginAutosaveSnapshot).toHaveBeenCalledTimes(1);
+    expect(chunksByWriteId.has('export-write-1')).toBe(false); // Preflight prevents a doomed partial snapshot write.
     expect(finishSnapshotWrite).not.toHaveBeenCalledWith({ writeId: 'export-write-1' });
     expect(finishSnapshotWrite).toHaveBeenCalledWith({ writeId: 'retry-write-1' });
     expect(parsed.manifest.state.images[0]).toEqual(expect.objectContaining({
       id: 'missing-image-1',
-      fileName: 'missing-snapshot-fallback.png',
+      fileName: 'missing-1-snapshot-fallback.png',
       fileType: 'image/png',
       mediaType: 'image',
       fallbackForMediaType: 'image',
@@ -1449,12 +1455,17 @@ describe('useSnapshotIO (Kling v3)', () => {
     }));
     expect(parsed.images[0]?.manifest).toEqual(expect.objectContaining({
       id: 'missing-image-1',
-      fileName: 'missing-snapshot-fallback.png',
+      fileName: 'missing-1-snapshot-fallback.png',
       fileType: 'image/png',
     }));
     expect(parsed.images[0]?.blob.type).toBe('image/png');
+    expect(parsed.manifest.state.images[1]).toEqual(expect.objectContaining({
+      id: 'missing-image-2',
+      fileName: 'missing-2-snapshot-fallback.png',
+      fallbackReason: 'source-unreadable',
+    }));
     expect(setError).toHaveBeenCalledWith(null);
-    expect(setToastMessage).toHaveBeenCalledWith('Snapshot exported with 1 unavailable media preview');
+    expect(setToastMessage).toHaveBeenCalledWith('Snapshot exported with 2 unavailable media previews');
   });
 
   it('uses a PNG fallback for download-link exports when source media cannot be read', async () => {

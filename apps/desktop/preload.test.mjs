@@ -117,6 +117,8 @@ describe('preload desktop bridge', () => {
             return readRangeResult; // Import reads bounded byte ranges.
           case 'canva-banana:file-menu-get-snapshot-media-url':
             return 'canva-banana-snapshot://media/source-1/0/1/image.png'; // Media elements stream through main.
+          case 'canva-banana:file-menu-download-snapshot-media':
+            return { started: true }; // Main hands the retained range URL to Chromium's downloader.
           case 'canva-banana:file-menu-retain-snapshot-read':
             return { retained: true }; // Successful imports keep their read source alive.
           case 'canva-banana:file-menu-close-snapshot-read':
@@ -191,6 +193,9 @@ describe('preload desktop bridge', () => {
       type: 'image/png',
       fileName: 'image.png',
     })).resolves.toBe('canva-banana-snapshot://media/source-1/0/1/image.png');
+    await expect(exposedApi.fileMenu.downloadSnapshotMedia({
+      url: 'canva-banana-snapshot://media/source-1/0/1/image.png?download=1&fileName=image.png',
+    })).resolves.toEqual({ started: true });
     await expect(exposedApi.fileMenu.retainSnapshotRead({ sourceId: 'source-1' })).resolves.toEqual({ retained: true });
     await expect(exposedApi.fileMenu.closeSnapshotRead({ sourceId: 'source-1' })).resolves.toEqual({ closed: true });
     await expect(exposedApi.fileMenu.listSnapshotBackups()).resolves.toBe(backupSummaries);
@@ -226,6 +231,9 @@ describe('preload desktop bridge', () => {
       length: 1,
       type: 'image/png',
       fileName: 'image.png',
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-download-snapshot-media', {
+      url: 'canva-banana-snapshot://media/source-1/0/1/image.png?download=1&fileName=image.png',
     });
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-retain-snapshot-read', {
       sourceId: 'source-1',
@@ -372,6 +380,7 @@ describe('preload desktop bridge', () => {
       type: 'video/mp4',
       fileName: 'video.mp4',
     })).toThrow(/media range/);
+    expect(() => exposedApi.fileMenu.downloadSnapshotMedia({ url: '' })).toThrow(/download URL/);
     expect(() => exposedApi.fileMenu.retainSnapshotRead({ sourceId: '' })).toThrow(/read source/);
     expect(ipcRenderer.invoke).not.toHaveBeenCalled();
   });
