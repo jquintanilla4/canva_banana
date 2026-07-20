@@ -252,6 +252,7 @@ export interface CanvasImage {
   // pass through ensureRealSnapshotFile() from snapshotService before using it with Blob APIs.
   file: File;
   isPlaying?: boolean;
+  isFavorite?: boolean;
   hasAudio?: boolean;
   videoDuration?: number; // Saved seconds keep lazy snapshot videos metadata-free on restore.
   metadata?: CanvasImageMetadata;

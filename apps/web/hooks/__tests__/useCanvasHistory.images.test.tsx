@@ -97,6 +97,25 @@ describe('useCanvasHistory image drafts', () => {
     expect(result.current.images[0]?.x).toBe(35);
   });
 
+  it('undoes and redoes favorite changes', () => {
+    const original = buildImage('original');
+    const { result } = renderHook(() => useCanvasHistory(buildState([original])));
+
+    act(() => {
+      result.current.setState(previous => ({
+        ...previous,
+        images: previous.images.map(image => ({ ...image, isFavorite: true })),
+      }));
+    });
+    expect(result.current.images[0]?.isFavorite).toBe(true);
+
+    act(() => result.current.undo());
+    expect(result.current.images[0]?.isFavorite).not.toBe(true);
+
+    act(() => result.current.redo());
+    expect(result.current.images[0]?.isFavorite).toBe(true);
+  });
+
   it('commits edits made to media that arrived during an active draft', () => {
     const original = buildImage('original');
     const generated = buildImage('generated', { mediaType: 'video', isPlaying: false });

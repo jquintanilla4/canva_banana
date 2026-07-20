@@ -291,6 +291,42 @@ describe('drawCanvas culling and path cache', () => {
     expect(vi.mocked(ctx.drawImage)).toHaveBeenCalledTimes(1);
   });
 
+  it('draws favorite chrome only outside presentation mode', () => {
+    const favorite = { ...buildImage('favorite', 20), isFavorite: true };
+    const favoriteCtx = buildContext();
+    const presentationCtx = buildContext();
+
+    drawBase({ ctx: favoriteCtx, images: [favorite] });
+    drawBase({ ctx: presentationCtx, images: [favorite], isPresentationMode: true });
+
+    expect(vi.mocked(favoriteCtx.lineTo)).toHaveBeenCalledTimes(9);
+    expect(vi.mocked(presentationCtx.lineTo)).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: 'minimum square', width: 20, height: 20 },
+    { label: 'short panorama', width: 100, height: 2 },
+    { label: 'narrow portrait', width: 2, height: 100 },
+  ])('keeps favorite chrome inside $label media', ({ width, height }) => {
+    const favorite = { ...buildImage('favorite', 20), width, height, isFavorite: true };
+    const ctx = buildContext();
+
+    drawBase({ ctx, images: [favorite] });
+
+    const points = [
+      ...vi.mocked(ctx.moveTo).mock.calls,
+      ...vi.mocked(ctx.lineTo).mock.calls,
+    ] as Array<[number, number]>;
+    const halfStroke = ctx.lineWidth / 2;
+    expect(points).toHaveLength(10);
+    points.forEach(([x, y]) => {
+      expect(x - halfStroke).toBeGreaterThanOrEqual(-width / 2);
+      expect(x + halfStroke).toBeLessThanOrEqual(width / 2);
+      expect(y - halfStroke).toBeGreaterThanOrEqual(-height / 2);
+      expect(y + halfStroke).toBeLessThanOrEqual(height / 2);
+    });
+  });
+
   it('draws a visible placeholder and selection outline for a lazy video', () => {
     const ctx = buildContext();
     const video = buildVideoImage(HTMLMediaElement.HAVE_NOTHING);

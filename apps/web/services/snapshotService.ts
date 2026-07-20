@@ -95,6 +95,7 @@ export type SnapshotImageManifest = {
   metadata?: CanvasImage['metadata'];
   mediaType?: CanvasMediaType;
   isPlaying?: boolean;
+  isFavorite?: boolean;
   hasAudio?: boolean;
   videoDuration?: number;
   currentPlaybackTime?: number;
@@ -261,6 +262,7 @@ export type SerializedCanvasImageV1 = {
   metadata?: CanvasImage['metadata'];
   mediaType?: CanvasMediaType;
   isPlaying?: boolean;
+  isFavorite?: boolean;
   hasAudio?: boolean;
   videoDuration?: number;
   currentPlaybackTime?: number;
@@ -652,6 +654,7 @@ const buildSnapshotImageManifest = (img: CanvasImage): SnapshotImageManifest => 
     metadata: img.metadata ? { ...img.metadata } : undefined,
     mediaType: img.mediaType,
     isPlaying: img.isPlaying ?? false,
+    isFavorite: img.isFavorite ?? false,
     hasAudio: img.hasAudio,
     videoDuration: img.mediaType === 'video' ? getCanvasMediaDurationSeconds(img) ?? undefined : undefined,
     currentPlaybackTime: img.mediaType === 'audio' && typeof img.currentPlaybackTime === 'number' && Number.isFinite(img.currentPlaybackTime)
@@ -1163,6 +1166,7 @@ export const restoreSnapshotFromFile = async (
       metadata?: CanvasImage['metadata'];
       currentPlaybackTime?: number;
       audioDuration?: number;
+      isFavorite?: unknown;
     };
     file: File;
     audioUrl?: string;
@@ -1210,6 +1214,7 @@ export const restoreSnapshotFromFile = async (
       naturalHeight,
       file: audioFile,
       isPlaying: false,
+      isFavorite: img.isFavorite === true,
       hasAudio: true,
       audioElement,
       waveformImageData,
@@ -1290,6 +1295,7 @@ export const restoreSnapshotFromFile = async (
           naturalHeight,
           file: snapshotFile,
           isPlaying: mediaType === 'video' ? Boolean(imageManifest.isPlaying) : false,
+          isFavorite: imageManifest.isFavorite === true,
           hasAudio: mediaType === 'video' ? imageManifest.hasAudio : false,
           videoDuration: mediaType === 'video' && typeof imageManifest.videoDuration === 'number' && Number.isFinite(imageManifest.videoDuration)
             ? imageManifest.videoDuration
@@ -1378,6 +1384,7 @@ export const restoreSnapshotFromFile = async (
           naturalHeight,
           file: snapshotFile,
           isPlaying: mediaType === 'video' ? Boolean((img as SerializedCanvasImageV1).isPlaying) : false,
+          isFavorite: (img as SerializedCanvasImageV1).isFavorite === true,
           hasAudio: mediaType === 'video' ? (img as SerializedCanvasImageV1).hasAudio : false,
           videoDuration: mediaType === 'video' && typeof (img as SerializedCanvasImageV1).videoDuration === 'number' && Number.isFinite((img as SerializedCanvasImageV1).videoDuration)
             ? (img as SerializedCanvasImageV1).videoDuration

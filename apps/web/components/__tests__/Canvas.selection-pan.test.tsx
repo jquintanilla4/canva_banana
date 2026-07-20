@@ -237,6 +237,37 @@ describe('Canvas selection temporary pan', () => {
     expect(onImagePromptCopy).toHaveBeenCalledWith('generated-1');
   });
 
+  it('toggles favorites through the committed image mutation channel', () => {
+    const image = buildImage();
+    const onImagesChange = vi.fn();
+    const onCommit = vi.fn();
+    const { container, rerender } = render(<Canvas {...buildCanvasProps({
+      images: [image],
+      selectedImageIds: [image.id],
+      onImagesChange,
+      onCommit,
+    })} />);
+    const view = within(container);
+
+    fireEvent.click(view.getByRole('button', { name: 'Add to Favorites' }));
+
+    const favoriteImages = onImagesChange.mock.calls[0]?.[0] as CanvasImage[];
+    expect(favoriteImages[0]?.isFavorite).toBe(true);
+    expect(onCommit).toHaveBeenCalledWith({ images: favoriteImages });
+
+    rerender(<Canvas {...buildCanvasProps({
+      images: favoriteImages,
+      selectedImageIds: [image.id],
+      onImagesChange,
+      onCommit,
+    })} />);
+    fireEvent.click(view.getByRole('button', { name: 'Remove from Favorites' }));
+
+    expect(onImagesChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: image.id, isFavorite: false }),
+    ]);
+  });
+
   it('hides selected media controls in presentation mode', () => {
     const generatedImage = {
       ...buildImage('generated-1'),
@@ -260,6 +291,7 @@ describe('Canvas selection temporary pan', () => {
     expect(view.queryByRole('button', { name: 'Copy Generation Prompt' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Crop Image' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Duplicate Media' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Add to Favorites' })).toBeNull();
   });
 
   it('hides video prompt bar controls in presentation mode', () => {

@@ -10,6 +10,11 @@ type TransformModeState = { imageId: string; };
 type CanvasBadgeColors = { fill: string; stroke: string; text: string };
 type CanvasRect = { minX: number; minY: number; maxX: number; maxY: number };
 
+const FAVORITE_STAR_INSET_RATIO = 1.4;
+const FAVORITE_STAR_STROKE_RATIO = 0.12;
+const FAVORITE_STAR_MAX_RADIUS = 32;
+const FAVORITE_STAR_PREFERRED_MIN_RADIUS = 10;
+
 export type CanvasRenderCache = {
   pathCanvas: HTMLCanvasElement | null;
   pathSignature: string | null;
@@ -101,6 +106,47 @@ const drawCanvasBadge = (
 
   ctx.fillStyle = colors.text;
   ctx.fillText(label, x + badgePaddingX, y + badgeHeight / 2);
+};
+
+const drawFavoriteStar = (
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  outerRadius: number,
+): void => {
+  const innerRadius = outerRadius * 0.5;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+    const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+    const px = cx + Math.cos(angle) * radius;
+    const py = cy + Math.sin(angle) * radius;
+    if (i === 0) {
+      ctx.moveTo(px, py);
+    } else {
+      ctx.lineTo(px, py);
+    }
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#facc15';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)'; // Dark outline keeps the star legible on bright media.
+  ctx.lineWidth = outerRadius * FAVORITE_STAR_STROKE_RATIO; // Proportional strokes remain inside very small media.
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+};
+
+const getFavoriteStarRadius = (width: number, height: number): number | null => {
+  const minDimension = Math.min(width, height);
+  if (!Number.isFinite(minDimension) || minDimension <= 0) {
+    return null;
+  }
+  const preferredRadius = Math.max(
+    FAVORITE_STAR_PREFERRED_MIN_RADIUS,
+    Math.min(FAVORITE_STAR_MAX_RADIUS, minDimension * 0.07),
+  );
+  const containmentRatio = FAVORITE_STAR_INSET_RATIO + 1 + FAVORITE_STAR_STROKE_RATIO / 2;
+  return Math.min(preferredRadius, minDimension / containmentRatio); // Include the far edge and half-stroke in the bound.
 };
 
 const drawVideoPlaceholder = (
@@ -484,6 +530,14 @@ export function drawCanvas({
         stroke: '#5b21b6',
         text: '#f5f3ff',
       });
+    }
+
+    if (shouldShowCanvasChrome && image.isFavorite) {
+      const starOuterRadius = getFavoriteStarRadius(image.width, image.height);
+      if (starOuterRadius !== null) {
+        const starInset = starOuterRadius * FAVORITE_STAR_INSET_RATIO;
+        drawFavoriteStar(ctx, baseX + image.width - starInset, baseY + starInset, starOuterRadius); // World units keep the marker proportional while zooming.
+      }
     }
 
     ctx.restore();

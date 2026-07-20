@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildSnapshotBinaryFromState, getSnapshotBinaryByteLength, normalizeSnapshotImageMetadata, parseBinarySnapshotFile, restoreSnapshotFromFile, writeSnapshotBinaryStreaming, type SnapshotByteSource, type SnapshotMetaState } from '../snapshotService';
+import { buildSnapshotBinaryFromState, getSnapshotBinaryByteLength, normalizeSnapshotImageMetadata, parseBinarySnapshotFile, restoreSnapshotFromFile, snapshotBinaryToBlob, writeSnapshotBinaryStreaming, type SnapshotByteSource, type SnapshotMetaState } from '../snapshotService';
 import { createDesktopSnapshotSource } from '../desktopSnapshotSource';
 import type { CanvasImageMetadata } from '../../types';
 
@@ -41,6 +41,25 @@ const cloneArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   new Uint8Array(buffer).set(bytes);
   return buffer;
 }; // Returns an exact ArrayBuffer slice.
+
+const stubImmediateImageLoad = (): void => {
+  const NativeURL = URL;
+  vi.stubGlobal('URL', class extends NativeURL {
+    static createObjectURL = vi.fn(() => 'blob:snapshot-test');
+    static revokeObjectURL = vi.fn();
+  }); // jsdom does not provide blob URL methods used by image restoration.
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    crossOrigin = '';
+    naturalWidth = 1;
+    naturalHeight = 1;
+
+    set src(_value: string) {
+      queueMicrotask(() => this.onload?.()); // Resolve image restoration without browser decoding.
+    }
+  } as unknown as typeof Image);
+}; // Snapshot tests only need deterministic image dimensions and load completion.
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -423,6 +442,7 @@ describe('snapshotService (binary metadata bounds)', () => {
       fileSize: 1,
       mediaType: 'video' as const,
       videoDuration: index + 2,
+      isFavorite: index === 0,
     }));
     const manifestBytes = snapshotTestEncoder.encode(JSON.stringify({
       version: 2,
@@ -463,6 +483,7 @@ describe('snapshotService (binary metadata bounds)', () => {
     expect(restored.images.map(image => image.naturalWidth)).toEqual(videoManifests.map(image => image.naturalWidth ?? image.width));
     expect(restored.images.map(image => image.naturalHeight)).toEqual(videoManifests.map(image => image.naturalHeight ?? image.height));
     expect(restored.images.map(image => image.videoDuration)).toEqual(videoManifests.map(image => image.videoDuration));
+    expect(restored.images.map(image => image.isFavorite)).toEqual(videoManifests.map(image => image.isFavorite));
     expect(getMediaUrl).toHaveBeenCalledTimes(videoManifests.length);
   });
 
@@ -484,6 +505,7 @@ describe('snapshotService (binary metadata bounds)', () => {
         naturalWidth: 640,
         naturalHeight: 360,
         file: new File(['video'], 'video.mp4', { type: 'video/mp4' }),
+        isFavorite: true,
       }],
       notes: [],
       paths: [],
@@ -498,6 +520,43 @@ describe('snapshotService (binary metadata bounds)', () => {
     expect(binary.manifest.state.images[0]?.naturalHeight).toBe(1080);
     expect(binary.images[0]?.manifest.naturalWidth).toBe(1920);
     expect(binary.images[0]?.manifest.naturalHeight).toBe(1080);
+    expect(binary.manifest.state.images[0]?.isFavorite).toBe(true);
+    expect(binary.images[0]?.manifest.isFavorite).toBe(true);
+  });
+
+  it('preserves favorites through a binary snapshot save and restore', async () => {
+    stubImmediateImageLoad();
+    const imageElement = document.createElement('img');
+    const binary = await buildSnapshotBinaryFromState({
+      images: [{
+        id: 'favorite-image',
+        element: imageElement,
+        mediaType: 'image',
+        x: 10,
+        y: 20,
+        width: 100,
+        height: 80,
+        rotation: 0,
+        naturalWidth: 100,
+        naturalHeight: 80,
+        file: new File([new Uint8Array([1])], 'favorite.png', { type: 'image/png' }),
+        isFavorite: true,
+      }],
+      notes: [],
+      paths: [],
+      videoPromptAreas: [],
+      videoPromptBars: [],
+      meta: {} as SnapshotMetaState,
+    });
+    const snapshotFile = new File([snapshotBinaryToBlob(binary)], 'favorite.bcsnap', { type: 'application/octet-stream' });
+
+    const restored = await restoreSnapshotFromFile(snapshotFile, {
+      brushSize: 20,
+      eraserSize: 20,
+      brushColor: '#ff0000',
+    });
+
+    expect(restored.images[0]?.isFavorite).toBe(true);
   });
 
   it('streams desktop URL-backed media when writing snapshots', async () => {
@@ -726,6 +785,7 @@ describe('snapshotService (audio restore)', () => {
           width: 100,
           height: 40,
           currentPlaybackTime: 8.5,
+          isFavorite: 'false',
         }],
         notes: [],
         paths: [],
@@ -743,6 +803,7 @@ describe('snapshotService (audio restore)', () => {
 
     expect(restored.images[0]?.currentPlaybackTime).toBe(8.5);
     expect(restored.images[0]?.audioElement?.currentTime).toBe(8.5);
+    expect(restored.images[0]?.isFavorite).toBe(false);
   });
 
   it('uses desktop media URLs for lazy audio playback while reading waveform data by range', async () => {
@@ -898,6 +959,40 @@ describe('snapshotService (audio restore)', () => {
     expect(readRange.mock.calls.every(([offset, length]) => offset + length <= headerBytes.byteLength)).toBe(true);
     expect(restored.images[0]?.audioDuration).toBe(3600);
     expect(restored.images[0]?.waveformImageData).toContain('Waveform%20preview%20unavailable');
+  });
+});
+
+describe('snapshotService (legacy image favorites)', () => {
+  it.each([
+    { label: 'saved favorite', isFavorite: true, expected: true },
+    { label: 'missing favorite field', isFavorite: undefined, expected: false },
+  ])('restores $label', async ({ isFavorite, expected }) => {
+    stubImmediateImageLoad();
+    const snapshotImage = {
+      id: 'legacy-image',
+      dataUrl: 'data:image/png;base64,AA==',
+      fileName: 'legacy.png',
+      fileType: 'image/png',
+      mediaType: 'image',
+      width: 100,
+      height: 80,
+      ...(isFavorite === undefined ? {} : { isFavorite }),
+    };
+    const snapshotJson = JSON.stringify({
+      version: 1,
+      createdAt: new Date(0).toISOString(),
+      state: { images: [snapshotImage], notes: [], paths: [] },
+    });
+    const snapshotFile = new File([snapshotJson], 'legacy.json', { type: 'application/json' }) as File & { text: () => Promise<string> };
+    snapshotFile.text = () => Promise.resolve(snapshotJson); // Node's test File polyfill does not always include text().
+
+    const restored = await restoreSnapshotFromFile(snapshotFile, {
+      brushSize: 20,
+      eraserSize: 20,
+      brushColor: '#ff0000',
+    });
+
+    expect(restored.images[0]?.isFavorite).toBe(expected);
   });
 });
 

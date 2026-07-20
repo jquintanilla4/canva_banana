@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus, FaRobot, FaHistory, FaThumbtack, FaFolder, FaFolderPlus, FaEllipsisV, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus, FaRobot, FaHistory, FaThumbtack, FaFolder, FaFolderPlus, FaEllipsisV, FaMapMarkerAlt, FaStar } from 'react-icons/fa';
 import { RiCameraLensLine } from 'react-icons/ri';
 import { PiSelectionBold } from 'react-icons/pi';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
@@ -44,6 +44,7 @@ export const TransformIcon = FaExpand as React.FC<IconProps>;
 export const RerunIcon = FaSyncAlt as React.FC<IconProps>;
 export const ResizeIcon = FaRulerCombined as React.FC<IconProps>;
 export const DuplicateIcon = FaRegClone as React.FC<IconProps>;
+export const StarIcon = FaStar as React.FC<IconProps>;
 export const PlayIcon = FaPlay as React.FC<IconProps>;
 export const PauseIcon = FaPause as React.FC<IconProps>;
 export const SnapshotIcon = FaCamera as React.FC<IconProps>;

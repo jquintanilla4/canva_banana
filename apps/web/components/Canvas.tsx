@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
 import { JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, MinusIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, MinusIcon, StarIcon } from './Icons';
 import {
   DOT_BASE_SIZE,
   DOT_MAX_SIZE,
@@ -366,6 +366,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, [getNextPlaybackAttemptId, images, isVideoImage, isAudioImage, onCommit, onImagesChange, onMediaPlaybackRejected]);
 
+  const toggleImageFavorite = useCallback((imageId: string) => {
+    const updatedImages = images.map(image => (
+      image.id === imageId ? { ...image, isFavorite: image.isFavorite !== true } : image
+    ));
+    onImagesChange(updatedImages);
+    onCommit({ images: updatedImages });
+  }, [images, onCommit, onImagesChange]);
 
   const setPanSmoothly = useCallback((nextPan: Point) => {
     panRef.current = nextPan;
@@ -1695,6 +1702,13 @@ export const Canvas: React.FC<CanvasProps> = ({
             title="Duplicate Media"
           >
             <DuplicateIcon className="w-4 h-4" />
+          </ActionButton>
+          <ActionButton
+            onClick={() => toggleImageFavorite(selectedImage.id)}
+            disabled={false}
+            title={selectedImage.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+          >
+            <StarIcon className={`w-4 h-4${selectedImage.isFavorite ? ' text-yellow-400' : ''}`} />
           </ActionButton>
         </div>
       )}

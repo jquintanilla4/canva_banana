@@ -27,7 +27,7 @@ const getStateSignature = (state: AppState): string => {
       : 'nofile'
   );
   const imageSignature = state.images
-    .map(img => `${img.id},${img.mediaType},${img.isPlaying ? 1 : 0},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height},${(img.rotation ?? 0).toFixed(3)},${getFileSignature(img.file)}`)
+    .map(img => `${img.id},${img.mediaType},${img.isPlaying ? 1 : 0},${img.isFavorite ? 1 : 0},${img.x.toFixed(2)},${img.y.toFixed(2)},${img.width},${img.height},${(img.rotation ?? 0).toFixed(3)},${getFileSignature(img.file)}`)
     .join(';');
   const pathSignature = state.paths.map(p => `${p.points.length},${p.tool}`).join(',');
   const noteSignature = state.notes.map(n => `${n.id},${n.label ?? ''},${n.anchor ? `${n.anchor.x.toFixed(2)},${n.anchor.y.toFixed(2)}` : 'na'},${getTextSignature(n.text)}`).join(';');
