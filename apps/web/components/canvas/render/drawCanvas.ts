@@ -10,10 +10,10 @@ type TransformModeState = { imageId: string; };
 type CanvasBadgeColors = { fill: string; stroke: string; text: string };
 type CanvasRect = { minX: number; minY: number; maxX: number; maxY: number };
 
-const FAVORITE_STAR_INSET_RATIO = 1.4;
-const FAVORITE_STAR_STROKE_RATIO = 0.12;
-const FAVORITE_STAR_MAX_RADIUS = 32;
+const FAVORITE_STAR_INSET_RATIO = 1.5;
+const FAVORITE_STAR_RADIUS_RATIO = 0.058; // ~11.6% of the item's smaller dimension as diameter.
 const FAVORITE_STAR_PREFERRED_MIN_RADIUS = 10;
+const FAVORITE_STAR_BACKDROP_RATIO = 1.3; // Backdrop half-size relative to the star's outer radius.
 
 export type CanvasRenderCache = {
   pathCanvas: HTMLCanvasElement | null;
@@ -114,6 +114,12 @@ const drawFavoriteStar = (
   cy: number,
   outerRadius: number,
 ): void => {
+  const backdropHalf = outerRadius * FAVORITE_STAR_BACKDROP_RATIO;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'; // Backdrop keeps the star visible on similar-hued media.
+  ctx.beginPath();
+  ctx.roundRect(cx - backdropHalf, cy - backdropHalf, backdropHalf * 2, backdropHalf * 2, outerRadius * 0.5);
+  ctx.fill();
+
   const innerRadius = outerRadius * 0.5;
   ctx.beginPath();
   for (let i = 0; i < 10; i++) {
@@ -128,12 +134,8 @@ const drawFavoriteStar = (
     }
   }
   ctx.closePath();
-  ctx.fillStyle = '#facc15';
+  ctx.fillStyle = '#FFA21E';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)'; // Dark outline keeps the star legible on bright media.
-  ctx.lineWidth = outerRadius * FAVORITE_STAR_STROKE_RATIO; // Proportional strokes remain inside very small media.
-  ctx.lineJoin = 'round';
-  ctx.stroke();
 };
 
 const getFavoriteStarRadius = (width: number, height: number): number | null => {
@@ -143,10 +145,10 @@ const getFavoriteStarRadius = (width: number, height: number): number | null => 
   }
   const preferredRadius = Math.max(
     FAVORITE_STAR_PREFERRED_MIN_RADIUS,
-    Math.min(FAVORITE_STAR_MAX_RADIUS, minDimension * 0.07),
+    minDimension * FAVORITE_STAR_RADIUS_RATIO,
   );
-  const containmentRatio = FAVORITE_STAR_INSET_RATIO + 1 + FAVORITE_STAR_STROKE_RATIO / 2;
-  return Math.min(preferredRadius, minDimension / containmentRatio); // Include the far edge and half-stroke in the bound.
+  const containmentRatio = FAVORITE_STAR_INSET_RATIO + FAVORITE_STAR_BACKDROP_RATIO;
+  return Math.min(preferredRadius, minDimension / containmentRatio); // Keep the backdrop's far edge inside the media.
 };
 
 const drawVideoPlaceholder = (

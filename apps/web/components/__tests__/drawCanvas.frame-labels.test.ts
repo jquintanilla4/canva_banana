@@ -327,6 +327,18 @@ describe('drawCanvas culling and path cache', () => {
     });
   });
 
+  it('scales the favorite star with large media instead of capping it', () => {
+    const favorite = { ...buildImage('favorite', 20), width: 1024, height: 1024, isFavorite: true };
+    const ctx = buildContext();
+
+    drawBase({ ctx, images: [favorite] });
+
+    // The star path starts at its top vertex: y = baseY + inset(1.5r) - r = -height/2 + 0.5r.
+    const [, topY] = vi.mocked(ctx.moveTo).mock.calls[0];
+    const outerRadius = (topY + 1024 / 2) / 0.5;
+    expect(outerRadius).toBeCloseTo(1024 * 0.058, 5);
+  });
+
   it('draws a visible placeholder and selection outline for a lazy video', () => {
     const ctx = buildContext();
     const video = buildVideoImage(HTMLMediaElement.HAVE_NOTHING);
