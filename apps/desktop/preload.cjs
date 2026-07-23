@@ -28,6 +28,7 @@ const createSnapshotOperationBudget = ({ maxOperations, maxBytes, errorMessage }
 const openManageKeysChannel = 'canva-banana:open-manage-keys';
 const fileMenuCommandChannel = 'canva-banana:file-menu-command';
 const chatHistoryClearedChannel = 'canva-banana:chat-history-cleared';
+const canvasMediaDownloadFinishedChannel = 'canva-banana:canvas-media-download-finished';
 const maxSnapshotChunkBytes = 16 * 1024 * 1024; // Keep each snapshot IPC message bounded.
 const maxSnapshotChunkOperations = 4; // Normal streams await one chunk while hostile bursts are rejected.
 const maxSnapshotChunkOperationBytes = maxSnapshotChunkBytes * 2; // Total snapshot size remains independent of concurrent IPC memory.
@@ -205,6 +206,7 @@ contextBridge.exposeInMainWorld('canvaBananaDesktop', {
   },
   fileMenu: {
     onCommand: callback => subscribeToMainChannel(fileMenuCommandChannel, callback),
+    onMediaDownloadFinished: callback => subscribeToMainChannel(canvasMediaDownloadFinishedChannel, callback), // Release Blob URLs only after native downloads finish.
     setState: state => ipcRenderer.invoke('canva-banana:file-menu-set-state', state), // Sync checked/disabled native items.
     openSnapshotFile: () => ipcRenderer.invoke('canva-banana:file-menu-open-snapshot'), // Native picker keeps macOS menu commands reliable.
     beginSaveSnapshot: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-save-snapshot', payload), // Main owns the save dialog and temp file.

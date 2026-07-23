@@ -8,6 +8,7 @@ const buildHandlers = () => ({
   toggleAutosave: vi.fn(),
   toggleZoomLevelBadge: vi.fn(),
   toggleFileName: vi.fn(),
+  toggleTrackpadMode: vi.fn(),
   openDebugLog: vi.fn(),
   openManageKeys: vi.fn(),
   openChangeIcon: vi.fn(),
@@ -23,6 +24,7 @@ describe('application menu template', () => {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
         showFileName: true,
+        trackpadMode: false,
         isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
@@ -45,6 +47,7 @@ describe('application menu template', () => {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
         showFileName: true,
+        trackpadMode: false,
         isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
@@ -69,6 +72,7 @@ describe('application menu template', () => {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
         showFileName: true,
+        trackpadMode: false,
         isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
@@ -90,6 +94,7 @@ describe('application menu template', () => {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
         showFileName: true,
+        trackpadMode: false,
         isClearingJimengCache: false,
       },
       handlers,
@@ -110,6 +115,7 @@ describe('application menu template', () => {
         autosaveEnabled: true,
         showZoomLevelBadge: true,
         showFileName: true,
+        trackpadMode: false,
         isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
@@ -131,6 +137,7 @@ describe('application menu template', () => {
         autosaveEnabled: false,
         showZoomLevelBadge: true,
         showFileName: false,
+        trackpadMode: true,
         isClearingJimengCache: true,
       },
       handlers: buildHandlers(),
@@ -142,12 +149,35 @@ describe('application menu template', () => {
     const autosaveItem = fileMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.AUTOSAVE);
     const zoomItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE);
     const fileNameItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.FILE_NAME);
+    const trackpadModeItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.TRACKPAD_MODE);
     const cacheItem = historyMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.CLEAR_JIMENG_CACHE);
 
     expect(autosaveItem.checked).toBe(false);
     expect(zoomItem.checked).toBe(true);
     expect(fileNameItem.checked).toBe(false);
+    expect(trackpadModeItem.checked).toBe(true);
     expect(cacheItem.enabled).toBe(false);
     expect(cacheItem.label).toBe('Clearing Jimeng Cache...');
+  });
+
+  it('wires Trackpad Mode to its View menu handler', () => {
+    const handlers = buildHandlers();
+    const template = buildApplicationMenuTemplate({
+      appName: 'The Institute',
+      fileMenuState: {
+        autosaveEnabled: true,
+        showZoomLevelBadge: true,
+        showFileName: true,
+        trackpadMode: false,
+        isClearingJimengCache: false,
+      },
+      handlers,
+    });
+    const viewMenu = template.find(item => item.label === 'View');
+    const trackpadModeItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.TRACKPAD_MODE);
+
+    trackpadModeItem.click();
+
+    expect(handlers.toggleTrackpadMode).toHaveBeenCalledTimes(1);
   });
 });

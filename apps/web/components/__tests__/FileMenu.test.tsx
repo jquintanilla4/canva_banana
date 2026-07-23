@@ -20,6 +20,8 @@ describe('FileMenu', () => {
         onToggleAutosave={vi.fn()}
         showZoomLevelBadge
         onToggleZoomLevelBadge={vi.fn()}
+        trackpadMode={false}
+        onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
         onClearJimengCache={vi.fn()}
         isClearingJimengCache={false}
@@ -53,6 +55,8 @@ describe('FileMenu', () => {
         onToggleAutosave={vi.fn()}
         showZoomLevelBadge
         onToggleZoomLevelBadge={vi.fn()}
+        trackpadMode={false}
+        onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
         onClearJimengCache={vi.fn()}
         isClearingJimengCache={false}
@@ -80,6 +84,8 @@ describe('FileMenu', () => {
         onToggleAutosave={vi.fn()}
         showZoomLevelBadge={false}
         onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
+        trackpadMode={false}
+        onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
         onClearJimengCache={vi.fn()}
         isClearingJimengCache={false}
@@ -93,6 +99,38 @@ describe('FileMenu', () => {
     expect(handleToggleZoomLevelBadge).toHaveBeenCalledTimes(1);
     expect(zoomToggle.getAttribute('aria-checked')).toBe('false');
     expect(zoomToggle.textContent).toContain('Off');
+  });
+
+  it('shows and toggles trackpad mode in the browser menu', () => {
+    const handleToggleTrackpadMode = vi.fn();
+
+    render(
+      <FileMenu
+        isOpen
+        onToggle={vi.fn()}
+        onClose={vi.fn()}
+        onImportSnapshot={vi.fn()}
+        onExportSnapshot={vi.fn()}
+        onOpenBackups={vi.fn()}
+        autosaveEnabled
+        onToggleAutosave={vi.fn()}
+        showZoomLevelBadge
+        onToggleZoomLevelBadge={vi.fn()}
+        trackpadMode
+        onToggleTrackpadMode={handleToggleTrackpadMode}
+        onOpenDebugLog={vi.fn()}
+        onClearJimengCache={vi.fn()}
+        isClearingJimengCache={false}
+      />
+    );
+
+    const trackpadToggle = screen.getByRole('menuitemcheckbox', { name: /trackpad mode/i });
+
+    fireEvent.click(trackpadToggle);
+
+    expect(trackpadToggle.getAttribute('aria-checked')).toBe('true');
+    expect(trackpadToggle.textContent).toContain('On');
+    expect(handleToggleTrackpadMode).toHaveBeenCalledTimes(1);
   });
 
   it('fires the Jimeng cache clear callback from the menu', () => {
@@ -110,6 +148,8 @@ describe('FileMenu', () => {
         onToggleAutosave={vi.fn()}
         showZoomLevelBadge
         onToggleZoomLevelBadge={vi.fn()}
+        trackpadMode={false}
+        onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
         onClearJimengCache={handleClearJimengCache}
         isClearingJimengCache={false}
@@ -134,6 +174,8 @@ describe('FileMenu', () => {
         onToggleAutosave={vi.fn()}
         showZoomLevelBadge
         onToggleZoomLevelBadge={vi.fn()}
+        trackpadMode={false}
+        onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
         onClearJimengCache={vi.fn()}
         isClearingJimengCache
@@ -158,6 +200,8 @@ describe('FileMenu', () => {
         onToggleAutosave={vi.fn()}
         showZoomLevelBadge
         onToggleZoomLevelBadge={vi.fn()}
+        trackpadMode={false}
+        onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
         onOpenDesktopSettings={handleOpenDesktopSettings}
         onClearJimengCache={vi.fn()}

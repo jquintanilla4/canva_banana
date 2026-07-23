@@ -7,6 +7,7 @@ import {
   getImageAtPoint,
   getNoteAnchorAtPoint,
   getTransformActionForPoint,
+  isPointInVideoPlayControl,
   type CropAction,
   type TransformAction,
 } from '../hitTest';
@@ -60,6 +61,7 @@ type UseCanvasInteractionsArgs = {
   onCommit: (overrides?: { images?: CanvasImage[]; paths?: Path[]; notes?: CanvasNote[]; videoPromptAreas?: CanvasVideoPromptArea[] }) => void;
   onImageSelect: (id: string | null, options?: { multi?: boolean; reference?: boolean; lastFrame?: boolean; element?: boolean }) => void;
   onSelectionReplace: (imageIds: string[]) => void;
+  onMediaPlaybackToggle: (imageId: string) => void;
   onVideoPromptAreaSelect: (id: string | null) => void;
   onFilesDrop: (files: FileList, point: Point) => void;
   onAnchorNoteCreate: (point: Point) => void;
@@ -116,6 +118,7 @@ export function useCanvasInteractions({
   onCommit,
   onImageSelect,
   onSelectionReplace,
+  onMediaPlaybackToggle,
   onVideoPromptAreaSelect,
   onFilesDrop,
   onAnchorNoteCreate,
@@ -374,6 +377,17 @@ export function useCanvasInteractions({
     const wantsTailSelection = canUpdateSelection && tailSelectionEnabled && !isMultiSelectKey && e.shiftKey && !e.altKey;
     const isElementToggle = canUpdateSelection && e.altKey && !e.shiftKey && !isMultiSelectKey;
     const isReferenceToggle = canUpdateSelection && !wantsTailSelection && !isMultiSelectKey && e.shiftKey;
+    const isDirectPlayImage = (image: CanvasImage | null): boolean => Boolean(
+      e.button === 0
+      && !isMultiSelectKey
+      && !wantsTailSelection
+      && !isElementToggle
+      && !isReferenceToggle
+      && image?.mediaType === 'video'
+      && image.element instanceof HTMLVideoElement
+      && image.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+      && isPointInVideoPlayControl(point, image, scale)
+    ); // Keep the painted Play control available to selection and pan gestures.
 
     const beginDrag = (imageIdsToDrag: string[]) => {
       const imagePositions: Record<string, Point> = {};
@@ -430,6 +444,14 @@ export function useCanvasInteractions({
 
       const image = getImageAtPoint(point, images);
       if (image) {
+        if (isDirectPlayImage(image)) {
+          onVideoPromptAreaSelect(null);
+          if (!selectedImageIds.includes(image.id)) {
+            onImageSelect(image.id);
+          }
+          onMediaPlaybackToggle(image.id);
+          return;
+        } // The painted center Play affordance must work even when the lower action bar is obscured.
         if (wantsTailSelection) {
           onVideoPromptAreaSelect(null);
           onImageSelect(image.id, { lastFrame: true });
@@ -513,6 +535,11 @@ export function useCanvasInteractions({
           }
         }
       }
+      const image = getImageAtPoint(point, images);
+      if (image && isDirectPlayImage(image)) {
+        onMediaPlaybackToggle(image.id);
+        return;
+      } // Pan and presentation modes hide or bypass the selected-item playback bar.
       setIsPanning(true);
       const start = { x: e.clientX - pan.x, y: e.clientY - pan.y };
       panStartRef.current = start;

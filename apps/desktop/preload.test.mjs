@@ -74,6 +74,35 @@ describe('preload desktop bridge', () => {
     expect(ipcRenderer.removeListener).toHaveBeenCalledWith('canva-banana:open-manage-keys', handler);
   });
 
+  it('exposes native media download completion and removes the IPC listener on cleanup', () => {
+    const ipcRenderer = {
+      sendSync: vi.fn(),
+      invoke: vi.fn(),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const contextBridge = {
+      exposeInMainWorld: vi.fn((_name, api) => {
+        exposedApi = api; // Capture the safe bridge API exposed to React.
+      }),
+    };
+
+    loadPreloadWithElectron({ contextBridge, ipcRenderer });
+
+    const callback = vi.fn();
+    const unsubscribe = exposedApi.fileMenu.onMediaDownloadFinished(callback);
+    const [channel, handler] = ipcRenderer.on.mock.calls[0];
+    const payload = { url: 'blob:file:///generated-image', state: 'completed' };
+
+    expect(channel).toBe('canva-banana:canvas-media-download-finished');
+
+    handler(null, payload);
+    unsubscribe();
+
+    expect(callback).toHaveBeenCalledWith(payload);
+    expect(ipcRenderer.removeListener).toHaveBeenCalledWith('canva-banana:canvas-media-download-finished', handler);
+  });
+
   it('exposes file menu bridge commands and IPC helpers', async () => {
     const openSnapshotResult = {
       canceled: false,
@@ -159,6 +188,7 @@ describe('preload desktop bridge', () => {
     await expect(exposedApi.fileMenu.setState({
       autosaveEnabled: false,
       showZoomLevelBadge: true,
+      trackpadMode: true,
       isClearingJimengCache: false,
     })).resolves.toBe(true);
     await expect(exposedApi.fileMenu.openSnapshotFile()).resolves.toBe(openSnapshotResult);
@@ -205,6 +235,7 @@ describe('preload desktop bridge', () => {
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-set-state', {
       autosaveEnabled: false,
       showZoomLevelBadge: true,
+      trackpadMode: true,
       isClearingJimengCache: false,
     });
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-open-snapshot');

@@ -45,6 +45,14 @@ export const createLazyVideoFromUrl = (
   return video;
 };
 
+export const prepareVideoForPlayback = (video: HTMLVideoElement): void => {
+  if (!getVideoObjectUrl(video) || video.readyState !== HTMLMediaElement.HAVE_NOTHING || video.preload !== 'none') {
+    return;
+  }
+  video.preload = 'auto'; // A Play action should wake the dormant snapshot stream immediately.
+  video.load(); // Detached canvas videos need an explicit first load in some Chromium builds.
+};
+
 export const ensureVideoMetadataLoaded = (video: HTMLVideoElement): Promise<void> => {
   if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
     return Promise.resolve(); // Existing metadata needs no extra protocol request.

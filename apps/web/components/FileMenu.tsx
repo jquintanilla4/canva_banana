@@ -12,6 +12,8 @@ type FileMenuProps = {
   onToggleAutosave: () => void;
   showZoomLevelBadge: boolean;
   onToggleZoomLevelBadge: () => void;
+  trackpadMode: boolean; // Enables continuous trackpad zoom.
+  onToggleTrackpadMode: () => void; // Flips the persisted trackpad preference.
   onOpenDebugLog: () => void;
   onOpenDesktopSettings?: () => void;
   onClearJimengCache: () => void;
@@ -29,6 +31,8 @@ export const FileMenu: React.FC<FileMenuProps> = ({
   onToggleAutosave,
   showZoomLevelBadge,
   onToggleZoomLevelBadge,
+  trackpadMode,
+  onToggleTrackpadMode,
   onOpenDebugLog,
   onOpenDesktopSettings,
   onClearJimengCache,
@@ -124,6 +128,16 @@ export const FileMenu: React.FC<FileMenuProps> = ({
           >
             <span>{showZoomLevelBadge ? 'Hide Zoom Level' : 'Display Zoom Level'}</span>
             <span className="shrink-0 text-xs uppercase text-gray-400">{showZoomLevelBadge ? 'On' : 'Off'}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={trackpadMode}
+            onClick={onToggleTrackpadMode}
+            className="flex items-center justify-between gap-[18px] px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
+          >
+            <span>Trackpad Mode</span>
+            <span className="shrink-0 text-xs uppercase text-gray-400">{trackpadMode ? 'On' : 'Off'}</span>
           </button>
           <button
             type="button"

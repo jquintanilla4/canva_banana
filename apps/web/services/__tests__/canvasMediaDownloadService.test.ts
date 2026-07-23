@@ -98,6 +98,35 @@ describe('downloadCanvasMedia', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:current-media');
   });
 
+  it('keeps desktop Blob URLs alive until Electron reports download completion', async () => {
+    vi.useFakeTimers();
+    const file = new File(['current-session'], 'current.png', { type: 'image/png' });
+    const createObjectURL = vi.fn(() => 'blob:desktop-media');
+    const revokeObjectURL = vi.fn();
+    let downloadFinished: ((payload: { url: string; state: 'completed' | 'cancelled' | 'interrupted' }) => void) | undefined;
+    const unsubscribe = vi.fn();
+    const onMediaDownloadFinished = vi.fn((callback: typeof downloadFinished) => {
+      downloadFinished = callback;
+      return unsubscribe;
+    });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    window.canvaBananaDesktop = { fileMenu: { onMediaDownloadFinished } };
+
+    await downloadCanvasMedia(buildImage(file));
+    await vi.runAllTimersAsync();
+
+    expect(clickedHref).toBe('blob:desktop-media');
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+
+    downloadFinished?.({ url: 'blob:another-media', state: 'completed' });
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+
+    downloadFinished?.({ url: 'blob:desktop-media', state: 'completed' });
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:desktop-media');
+  });
+
   it('uses the rendered media source when a non-retained file can no longer be read', async () => {
     const lazyFile = buildLazyFile();
     const element = document.createElement('img');

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLazyVideoFromUrl, ensureVideoMetadataLoaded, getVideoObjectUrl, loadMediaFromBlob, loadMediaFromUrl } from '../mediaService';
+import { createLazyVideoFromUrl, ensureVideoMetadataLoaded, getVideoObjectUrl, loadMediaFromBlob, loadMediaFromUrl, prepareVideoForPlayback } from '../mediaService';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -55,6 +55,26 @@ describe('createLazyVideoFromUrl', () => {
     expect(video.width).toBe(1920);
     expect(video.height).toBe(1080);
     expect(getVideoObjectUrl(video)).toBe('canva-banana-snapshot://media/source-1/0/1/a.mp4');
+  });
+
+  it('explicitly wakes a dormant snapshot video before playback', () => {
+    const video = createLazyVideoFromUrl('canva-banana-snapshot://media/source-1/0/1/a.mp4', 1920, 1080);
+    const load = vi.spyOn(video, 'load').mockImplementation(() => {});
+
+    prepareVideoForPlayback(video);
+    prepareVideoForPlayback(video);
+
+    expect(video.preload).toBe('auto');
+    expect(load).toHaveBeenCalledTimes(1); // Repeated playback sync must not reset the stream.
+  });
+
+  it('does not reset an ordinary or already-loaded video', () => {
+    const video = document.createElement('video');
+    const load = vi.spyOn(video, 'load').mockImplementation(() => {});
+
+    prepareVideoForPlayback(video);
+
+    expect(load).not.toHaveBeenCalled();
   });
 
   it('deduplicates on-demand metadata loads and restores the lazy preload policy', async () => {

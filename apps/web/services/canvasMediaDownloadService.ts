@@ -34,6 +34,18 @@ const clickDownloadLink = (href: string, fileName: string): void => {
   document.body.removeChild(link);
 }; // A DOM-attached anchor preserves browser and Electron download behavior.
 
+const revokeObjectUrlAfterDesktopDownload = (objectUrl: string): boolean => {
+  const subscribe = window.canvaBananaDesktop?.fileMenu?.onMediaDownloadFinished;
+  if (!subscribe) return false;
+  let unsubscribe = (): void => {};
+  unsubscribe = subscribe((payload) => {
+    if (payload.url !== objectUrl) return;
+    unsubscribe();
+    URL.revokeObjectURL(objectUrl);
+  });
+  return true;
+}; // The macOS save dialog may stay open long after the anchor click returns.
+
 export const downloadCanvasMedia = async (image: CanvasImage): Promise<void> => {
   const fileName = getDownloadName(image);
   const snapshotDownloadUrl = image.file
@@ -66,8 +78,9 @@ export const downloadCanvasMedia = async (image: CanvasImage): Promise<void> => 
     throw new CanvasMediaDownloadError('No downloadable source found for this item.');
   }
 
+  const waitsForDesktopDownload = objectUrl ? revokeObjectUrlAfterDesktopDownload(objectUrl) : false;
   clickDownloadLink(href, fileName);
-  if (objectUrl) {
+  if (objectUrl && !waitsForDesktopDownload) {
     setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
   }
 }; // Lazy snapshot URLs stream directly; other canvas media uses a real Blob when available.

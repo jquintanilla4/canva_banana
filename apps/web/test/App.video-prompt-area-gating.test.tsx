@@ -879,7 +879,7 @@ describe('App video prompt area gating', () => {
     expect(toolbarSlot.hasAttribute('inert')).toBe(false);
   });
 
-  it('shows the active snapshot name on macOS and toggles it from the native View menu', async () => {
+  it('handles persisted View menu toggles and shows the active trackpad status beside zoom', async () => {
     let fileMenuCommand: ((command: DesktopFileMenuCommand) => void) | null = null;
     Object.defineProperty(navigator, 'platform', {
       configurable: true,
@@ -913,6 +913,7 @@ describe('App video prompt area gating', () => {
     expect(fileNameText?.style.paintOrder).toBe('stroke fill');
     expect(fileNameText?.style.textShadow).toContain('rgba(0, 0, 0, 0.95)');
     await waitFor(() => expect(setState).toHaveBeenCalledWith(expect.objectContaining({ showFileName: true })));
+    expect(mockState.lastCanvasProps?.trackpadMode).toBe(false);
 
     act(() => {
       fileMenuCommand?.('toggleFileName');
@@ -920,6 +921,22 @@ describe('App video prompt area gating', () => {
 
     expect(screen.queryByTestId('snapshot-file-name')).toBeNull();
     await waitFor(() => expect(setState).toHaveBeenCalledWith(expect.objectContaining({ showFileName: false })));
+
+    act(() => {
+      fileMenuCommand?.('toggleTrackpadMode');
+    });
+
+    expect(screen.getByLabelText('Canvas zoom 100%, Trackpad mode on')).toBeTruthy();
+    expect(screen.getByText('Trackpad')).toBeTruthy();
+    expect(mockState.lastCanvasProps?.trackpadMode).toBe(true);
+    await waitFor(() => expect(setState).toHaveBeenCalledWith(expect.objectContaining({ trackpadMode: true })));
+
+    act(() => {
+      fileMenuCommand?.('toggleZoomLevelBadge');
+    });
+
+    expect(screen.queryByLabelText('Canvas zoom 100%, Trackpad mode on')).toBeNull();
+    expect(screen.queryByText('Trackpad')).toBeNull();
   });
 
   it('toggles presentation mode from the shortcut handler and hides app chrome', () => {

@@ -74,6 +74,7 @@ const renderCanvas = (overrides: HarnessOverrides = {}) => {
       zoomToSelectionTrigger={0}
       zoomInTrigger={0}
       zoomOutTrigger={0}
+      trackpadMode={false}
       panToAnchorRequest={null}
       onFilesDrop={vi.fn()}
       onAnchorNoteCreate={onAnchorNoteCreate}

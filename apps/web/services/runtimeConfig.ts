@@ -70,6 +70,7 @@ export type DesktopFileMenuCommand =
   | 'toggleAutosave'
   | 'toggleZoomLevelBadge'
   | 'toggleFileName'
+  | 'toggleTrackpadMode'
   | 'openDebugLog'
   | 'openManageKeys'
   | 'openChangeIcon'
@@ -92,6 +93,7 @@ export type DesktopFileMenuState = {
   autosaveEnabled: boolean;
   showZoomLevelBadge: boolean;
   showFileName: boolean;
+  trackpadMode: boolean;
   isClearingJimengCache: boolean;
 };
 
@@ -191,6 +193,7 @@ declare global {
       };
       fileMenu?: {
         onCommand?: (callback: (command: DesktopFileMenuCommand) => void) => () => void;
+        onMediaDownloadFinished?: (callback: (payload: { url: string; state: 'completed' | 'cancelled' | 'interrupted' }) => void) => () => void;
         setState?: (state: DesktopFileMenuState) => Promise<unknown>;
         openSnapshotFile?: () => Promise<DesktopOpenSnapshotResult>;
         beginSaveSnapshot?: (payload: DesktopBeginSaveSnapshotPayload) => Promise<DesktopBeginSnapshotWriteResult>;

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
-import { getNaturalSize, loadImageFromBlob } from '../services/mediaService';
+import { getNaturalSize, loadImageFromBlob, prepareVideoForPlayback } from '../services/mediaService';
 import { JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, MinusIcon, StarIcon } from './Icons';
 import {
@@ -15,9 +15,9 @@ import {
   KEYBOARD_ZOOM_OUT_MULTIPLIER,
   MAX_SCALE,
   MIN_SCALE,
-  WHEEL_ZOOM_MULTIPLIER,
 } from './canvas/constants';
 import { getImageBounds } from './canvas/geometry';
+import { getCanvasWheelZoomMultiplier } from './canvas/wheelZoom';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { createCanvasRenderCache, drawCanvas } from './canvas/render/drawCanvas';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
@@ -96,6 +96,7 @@ interface CanvasProps {
   zoomToSelectionTrigger: number;
   zoomInTrigger: number;
   zoomOutTrigger: number;
+  trackpadMode: boolean;
   panToAnchorRequest: PanToAnchorRequest | null;
   onFilesDrop: (files: FileList, point: Point) => void;
   onAnchorNoteCreate: (point: Point) => void;
@@ -218,6 +219,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   zoomToSelectionTrigger,
   zoomInTrigger,
   zoomOutTrigger,
+  trackpadMode,
   panToAnchorRequest,
   onFilesDrop,
   onAnchorNoteCreate,
@@ -314,6 +316,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       if (nextIsPlaying) {
         const attemptId = getNextPlaybackAttemptId(mediaId);
+        prepareVideoForPlayback(videoElement); // Wake lazy videos before asking Chromium to play them.
         const playPromise = videoElement.play();
         if (playPromise && typeof playPromise.catch === 'function') {
           playPromise.catch(err => {
@@ -425,6 +428,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     onCommit,
     onImageSelect,
     onSelectionReplace,
+    onMediaPlaybackToggle: toggleMediaPlayback,
     onVideoPromptAreaSelect,
     onFilesDrop: isPresentationMode ? () => {} : onFilesDrop,
     onAnchorNoteCreate: isPresentationMode ? () => {} : onAnchorNoteCreate,
@@ -666,7 +670,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
 
-      const multiplier = event.deltaY < 0 ? WHEEL_ZOOM_MULTIPLIER : 1 / WHEEL_ZOOM_MULTIPLIER;
+      const multiplier = getCanvasWheelZoomMultiplier({
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode,
+        pageHeight: container.clientHeight,
+        trackpadMode,
+      });
       applyZoom(multiplier, { x: mouseX, y: mouseY });
     };
 
@@ -676,7 +685,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [applyZoom]);
+  }, [applyZoom, trackpadMode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

@@ -2,6 +2,8 @@ import type { CanvasImage, CanvasNote, Point } from '../../types';
 import { CROP_HANDLE_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from './constants';
 import { getNotePinGeometry, imageLocalToWorld, worldToImageLocal } from './geometry';
 
+const VIDEO_PLAY_CONTROL_HIT_RADIUS_PX = 28; // Keep the painted placeholder Play icon easy to press at every zoom level.
+
 // FIX: Added 'resize-l' to the CropAction type to support left-side cropping and fix a type error.
 export type CropAction =
   | 'move'
@@ -57,6 +59,15 @@ export function getImageAtPoint(point: Point, images: CanvasImage[]): CanvasImag
   }
   return null;
 }
+
+export function isPointInVideoPlayControl(point: Point, image: CanvasImage, scale: number): boolean {
+  const localPoint = worldToImageLocal(point, image);
+  const safeScale = Math.max(scale, 0.0001);
+  const radius = Math.min(Math.min(image.width, image.height) / 2, VIDEO_PLAY_CONTROL_HIT_RADIUS_PX / safeScale);
+  const dx = localPoint.x - image.width / 2;
+  const dy = localPoint.y - image.height / 2;
+  return dx * dx + dy * dy <= radius * radius;
+} // Match the rotated canvas item's visible center instead of its axis-aligned bounds.
 
 export function getCropActionForPoint(
   point: Point,
@@ -127,4 +138,3 @@ export function getTransformActionForPoint(point: Point, image: CanvasImage, sca
 
   return null;
 }
-

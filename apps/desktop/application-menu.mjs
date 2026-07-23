@@ -5,6 +5,7 @@ export const FILE_MENU_COMMANDS = Object.freeze({
   TOGGLE_AUTOSAVE: 'toggleAutosave',
   TOGGLE_ZOOM_LEVEL_BADGE: 'toggleZoomLevelBadge',
   TOGGLE_FILE_NAME: 'toggleFileName',
+  TOGGLE_TRACKPAD_MODE: 'toggleTrackpadMode',
   OPEN_DEBUG_LOG: 'openDebugLog',
   OPEN_MANAGE_KEYS: 'openManageKeys',
   OPEN_CHANGE_ICON: 'openChangeIcon',
@@ -15,6 +16,7 @@ export const APPLICATION_MENU_ITEM_IDS = Object.freeze({
   AUTOSAVE: 'canva-banana-file-autosave',
   ZOOM_LEVEL_BADGE: 'canva-banana-file-zoom-level-badge',
   FILE_NAME: 'canva-banana-view-file-name',
+  TRACKPAD_MODE: 'canva-banana-view-trackpad-mode',
   CLEAR_JIMENG_CACHE: 'canva-banana-history-clear-jimeng-cache',
 });
 
@@ -73,6 +75,13 @@ export const buildApplicationMenuTemplate = ({
         type: 'checkbox',
         checked: fileMenuState.showZoomLevelBadge,
         click: handlers.toggleZoomLevelBadge,
+      },
+      {
+        id: APPLICATION_MENU_ITEM_IDS.TRACKPAD_MODE,
+        label: 'Trackpad Mode',
+        type: 'checkbox',
+        checked: fileMenuState.trackpadMode,
+        click: handlers.toggleTrackpadMode,
       },
       { type: 'separator' },
       { role: 'reload' },

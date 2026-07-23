@@ -33,8 +33,10 @@ import { createSnapshotBackupCoordinator } from './snapshot-backup-coordinator.m
 import { openSnapshotBackupSource } from './snapshot-backup-open.mjs';
 import { reconcileSnapshotBackupDirectory } from './snapshot-backup-recovery.mjs';
 import { createSnapshotMediaStreamController, isSnapshotMediaStreamBusyError } from './snapshot-media-stream-controller.mjs';
+import { createFileHandleRangeStream } from './file-handle-range-stream.mjs';
 import { createDeferredCloseLease } from './deferred-close-lease.mjs';
 import { SNAPSHOT_DOWNLOAD_TOKEN_PARAM, createSnapshotDownloadCoordinator } from './snapshot-download-coordinator.mjs';
+import { attachBlobDownloadCompletionNotifier } from './blob-download-lifecycle.mjs';
 import { canReplaceSnapshotAutosaveTarget } from './snapshot-autosave-target.mjs';
 import { createRendererResourceEpochs } from './renderer-resource-epochs.mjs';
 import snapshotOperationBudget from './snapshot-operation-budget.cjs';
@@ -79,6 +81,7 @@ const preloadPath = join(desktopDir, 'preload.cjs');
 const devRendererUrl = getDevRendererUrl(process.env, app.isPackaged);
 const fileMenuCommandChannel = 'canva-banana:file-menu-command';
 const chatHistoryClearedChannel = 'canva-banana:chat-history-cleared';
+const canvasMediaDownloadFinishedChannel = 'canva-banana:canvas-media-download-finished';
 const desktopAuthToken = randomBytes(32).toString('base64url'); // Per-launch secret for desktop-only backend calls.
 const maxClipboardTextChars = 1_000_000; // Match preload's native clipboard IPC cap.
 const serviceStatus = {
@@ -97,6 +100,7 @@ let fileMenuState = {
   autosaveEnabled: true,
   showZoomLevelBadge: true,
   showFileName: true,
+  trackpadMode: false,
   isClearingJimengCache: false,
 };
 
@@ -275,7 +279,7 @@ const handleSnapshotMediaProtocolRequest = async (request) => {
   try {
     body = await source.mediaStreamController.open({
       signal: request.signal,
-      createStream: () => source.handle.createReadStream({ start: fileStart, end: fileEnd, autoClose: false }),
+      createStream: () => createFileHandleRangeStream({ handle: source.handle, start: fileStart, end: fileEnd }),
     }); // Excess range requests wait without limiting the media byte length.
   } catch (error) {
     if (isSnapshotMediaStreamBusyError(error)) {
@@ -1286,6 +1290,7 @@ const updateFileMenuItems = () => {
   const autosaveItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.AUTOSAVE);
   const zoomItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE);
   const fileNameItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.FILE_NAME);
+  const trackpadModeItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.TRACKPAD_MODE);
   const clearCacheItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.CLEAR_JIMENG_CACHE);
   if (autosaveItem) {
     autosaveItem.checked = fileMenuState.autosaveEnabled;
@@ -1295,6 +1300,9 @@ const updateFileMenuItems = () => {
   }
   if (fileNameItem) {
     fileNameItem.checked = fileMenuState.showFileName;
+  }
+  if (trackpadModeItem) {
+    trackpadModeItem.checked = fileMenuState.trackpadMode;
   }
   if (clearCacheItem) {
     clearCacheItem.enabled = !fileMenuState.isClearingJimengCache;
@@ -1342,6 +1350,7 @@ const installApplicationMenu = () => {
       toggleAutosave: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_AUTOSAVE),
       toggleZoomLevelBadge: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_ZOOM_LEVEL_BADGE),
       toggleFileName: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_FILE_NAME),
+      toggleTrackpadMode: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.TOGGLE_TRACKPAD_MODE),
       openDebugLog: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_DEBUG_LOG),
       openManageKeys: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_MANAGE_KEYS),
       openChangeIcon: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_CHANGE_ICON),
@@ -1429,6 +1438,7 @@ const startDesktopApp = async () => {
       webContentsId: webContents.id,
       item,
     });
+    attachBlobDownloadCompletionNotifier({ item, webContents, channel: canvasMediaDownloadFinishedChannel });
   }); // DownloadItem completion owns the terminal release for each source lease.
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(webContents === mainWindow?.webContents && isAllowedAudioPermissionRequest(permission, details)); // Trust only the app window's microphone requests.
@@ -1472,6 +1482,7 @@ ipcMain.handle('canva-banana:file-menu-set-state', (event, nextState) => {
     autosaveEnabled: typeof nextState?.autosaveEnabled === 'boolean' ? nextState.autosaveEnabled : fileMenuState.autosaveEnabled,
     showZoomLevelBadge: typeof nextState?.showZoomLevelBadge === 'boolean' ? nextState.showZoomLevelBadge : fileMenuState.showZoomLevelBadge,
     showFileName: typeof nextState?.showFileName === 'boolean' ? nextState.showFileName : fileMenuState.showFileName,
+    trackpadMode: typeof nextState?.trackpadMode === 'boolean' ? nextState.trackpadMode : fileMenuState.trackpadMode,
     isClearingJimengCache: typeof nextState?.isClearingJimengCache === 'boolean' ? nextState.isClearingJimengCache : fileMenuState.isClearingJimengCache,
   };
   updateFileMenuItems();

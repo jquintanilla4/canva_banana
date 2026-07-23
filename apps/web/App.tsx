@@ -90,6 +90,7 @@ import { useDebugLogState } from './hooks/useDebugLogState';
 import { useJimengSetup } from './hooks/useJimengSetup';
 import { useGenerationCanvasNotifications, type GenerationCanvasNotification } from './hooks/useGenerationCanvasNotifications';
 import { useFileNameVisibility } from './hooks/useFileNameVisibility';
+import { useTrackpadMode } from './hooks/useTrackpadMode';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
 import { createDesktopSnapshotSource } from './services/desktopSnapshotSource';
 import { writeClipboardText } from './services/clipboardService';
@@ -232,6 +233,7 @@ export default function App() {
   const [canvasScale, setCanvasScale] = useState(1);
   const [showZoomLevelBadge, setShowZoomLevelBadge] = useState(true);
   const { showFileName, toggleFileName } = useFileNameVisibility(); // The user's View-menu choice survives desktop relaunches.
+  const { trackpadMode, toggleTrackpadMode } = useTrackpadMode(); // Trackpad zoom remains an explicit persisted opt-in.
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const retryingFalJobIdsRef = useRef(new Set<string>());
 
@@ -1920,6 +1922,9 @@ export default function App() {
         case 'toggleFileName':
           toggleFileName();
           break;
+        case 'toggleTrackpadMode':
+          toggleTrackpadMode();
+          break;
         case 'openDebugLog':
           openDebugLogPanel();
           break;
@@ -1950,6 +1955,7 @@ export default function App() {
     openDebugLogPanel,
     openDesktopSettings,
     toggleFileName,
+    toggleTrackpadMode,
   ]);
 
   useEffect(() => {
@@ -1960,9 +1966,10 @@ export default function App() {
       autosaveEnabled,
       showZoomLevelBadge,
       showFileName,
+      trackpadMode,
       isClearingJimengCache: jimengSetup.isClearingCache,
     });
-  }, [autosaveEnabled, hasNativeFileMenuBridge, jimengSetup.isClearingCache, showFileName, showZoomLevelBadge]);
+  }, [autosaveEnabled, hasNativeFileMenuBridge, jimengSetup.isClearingCache, showFileName, showZoomLevelBadge, trackpadMode]);
 
   // TSX (React with Tailwind CSS utility classes)
   return (
@@ -2007,6 +2014,8 @@ export default function App() {
                 onToggleAutosave={handleToggleAutosave}
                 showZoomLevelBadge={showZoomLevelBadge}
                 onToggleZoomLevelBadge={handleToggleZoomLevelBadge}
+                trackpadMode={trackpadMode}
+                onToggleTrackpadMode={toggleTrackpadMode}
                 onOpenDebugLog={openDebugLogPanel}
                 onOpenDesktopSettings={hasDesktopSettingsBridge ? openDesktopSettings : undefined}
                 onClearJimengCache={jimengSetup.handleClearCache}
@@ -2062,10 +2071,15 @@ export default function App() {
           <div className="flex items-center justify-end">
             {showZoomLevelBadge && (
               <div
-                className="pointer-events-none shrink-0 rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
-                aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}`}
+                className="pointer-events-none flex shrink-0 items-center rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
+                aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}${trackpadMode ? ', Trackpad mode on' : ''}`}
               >
-                Zoom {formatZoomPercentage(canvasScale)}
+                <span>Zoom {formatZoomPercentage(canvasScale)}</span>
+                {trackpadMode && (
+                  <span className="ml-2 border-l border-cyan-300/30 pl-2 text-[10px] tracking-[0.12em] text-cyan-200">
+                    Trackpad
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -2130,6 +2144,7 @@ export default function App() {
           zoomToSelectionTrigger={zoomToSelectionTrigger}
           zoomInTrigger={zoomInTrigger}
           zoomOutTrigger={zoomOutTrigger}
+          trackpadMode={trackpadMode}
           panToAnchorRequest={panToAnchorRequest}
           onScaleChange={setCanvasScale}
           onAnchorNoteCreate={createNote}

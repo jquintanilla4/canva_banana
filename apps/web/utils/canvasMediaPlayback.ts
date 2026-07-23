@@ -1,4 +1,5 @@
 import type { CanvasImage } from '../types';
+import { prepareVideoForPlayback } from '../services/mediaService';
 
 type CanvasMediaPlaybackRejectedHandler = (image: CanvasImage, err: unknown) => void;
 
@@ -31,6 +32,7 @@ export const syncCanvasMediaElementPlayback = (
     image.element.playsInline = true; // Avoid fullscreen takeover on mobile browsers.
     if (image.isPlaying && image.element.paused) {
       image.element.muted = true; // Let restored videos autoplay before hover can re-enable sound.
+      prepareVideoForPlayback(image.element); // Restored playing state must wake a lazy snapshot video too.
       image.element.play().catch(err => {
         console.error('Failed to play video', err);
         onPlaybackRejected?.(image, err); // Let state match the paused DOM element after autoplay denial.

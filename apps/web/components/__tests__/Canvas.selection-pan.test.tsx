@@ -3,6 +3,7 @@ import { type ComponentProps } from 'react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
 import { Tool, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
+import { createLazyVideoFromUrl } from '../../services/mediaService';
 
 type CanvasProps = ComponentProps<typeof Canvas>;
 
@@ -51,6 +52,7 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   zoomToSelectionTrigger: 0,
   zoomInTrigger: 0,
   zoomOutTrigger: 0,
+  trackpadMode: false,
   panToAnchorRequest: null,
   onFilesDrop: vi.fn(),
   onAnchorNoteCreate: vi.fn(),
@@ -700,6 +702,90 @@ describe('Canvas selection temporary pan', () => {
     expect(videoElement.muted).toBe(true);
   });
 
+  it('wakes an older lazy snapshot video when the user presses Play', () => {
+    const videoElement = createLazyVideoFromUrl('canva-banana-snapshot://media/source-1/0/1/legacy.mp4', 1280, 720);
+    const load = vi.spyOn(videoElement, 'load').mockImplementation(() => {});
+    const play = vi.spyOn(videoElement, 'play').mockResolvedValue(undefined);
+    const videoImage = {
+      ...buildVideo('legacy-video'),
+      element: videoElement,
+      isPlaying: false,
+    };
+    const onImagesChange = vi.fn();
+
+    render(<Canvas {...buildCanvasProps({
+      images: [videoImage],
+      selectedImageIds: [videoImage.id],
+      onImagesChange,
+    })} />);
+    fireEvent.click(screen.getByLabelText('Play'));
+
+    expect(videoElement.preload).toBe('auto');
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(onImagesChange).toHaveBeenCalledWith([expect.objectContaining({ id: videoImage.id, isPlaying: true })]);
+  });
+
+  it('plays a lazy snapshot video from its painted center Play control', () => {
+    const videoElement = createLazyVideoFromUrl('canva-banana-snapshot://media/source-1/0/1/legacy.mp4', 100, 80);
+    const load = vi.spyOn(videoElement, 'load').mockImplementation(() => {});
+    const play = vi.spyOn(videoElement, 'play').mockResolvedValue(undefined);
+    const videoImage = {
+      ...buildVideo('legacy-video'),
+      element: videoElement,
+      isPlaying: false,
+    };
+    const onImageSelect = vi.fn();
+    const onImagesChange = vi.fn();
+    const { container } = render(<Canvas {...buildCanvasProps({
+      images: [videoImage],
+      onImageSelect,
+      onImagesChange,
+    })} />);
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    fireEvent.mouseDown(root, { clientX: 60, clientY: 50, button: 0 });
+    fireEvent.mouseUp(root, { clientX: 60, clientY: 50, button: 0 });
+
+    expect(onImageSelect).toHaveBeenCalledWith(videoImage.id);
+    expect(videoElement.preload).toBe('auto');
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(onImagesChange).toHaveBeenCalledWith([expect.objectContaining({ id: videoImage.id, isPlaying: true })]);
+  });
+
+  it.each([
+    ['pan tool', { tool: Tool.PAN }],
+    ['presentation mode', { isPresentationMode: true }],
+  ] as const)('plays a lazy snapshot video from its painted center Play control in %s', (_label, overrides) => {
+    const videoElement = createLazyVideoFromUrl('canva-banana-snapshot://media/source-1/0/1/legacy.mp4', 100, 80);
+    const load = vi.spyOn(videoElement, 'load').mockImplementation(() => {});
+    const play = vi.spyOn(videoElement, 'play').mockResolvedValue(undefined);
+    const videoImage = {
+      ...buildVideo('legacy-video'),
+      element: videoElement,
+      isPlaying: false,
+    };
+    const onImageSelect = vi.fn();
+    const onImagesChange = vi.fn();
+    const { container } = render(<Canvas {...buildCanvasProps({
+      ...overrides,
+      images: [videoImage],
+      onImageSelect,
+      onImagesChange,
+    })} />);
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    fireEvent.mouseDown(root, { clientX: 60, clientY: 50, button: 0 });
+    fireEvent.mouseUp(root, { clientX: 60, clientY: 50, button: 0 });
+
+    expect(onImageSelect).not.toHaveBeenCalled(); // Playback should not mutate selection while the canvas is a navigation surface.
+    expect(videoElement.preload).toBe('auto');
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(onImagesChange).toHaveBeenCalledWith([expect.objectContaining({ id: videoImage.id, isPlaying: true })]);
+  });
+
   it('reports restored audio autoplay rejection so history can replace the playing state', async () => {
     const audioImage = buildAudio();
     const audioElement = audioImage.audioElement as HTMLAudioElement;
@@ -827,5 +913,18 @@ describe('Canvas selection temporary pan', () => {
 
     expect(queryByTestId('krea-style-reference-slider-style-ref')).toBeTruthy();
     expect(queryByTestId('krea-style-reference-slider-area-ref')).toBeNull();
+  });
+
+  it('applies gentle pixel-based wheel zoom while trackpad mode is enabled', () => {
+    const onScaleChange = vi.fn();
+    const { container } = render(<Canvas {...buildCanvasProps({
+      trackpadMode: true,
+      onScaleChange,
+    })} />);
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    fireEvent.wheel(root, { deltaY: 1, deltaMode: 0, clientX: 400, clientY: 300 });
+
+    expect(onScaleChange).toHaveBeenLastCalledWith(expect.closeTo(Math.exp(-0.001), 6));
   });
 });
