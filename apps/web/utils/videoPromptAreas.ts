@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  MINIMAX_H3_VIDEO_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
@@ -103,6 +104,13 @@ export const getVideoPromptAreaCapabilityProfile = (
       return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: resolvedModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID });
     }
     return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId };
+  }
+
+  if (resolvedModelId === MINIMAX_H3_VIDEO_MODEL_ID) {
+    if (falOptions?.miniMaxH3Variant === 'standard') {
+      return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: true });
+    }
+    return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId }; // H3 Reference shares Seedance's multimodal limits.
   }
 
   if (resolvedModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {

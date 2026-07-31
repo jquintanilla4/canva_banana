@@ -6,6 +6,7 @@ import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue no
 import { logFalEvent } from './logging'; // Fal debug logging.
 import { emitFalPhase } from './phase'; // Phase update helper.
 import { collectReferenceUploadUrls, uploadImageElementToFal, uploadVideoToFal } from './media'; // Media upload helpers.
+import { convertReferencePromptMentionsToOrderedLabels } from '../../utils/seedancePromptMentions';
 import {
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
@@ -30,6 +31,10 @@ import {
   FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  MINIMAX_H3_IMAGE_TO_VIDEO_MODEL_ID,
+  MINIMAX_H3_REFERENCE_TO_VIDEO_MODEL_ID,
+  MINIMAX_H3_TEXT_TO_VIDEO_MODEL_ID,
+  MINIMAX_H3_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   VEO_31_EXTEND_VIDEO_MODEL_ID,
@@ -662,6 +667,72 @@ export const generateImageToVideo = async (
     }
 
     return subscribeForVideoUrl(FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID, sharedPayload, options);
+  }
+
+  if (modelId === MINIMAX_H3_VIDEO_MODEL_ID) {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('MiniMax H3 requires a prompt.');
+    }
+
+    const variant = options.miniMaxH3Variant === 'standard' ? 'standard' : 'reference';
+    const duration = Number(options.miniMaxH3Duration ?? '5');
+    const normalizedDuration = Number.isInteger(duration) && duration >= 5 && duration <= 15 ? duration : 5;
+    const selectedAspectRatio = options.miniMaxH3AspectRatio ?? (variant === 'reference' ? 'adaptive' : '16:9');
+    const aspectRatio = variant === 'standard' && selectedAspectRatio === 'adaptive' ? '16:9' : selectedAspectRatio;
+    const sharedPayload = {
+      prompt: variant === 'reference' ? convertReferencePromptMentionsToOrderedLabels(trimmedPrompt) : trimmedPrompt,
+      duration: normalizedDuration,
+      resolution: '2K',
+    };
+
+    if (variant === 'reference') {
+      const imageCount = referenceImages.length;
+      const videoCount = options.referenceVideos?.length ?? 0;
+      const audioCount = options.referenceAudios?.length ?? 0;
+      const totalReferenceFiles = imageCount + videoCount + audioCount;
+
+      if (totalReferenceFiles === 0) {
+        throw new Error('MiniMax H3 Reference requires at least one reference asset.');
+      }
+      if (imageCount > 9 || videoCount > 3 || audioCount > 3 || totalReferenceFiles > 12) {
+        throw new Error('MiniMax H3 Reference supports up to 9 images, 3 videos, 3 audio clips, and 12 files total.');
+      }
+      if (audioCount > 0 && imageCount + videoCount === 0) {
+        throw new Error('MiniMax H3 audio references require at least one image or video reference.');
+      }
+
+      const imageUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages, options) : [];
+      const videoUrls = options.referenceVideos?.length
+        ? await Promise.all(options.referenceVideos.map(file => uploadVideoToFal(file, options)))
+        : [];
+      const audioUrls = options.referenceAudios?.length
+        ? await Promise.all(options.referenceAudios.map(file => uploadVideoToFal(file, options)))
+        : [];
+
+      return subscribeForVideoUrl(MINIMAX_H3_REFERENCE_TO_VIDEO_MODEL_ID, {
+        ...sharedPayload,
+        aspect_ratio: aspectRatio,
+        ...(imageUrls.length ? { reference_image_urls: imageUrls } : {}),
+        ...(videoUrls.length ? { reference_video_urls: videoUrls } : {}),
+        ...(audioUrls.length ? { reference_audio_urls: audioUrls } : {}),
+      }, options);
+    }
+
+    if (image) {
+      const imageUrl = await uploadImageElementToFal(image, options);
+      const endImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage, options) : undefined;
+      return subscribeForVideoUrl(MINIMAX_H3_IMAGE_TO_VIDEO_MODEL_ID, {
+        ...sharedPayload,
+        image_url: imageUrl,
+        ...(endImageUrl ? { end_image_url: endImageUrl } : {}),
+      }, options);
+    }
+
+    return subscribeForVideoUrl(MINIMAX_H3_TEXT_TO_VIDEO_MODEL_ID, {
+      ...sharedPayload,
+      aspect_ratio: aspectRatio,
+    }, options);
   }
 
   const isInfinitalkModel = modelId === INFINITALK_VIDEO_MODEL_ID;

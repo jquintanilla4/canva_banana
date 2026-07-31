@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob, prepareVideoForPlayback } from '../services/mediaService';
-import { JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
+import { JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, MinusIcon, StarIcon } from './Icons';
 import {
   DOT_BASE_SIZE,
@@ -1489,6 +1489,10 @@ export const Canvas: React.FC<CanvasProps> = ({
                   submitDisabled={!barMembership || (
                     selectedEmbeddedModelId.includes('seedance-2')
                       && bar.seedance2Variant === 'reference'
+                      && embeddedMediaCount === 0
+                  ) || (
+                    selectedEmbeddedModelId === MINIMAX_H3_VIDEO_MODEL_ID
+                      && (bar.falOptions?.miniMaxH3Variant ?? 'reference') === 'reference'
                       && embeddedMediaCount === 0
                   ) || (
                     isKlingV3EmbeddedModel

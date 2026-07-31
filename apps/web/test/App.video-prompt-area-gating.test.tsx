@@ -71,6 +71,7 @@ const mockState = vi.hoisted(() => {
   const importSnapshotWithPicker = vi.fn((callback: () => void) => callback());
   const setSelectedImageIds = vi.fn();
   const setReferenceImageIds = vi.fn();
+  const setLiveVideoPromptBars = vi.fn();
   const baseVideoPromptArea = {
     id: 'area-1',
     sequence: 1,
@@ -290,6 +291,7 @@ const mockState = vi.hoisted(() => {
     selectedImageIds: [] as string[],
     setSelectedImageIds,
     setReferenceImageIds,
+    setLiveVideoPromptBars,
     falState,
     images: [] as CanvasImage[],
     displayedImages: [] as CanvasImage[],
@@ -405,7 +407,7 @@ vi.mock('../hooks/useCanvasHistory', () => ({
     setLivePaths: vi.fn(),
     setLiveNotes: vi.fn(),
     setLiveVideoPromptAreas: vi.fn(),
-    setLiveVideoPromptBars: vi.fn(),
+    setLiveVideoPromptBars: mockState.setLiveVideoPromptBars,
     commit: vi.fn(),
     undo: vi.fn(),
     redo: vi.fn(),
@@ -619,6 +621,7 @@ afterEach(() => {
   mockState.importSnapshotWithPicker.mockImplementation((callback: () => void) => callback()); // Default tests use the hidden-input fallback path.
   mockState.activeSnapshotFileName = null;
   mockState.setReferenceImageIds.mockClear();
+  mockState.setLiveVideoPromptBars.mockClear();
   mockState.images = [];
   mockState.displayedImages = [];
   mockState.lastCanvasProps = null;
@@ -1321,6 +1324,38 @@ describe('App video prompt area gating', () => {
     expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.not.objectContaining({
       volcengineOptions: expect.anything(),
     }));
+  });
+
+  it('normalizes a new embedded MiniMax H3 bar to 16:9 when Standard is selected', () => {
+    const h3Bar = {
+      ...mockState.baseVideoPromptBar,
+      modelId: 'minimax/h3',
+    };
+    mockState.videoPromptBars = [h3Bar];
+    mockState.displayedVideoPromptBars = [h3Bar];
+
+    render(<App />);
+
+    const buildControls = mockState.lastCanvasProps?.buildVideoPromptBarControls as
+      | ((bar: typeof h3Bar) => Array<{ id: string; onChange?: (value: string) => void }>)
+      | undefined;
+    const controls = buildControls?.(h3Bar) ?? [];
+    const variantControl = controls.find(control => control.id.endsWith('minimax-h3-variant-select'));
+    variantControl?.onChange?.('standard');
+
+    expect(controls.map(control => control.id)).toEqual([
+      `${h3Bar.id}-minimax-h3-variant-select`,
+      `${h3Bar.id}-minimax-h3-aspect-ratio-select`,
+      `${h3Bar.id}-minimax-h3-duration-select`,
+    ]);
+    expect(mockState.setLiveVideoPromptBars).toHaveBeenCalledWith([
+      expect.objectContaining({
+        falOptions: expect.objectContaining({
+          miniMaxH3Variant: 'standard',
+          miniMaxH3AspectRatio: '16:9',
+        }),
+      }),
+    ]);
   });
 
   it('submits Kling v3 embedded prompt bars through smart first and last frame overrides', () => {

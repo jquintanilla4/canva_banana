@@ -24,6 +24,7 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  MINIMAX_H3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
@@ -74,6 +75,10 @@ import {
   isWan27VideoDurationSelectionValue,
   isWan27VideoResolutionSelectionValue,
   isWan27VideoVariant,
+  isMiniMaxH3AspectRatioSelectionValue,
+  isMiniMaxH3DurationSelectionValue,
+  isMiniMaxH3Variant,
+  normalizeMiniMaxH3AspectRatioForVariant,
   RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   RECRAFT_V4_PRO_MAX_COLORS,
@@ -125,6 +130,9 @@ import type {
   Wan27VideoDurationSelectionValue,
   Wan27VideoResolutionSelectionValue,
   Wan27VideoVariant,
+  MiniMaxH3AspectRatioSelectionValue,
+  MiniMaxH3DurationSelectionValue,
+  MiniMaxH3Variant,
   Wan27ImageAspectRatioSelectionValue,
   Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
@@ -156,6 +164,7 @@ type FalDerivedState = {
   isInfinitalkVideoModel: boolean;
   isGrokImagineVideoModel: boolean;
   isWan27VideoModel: boolean;
+  isMiniMaxH3VideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
@@ -222,6 +231,9 @@ type FalHandlers = {
   handleWan27VideoPromptExpansionChange: (value: boolean) => void;
   handleWan27VideoVariantChange: (value: string) => void;
   handleWan27VideoAudioSettingChange: (value: string) => void;
+  handleMiniMaxH3VariantChange: (value: string) => void;
+  handleMiniMaxH3AspectRatioChange: (value: string) => void;
+  handleMiniMaxH3DurationChange: (value: string) => void;
   handleSeedance15AspectRatioChange: (value: string) => void;
   handleSeedance15ResolutionChange: (value: string) => void;
   handleSeedance15DurationChange: (value: string) => void;
@@ -306,6 +318,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wan27VideoPromptExpansion: boolean;
   wan27VideoVariant: Wan27VideoVariant;
   wan27VideoAudioSetting: Wan27VideoAudioSettingSelectionValue;
+  miniMaxH3Variant: MiniMaxH3Variant;
+  miniMaxH3AspectRatio: MiniMaxH3AspectRatioSelectionValue;
+  miniMaxH3Duration: MiniMaxH3DurationSelectionValue;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -385,6 +400,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWan27VideoPromptExpansion: Dispatch<SetStateAction<boolean>>;
   setWan27VideoVariant: Dispatch<SetStateAction<Wan27VideoVariant>>;
   setWan27VideoAudioSetting: Dispatch<SetStateAction<Wan27VideoAudioSettingSelectionValue>>;
+  setMiniMaxH3Variant: Dispatch<SetStateAction<MiniMaxH3Variant>>;
+  setMiniMaxH3AspectRatio: Dispatch<SetStateAction<MiniMaxH3AspectRatioSelectionValue>>;
+  setMiniMaxH3Duration: Dispatch<SetStateAction<MiniMaxH3DurationSelectionValue>>;
   setSeedance15AspectRatio: Dispatch<SetStateAction<Seedance15AspectRatioSelectionValue>>;
   setSeedance15Resolution: Dispatch<SetStateAction<Seedance15ResolutionSelectionValue>>;
   setSeedance15Duration: Dispatch<SetStateAction<Seedance15DurationSelectionValue>>;
@@ -467,6 +485,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wan27VideoPromptExpansion, setWan27VideoPromptExpansion] = useState<boolean>(true);
   const [wan27VideoVariant, setWan27VideoVariant] = useState<Wan27VideoVariant>('smart');
   const [wan27VideoAudioSetting, setWan27VideoAudioSetting] = useState<Wan27VideoAudioSettingSelectionValue>('auto');
+  const [miniMaxH3Variant, setMiniMaxH3Variant] = useState<MiniMaxH3Variant>('reference');
+  const [miniMaxH3AspectRatio, setMiniMaxH3AspectRatio] = useState<MiniMaxH3AspectRatioSelectionValue>('adaptive');
+  const [miniMaxH3Duration, setMiniMaxH3Duration] = useState<MiniMaxH3DurationSelectionValue>('5');
   const [seedance15AspectRatio, setSeedance15AspectRatio] = useState<Seedance15AspectRatioSelectionValue>('16:9');
   const [seedance15Resolution, setSeedance15Resolution] = useState<Seedance15ResolutionSelectionValue>('720p');
   const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
@@ -513,6 +534,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
   const isGrokImagineVideoModel = isVideoMode && falVideoModelId === GROK_IMAGINE_VIDEO_MODEL_ID;
   const isWan27VideoModel = isVideoMode && falVideoModelId === WAN_27_VIDEO_MODEL_ID;
+  const isMiniMaxH3VideoModel = isVideoMode && falVideoModelId === MINIMAX_H3_VIDEO_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
   const isSeedance2VideoModel = isVideoMode && isSeedance2VideoModelId(falVideoModelId);
   const isFalSeedance2VideoModel = isVideoMode && falVideoModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
@@ -980,6 +1002,26 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWan27VideoAudioSetting(value === 'origin' ? 'origin' : 'auto');
   }, []);
 
+  const handleMiniMaxH3VariantChange = useCallback((value: string) => {
+    if (!isMiniMaxH3Variant(value)) {
+      return;
+    }
+    setMiniMaxH3Variant(value);
+    setMiniMaxH3AspectRatio(current => normalizeMiniMaxH3AspectRatioForVariant(value, current));
+  }, []);
+
+  const handleMiniMaxH3AspectRatioChange = useCallback((value: string) => {
+    if (isMiniMaxH3AspectRatioSelectionValue(value)) {
+      setMiniMaxH3AspectRatio(value);
+    }
+  }, []);
+
+  const handleMiniMaxH3DurationChange = useCallback((value: string) => {
+    if (isMiniMaxH3DurationSelectionValue(value)) {
+      setMiniMaxH3Duration(value);
+    }
+  }, []);
+
   const handleSeedance15AspectRatioChange = useCallback((value: string) => {
     const valid = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] as const;
     if (valid.includes(value as Seedance15AspectRatioSelectionValue)) {
@@ -1221,6 +1263,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wan27VideoPromptExpansion,
     wan27VideoVariant,
     wan27VideoAudioSetting,
+    miniMaxH3Variant,
+    miniMaxH3AspectRatio,
+    miniMaxH3Duration,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -1267,6 +1312,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isGrokImagineVideoModel,
     isVeo31VideoModel,
     isWan27VideoModel,
+    isMiniMaxH3VideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
@@ -1325,6 +1371,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWan27VideoPromptExpansionChange,
     handleWan27VideoVariantChange,
     handleWan27VideoAudioSettingChange,
+    handleMiniMaxH3VariantChange,
+    handleMiniMaxH3AspectRatioChange,
+    handleMiniMaxH3DurationChange,
     handleSeedance15AspectRatioChange,
     handleSeedance15ResolutionChange,
     handleSeedance15DurationChange,
@@ -1406,6 +1455,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWan27VideoPromptExpansion,
     setWan27VideoVariant,
     setWan27VideoAudioSetting,
+    setMiniMaxH3Variant,
+    setMiniMaxH3AspectRatio,
+    setMiniMaxH3Duration,
     setSeedance15AspectRatio,
     setSeedance15Resolution,
     setSeedance15Duration,

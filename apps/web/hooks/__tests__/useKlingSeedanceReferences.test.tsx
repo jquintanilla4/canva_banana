@@ -75,4 +75,23 @@ describe('Seedance 2 reference labels', () => {
     expect(result.current.klingPromptMentions).toEqual(['@Image1', '@Video1', '@Audio1']);
     expect(result.current.klingReferenceCount).toBe(3);
   });
+
+  it('surfaces the same multimodal suggestions for MiniMax H3 Reference', () => {
+    const { result } = renderHook(() => useKlingPromptMentions({
+      isKlingO3VideoModel: false,
+      isKlingO3EditMode: false,
+      isMiniMaxH3ReferenceMode: true,
+      referenceOrderLabels: {
+        'image-1': '@Image1',
+        'video-1': '@Video1',
+        'audio-1': '@Audio1',
+      },
+      elementOrderLabels: null,
+      referenceImageIds: ['image-1'],
+      hasSingleImageSelected: false,
+      primarySelectionMediaType: null,
+    }));
+
+    expect(result.current.klingPromptMentions).toEqual(['@Image1', '@Video1', '@Audio1']);
+  });
 });

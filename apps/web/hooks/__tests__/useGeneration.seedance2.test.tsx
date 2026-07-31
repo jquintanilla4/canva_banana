@@ -9,6 +9,7 @@ import {
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+  MINIMAX_H3_VIDEO_MODEL_ID,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -369,6 +370,305 @@ describe('useGeneration (seedance 2)', () => {
         seedance2GenerateAudio: false,
       }),
     );
+  });
+
+  it('routes MiniMax H3 Standard text generation with variant metadata and queue labeling', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = MINIMAX_H3_VIDEO_MODEL_ID;
+    fal.isMiniMaxH3VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.miniMaxH3Variant = 'standard';
+    fal.miniMaxH3AspectRatio = '21:9';
+    fal.miniMaxH3Duration = '15';
+    let queuedJobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      queuedJobs = typeof value === 'function' ? value(queuedJobs) : value;
+    });
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing and retry metadata can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A crystalline city forming from mist',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs,
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'A crystalline city forming from mist',
+      null,
+      expect.objectContaining({
+        modelId: MINIMAX_H3_VIDEO_MODEL_ID,
+        miniMaxH3Variant: 'standard',
+        miniMaxH3AspectRatio: '21:9',
+        miniMaxH3Duration: '15',
+      }),
+    );
+    expect(queuedJobs[0]).toEqual(expect.objectContaining({
+      modelLabel: 'MiniMax H3 Standard',
+      retryInputs: expect.objectContaining({
+        falOptions: expect.objectContaining({
+          miniMaxH3Variant: 'standard',
+          miniMaxH3AspectRatio: '21:9',
+          miniMaxH3Duration: '15',
+        }),
+      }),
+    }));
+  });
+
+  it('marks MiniMax H3 outputs as audible when browser audio probes are unavailable', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = MINIMAX_H3_VIDEO_MODEL_ID;
+    fal.isMiniMaxH3VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.miniMaxH3Variant = 'standard';
+    const setState = vi.fn();
+    const videoElement = document.createElement('video');
+    Object.defineProperty(videoElement, 'videoWidth', { configurable: true, value: 640 });
+    Object.defineProperty(videoElement, 'videoHeight', { configurable: true, value: 360 });
+    Object.defineProperty(videoElement, 'play', { configurable: true, value: vi.fn().mockResolvedValue(undefined) });
+    Object.defineProperty(videoElement, 'pause', { configurable: true, value: vi.fn() });
+    vi.mocked(generateImageToVideo).mockResolvedValue({ videoUrl: 'https://example.com/h3.mp4', requestId: 'req-h3' });
+    vi.mocked(loadMediaFromBlob).mockResolvedValue(videoElement);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['video'], { type: 'video/mp4' })),
+    }));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A crystalline city forming from mist',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState,
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    const stateUpdater = setState.mock.calls.find(([value]) => typeof value === 'function')?.[0] as ((prev: { images: CanvasImage[] }) => { images: CanvasImage[] }) | undefined;
+    const nextState = stateUpdater?.({ images: [] });
+    expect(nextState?.images[0]?.hasAudio).toBe(true);
+  });
+
+  it('ignores retained Reference media when MiniMax H3 Standard runs', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = MINIMAX_H3_VIDEO_MODEL_ID;
+    fal.isMiniMaxH3VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.miniMaxH3Variant = 'standard';
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const video1 = buildCanvasMedia('video-1', 'video', 30);
+    const audio1 = buildCanvasMedia('audio-1', 'audio', 30);
+    let queuedJobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      queuedJobs = typeof value === 'function' ? value(queuedJobs) : value;
+    });
+    const setError = vi.fn();
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so inactive retry inputs can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A paper kite crossing the sky',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        referenceImageIds: [image1.id],
+        referenceVideoIds: [video1.id],
+        referenceAudioIds: [audio1.id],
+      }),
+      images: [image1, video1, audio1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs,
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(setError.mock.calls.every(([message]) => message === null)).toBe(true);
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalled();
+    const requestOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
+    expect(requestOptions).not.toHaveProperty('referenceImages');
+    expect(requestOptions).not.toHaveProperty('referenceVideos');
+    expect(requestOptions).not.toHaveProperty('referenceAudios');
+    expect(queuedJobs[0]?.retryInputs).not.toHaveProperty('referenceImageIds');
+    expect(queuedJobs[0]?.retryInputs).not.toHaveProperty('referenceVideoIds');
+    expect(queuedJobs[0]?.retryInputs).not.toHaveProperty('referenceAudioIds');
+  });
+
+  it('routes embedded and retried MiniMax H3 Reference inputs with a Reference queue label', async () => {
+    const image1 = buildCanvasMedia('image-1', 'image');
+    let queuedJobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      queuedJobs = typeof value === 'function' ? value(queuedJobs) : value;
+    });
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so saved-run routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Current prompt should not be used',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal: createFalStub(),
+      selection: createSelectionStub(),
+      images: [image1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs,
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'video',
+        prompt: '@Image1 walks through a garden',
+        provider: 'fal',
+        modelId: MINIMAX_H3_VIDEO_MODEL_ID,
+        modelMode: 'video',
+        referenceImageIds: [image1.id],
+        falOptions: {
+          miniMaxH3Variant: 'reference',
+          miniMaxH3AspectRatio: 'adaptive',
+          miniMaxH3Duration: '8',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      '@Image1 walks through a garden',
+      null,
+      expect.objectContaining({
+        modelId: MINIMAX_H3_VIDEO_MODEL_ID,
+        miniMaxH3Variant: 'reference',
+        miniMaxH3AspectRatio: 'adaptive',
+        miniMaxH3Duration: '8',
+        referenceImages: [image1.element],
+      }),
+    );
+    expect(queuedJobs[0]).toEqual(expect.objectContaining({
+      modelLabel: 'MiniMax H3 Reference',
+      retryInputs: expect.objectContaining({
+        referenceImageIds: [image1.id],
+        falOptions: expect.objectContaining({
+          miniMaxH3Variant: 'reference',
+          miniMaxH3AspectRatio: 'adaptive',
+          miniMaxH3Duration: '8',
+        }),
+      }),
+    }));
+  });
+
+  it('keeps untouched embedded MiniMax H3 defaults independent from the global bar', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = MINIMAX_H3_VIDEO_MODEL_ID;
+    fal.isMiniMaxH3VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.miniMaxH3Variant = 'standard';
+    fal.miniMaxH3AspectRatio = '21:9';
+    fal.miniMaxH3Duration = '15';
+    const image1 = buildCanvasMedia('image-1', 'image');
+    let queuedJobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      queuedJobs = typeof value === 'function' ? value(queuedJobs) : value;
+    });
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so override routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Global prompt should not be used',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [image1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs,
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind: 'video',
+        prompt: '@Image1 walks through a garden',
+        provider: 'fal',
+        modelId: MINIMAX_H3_VIDEO_MODEL_ID,
+        modelMode: 'video',
+        referenceImageIds: [image1.id],
+      });
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      '@Image1 walks through a garden',
+      null,
+      expect.objectContaining({
+        modelId: MINIMAX_H3_VIDEO_MODEL_ID,
+        miniMaxH3Variant: 'reference',
+        miniMaxH3AspectRatio: 'adaptive',
+        miniMaxH3Duration: '5',
+        referenceImages: [image1.element],
+      }),
+    );
+    expect(queuedJobs[0]).toEqual(expect.objectContaining({
+      modelLabel: 'MiniMax H3 Reference',
+      retryInputs: expect.objectContaining({
+        falOptions: expect.objectContaining({
+          miniMaxH3Variant: 'reference',
+          miniMaxH3AspectRatio: 'adaptive',
+          miniMaxH3Duration: '5',
+        }),
+      }),
+    }));
   });
 
   it('routes Seedance 2 (JM CLI) Smart text-to-video through Jimeng', async () => {
@@ -1559,6 +1859,48 @@ describe('useGeneration (seedance 2)', () => {
 
     expect(setError).toHaveBeenCalledWith('@Image2 does not match any selected Seedance reference. Check the canvas label and try again.');
     expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+  });
+
+  it('blocks MiniMax H3 Reference submissions when the prompt mentions an unavailable label', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = MINIMAX_H3_VIDEO_MODEL_ID;
+    fal.isMiniMaxH3VideoModel = true;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.miniMaxH3Variant = 'reference';
+    fal.miniMaxH3AspectRatio = 'adaptive';
+    fal.miniMaxH3Duration = '5';
+    const image1 = buildCanvasMedia('image-1', 'image');
+    const setError = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Match @Image2 exactly',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [image1.id],
+        referenceImageIds: [image1.id],
+        seedanceReferenceOrderIds: [image1.id],
+      }),
+      images: [image1],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(setError).toHaveBeenCalledWith('@Image2 does not match any selected MiniMax H3 reference. Check the canvas label and try again.');
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
   });
 
   it('surfaces the normalized backend reachability error in the queue row and banner', async () => {

@@ -43,6 +43,9 @@ type Args = {
   isKlingV3ControlVideoModel: boolean;
   isHailuoVideoModel: boolean;
   isVeo31VideoModel: boolean;
+  isMiniMaxH3VideoModel?: boolean;
+  miniMaxH3Variant?: 'standard' | 'reference';
+  miniMaxH3ReferenceAssetCount?: number;
   isSeedance2VideoModel: boolean;
   seedance2Variant: 'smart' | 'reference';
   seedance2ReferenceAssetCount: number;
@@ -88,6 +91,9 @@ export function useGenerationGuards({
   isKlingV3ControlVideoModel,
   isHailuoVideoModel,
   isVeo31VideoModel,
+  isMiniMaxH3VideoModel = false,
+  miniMaxH3Variant = 'reference',
+  miniMaxH3ReferenceAssetCount = 0,
   isSeedance2VideoModel,
   seedance2Variant,
   seedance2ReferenceAssetCount,
@@ -114,6 +120,7 @@ export function useGenerationGuards({
   const isWan27EditMode = isWan27VideoModel && wan27VideoVariant === 'edit';
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isSeedance2ReferenceMode = isSeedance2VideoModel && seedance2Variant === 'reference';
+  const isMiniMaxH3ReferenceMode = isMiniMaxH3VideoModel && miniMaxH3Variant === 'reference';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
   const isFalVideoInputMode = isWanVideoInputMode
@@ -129,6 +136,12 @@ export function useGenerationGuards({
     && isVideoMode
     && isSeedance2VideoModel
     && !isSeedance2ReferenceMode
+    && primarySelectionMediaType !== null
+    && !hasPrimaryImage;
+  const hasMiniMaxH3StandardUnsupportedSelection = apiProvider === 'fal'
+    && isVideoMode
+    && isMiniMaxH3VideoModel
+    && !isMiniMaxH3ReferenceMode
     && primarySelectionMediaType !== null
     && !hasPrimaryImage;
   const hasWan27SmartUnsupportedSelection = apiProvider === 'fal'
@@ -175,7 +188,7 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isSeedance2VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isSeedance2VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKlingV3Control = usingFal && isKlingV3ControlVideoModel && !hasKlingV3ControlStillImage;
@@ -188,9 +201,11 @@ export function useGenerationGuards({
 
     const submitDisabled = isPromptMissing ||
       (shouldValidateFalOptions && isNumImagesInvalid) ||
+      (usingFal && isMiniMaxH3ReferenceMode && miniMaxH3ReferenceAssetCount === 0) ||
       (usingFal && isSeedance2ReferenceMode && seedance2ReferenceAssetCount === 0) ||
       (usingFal && isWan27ReferenceMode && !hasWan27ReferenceAssets) ||
       hasSeedance2SmartUnsupportedSelection ||
+      hasMiniMaxH3StandardUnsupportedSelection ||
       hasWan27SmartUnsupportedSelection ||
       hasKlingV3UnsupportedSelection ||
       requiresSelectedImageForUpscale ||
@@ -205,6 +220,19 @@ export function useGenerationGuards({
 
     const promptPlaceholderText = (() => {
       if (isVideoMode) {
+        if (isMiniMaxH3VideoModel) {
+          if (isMiniMaxH3ReferenceMode) {
+            return miniMaxH3ReferenceAssetCount > 0
+              ? `MiniMax H3 Reference: select up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips as @Image1, @Video1, or @Audio1, then describe the scene...`
+              : 'MiniMax H3 Reference: select canvas media to label @Image1, @Video1, or @Audio1 references, then describe the scene...';
+          }
+          if (hasMiniMaxH3StandardUnsupportedSelection) {
+            return 'MiniMax H3 Standard uses still images for its first and last frames. Clear the current video or audio selection...';
+          }
+          return hasPrimaryImage
+            ? 'Describe the motion, or shift-click another still image to set the end frame...'
+            : 'Describe the video, or select an image for image-to-video...';
+        }
         if (isSeedance2VideoModel) {
           if (isSeedance2ReferenceMode) {
             return seedance2ReferenceAssetCount > 0
@@ -358,6 +386,7 @@ export function useGenerationGuards({
     hasSelectedStillImage,
     hasSourceAudio,
     hasSourceVideo,
+    hasMiniMaxH3StandardUnsupportedSelection,
     hasSeedance2SmartUnsupportedSelection,
     hasWan27SmartUnsupportedSelection,
     hasKlingV3UnsupportedSelection,
@@ -374,6 +403,8 @@ export function useGenerationGuards({
     isKlingO3VideoModel,
     isKlingV3SmartVideoModel,
     isKlingVideoModel,
+    isMiniMaxH3VideoModel,
+    isMiniMaxH3ReferenceMode,
     isSeedance2VideoModel,
     isWanAnimateVideoModel,
     isScailVideoModel,
@@ -388,6 +419,8 @@ export function useGenerationGuards({
     isUpscaleModel,
     isVideoMode,
     prompt,
+    miniMaxH3ReferenceAssetCount,
+    miniMaxH3Variant,
     seedance2ReferenceAssetCount,
     seedance2Variant,
     wan27ReferenceAssetCount,

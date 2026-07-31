@@ -93,6 +93,25 @@ describe('video prompt area helpers', () => {
     });
   });
 
+  it('gives MiniMax H3 Standard still-frame roles and Reference multimodal roles', () => {
+    const standard = getVideoPromptAreaCapabilityProfile('minimax/h3', undefined, {
+      miniMaxH3Variant: 'standard',
+    });
+    const reference = getVideoPromptAreaCapabilityProfile('minimax/h3', undefined, {
+      miniMaxH3Variant: 'reference',
+    });
+
+    expect(standard.supportsTextOnly).toBe(true);
+    expect(standard.defaultImageRole).toBe('primary');
+    expect(standard.shiftImageRole).toBe('tail');
+    expect(standard.supportedMediaTypes).toEqual(['image']);
+    expect(reference.defaultImageRole).toBe('reference');
+    expect(reference.supportedMediaTypes).toEqual(['image', 'video', 'audio']);
+    expect(reference.maxImages).toBe(9);
+    expect(reference.maxVideos).toBe(3);
+    expect(reference.maxAudios).toBe(3);
+  });
+
   it('re-appends media when it leaves an area and enters again', () => {
     const area: CanvasVideoPromptArea = {
       id: 'area-1',

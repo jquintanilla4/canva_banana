@@ -40,6 +40,9 @@ import type {
   Seedance2ResolutionSelectionValue,
   Seedance2DurationSelectionValue,
   Seedance2Variant,
+  MiniMaxH3AspectRatioSelectionValue,
+  MiniMaxH3DurationSelectionValue,
+  MiniMaxH3Variant,
   Wan27VideoAudioSettingSelectionValue,
   Wan27VideoAspectRatioSelectionValue,
   Wan27VideoDurationSelectionValue,
@@ -127,6 +130,9 @@ import {
   SEEDANCE2_AUDIO_OPTIONS,
   SEEDANCE2_CAMERA_FIXED_OPTIONS,
   JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS,
+  MINIMAX_H3_ASPECT_RATIO_OPTIONS,
+  MINIMAX_H3_DURATION_OPTIONS,
+  MINIMAX_H3_VARIANT_OPTIONS,
   WAN_ANIMATE_MODEL_ID,
   WAN_ANIMATE_QUALITY_OPTIONS,
   WAN_ANIMATE_RESOLUTION_OPTIONS,
@@ -341,6 +347,64 @@ export const buildSeedance2PromptBarControls = ({
   return controls;
 };
 
+type MiniMaxH3PromptBarControlsInput = {
+  idPrefix?: string;
+  variant: MiniMaxH3Variant;
+  aspectRatio: MiniMaxH3AspectRatioSelectionValue;
+  duration: MiniMaxH3DurationSelectionValue;
+  usesSourceAspectRatio: boolean;
+  isLoading: boolean;
+  onVariantChange: (value: MiniMaxH3Variant) => void;
+  onAspectRatioChange: (value: MiniMaxH3AspectRatioSelectionValue) => void;
+  onDurationChange: (value: MiniMaxH3DurationSelectionValue) => void;
+};
+
+export const buildMiniMaxH3PromptBarControls = ({
+  idPrefix,
+  variant,
+  aspectRatio,
+  duration,
+  usesSourceAspectRatio,
+  isLoading,
+  onVariantChange,
+  onAspectRatioChange,
+  onDurationChange,
+}: MiniMaxH3PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => {
+  const controlId = (name: string): string => idPrefix ? `${idPrefix}-minimax-h3-${name}-select` : `minimax-h3-${name}-select`; // Embedded ids stay unique.
+  const aspectRatioOptions = variant === 'reference'
+    ? MINIMAX_H3_ASPECT_RATIO_OPTIONS
+    : MINIMAX_H3_ASPECT_RATIO_OPTIONS.filter(option => option.value !== 'adaptive');
+  return [{
+    id: controlId('variant'),
+    ariaLabel: 'Select MiniMax H3 variant',
+    options: MINIMAX_H3_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+    value: variant,
+    onChange: value => onVariantChange(value as MiniMaxH3Variant),
+    disabled: isLoading,
+  }, {
+    id: controlId('aspect-ratio'),
+    prefixLabel: 'AR',
+    ariaLabel: 'Select MiniMax H3 aspect ratio',
+    options: usesSourceAspectRatio
+      ? [{ value: 'source', label: 'Source' }]
+      : aspectRatioOptions.map(option => ({ value: option.value, label: option.label })),
+    value: usesSourceAspectRatio ? 'source' : aspectRatio,
+    onChange: value => {
+      if (!usesSourceAspectRatio) {
+        onAspectRatioChange(value as MiniMaxH3AspectRatioSelectionValue);
+      }
+    },
+    disabled: isLoading || usesSourceAspectRatio,
+  }, {
+    id: controlId('duration'),
+    ariaLabel: 'Select MiniMax H3 duration',
+    options: MINIMAX_H3_DURATION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+    value: duration,
+    onChange: value => onDurationChange(value as MiniMaxH3DurationSelectionValue),
+    disabled: isLoading,
+  }];
+};
+
 type KlingV3PromptBarControlsInput = {
   idPrefix?: string;
   klingV3Duration: KlingV3DurationSelectionValue;
@@ -445,6 +509,7 @@ export const buildKlingV3PromptBarControls = ({
 
 export type PromptBarControlsInput = {
   apiProvider: 'google' | 'fal';
+  controlIdPrefix?: string; // Keeps embedded control ids unique.
   falModelId: string;
   falModelMode: FalModelMode;
   isVideoMode: boolean;
@@ -468,6 +533,7 @@ export type PromptBarControlsInput = {
   isGrokImagineVideoModel: boolean;
   isVeo31VideoModel: boolean;
   isWan27VideoModel: boolean;
+  isMiniMaxH3VideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
@@ -519,6 +585,10 @@ export type PromptBarControlsInput = {
   wan27VideoPromptExpansion: boolean;
   wan27VideoVariant: Wan27VideoVariant;
   wan27VideoAudioSetting: Wan27VideoAudioSettingSelectionValue;
+  miniMaxH3Variant: MiniMaxH3Variant;
+  miniMaxH3AspectRatio: MiniMaxH3AspectRatioSelectionValue;
+  miniMaxH3Duration: MiniMaxH3DurationSelectionValue;
+  miniMaxH3UsesSourceAspectRatio: boolean;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -595,6 +665,9 @@ export type PromptBarControlsInput = {
   onWan27VideoPromptExpansionChange: (value: boolean) => void;
   onWan27VideoVariantChange: (value: string) => void;
   onWan27VideoAudioSettingChange: (value: string) => void;
+  onMiniMaxH3VariantChange: (value: string) => void;
+  onMiniMaxH3AspectRatioChange: (value: string) => void;
+  onMiniMaxH3DurationChange: (value: string) => void;
   onSeedance15AspectRatioChange: (value: string) => void;
   onSeedance15ResolutionChange: (value: string) => void;
   onSeedance15DurationChange: (value: string) => void;
@@ -633,6 +706,7 @@ export type PromptBarControlsInput = {
 export const buildPromptBarModelControls = (input: PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> | undefined => {
   const {
     apiProvider,
+    controlIdPrefix,
     falModelId,
     falModelMode,
     isVideoMode,
@@ -656,6 +730,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isGrokImagineVideoModel,
     isVeo31VideoModel,
     isWan27VideoModel,
+    isMiniMaxH3VideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
@@ -707,6 +782,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     wan27VideoPromptExpansion,
     wan27VideoVariant,
     wan27VideoAudioSetting,
+    miniMaxH3Variant,
+    miniMaxH3AspectRatio,
+    miniMaxH3Duration,
+    miniMaxH3UsesSourceAspectRatio,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -783,6 +862,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onWan27VideoPromptExpansionChange,
     onWan27VideoVariantChange,
     onWan27VideoAudioSettingChange,
+    onMiniMaxH3VariantChange,
+    onMiniMaxH3AspectRatioChange,
+    onMiniMaxH3DurationChange,
     onSeedance15AspectRatioChange,
     onSeedance15ResolutionChange,
     onSeedance15DurationChange,
@@ -874,6 +956,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   if (isKlingV3VideoModel) {
     controls.push(...buildKlingV3PromptBarControls({
+      idPrefix: controlIdPrefix,
       klingV3Duration,
       klingV3GenerateAudio,
       klingV3CfgScale,
@@ -1376,8 +1459,23 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
+  if (isMiniMaxH3VideoModel) {
+    controls.push(...buildMiniMaxH3PromptBarControls({
+      idPrefix: controlIdPrefix,
+      variant: miniMaxH3Variant,
+      aspectRatio: miniMaxH3AspectRatio,
+      duration: miniMaxH3Duration,
+      usesSourceAspectRatio: miniMaxH3UsesSourceAspectRatio,
+      isLoading,
+      onVariantChange: onMiniMaxH3VariantChange,
+      onAspectRatioChange: onMiniMaxH3AspectRatioChange,
+      onDurationChange: onMiniMaxH3DurationChange,
+    }));
+  }
+
   if (isSeedance2VideoModel) {
     controls.push(...buildSeedance2PromptBarControls({
+      idPrefix: controlIdPrefix,
       seedance2Variant,
       seedance2JimengModelVersion,
       seedance2AspectRatio,

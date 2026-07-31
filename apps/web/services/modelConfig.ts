@@ -67,6 +67,10 @@ export const WAN_27_TEXT_TO_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/text-to-video' as 
 export const WAN_27_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/image-to-video' as const; // Wan 2.7 image-to-video endpoint.
 export const WAN_27_REFERENCE_TO_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/reference-to-video' as const; // Wan 2.7 reference endpoint.
 export const WAN_27_EDIT_VIDEO_MODEL_ID = 'fal-ai/wan/v2.7/edit-video' as const; // Wan 2.7 edit-video endpoint.
+export const MINIMAX_H3_VIDEO_MODEL_ID = 'minimax/h3' as const; // MiniMax H3 family selector.
+export const MINIMAX_H3_TEXT_TO_VIDEO_MODEL_ID = 'minimax/h3/text-to-video' as const; // H3 text endpoint.
+export const MINIMAX_H3_IMAGE_TO_VIDEO_MODEL_ID = 'minimax/h3/image-to-video' as const; // H3 image endpoint.
+export const MINIMAX_H3_REFERENCE_TO_VIDEO_MODEL_ID = 'minimax/h3/reference-to-video' as const; // H3 reference endpoint.
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
 export const SEEDANCE_2_VIDEO_MODEL_ID = 'volcengine/seedance-2' as const;
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0' as const; // Selector id for the Fal Seedance 2 family.
@@ -94,6 +98,7 @@ export type KlingV3BooleanSelectionValue = 'true' | 'false';
 export type KlingV3ControlOrientation = 'image' | 'video';
 export type Veo31Variant = 'i2v-fflf' | 'extend';
 export type Seedance2Variant = 'smart' | 'reference';
+export type MiniMaxH3Variant = 'standard' | 'reference';
 export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
 export type KlingV3ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
@@ -152,6 +157,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: KLING_V3_CONTROL_VIDEO_MODEL_ID, label: 'Kling 3.0 Control' },
   { value: KLING_V3_VIDEO_MODEL_ID, label: 'Kling 3.0 Pro' },
   { value: KLING_O3_VIDEO_MODEL_ID, label: 'Kling O3 Video' },
+  { value: MINIMAX_H3_VIDEO_MODEL_ID, label: 'MiniMax H3' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
   { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (VE)' }, // VE-backed Seedance 2 selector label.
@@ -243,10 +249,48 @@ export type Seedance2ResolutionSelectionValue = '480p' | '720p' | '1080p';
 export type Seedance2DurationSelectionValue = '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
 export type Seedance2BooleanSelectionValue = 'true' | 'false';
 export type JimengSeedance2ModelVersionSelectionValue = JimengSeedance2ModelVersion;
+export type MiniMaxH3AspectRatioSelectionValue = Seedance2AspectRatioSelectionValue;
+export type MiniMaxH3DurationSelectionValue = Exclude<Seedance2DurationSelectionValue, '4'>;
+
+export const normalizeMiniMaxH3AspectRatioForVariant = (
+  variant: MiniMaxH3Variant,
+  aspectRatio: MiniMaxH3AspectRatioSelectionValue = 'adaptive',
+): MiniMaxH3AspectRatioSelectionValue => (
+  variant === 'standard' && aspectRatio === 'adaptive' ? '16:9' : aspectRatio
+); // Standard mode cannot send the Reference-only Adaptive value.
 
 export const SEEDANCE2_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant; label: string }> = [
   { value: 'smart', label: 'Smart' },
   { value: 'reference', label: 'Reference' },
+] as const;
+
+export const MINIMAX_H3_VARIANT_OPTIONS: ReadonlyArray<{ value: MiniMaxH3Variant; label: string }> = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'reference', label: 'Reference' },
+] as const;
+
+export const MINIMAX_H3_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: MiniMaxH3AspectRatioSelectionValue; label: string }> = [
+  { value: '21:9', label: '21:9' },
+  { value: '16:9', label: '16:9' },
+  { value: '4:3', label: '4:3' },
+  { value: '1:1', label: '1:1' },
+  { value: '3:4', label: '3:4' },
+  { value: '9:16', label: '9:16' },
+  { value: 'adaptive', label: 'Adaptive' },
+] as const; // H3 uses the same visible ratios as Seedance 2.
+
+export const MINIMAX_H3_DURATION_OPTIONS: ReadonlyArray<{ value: MiniMaxH3DurationSelectionValue; label: string }> = [
+  { value: '5', label: '5s' },
+  { value: '6', label: '6s' },
+  { value: '7', label: '7s' },
+  { value: '8', label: '8s' },
+  { value: '9', label: '9s' },
+  { value: '10', label: '10s' },
+  { value: '11', label: '11s' },
+  { value: '12', label: '12s' },
+  { value: '13', label: '13s' },
+  { value: '14', label: '14s' },
+  { value: '15', label: '15s' },
 ] as const;
 
 export const SEEDANCE2_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Seedance2AspectRatioSelectionValue; label: string }> = [
@@ -680,6 +724,18 @@ export const isSeedance2ResolutionSelectionValue = (value: unknown): value is Se
 
 export const isSeedance2DurationSelectionValue = (value: unknown): value is Seedance2DurationSelectionValue =>
   value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
+
+export const isMiniMaxH3VideoModel = (modelId: string | undefined): boolean =>
+  modelId === MINIMAX_H3_VIDEO_MODEL_ID;
+
+export const isMiniMaxH3Variant = (value: unknown): value is MiniMaxH3Variant =>
+  value === 'standard' || value === 'reference';
+
+export const isMiniMaxH3AspectRatioSelectionValue = (value: unknown): value is MiniMaxH3AspectRatioSelectionValue =>
+  isSeedance2AspectRatioSelectionValue(value);
+
+export const isMiniMaxH3DurationSelectionValue = (value: unknown): value is MiniMaxH3DurationSelectionValue =>
+  value !== '4' && isSeedance2DurationSelectionValue(value);
 
 export const isJimengSeedance2ModelVersion = (value: unknown): value is JimengSeedance2ModelVersionSelectionValue =>
   value === 'seedance2.0fast' || value === 'seedance2.0' || value === 'seedance2.0_vip' || value === 'seedance2.0fast_vip';
@@ -1195,6 +1251,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [INFINITALK_VIDEO_MODEL_ID]: 0,
   [VEO_31_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [WAN_27_VIDEO_MODEL_ID]: 0,
+  [MINIMAX_H3_VIDEO_MODEL_ID]: 9, // H3 Reference accepts up to 9 image references.
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Seedance 2 reference mode supports up to 9 image refs.
   [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Fal Seedance 2 reference mode supports up to 9 image refs.

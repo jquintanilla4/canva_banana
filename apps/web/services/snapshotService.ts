@@ -40,6 +40,9 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isMiniMaxH3AspectRatioSelectionValue,
+  isMiniMaxH3DurationSelectionValue,
+  isMiniMaxH3Variant,
   isWan27ImageAspectRatioSelectionValue,
   isWan27ImageMaxImagesSelectionValue,
   isVeo31AspectRatioSelectionValue,
@@ -1797,6 +1800,15 @@ export const normalizeSnapshotImageMetadata = (
       const wan27VideoAudioSettingValue = (typed as { wan27VideoAudioSetting?: unknown }).wan27VideoAudioSetting;
       if (wan27VideoAudioSettingValue === 'auto' || wan27VideoAudioSettingValue === 'origin') {
         normalizedOptions.wan27VideoAudioSetting = wan27VideoAudioSettingValue;
+      }
+      if (isMiniMaxH3Variant(typed.miniMaxH3Variant)) {
+        normalizedOptions.miniMaxH3Variant = typed.miniMaxH3Variant;
+      }
+      if (isMiniMaxH3AspectRatioSelectionValue(typed.miniMaxH3AspectRatio)) {
+        normalizedOptions.miniMaxH3AspectRatio = typed.miniMaxH3AspectRatio;
+      }
+      if (isMiniMaxH3DurationSelectionValue(typed.miniMaxH3Duration)) {
+        normalizedOptions.miniMaxH3Duration = typed.miniMaxH3Duration;
       }
 
       const wanTargetResolution = (typed as { wanTargetResolution?: unknown }).wanTargetResolution;

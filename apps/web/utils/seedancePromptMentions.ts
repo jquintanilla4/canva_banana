@@ -37,9 +37,17 @@ export const normalizeSeedanceReferencePromptMentions = (prompt: string): string
   )) // Canonicalize typed mention aliases before they hit the provider.
 );
 
+export const convertReferencePromptMentionsToOrderedLabels = (prompt: string): string => (
+  normalizeSeedanceReferencePromptMentions(prompt)
+    .replace(SEEDANCE_REFERENCE_MENTION_REGEX, (_, mediaKind: 'Image' | 'Video' | 'Audio', indexText: string) => (
+      `${mediaKind} ${indexText}`
+    ))
+); // H3 expects "Image 1" instead of the UI's @Image1 token.
+
 export const getSeedanceReferencePromptMentionError = (
   prompt: string,
   counts: SeedanceReferenceMentionCounts,
+  modelLabel = 'Seedance',
 ): string | null => {
   const normalizedPrompt = normalizeSeedanceReferencePromptMentions(prompt);
   const invalidMentions: string[] = [];
@@ -59,6 +67,6 @@ export const getSeedanceReferencePromptMentionError = (
 
   const invalidLabelList = invalidMentions.join(', ');
   return invalidMentions.length === 1
-    ? `${invalidLabelList} does not match any selected Seedance reference. Check the canvas label and try again.`
-    : `These Seedance mentions do not match the selected references: ${invalidLabelList}.`;
+    ? `${invalidLabelList} does not match any selected ${modelLabel} reference. Check the canvas label and try again.`
+    : `These ${modelLabel} mentions do not match the selected references: ${invalidLabelList}.`;
 };

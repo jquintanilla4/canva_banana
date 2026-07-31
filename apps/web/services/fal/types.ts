@@ -20,6 +20,9 @@ import type {
   KlingV3ShotDurationSelectionValue,
   InfinitalkDurationSelectionValue,
   LipsyncSyncMode,
+  MiniMaxH3AspectRatioSelectionValue,
+  MiniMaxH3DurationSelectionValue,
+  MiniMaxH3Variant,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
   Wan27VideoAudioSettingSelectionValue,
@@ -184,6 +187,9 @@ export interface GenerateVideoOptions {
   wan27VideoPromptExpansion?: boolean;
   wan27VideoVariant?: Wan27VideoVariant;
   wan27VideoAudioSetting?: Wan27VideoAudioSettingSelectionValue;
+  miniMaxH3Variant?: MiniMaxH3Variant;
+  miniMaxH3AspectRatio?: MiniMaxH3AspectRatioSelectionValue;
+  miniMaxH3Duration?: MiniMaxH3DurationSelectionValue;
   seedance15AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
   seedance15Resolution?: '480p' | '720p' | '1080p';
   seedance15Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';

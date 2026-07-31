@@ -43,6 +43,8 @@ type SelectionFalSettings = Pick<
   wan27VideoVariant?: UseFalSettingsResult['wan27VideoVariant']; // Missing values fall back to Smart.
   isKlingV3VideoModel?: UseFalSettingsResult['isKlingV3VideoModel']; // Older test stubs and snapshots do not carry this flag.
   isKrea2LargeModel?: UseFalSettingsResult['isKrea2LargeModel']; // Older test stubs do not carry this image flag.
+  isMiniMaxH3VideoModel?: UseFalSettingsResult['isMiniMaxH3VideoModel']; // Older test stubs predate H3.
+  miniMaxH3Variant?: UseFalSettingsResult['miniMaxH3Variant']; // Missing H3 state defaults to Reference elsewhere.
 };
 
 type SelectionOptions = {
@@ -107,6 +109,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
     isWan27VideoModel,
+    isMiniMaxH3VideoModel,
+    miniMaxH3Variant,
     isKrea2LargeModel,
     wan27VideoVariant,
     isSeedance15VideoModel,
@@ -150,6 +154,12 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isSeedance2VideoModel
     && seedance2Variant === 'reference';
+  const isMiniMaxH3ReferenceMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isMiniMaxH3VideoModel
+    && miniMaxH3Variant === 'reference';
+  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isMiniMaxH3ReferenceMode;
+  const multimodalReferenceLabel = isMiniMaxH3ReferenceMode ? 'MiniMax H3' : 'Seedance 2';
   const isVideoInputMode = isKlingO3VideoInputMode
     || isWanVideoInputMode
     || isAudioInputMode
@@ -164,6 +174,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isSeedance2VideoModel
     && seedance2Variant === 'smart';
+  const isMiniMaxH3StandardMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isMiniMaxH3VideoModel
+    && miniMaxH3Variant === 'standard';
   const isVeo31TailCapable = isVeo31VideoModel && veo31Variant === 'i2v-fflf';
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -222,7 +236,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   }, [elementImageIds.length, images, referenceAudioIds.length, referenceImageIds.length, referenceVideoIds.length, seedanceReferenceOrderIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
 
   const referenceLimits = useMemo(() => {
-    if (isSeedance2ReferenceMode) {
+    if (isMultimodalReferenceMode) {
       return {
         images: SEEDANCE_REFERENCE_IMAGE_LIMIT,
         videos: SEEDANCE_REFERENCE_VIDEO_LIMIT,
@@ -250,18 +264,18 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       videos: NO_REFERENCE_LIMIT,
       audios: NO_REFERENCE_LIMIT,
     };
-  }, [falModelId, isFalProvider, isSeedance2ReferenceMode, isWan27EditMode, isWan27ReferenceMode, referenceImageSlotOffset]);
+  }, [falModelId, isFalProvider, isMultimodalReferenceMode, isWan27EditMode, isWan27ReferenceMode, referenceImageSlotOffset]);
 
   useEffect(() => {
     if (referenceVideoIds.length > referenceLimits.videos) {
-      if (isSeedance2ReferenceMode) {
-        onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
+      if (isMultimodalReferenceMode) {
+        onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
       }
       setReferenceVideoIds(prevIds => prevIds.slice(0, referenceLimits.videos));
     }
     if (referenceAudioIds.length > referenceLimits.audios) {
-      if (isSeedance2ReferenceMode) {
-        onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
+      if (isMultimodalReferenceMode) {
+        onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
       }
       setReferenceAudioIds(prevIds => prevIds.slice(0, referenceLimits.audios));
     }
@@ -272,7 +286,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       onReferenceLimit(referenceLimits.images);
       setReferenceImageIds(prevIds => prevIds.slice(0, referenceLimits.images));
     }
-  }, [isKlingO3VideoModel, isSeedance2ReferenceMode, onError, onReferenceLimit, referenceAudioIds.length, referenceImageIds.length, referenceLimits, referenceVideoIds.length]);
+  }, [isKlingO3VideoModel, isMultimodalReferenceMode, multimodalReferenceLabel, onError, onReferenceLimit, referenceAudioIds.length, referenceImageIds.length, referenceLimits, referenceVideoIds.length]);
 
   useEffect(() => {
     if (isActiveKrea2LargeModel || !primaryImageId) {
@@ -291,7 +305,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   }, [activePrimaryImageId, hasActivePrimaryReference, isActiveKrea2LargeModel]);
 
   useEffect(() => {
-    const effectiveSeedanceReferenceIds = isSeedance2ReferenceMode
+    const effectiveSeedanceReferenceIds = isMultimodalReferenceMode
       ? Array.from(new Set([
         ...selectedImageIds,
         ...referenceImageIds,
@@ -312,7 +326,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       const isUnchanged = nextIds.length === prevIds.length && nextIds.every((id, index) => id === prevIds[index]); // Avoid extra state churn when nothing moved.
       return isUnchanged ? prevIds : nextIds;
     });
-  }, [isSeedance2ReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
+  }, [isMultimodalReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
 
   // Clear sourceVideoId when leaving a video input mode (Kling O3 / Wan / 1-to-All / Scail / Lip Sync / HeyGen).
   useEffect(() => {
@@ -377,7 +391,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       && falModelMode === 'video'
       && isKlingO3VideoModelId(falVideoModelId);
 
-    if (reference && isSeedance2ReferenceMode && targetImage?.mediaType === 'video') {
+    if (reference && isMultimodalReferenceMode && targetImage?.mediaType === 'video') {
       if (!imageId) {
         setReferenceVideoIds([]);
         return;
@@ -389,7 +403,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         if (prevIds.length < SEEDANCE_REFERENCE_VIDEO_LIMIT) {
           return [...prevIds, imageId];
         }
-        onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
+        onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
         return prevIds;
       });
       return;
@@ -428,7 +442,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return;
     }
 
-    if (reference && isSeedance2ReferenceMode && targetImage?.mediaType === 'audio') {
+    if (reference && isMultimodalReferenceMode && targetImage?.mediaType === 'audio') {
       if (!imageId) {
         setReferenceAudioIds([]);
         return;
@@ -440,7 +454,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         if (prevIds.length < SEEDANCE_REFERENCE_AUDIO_LIMIT) {
           return [...prevIds, imageId];
         }
-        onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
+        onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
         return prevIds;
       });
       return;
@@ -465,7 +479,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isMiniMaxH3StandardMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -527,14 +541,14 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (reference) {
-      if (primaryImageId && imageId === primaryImageId && !isSeedance2ReferenceMode && !isWan27ReferenceMode && !isActiveKrea2LargeModel) {
+      if (primaryImageId && imageId === primaryImageId && !isMultimodalReferenceMode && !isWan27ReferenceMode && !isActiveKrea2LargeModel) {
         return;
       }
       if (!imageId) {
         setReferenceImageIds([]);
         return;
       }
-      if (isSeedance2ReferenceMode) {
+      if (isMultimodalReferenceMode) {
         setReferenceImageIds(prevIds => {
           if (prevIds.includes(imageId)) {
             return prevIds.filter(id => id !== imageId);
@@ -542,7 +556,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
           if (prevIds.length < SEEDANCE_REFERENCE_IMAGE_LIMIT) {
             return [...prevIds, imageId];
           }
-          onError(`Seedance 2 reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images.`);
+          onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images.`);
           return prevIds;
         });
         return;
@@ -612,7 +626,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
 
     if (multi) {
       setReferenceImageIds([]);
-      if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
+      if (!isMultimodalReferenceMode && !isWan27ReferenceMode) {
         setReferenceVideoIds([]);
         setReferenceAudioIds([]);
       }
@@ -643,7 +657,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
 
     if (primaryImageId === imageId && selectedImageIds.length === 1) {
       setReferenceImageIds([]);
-      if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
+      if (!isMultimodalReferenceMode && !isWan27ReferenceMode) {
         setReferenceVideoIds([]);
         setReferenceAudioIds([]);
       }
@@ -684,7 +698,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       setSourceAudioId(null);
     }
     setReferenceImageIds([]);
-    if (!isSeedance2ReferenceMode && !isWan27ReferenceMode) {
+    if (!isMultimodalReferenceMode && !isWan27ReferenceMode) {
       setReferenceVideoIds([]);
       setReferenceAudioIds([]);
     }
@@ -711,6 +725,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isWan27SmartMode,
     isSeedance15FflfMode,
     isSeedance2SmartMode,
+    isMiniMaxH3StandardMode,
     isVeo31TailCapable,
     klingVariant,
     onError,
@@ -728,7 +743,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     sourceVideoId,
     isAudioInputMode,
     sourceAudioId,
-    isSeedance2ReferenceMode,
+    isMultimodalReferenceMode,
+    multimodalReferenceLabel,
     isWan27ReferenceMode,
     isActiveKrea2LargeModel,
     referenceImageSlotOffset,
