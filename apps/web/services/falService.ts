@@ -2,9 +2,6 @@ export type { FalImageGenerationResult, FalPhaseUpdate, FalQueueUpdate } from '.
 export { getFalErrorPhase, getFalErrorRequestId } from './fal/errors'; // Re-export phase error helpers.
 
 export {
-  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
-  HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
-  HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
   GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID,
   KLING_IMAGE_TO_VIDEO_MODEL_ID,

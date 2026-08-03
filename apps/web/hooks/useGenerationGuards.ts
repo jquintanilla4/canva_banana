@@ -41,7 +41,6 @@ type Args = {
   isKlingV3VideoModel?: boolean;
   isKlingO3VideoModel: boolean;
   isKlingV3ControlVideoModel: boolean;
-  isHailuoVideoModel: boolean;
   isVeo31VideoModel: boolean;
   isMiniMaxH3VideoModel?: boolean;
   miniMaxH3Variant?: 'standard' | 'reference';
@@ -89,7 +88,6 @@ export function useGenerationGuards({
   isKlingV3VideoModel = false,
   isKlingO3VideoModel,
   isKlingV3ControlVideoModel,
-  isHailuoVideoModel,
   isVeo31VideoModel,
   isMiniMaxH3VideoModel = false,
   miniMaxH3Variant = 'reference',
@@ -396,7 +394,6 @@ export function useGenerationGuards({
     isGptImage2Model,
     isKrea2LargeModel,
     isNanoBananaModel,
-    isHailuoVideoModel,
     isKlingV3ControlVideoModel,
     isKlingO3EditMode,
     isKlingO3VideoInputMode,

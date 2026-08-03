@@ -5,7 +5,6 @@ import {
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
-  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
@@ -36,7 +35,6 @@ import {
   getFalModelLabel,
   getFalNumImageMaxForModel,
   getGptImage2TextToImageModelId,
-  getHailuoActualModelId,
   getKlingActualModelId,
   getKlingO3VideoEndpoint,
   getNanoBananaTextToImageModelId,
@@ -58,7 +56,9 @@ import {
   isKlingV3DurationSelectionValue,
   isKlingV3ShotDurationSelectionValue,
   isLipsyncSyncMode,
+  isLegacySora2ProVideoModelId,
   isNanoBananaEditModelId,
+  isRemovedHailuoModelId,
   isRecraftV4ProModel,
   isRecraftV4ProImageSizeSelectionValue,
   normalizeRecraftRgbColor,
@@ -97,7 +97,6 @@ import {
   type FalModelMode,
   type FalResolutionSelectionValue,
   type FalVideoModelId,
-  type HailuoVariant,
   type KlingO3Variant,
   type KlingO3DurationSelectionValue,
   type KlingV3CfgScaleSelectionValue,
@@ -480,7 +479,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     falNoiseScale,
     falCreativity,
     falVideoDuration,
-    hailuoVariant,
     klingVariant,
     klingV3Duration,
     klingV3GenerateAudio,
@@ -610,6 +608,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const requestedProviderForRun = isGenerationProvider(generationOverride?.provider) ? generationOverride.provider : apiProvider;
     const apiProviderForRun: ApiProviderId = requestedProviderForRun === 'google' ? 'google' : 'fal';
     const rawOverrideModelId = generationOverride?.modelId;
+    const isLegacySora2ProRun = isLegacySora2ProVideoModelId(rawOverrideModelId); // Migrated Sora reruns always use Kling Standard.
+    const isUnsupportedRemovedHailuoRun = isRemovedHailuoModelId(rawOverrideModelId); // Saved Hailuo requests must not fall back to another paid model.
     const overrideModelId = normalizeFalModelId(rawOverrideModelId); // Accept legacy saved model ids.
     const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode : falModelMode;
     const falImageModelIdForRun = isFalImageModelId(overrideModelId) ? overrideModelId : falImageModelId;
@@ -634,8 +634,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const falNoiseScaleForRun = falOptionsOverride.noiseScale ?? falNoiseScale;
     const falCreativityForRun = falOptionsOverride.creativity ?? falCreativity;
     const falVideoDurationForRun = falOptionsOverride.videoDuration ?? falVideoDuration;
-    const hailuoVariantForRun = falOptionsOverride.hailuoVariant ?? hailuoVariant;
-    const klingVariantForRun = falOptionsOverride.klingVariant ?? klingVariant;
+    const klingVariantForRun: KlingVariant = isLegacySora2ProRun ? 'standard' : falOptionsOverride.klingVariant ?? klingVariant;
     const legacyKlingOptions = falOptionsOverride as {
       klingO1Variant?: unknown;
       klingO1KeepAudio?: unknown;
@@ -914,9 +913,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
     const isSeedvrUpscaleModel = !isVideoMode && falModelIdForRun === 'fal-ai/seedvr/upscale/image';
     const isUpscaleModel = isCrystalUpscaleModel || isSeedvrUpscaleModel;
-    const isHailuoVideoModel = isVideoMode && falVideoModelIdForRun === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
-    const isHailuoStandardVideoModel = isHailuoVideoModel && hailuoVariantForRun === 'standard';
-    const actualHailuoModelId = isHailuoVideoModel ? getHailuoActualModelId(hailuoVariantForRun) : null;
     const isKlingVideoModel = isVideoMode && falVideoModelIdForRun === KLING_VIDEO_MODEL_ID;
     const isKlingV3VideoModel = isVideoMode && falVideoModelIdForRun === KLING_V3_VIDEO_MODEL_ID;
     const isKlingO3VideoModel = isVideoMode && isKlingO3VideoModelId(falVideoModelIdForRun);
@@ -962,11 +958,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isMultimodalReferenceModeForRun = isSeedance2ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun;
     const shouldPersistReferenceInputsForRun = !isMiniMaxH3VideoModelForRun || isMiniMaxH3ReferenceModeForRun; // H3 Standard ignores references retained from Reference mode.
     const wan27AudioIdForRun = isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun ? sourceAudioIdForRun : null; // Wan 2.7 Smart supports optional audio.
-    const videoDurationForRun: FalVideoDuration | undefined = isHailuoVideoModel
-      ? (hailuoVariantForRun === 'standard' ? falVideoDurationForRun : '6')
-      : isKlingVideoModel
-        ? (falVideoDurationForRun === '10' ? '10' : '5')
-        : undefined;
+    const videoDurationForRun: FalVideoDuration | undefined = isKlingVideoModel
+      ? (falVideoDurationForRun === '10' ? '10' : '5')
+      : undefined;
     const normalizedVideoNegativePrompt =
       (isKlingVideoModel || isKlingV3VideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun)
         ? videoNegativePromptForRun.trim()
@@ -984,6 +978,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     if (isUnsupportedLegacyKlingO1RefV2VRerun) {
       setError('Kling O1 Ref-v2v is no longer available and cannot be regenerated. Create a new Kling O3 Reference or Edit generation instead.');
+      return;
+    }
+
+    if (isUnsupportedRemovedHailuoRun) {
+      setError('Hailuo 2.3 is no longer available and cannot be regenerated. Select a supported video model and create a new generation instead.');
       return;
     }
 
@@ -1049,9 +1048,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const baseModelLabel = getFalModelLabel(falModelIdForRun);
       const klingO3VariantLabel = klingO3VariantForRun === 'edit' ? 'Edit' : 'Reference';
       const veo31VariantLabel = veo31VariantForRun === 'extend' ? 'Extend' : 'i2v/FFLF';
-      const jobModelLabel = isHailuoVideoModel
-        ? `${baseModelLabel} ${hailuoVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
-        : isKlingVideoModel
+      const jobModelLabel = isKlingVideoModel
           ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
         : isKlingV3VideoModel
           ? `${baseModelLabel}${klingV3MultiPromptEnabledForRun ? ' Multi' : ' Smart'}`
@@ -1537,7 +1534,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
       // generation metadata. Keep in sync with the request args passed to generateFalImageToVideo.
       const buildVideoFalOptionsForRun = (): GenerationFalOptions => ({
         ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
-        ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
         ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
         ...(isKlingV3VideoModel ? {
           klingV3Duration: klingV3DurationForRun,
@@ -2154,18 +2150,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const actualGrokImagineVideoModelId = isGrokImagineVideoModel
           ? (isGrokImagineVideoEditMode ? GROK_IMAGINE_VIDEO_EDIT_MODEL_ID : GROK_IMAGINE_VIDEO_MODEL_ID)
           : null;
-        const videoModelIdForRequest = actualHailuoModelId
-          ?? actualKlingModelId
+        const videoModelIdForRequest = actualKlingModelId
           ?? actualKlingO3ModelId
           ?? actualKlingV3ControlModelId
           ?? actualWanAnimateModelId
           ?? actualVeo31ModelId
           ?? actualGrokImagineVideoModelId
           ?? falVideoModelIdForRun;
-        const shouldSendDuration = isHailuoVideoModel
-          ? isHailuoStandardVideoModel
-          : isKlingVideoModel;
-        const durationForRequest = shouldSendDuration ? videoDurationForRun : undefined;
+        const durationForRequest = isKlingVideoModel ? videoDurationForRun : undefined;
         const oneToAllNegativePromptForRequest = isOneToAllAnimateVideoModel ? videoNegativePromptForRun.trim() : undefined;
         const negativePromptForRequest =
           (isKlingVideoModel || isKlingV3VideoModel || isWanVisionEnhancerVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun) && hasVideoNegativePrompt
@@ -3022,7 +3014,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...buildImageFalOptionsForRun(referenceIdsUsed),
                   // Saved metadata keeps video-model options too so legacy snapshot restores retain them.
                   ...(generationKind === 'video' ? { videoDuration: videoDurationForRun } : {}),
-                  ...(isHailuoVideoModel ? { hailuoVariant: hailuoVariantForRun } : {}),
                   ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
                   ...(hasVideoNegativePrompt ? { negativePrompt: normalizedVideoNegativePrompt } : {}),
                   ...(isWanVisionEnhancerVideoModel ? {
@@ -3121,7 +3112,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     falNoiseScale,
     falCreativity,
     falVideoDuration,
-    hailuoVariant,
     klingVariant,
     klingV3Duration,
     klingV3GenerateAudio,

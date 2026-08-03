@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { useSelectionState } from '../useSelectionState';
 import {
   GPT_IMAGE_2_EDIT_MODEL_ID,
-  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  MINIMAX_H3_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../../services/modelConfig';
 import type { CanvasImage } from '../../types';
@@ -50,7 +50,7 @@ const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType'] = 'ima
 const buildFal = (overrides: Partial<TestFalSettings> = {}): TestFalSettings => ({
   falModelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   falModelMode: 'image',
-  falVideoModelId: HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+  falVideoModelId: MINIMAX_H3_VIDEO_MODEL_ID,
   klingVariant: 'standard',
   klingO3Variant: 'reference',
   isVideoMode: false,

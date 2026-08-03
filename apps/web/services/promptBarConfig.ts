@@ -7,7 +7,6 @@ import type {
   FalResolutionSelectionValue,
   FalVideoModelId,
   Flux2MaxImageSizeSelectionValue,
-  HailuoVariant,
   InfinitalkAccelerationSelectionValue,
   InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
@@ -85,7 +84,6 @@ import {
   getFalNumImageOptionsForModel,
   getSeedreamAspectRatioOptions,
   getSeedreamImageSizeOptions,
-  HAILUO_VARIANT_OPTIONS,
   KLING_O3_ASPECT_RATIO_OPTIONS,
   KLING_O3_VARIANT_OPTIONS,
   KLING_V3_CONTROL_ORIENTATION_OPTIONS,
@@ -525,7 +523,6 @@ export type PromptBarControlsInput = {
   isKlingV3VideoModel: boolean;
   isKlingO3VideoModel: boolean;
   isKlingV3ControlVideoModel: boolean;
-  isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
   isHeygenV3LipsyncVideoModel: boolean;
@@ -538,7 +535,6 @@ export type PromptBarControlsInput = {
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
   isJimengSeedance2VideoModel?: boolean;
-  hailuoVariant: HailuoVariant;
   falVideoDuration: string;
   klingVariant: KlingVariant;
   klingV3Duration: KlingV3DurationSelectionValue;
@@ -618,7 +614,6 @@ export type PromptBarControlsInput = {
   falResolutionSelection: FalResolutionSelectionValue;
   falNumImages: number;
   isLoading: boolean;
-  onHailuoVariantChange: (value: string) => void;
   onFalVideoDurationChange: (value: string) => void;
   onKlingVariantChange: (value: string) => void;
   onKlingV3DurationChange: (value: string) => void;
@@ -722,7 +717,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isKlingV3VideoModel,
     isKlingO3VideoModel,
     isKlingV3ControlVideoModel,
-    isHailuoVideoModel,
     isWanAnimateVideoModel,
     isLipsyncVideoModel,
     isHeygenV3LipsyncVideoModel,
@@ -735,7 +729,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
     isJimengSeedance2VideoModel = false,
-    hailuoVariant,
     falVideoDuration,
     klingVariant,
     klingV3Duration,
@@ -815,7 +808,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     falResolutionSelection,
     falNumImages,
     isLoading,
-    onHailuoVariantChange,
     onFalVideoDurationChange,
     onKlingVariantChange,
     onKlingV3DurationChange,
@@ -901,32 +893,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const controls: PromptBarModelControl[] = [];
   const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
-
-  if (isHailuoVideoModel) {
-    const isProVariant = hailuoVariant === 'pro';
-    controls.push({
-      id: 'hailuo-variant-select',
-      ariaLabel: 'Select Hailuo 2.3 variant',
-      options: HAILUO_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: hailuoVariant,
-      onChange: onHailuoVariantChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'fal-video-duration-select',
-      ariaLabel: isProVariant ? 'Hailuo 2.3 Pro duration (6s only)' : 'Select Hailuo 2.3 Standard duration',
-      options: isProVariant
-        ? [{ value: '6', label: '6s' }]
-        : [
-          { value: '6', label: '6s' },
-          { value: '10', label: '10s' },
-        ],
-      value: isProVariant ? '6' : falVideoDuration,
-      onChange: onFalVideoDurationChange,
-      disabled: isLoading || isProVariant,
-    });
-  }
 
   if (isKlingVideoModel) {
     controls.push({

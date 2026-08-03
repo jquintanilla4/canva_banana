@@ -13,7 +13,6 @@ import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
-  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -188,7 +187,7 @@ export const getVideoPromptAreaCapabilityProfile = (
     });
   }
 
-  if (resolvedModelId === GROK_IMAGINE_VIDEO_MODEL_ID || resolvedModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID) {
+  if (resolvedModelId === GROK_IMAGINE_VIDEO_MODEL_ID) {
     return imageOnlyProfile(resolvedModelId);
   }
 

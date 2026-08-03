@@ -5,16 +5,18 @@ import {
   getFalNumImageMaxForModel,
   getFalNumImageOptionsForModel,
   getSeedreamImageSizeOptions,
-  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   isFalVideoModelId,
   isFalModelId,
   getMaxReferenceImages,
   isKrea2AspectRatioSelectionValue,
   isKrea2CreativitySelectionValue,
+  isRemovedHailuoModelId,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
+  KLING_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   isRecraftV4ProModel,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  MINIMAX_H3_VIDEO_MODEL_ID,
   normalizeFalModelId,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -76,7 +78,20 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
   });
 
   it('maps legacy Sora 2 Pro video snapshots to the default video model', () => {
-    expect(normalizeFalModelId('fal-ai/sora-2/image-to-video/pro')).toBe(HAILUO_IMAGE_TO_VIDEO_MODEL_ID);
+    expect(normalizeFalModelId('fal-ai/sora-2/image-to-video/pro')).toBe(KLING_VIDEO_MODEL_ID);
+  });
+
+  it('removes Hailuo 2.3 without migrating saved selections', () => {
+    const videoModelLabels = FAL_VIDEO_MODEL_OPTIONS.map(option => option.label as string);
+
+    expect(videoModelLabels).not.toContain('Hailuo 2.3');
+    expect(normalizeFalModelId('fal-ai/minimax/hailuo-2.3/image-to-video')).toBeUndefined();
+    expect(normalizeFalModelId('fal-ai/minimax/hailuo-2.3/standard/image-to-video')).toBeUndefined();
+    expect(normalizeFalModelId('fal-ai/minimax/hailuo-2.3/pro/image-to-video')).toBeUndefined();
+    expect(isRemovedHailuoModelId('fal-ai/minimax/hailuo-2.3/image-to-video')).toBe(true);
+    expect(isRemovedHailuoModelId('fal-ai/minimax/hailuo-2.3/standard/image-to-video')).toBe(true);
+    expect(isRemovedHailuoModelId('fal-ai/minimax/hailuo-2.3/pro/image-to-video')).toBe(true);
+    expect(isRemovedHailuoModelId(MINIMAX_H3_VIDEO_MODEL_ID)).toBe(false);
   });
 
   it('replaces Kling 2.6 Control with Kling 3.0 Control', () => {

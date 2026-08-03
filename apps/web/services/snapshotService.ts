@@ -35,6 +35,7 @@ import {
   isKlingV3DurationSelectionValue,
   isKlingV3ShotDurationSelectionValue,
   isLipsyncSyncMode,
+  isRemovedHailuoModelId,
   isRecraftV4ProImageSizeSelectionValue,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
@@ -1521,7 +1522,10 @@ export const restoreSnapshotFromFile = async (
     };
   });
   const sanitizedVideoPromptBars: CanvasVideoPromptBar[] = snapshotVideoPromptBars.map(bar => {
-    const modelId = typeof bar?.modelId === 'string' && isFalVideoModelId(bar.modelId) ? bar.modelId : SEEDANCE_2_VIDEO_MODEL_ID;
+    const rawModelId = typeof bar?.modelId === 'string' ? bar.modelId : undefined;
+    const modelId = rawModelId && (isFalVideoModelId(rawModelId) || isRemovedHailuoModelId(rawModelId))
+      ? rawModelId
+      : SEEDANCE_2_VIDEO_MODEL_ID; // Keep removed Hailuo ids so generation can block them safely.
     const isJimengBar = modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
     const falOptions = bar?.falOptions && typeof bar.falOptions === 'object' ? { ...bar.falOptions } : undefined;
     const falJimengModelVersion: CanvasVideoPromptBar['seedance2JimengModelVersion'] | undefined = falOptions && isJimengSeedance2ModelVersion((falOptions as { seedance2JimengModelVersion?: unknown }).seedance2JimengModelVersion)
@@ -1701,10 +1705,6 @@ export const normalizeSnapshotImageMetadata = (
             : undefined;
       if (videoDuration) {
         normalizedOptions.videoDuration = videoDuration;
-      }
-      const hailuoVariantValue = (typed as { hailuoVariant?: unknown }).hailuoVariant;
-      if (hailuoVariantValue === 'standard' || hailuoVariantValue === 'pro') {
-        normalizedOptions.hailuoVariant = hailuoVariantValue;
       }
       const klingVariantValue = (typed as { klingVariant?: unknown }).klingVariant;
       if (klingVariantValue === 'standard' || klingVariantValue === 'pro') {

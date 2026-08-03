@@ -1,11 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
+  KLING_VIDEO_STANDARD_MODEL_ID,
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
@@ -82,7 +82,6 @@ const createFalStub = (): UseFalSettingsResult => ({
   falNoiseScale: 0.5,
   falCreativity: 0.5,
   falVideoDuration: '5',
-  hailuoVariant: 'standard',
   klingVariant: 'standard',
   klingO3Variant: 'reference',
   klingO3Duration: '5',
@@ -1471,6 +1470,41 @@ describe('useGeneration (seedance 2)', () => {
     expect(generateImageToVideo).not.toHaveBeenCalled();
   });
 
+  it('blocks removed Hailuo reruns without falling back to the selected video model', async () => {
+    const setError = vi.fn();
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal: createFalStub(),
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate({
+        kind: 'video',
+        prompt: 'legacy Hailuo rerun',
+        provider: 'fal',
+        modelId: 'fal-ai/minimax/hailuo-2.3/pro/image-to-video',
+        modelMode: 'video',
+      });
+    });
+
+    expect(setError).toHaveBeenCalledWith('Hailuo 2.3 is no longer available and cannot be regenerated. Select a supported video model and create a new generation instead.');
+    expect(generateImageToVideo).not.toHaveBeenCalled();
+  });
+
   it('infers Kling O3 edit reruns from the saved edit endpoint', async () => {
     const video1 = buildCanvasMedia('video-1', 'video', 4);
     vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/source.mp4');
@@ -1520,8 +1554,10 @@ describe('useGeneration (seedance 2)', () => {
     );
   });
 
-  it('normalizes legacy Sora video reruns before choosing the generation backend', async () => {
+  it('normalizes legacy Sora video reruns to Kling Standard even when Kling Pro is selected', async () => {
     const image1 = buildCanvasMedia('image-1', 'image') as CanvasImage & { element: HTMLImageElement };
+    const fal = createFalStub();
+    fal.klingVariant = 'pro'; // Live picker state must not change the migrated endpoint.
     vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep the Fal request pending for payload inspection.
 
     const { result } = renderHook(() => useGeneration({
@@ -1530,7 +1566,7 @@ describe('useGeneration (seedance 2)', () => {
       prompt: '',
       promptPrefix: '',
       apiProvider: 'fal',
-      fal: createFalStub(),
+      fal,
       selection: createSelectionStub(),
       images: [image1],
       paths: [],
@@ -1560,7 +1596,7 @@ describe('useGeneration (seedance 2)', () => {
       'A cinematic Sora rerun',
       image1.element,
       expect.objectContaining({
-        modelId: HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
+        modelId: KLING_VIDEO_STANDARD_MODEL_ID,
       }),
     );
   });

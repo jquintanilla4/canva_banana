@@ -21,7 +21,6 @@ const buildGuardArgs = (overrides: Partial<Parameters<typeof useGenerationGuards
   isKlingVideoModel: false,
   isKlingO3VideoModel: false,
   isKlingV3ControlVideoModel: false,
-  isHailuoVideoModel: false,
   isVeo31VideoModel: false,
   isSeedance2VideoModel: false,
   seedance2Variant: 'smart',

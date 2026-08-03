@@ -11,7 +11,6 @@ import {
   GPT_IMAGE_2_EDIT_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
-  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
@@ -94,7 +93,6 @@ import type {
   FalResolutionSelectionValue,
   FalVideoModelId,
   Flux2MaxImageSizeSelectionValue,
-  HailuoVariant,
   KlingO3DurationSelectionValue,
   KlingO3Variant,
   KlingV3ControlOrientation,
@@ -156,7 +154,6 @@ type FalDerivedState = {
   isKlingV3VideoModel: boolean;
   isKlingO3VideoModel: boolean;
   isKlingV3ControlVideoModel: boolean;
-  isHailuoVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
   isOneToAllAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
@@ -184,7 +181,6 @@ type FalHandlers = {
   handleModelModeChange: (mode: FalModelMode) => void;
   handleFalModelChange: (modelId: string) => void;
   handleFalVideoDurationChange: (value: string) => void;
-  handleHailuoVariantChange: (value: string) => void;
   handleKlingVariantChange: (value: string) => void;
   handleKlingV3DurationChange: (value: string) => void;
   handleKlingV3GenerateAudioChange: (value: boolean) => void;
@@ -271,7 +267,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   falImageModelId: FalImageModelId;
   falVideoModelId: FalVideoModelId;
   falVideoDuration: FalVideoDuration;
-  hailuoVariant: HailuoVariant;
   klingVariant: KlingVariant;
   klingV3Duration: KlingV3DurationSelectionValue;
   klingV3GenerateAudio: boolean;
@@ -353,7 +348,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setFalImageModelId: Dispatch<SetStateAction<FalImageModelId>>;
   setFalVideoModelId: Dispatch<SetStateAction<FalVideoModelId>>;
   setFalVideoDuration: Dispatch<SetStateAction<FalVideoDuration>>;
-  setHailuoVariant: Dispatch<SetStateAction<HailuoVariant>>;
   setKlingVariant: Dispatch<SetStateAction<KlingVariant>>;
   setKlingV3Duration: Dispatch<SetStateAction<KlingV3DurationSelectionValue>>;
   setKlingV3GenerateAudio: Dispatch<SetStateAction<boolean>>;
@@ -438,7 +432,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [falImageModelId, setFalImageModelId] = useState<FalImageModelId>(DEFAULT_FAL_IMAGE_MODEL_ID);
   const [falVideoModelId, setFalVideoModelId] = useState<FalVideoModelId>(DEFAULT_FAL_VIDEO_MODEL_ID);
   const [falVideoDuration, setFalVideoDuration] = useState<FalVideoDuration>('6');
-  const [hailuoVariant, setHailuoVariant] = useState<HailuoVariant>('standard');
   const [klingVariant, setKlingVariant] = useState<KlingVariant>('standard');
   const [klingV3Duration, setKlingV3Duration] = useState<KlingV3DurationSelectionValue>('5');
   const [klingV3GenerateAudio, setKlingV3GenerateAudio] = useState<boolean>(true);
@@ -526,7 +519,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isKlingV3VideoModel = isVideoMode && falVideoModelId === KLING_V3_VIDEO_MODEL_ID;
   const isKlingO3VideoModel = isVideoMode && isKlingO3VideoModelId(falVideoModelId);
   const isKlingV3ControlVideoModel = isVideoMode && falVideoModelId === KLING_V3_CONTROL_VIDEO_MODEL_ID;
-  const isHailuoVideoModel = isVideoMode && falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
   const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
@@ -558,10 +550,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, [apiProvider, falModelMode]);
 
   useEffect(() => {
-    if (falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID) {
-      setFalVideoDuration(prev => (prev === '10' ? '10' : '6'));
-      return;
-    }
     if (
       falVideoModelId === KLING_VIDEO_MODEL_ID
       || isKlingO3VideoModelId(falVideoModelId)
@@ -635,12 +623,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       setVeo31Resolution('720p');
     }
   }, [isVeo31VideoModel, veo31Duration, veo31Resolution, veo31Variant]);
-
-  useEffect(() => {
-    if (falVideoModelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID && hailuoVariant === 'pro' && falVideoDuration !== '6') {
-      setFalVideoDuration('6');
-    }
-  }, [falVideoModelId, hailuoVariant, falVideoDuration]);
 
   useEffect(() => {
     if (!isVeo31VideoModel) {
@@ -743,14 +725,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       return;
     }
     setFalVideoDuration('6');
-  }, []);
-
-  const handleHailuoVariantChange = useCallback((value: string) => {
-    const variant = value === 'pro' ? 'pro' : 'standard';
-    setHailuoVariant(variant);
-    if (variant === 'pro') {
-      setFalVideoDuration('6');
-    }
   }, []);
 
   const handleKlingVariantChange = useCallback((value: string) => {
@@ -1216,7 +1190,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     falImageModelId,
     falVideoModelId,
     falVideoDuration,
-    hailuoVariant,
     klingVariant,
     klingV3Duration,
     klingV3GenerateAudio,
@@ -1303,7 +1276,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isKlingV3VideoModel,
     isKlingO3VideoModel,
     isKlingV3ControlVideoModel,
-    isHailuoVideoModel,
     isWanAnimateVideoModel,
     isOneToAllAnimateVideoModel,
     isLipsyncVideoModel,
@@ -1324,7 +1296,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleModelModeChange,
     handleFalModelChange,
     handleFalVideoDurationChange,
-    handleHailuoVariantChange,
     handleKlingVariantChange,
     handleKlingV3DurationChange,
     handleKlingV3GenerateAudioChange,
@@ -1408,7 +1379,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setFalImageModelId,
     setFalVideoModelId,
     setFalVideoDuration,
-    setHailuoVariant,
     setKlingVariant,
     setKlingV3Duration,
     setKlingV3GenerateAudio,

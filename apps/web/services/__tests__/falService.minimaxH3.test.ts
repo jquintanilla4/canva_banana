@@ -74,6 +74,21 @@ describe('falService (MiniMax H3)', () => {
     }));
   });
 
+  it('routes an image call without options through H3 Standard', async () => {
+    vi.mocked(fal.storage.upload).mockResolvedValueOnce('https://example.com/default-start.png');
+
+    await generateImageToVideo('Animate the default image', createTestImage());
+
+    expect(fal.subscribe).toHaveBeenCalledWith(MINIMAX_H3_IMAGE_TO_VIDEO_MODEL_ID, expect.objectContaining({
+      input: {
+        prompt: 'Animate the default image',
+        duration: 5,
+        resolution: '2K',
+        image_url: 'https://example.com/default-start.png',
+      },
+    }));
+  });
+
   it('routes Standard image generation with an optional end frame and no aspect ratio', async () => {
     vi.mocked(fal.storage.upload)
       .mockResolvedValueOnce('https://example.com/start.png')

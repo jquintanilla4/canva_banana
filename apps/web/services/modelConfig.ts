@@ -38,9 +38,6 @@ export const GROK_IMAGINE_VIDEO_MODEL_ID = 'xai/grok-imagine-video/image-to-vide
 export const GROK_IMAGINE_VIDEO_EDIT_MODEL_ID = 'xai/grok-imagine-video/edit-video' as const; // Grok Imagine video edit endpoint id.
 export const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
 export const SEEDVR_UPSCALER_MODEL_ID = 'fal-ai/seedvr/upscale/image' as const;
-export const HAILUO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/image-to-video' as const;
-export const HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/standard/image-to-video' as const;
-export const HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video' as const;
 export const KLING_O3_VIDEO_MODEL_ID = 'fal-ai/kling-video/o3/pro/reference-to-video' as const; // Kling O3 reference selector.
 export const KLING_O3_VIDEO_EDIT_MODEL_ID = 'fal-ai/kling-video/o3/pro/video-to-video/edit' as const; // Kling O3 edit endpoint.
 export const KLING_O3_VIDEO_MODEL_IDS = [
@@ -86,7 +83,6 @@ export const WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/wan/v2.7/pro/text-to-
 export const WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'fal-ai/wan/v2.7/pro/edit' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
-export type HailuoVariant = 'standard' | 'pro';
 export type KlingVariant = 'standard' | 'pro';
 export type KlingO3Variant = 'reference' | 'edit';
 export type KlingO3DurationSelectionValue = KlingV3DurationSelectionValue;
@@ -150,7 +146,6 @@ export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_O
 const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: ONE_TO_ALL_ANIMATE_MODEL_ID, label: '1-to-All Animate' },
   { value: GROK_IMAGINE_VIDEO_MODEL_ID, label: 'Grok Imagine' },
-  { value: HAILUO_IMAGE_TO_VIDEO_MODEL_ID, label: 'Hailuo 2.3' },
   { value: HEYGEN_V3_LIPSYNC_MODEL_ID, label: 'HeyGen V3 Lipsync' },
   { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
@@ -171,14 +166,6 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
 ] as const;
 
 export const FAL_VIDEO_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_VIDEO_MODEL_OPTIONS_BASE);
-
-export const HAILUO_VARIANT_OPTIONS: ReadonlyArray<{ value: HailuoVariant; label: string }> = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'pro', label: 'Pro' },
-] as const;
-
-export const getHailuoActualModelId = (variant: HailuoVariant): string =>
-  variant === 'pro' ? HAILUO_IMAGE_TO_VIDEO_PRO_MODEL_ID : HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID;
 
 export const KLING_VARIANT_OPTIONS: ReadonlyArray<{ value: KlingVariant; label: string }> = [
   { value: 'standard', label: 'Standard' },
@@ -1060,6 +1047,11 @@ export const isGenerationKind = (value: unknown): value is GenerationKind =>
 
 const LEGACY_NANO_BANANA_MODEL_ID = 'fal-ai/nano-banana/edit' as const;
 const LEGACY_SORA_2_PRO_VIDEO_MODEL_ID = 'fal-ai/sora-2/image-to-video/pro' as const;
+const REMOVED_HAILUO_VIDEO_MODEL_IDS = [
+  'fal-ai/minimax/hailuo-2.3/image-to-video',
+  'fal-ai/minimax/hailuo-2.3/standard/image-to-video',
+  'fal-ai/minimax/hailuo-2.3/pro/image-to-video',
+] as const; // Keep removed ids detectable so saved generations can be blocked safely.
 const LEGACY_WAN_26_VIDEO_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
 const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
@@ -1070,6 +1062,10 @@ const LEGACY_KLING_O1_VIDEO_EDIT_MODEL_ID = 'fal-ai/kling-video/o1/video-to-vide
 const LEGACY_KLING_O1_VIDEO_REF_V2V_MODEL_ID = 'fal-ai/kling-video/o1/video-to-video/reference' as const; // Old Kling O1 ref-v2v id.
 const LEGACY_KLING_O1_VIDEO_FFLF_MODEL_ID = 'fal-ai/kling-video/o1/image-to-video' as const; // Old Kling O1 fflf id.
 export const LEGACY_SYNC_LIPSYNC_REACT_MODEL_ID = 'fal-ai/sync-lipsync/react-1' as const; // Old Sync React-1 id.
+export const isLegacySora2ProVideoModelId = (value: string | undefined): boolean =>
+  value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID; // Detect saved Sora reruns that migrate to Kling Standard.
+export const isRemovedHailuoModelId = (value: string | undefined): boolean =>
+  typeof value === 'string' && (REMOVED_HAILUO_VIDEO_MODEL_IDS as readonly string[]).includes(value); // Detect unsupported saved Hailuo generations.
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
   if (value === LEGACY_NANO_BANANA_MODEL_ID) {
     return NANO_BANANA_PRO_EDIT_MODEL_ID;
@@ -1077,8 +1073,8 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   if (value === LEGACY_SYNC_LIPSYNC_REACT_MODEL_ID) {
     return SYNC_LIPSYNC_MODEL_ID;
   }
-  if (value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID) {
-    return HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+  if (isLegacySora2ProVideoModelId(value)) {
+    return KLING_VIDEO_MODEL_ID;
   }
   if (value === KLING_V3_TEXT_TO_VIDEO_MODEL_ID || value === KLING_V3_IMAGE_TO_VIDEO_MODEL_ID) {
     return KLING_V3_VIDEO_MODEL_ID;
@@ -1109,7 +1105,7 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
 export const ENV_FAL_MODEL_ID = normalizeFalModelId(getRuntimeConfig().falModelId);
 export const DEFAULT_FAL_IMAGE_MODEL_ID: FalImageModelId =
   isFalImageModelId(ENV_FAL_MODEL_ID) ? ENV_FAL_MODEL_ID : NANO_BANANA_PRO_EDIT_MODEL_ID;
-export const DEFAULT_FAL_VIDEO_MODEL_ID: FalVideoModelId = HAILUO_IMAGE_TO_VIDEO_MODEL_ID;
+export const DEFAULT_FAL_VIDEO_MODEL_ID: FalVideoModelId = MINIMAX_H3_VIDEO_MODEL_ID;
 
 export const FAL_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
   { value: 'placeholder', label: 'Aspect Ratio' },
@@ -1239,7 +1235,6 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
   [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,
   [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID]: 3, // Wan 2.7 Pro Image supports up to 4 total images (1 primary + 3 references)
-  [HAILUO_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [KLING_O3_VIDEO_MODEL_ID]: 4,
   [KLING_O3_VIDEO_EDIT_MODEL_ID]: 4,
   [KLING_VIDEO_MODEL_ID]: 0,

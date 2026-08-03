@@ -20,7 +20,6 @@ import {
   isKlingO3DurationSelectionValue,
 } from '../modelConfig'; // Canonical model IDs.
 import {
-  HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   KLING_V3_IMAGE_TO_VIDEO_MODEL_ID,
   KLING_V3_TEXT_TO_VIDEO_MODEL_ID,
@@ -127,7 +126,8 @@ export const generateImageToVideo = async (
 ): Promise<{ videoUrl: string; requestId?: string }> => { // Generate video from image + prompt.
   ensureFalClientConfigured(); // Ensure SDK is configured before requests.
 
-  const modelId = options.modelId || HAILUO_IMAGE_TO_VIDEO_STANDARD_MODEL_ID; // Default to Hailuo standard.
+  const isImplicitDefaultModel = !options.modelId; // Missing ids use H3 Standard so default calls remain usable.
+  const modelId = options.modelId || MINIMAX_H3_VIDEO_MODEL_ID; // Default to the supported MiniMax family.
   const duration = options.duration; // Optional duration override.
   const isVeo31ImageToVideoModel = modelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID; // Veo 3.1 i2v route.
   const isVeo31FflfModel = modelId === VEO_31_FFLF_VIDEO_MODEL_ID; // Veo 3.1 fflf route.
@@ -675,7 +675,7 @@ export const generateImageToVideo = async (
       throw new Error('MiniMax H3 requires a prompt.');
     }
 
-    const variant = options.miniMaxH3Variant === 'standard' ? 'standard' : 'reference';
+    const variant = options.miniMaxH3Variant === 'standard' || isImplicitDefaultModel ? 'standard' : 'reference';
     const duration = Number(options.miniMaxH3Duration ?? '5');
     const normalizedDuration = Number.isInteger(duration) && duration >= 5 && duration <= 15 ? duration : 5;
     const selectedAspectRatio = options.miniMaxH3AspectRatio ?? (variant === 'reference' ? 'adaptive' : '16:9');
@@ -1047,8 +1047,7 @@ export const generateImageToVideo = async (
   }
   const imageUrl = await uploadImageElementToFal(image, options);
 
-  const isHailuoVideoModel = modelId.includes('hailuo-2.3');
-  const promptOptimizer = options.promptOptimizer ?? (isHailuoVideoModel ? true : undefined);
+  const promptOptimizer = options.promptOptimizer;
   const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
   const cfgScale = typeof options.cfgScale === 'number' && Number.isFinite(options.cfgScale)
     ? options.cfgScale

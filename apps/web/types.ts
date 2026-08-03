@@ -115,7 +115,6 @@ export type GenerationFalOptions = Partial<{
   noiseScale: number;
   creativity: number;
   videoDuration: FalVideoDuration;
-  hailuoVariant: 'standard' | 'pro';
   klingVariant: 'standard' | 'pro';
   klingO3Variant: 'reference' | 'edit';
   klingO3Duration: '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';

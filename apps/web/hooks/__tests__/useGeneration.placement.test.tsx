@@ -130,7 +130,6 @@ const createFalStub = (overrides: Partial<UseFalSettingsResult> = {}): UseFalSet
   falNoiseScale: 0.5,
   falCreativity: 0.5,
   falVideoDuration: '5',
-  hailuoVariant: 'standard',
   klingVariant: 'standard',
   klingV3Duration: '5',
   klingV3GenerateAudio: false,

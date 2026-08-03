@@ -21,7 +21,6 @@ const renderWan27Guard = (overrides: Partial<Parameters<typeof useGenerationGuar
   isKlingVideoModel: false,
   isKlingO3VideoModel: false,
   isKlingV3ControlVideoModel: false,
-  isHailuoVideoModel: false,
   isVeo31VideoModel: false,
   isSeedance2VideoModel: false,
   seedance2Variant: 'smart',

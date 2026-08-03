@@ -35,7 +35,6 @@ import {
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
-  HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
@@ -1277,7 +1276,7 @@ export default function App() {
   const isGptImage2Model = !fal.isVideoMode && isGptImage2EditModelId(fal.falModelId);
   const isKrea2LargeModel = isActiveKrea2LargeModel;
   const isGrokModel = !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
-  const isAnnotateModeDisabled = (fal.isVideoMode && !fal.isHailuoVideoModel) || fal.isFlux2MaxModel || fal.isUpscaleModel;
+  const isAnnotateModeDisabled = fal.isVideoMode || fal.isFlux2MaxModel || fal.isUpscaleModel;
 
   useEffect(() => {
     if (appMode === 'ANNOTATE' && isAnnotateModeDisabled) {
@@ -1478,7 +1477,6 @@ export default function App() {
       isKlingV3VideoModel: modelId === KLING_V3_VIDEO_MODEL_ID,
       isKlingO3VideoModel: isKlingO3VideoModelId(modelId),
       isKlingV3ControlVideoModel: modelId === KLING_V3_CONTROL_VIDEO_MODEL_ID,
-      isHailuoVideoModel: modelId === HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
       isWanAnimateVideoModel: modelId === WAN_ANIMATE_MODEL_ID,
       isLipsyncVideoModel: modelId === SYNC_LIPSYNC_MODEL_ID,
       isHeygenV3LipsyncVideoModel: modelId === HEYGEN_V3_LIPSYNC_MODEL_ID,
@@ -1491,7 +1489,6 @@ export default function App() {
       isSeedance2VideoModel: modelId === SEEDANCE_2_VIDEO_MODEL_ID || modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID || modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
       isFalSeedance2VideoModel: modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
       isJimengSeedance2VideoModel: modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
-      hailuoVariant: options.hailuoVariant ?? fal.hailuoVariant,
       falVideoDuration: options.videoDuration ?? fal.falVideoDuration,
       klingVariant: options.klingVariant ?? fal.klingVariant,
       klingV3Duration: bar.klingV3Duration ?? options.klingV3Duration ?? '5',
@@ -1570,7 +1567,6 @@ export default function App() {
       falResolutionSelection: fal.falResolutionSelection,
       falNumImages: fal.falNumImages,
       isLoading,
-      onHailuoVariantChange: value => updateFalOption('hailuoVariant', value),
       onFalVideoDurationChange: value => updateFalOption('videoDuration', value),
       onKlingVariantChange: value => updateFalOption('klingVariant', value),
       onKlingV3DurationChange: value => updateLegacyAndFal({ klingV3Duration: value as CanvasVideoPromptBar['klingV3Duration'] }, 'klingV3Duration', value),
@@ -1703,7 +1699,6 @@ export default function App() {
     isKlingV3VideoModel: fal.isKlingV3VideoModel,
     isKlingO3VideoModel: fal.isKlingO3VideoModel,
     isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
-    isHailuoVideoModel: fal.isHailuoVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
     isMiniMaxH3VideoModel: fal.isMiniMaxH3VideoModel,
     miniMaxH3Variant: fal.miniMaxH3Variant,
@@ -1738,7 +1733,6 @@ export default function App() {
     isKlingV3VideoModel: fal.isKlingV3VideoModel,
     isKlingO3VideoModel: fal.isKlingO3VideoModel,
     isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
-    isHailuoVideoModel: fal.isHailuoVideoModel,
     isWanAnimateVideoModel: fal.isWanAnimateVideoModel,
     isLipsyncVideoModel: fal.isLipsyncVideoModel,
     isHeygenV3LipsyncVideoModel: fal.isHeygenV3LipsyncVideoModel,
@@ -1751,7 +1745,6 @@ export default function App() {
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
     isFalSeedance2VideoModel: fal.isFalSeedance2VideoModel,
     isJimengSeedance2VideoModel: fal.isJimengSeedance2VideoModel,
-    hailuoVariant: fal.hailuoVariant,
     falVideoDuration: fal.falVideoDuration,
     klingVariant: fal.klingVariant,
     klingV3Duration: fal.klingV3Duration,
@@ -1832,7 +1825,6 @@ export default function App() {
     falResolutionSelection: fal.falResolutionSelection,
     falNumImages: fal.falNumImages,
     isLoading,
-    onHailuoVariantChange: fal.handleHailuoVariantChange,
     onFalVideoDurationChange: fal.handleFalVideoDurationChange,
     onKlingVariantChange: fal.handleKlingVariantChange,
     onKlingV3DurationChange: fal.handleKlingV3DurationChange,

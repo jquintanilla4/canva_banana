@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useSelectionState } from '../useSelectionState';
-import { GROK_IMAGINE_IMAGE_MODEL_ID, HAILUO_IMAGE_TO_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { GROK_IMAGINE_IMAGE_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage } from '../../types';
 import type { UseFalSettingsResult } from '../useFalSettings';
 
@@ -55,7 +55,7 @@ describe('useSelectionState (grok imagine)', () => {
     const fal = {
       falModelId: GROK_IMAGINE_IMAGE_MODEL_ID,
       falModelMode: 'image',
-      falVideoModelId: HAILUO_IMAGE_TO_VIDEO_MODEL_ID,
+      falVideoModelId: MINIMAX_H3_VIDEO_MODEL_ID,
       klingVariant: 'standard',
       klingO3Variant: 'reference',
       isVideoMode: false,

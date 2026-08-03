@@ -118,7 +118,6 @@ const mockState = vi.hoisted(() => {
     isKlingV3VideoModel: false,
     isKlingO3VideoModel: false,
     isKlingV3ControlVideoModel: false,
-    isHailuoVideoModel: false,
     isWanAnimateVideoModel: false,
     isOneToAllAnimateVideoModel: false,
     isLipsyncVideoModel: false,
@@ -145,7 +144,6 @@ const mockState = vi.hoisted(() => {
     falNoiseScale: 0.5,
     falCreativity: 0.5,
     falVideoDuration: '5',
-    hailuoVariant: 'standard',
     klingVariant: 'standard',
     klingV3Duration: '5',
     klingV3GenerateAudio: true,
@@ -216,7 +214,6 @@ const mockState = vi.hoisted(() => {
   });
   falState.handleFalModelChange = vi.fn();
   falState.handleFalVideoDurationChange = vi.fn();
-  falState.handleHailuoVariantChange = vi.fn();
   falState.handleKlingVariantChange = vi.fn();
   falState.handleKlingV3DurationChange = vi.fn();
   falState.handleKlingV3GenerateAudioChange = vi.fn();

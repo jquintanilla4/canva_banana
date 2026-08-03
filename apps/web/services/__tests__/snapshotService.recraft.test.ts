@@ -1090,6 +1090,47 @@ describe('snapshotService (Jimeng metadata)', () => {
     expect(restored.videoPromptBars[0]?.seedance2JimengModelVersion).toBe('seedance2.0_vip');
   });
 
+  it('preserves removed Hailuo ids on restored embedded prompt bars', async () => {
+    const hailuoModelId = 'fal-ai/minimax/hailuo-2.3/pro/image-to-video';
+    const snapshot = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      state: {
+        images: [],
+        notes: [],
+        paths: [],
+        videoPromptAreas: [],
+        videoPromptBars: [{
+          id: 'bar-hailuo',
+          assignedAreaId: 'area-1',
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 72,
+          prompt: 'legacy Hailuo prompt',
+          modelId: hailuoModelId,
+          seedance2Variant: 'reference',
+          seedance2AspectRatio: '16:9',
+          seedance2Resolution: '720p',
+          seedance2Duration: '5',
+          seedance2GenerateAudio: false,
+          seedance2CameraFixed: false,
+        }],
+      },
+    };
+    const snapshotJson = JSON.stringify(snapshot);
+    const file = new File([snapshotJson], 'canvas.json', { type: 'application/json' }) as File & { text: () => Promise<string> };
+    file.text = () => Promise.resolve(snapshotJson); // Node's test File polyfill does not always include text().
+
+    const restored = await restoreSnapshotFromFile(file, {
+      brushSize: 20,
+      eraserSize: 20,
+      brushColor: '#ff0000',
+    });
+
+    expect(restored.videoPromptBars[0]?.modelId).toBe(hailuoModelId);
+  });
+
   it('restores legacy embedded Jimeng prompt bar channel values from fal options', async () => {
     const snapshot = {
       version: 1,
