@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus, FaRobot, FaHistory, FaThumbtack, FaFolder, FaFolderPlus, FaEllipsisV, FaMapMarkerAlt, FaStar } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaFileExport, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus, FaRobot, FaHistory, FaThumbtack, FaFolder, FaFolderPlus, FaEllipsisV, FaMapMarkerAlt, FaStar } from 'react-icons/fa';
 import { RiCameraLensLine } from 'react-icons/ri';
 import { PiSelectionBold } from 'react-icons/pi';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
@@ -30,6 +30,7 @@ export const LayerDownIcon = FaArrowDown as React.FC<IconProps>;
 export const ConfirmIcon = FaCheck as React.FC<IconProps>;
 export const CancelIcon = FaTimes as React.FC<IconProps>;
 export const CopyIcon = FaCopy as React.FC<IconProps>;
+export const MetadataToPromptBarIcon = FaFileExport as React.FC<IconProps>; // Shows saved generation data leaving the selected media.
 export const ChevronDownIcon = FaChevronDown as React.FC<IconProps>;
 export const PinIcon = FaThumbtack as React.FC<IconProps>;
 export const FolderIcon = FaFolder as React.FC<IconProps>;

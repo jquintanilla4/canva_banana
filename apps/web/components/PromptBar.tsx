@@ -228,6 +228,7 @@ interface PromptBarProps {
   maxInlineWidthPx?: number;
   onPromptFocus?: () => void;
   onPromptBlur?: () => void;
+  focusRequestToken?: number;
 }
 
 export const PromptBar: React.FC<PromptBarProps> = ({
@@ -270,6 +271,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   maxInlineWidthPx,
   onPromptFocus,
   onPromptBlur,
+  focusRequestToken,
 }) => {
   const resolvedSizeMode = sizeMode as 'full' | 'mini';
   // Prompt input surface with dynamic model selectors and optional negative prompt for video flows.
@@ -277,6 +279,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const multiPromptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const negativeTextareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoading = useRef(isLoading);
+  const handledFocusRequestTokenRef = useRef(focusRequestToken); // Ignore the initial token and react only to later requests.
   const controlsViewportRef = useRef<HTMLDivElement>(null);
   const controlsStripRef = useRef<HTMLDivElement>(null);
   const promptBarOuterRef = useRef<HTMLElement | null>(null);
@@ -363,6 +366,17 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     }
     wasLoading.current = isLoading;
   }, [isLoading, inputDisabled]);
+
+  useEffect(() => {
+    if (focusRequestToken === undefined || focusRequestToken === handledFocusRequestTokenRef.current) {
+      return;
+    }
+    handledFocusRequestTokenRef.current = focusRequestToken; // Consume the request even when it cannot be honored, so it never fires later.
+    if (inputDisabled) {
+      return;
+    }
+    textareaRef.current?.focus(); // Metadata transfers put the caret back in the editable prompt.
+  }, [focusRequestToken, inputDisabled]);
 
   useLayoutEffect(() => {
     if (!showMultiPrompt) {
@@ -727,7 +741,6 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               aria-label="Prompt input"
               aria-autocomplete={klingAutocompleteAvailable ? 'list' : undefined}
               aria-haspopup={klingAutocompleteAvailable ? 'listbox' : undefined}
-              aria-expanded={klingAutocompleteAvailable ? klingSuggestionsOpen : undefined}
               aria-controls={klingSuggestionsOpen ? klingSuggestionListId : undefined}
               aria-activedescendant={activeKlingSuggestionId}
             />

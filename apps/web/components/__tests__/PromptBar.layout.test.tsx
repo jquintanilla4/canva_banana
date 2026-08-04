@@ -407,6 +407,71 @@ describe('PromptBar layout', () => {
     expect(textarea.style.backgroundColor).toBe('transparent');
   });
 
+  it('focuses the main textarea when the focus request token changes', () => {
+    const Harness = () => {
+      const [focusRequestToken, setFocusRequestToken] = React.useState(0);
+      return (
+        <>
+          <button type="button" onClick={() => setFocusRequestToken(token => token + 1)}>Load metadata</button>
+          <PromptBar
+            prompt="Saved prompt"
+            onPromptChange={vi.fn()}
+            onSubmit={vi.fn()}
+            isLoading={false}
+            inputDisabled={false}
+            submitDisabled={false}
+            modelOptions={[{ value: 'seedance-2', label: 'Seedance 2' }]}
+            selectedModel="seedance-2"
+            onModelChange={vi.fn()}
+            modelSelectDisabled={false}
+            modelMode="video"
+            onModelModeChange={vi.fn()}
+            focusRequestToken={focusRequestToken}
+          />
+        </>
+      );
+    };
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load metadata' }));
+
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Prompt input' }));
+  });
+
+  it('drops a focus request that arrives while the input is disabled instead of firing it later', () => {
+    const Harness = () => {
+      const [focusRequestToken, setFocusRequestToken] = React.useState(0);
+      const [inputDisabled, setInputDisabled] = React.useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setFocusRequestToken(token => token + 1)}>Load metadata</button>
+          <button type="button" onClick={() => setInputDisabled(false)}>Enable prompt</button>
+          <PromptBar
+            prompt="Saved prompt"
+            onPromptChange={vi.fn()}
+            onSubmit={vi.fn()}
+            isLoading={false}
+            inputDisabled={inputDisabled}
+            submitDisabled={false}
+            modelOptions={[{ value: 'seedance-2', label: 'Seedance 2' }]}
+            selectedModel="seedance-2"
+            onModelChange={vi.fn()}
+            modelSelectDisabled={false}
+            modelMode="video"
+            onModelModeChange={vi.fn()}
+            focusRequestToken={focusRequestToken}
+          />
+        </>
+      );
+    };
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load metadata' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enable prompt' }));
+
+    expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'Prompt input' })); // A stale token must never steal focus on a later model change.
+  });
+
   it('renders HeyGen boolean controls with option tooltips', () => {
     renderHeygenPromptBar();
 
@@ -879,7 +944,7 @@ describe('PromptBar layout', () => {
     const textarea = screen.getByLabelText('Prompt input') as HTMLTextAreaElement;
     expect(textarea.getAttribute('role')).toBeNull();
     expect(textarea.getAttribute('aria-controls')).toBeNull();
-    expect(textarea.getAttribute('aria-expanded')).toBe('false');
+    expect(textarea.getAttribute('aria-expanded')).toBeNull(); // aria-expanded is not supported on a textbox, so the popup state rides on aria-controls.
 
     const mentionPrefix = 'Use @Image1 and @';
     fireEvent.change(textarea, {
@@ -895,7 +960,7 @@ describe('PromptBar layout', () => {
     expect(screen.getByRole('textbox', { name: 'Prompt input' })).toBe(textarea);
     expect(textarea.getAttribute('aria-autocomplete')).toBe('list');
     expect(textarea.getAttribute('aria-haspopup')).toBe('listbox');
-    expect(textarea.getAttribute('aria-expanded')).toBe('true');
+    expect(textarea.getAttribute('aria-expanded')).toBeNull();
     expect(textarea.getAttribute('aria-controls')).toBe(suggestions.id);
     expect(textarea.getAttribute('aria-activedescendant')).toBe(firstOption.id);
 
@@ -905,7 +970,7 @@ describe('PromptBar layout', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' });
     expect(textarea.getAttribute('aria-controls')).toBeNull();
     expect(textarea.getAttribute('aria-activedescendant')).toBeNull();
-    expect(textarea.getAttribute('aria-expanded')).toBe('false');
+    expect(textarea.getAttribute('aria-expanded')).toBeNull();
   });
 
   it('dismisses portaled mention suggestions when focus leaves without trapping Tab', async () => {

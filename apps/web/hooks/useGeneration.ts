@@ -167,6 +167,7 @@ import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/v
 import { generateJimengSeedanceVideo, type JimengQueueUpdate } from '../services/jimengService';
 import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
+import { normalizeKrea2StyleStrength } from '../utils/krea2StyleStrength';
 import {
   buildEffectiveSeedanceReferenceIds,
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
@@ -230,12 +231,6 @@ const getDefaultImageEditTool = (editAppMode: AppMode, value: Tool): Tool =>
 
 const clonePathsForRetry = (sourcePaths: Path[]): Path[] =>
   sourcePaths.map(path => ({ ...path, points: path.points.map(point => ({ ...point })) })); // Detach saved paths from live canvas edits.
-
-const normalizeKrea2StyleStrength = (value: unknown): number => {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  const rounded = Number.isFinite(parsed) ? Math.round(parsed * 10) / 10 : 1; // UI exposes tenths.
-  return Math.min(2, Math.max(-2, rounded));
-};
 
 const extractDataUrlBase64 = (dataUrl: string): string | null => {
   const commaIndex = dataUrl.indexOf(',');

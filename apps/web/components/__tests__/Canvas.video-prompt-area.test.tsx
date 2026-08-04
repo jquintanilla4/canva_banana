@@ -68,6 +68,7 @@ const buildCanvasProps = (overrides: Partial<ComponentProps<typeof Canvas>> = {}
   onImagePromptCopy: vi.fn(),
   onImageDuplicate: vi.fn(),
   onRerunGeneration: vi.fn(),
+  onMetadataToPromptBar: vi.fn(),
   showMetadataOverlay: false,
   transformMode: null,
   onStartTransform: vi.fn(),
@@ -156,6 +157,7 @@ describe('Canvas video prompt area tool', () => {
           onImagePromptCopy={vi.fn()}
           onImageDuplicate={vi.fn()}
           onRerunGeneration={vi.fn()}
+          onMetadataToPromptBar={vi.fn()}
           showMetadataOverlay={false}
           transformMode={null}
           onStartTransform={vi.fn()}
@@ -260,6 +262,7 @@ describe('Canvas video prompt area tool', () => {
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
+        onMetadataToPromptBar={vi.fn()}
         showMetadataOverlay={false}
         transformMode={null}
         onStartTransform={vi.fn()}
@@ -421,6 +424,69 @@ describe('Canvas video prompt area tool', () => {
     expect(screen.getByRole('option', { name: 'Seedance 2' })).toBeTruthy();
   });
 
+  it('labels restored Hailuo prompt bars as unavailable and blocks submission', () => {
+    const videoPromptArea: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 40,
+      y: 60,
+      width: 720,
+      height: 360,
+      promptBarId: 'bar-1',
+      orderedMediaIds: [],
+    };
+    const videoPromptBar: CanvasVideoPromptBar = {
+      id: 'bar-1',
+      assignedAreaId: 'area-1',
+      modelId: 'fal-ai/minimax/hailuo-2.3/pro/image-to-video',
+      x: 0,
+      y: 0,
+      width: 720,
+      height: 190,
+      prompt: 'Legacy Hailuo prompt',
+      negativePrompt: '',
+      seedance2Variant: 'reference',
+      seedance2AspectRatio: '16:9',
+      seedance2Resolution: '720p',
+      seedance2Duration: '5',
+      seedance2GenerateAudio: false,
+      seedance2CameraFixed: false,
+      klingV3MultiPrompt: '',
+      klingV3Duration: '5',
+      klingV3GenerateAudio: true,
+      klingV3CfgScale: '0.5',
+      klingV3MultiPromptEnabled: false,
+      klingV3Shot1Duration: '5',
+      klingV3Shot2Duration: '5',
+    };
+
+    render(
+      <Canvas
+        {...buildCanvasProps({
+          videoPromptAreas: [videoPromptArea],
+          videoPromptBars: [videoPromptBar],
+          videoPromptAreaMemberships: {
+            'area-1': {
+              orderedMediaIds: [],
+              acceptedImageIds: [],
+              acceptedVideoIds: [],
+              acceptedAudioIds: [],
+              elementImageIds: [],
+              ignoredMediaIds: [],
+              orderLabels: {},
+            },
+          },
+        })}
+      />,
+    );
+
+    const modelPicker = screen.getByRole('combobox', { name: 'Select video model' }) as HTMLButtonElement;
+    expect(modelPicker.textContent).toContain('Hailuo 2.3 (Unavailable)'); // A retired bar must never claim to be a supported model.
+    expect(modelPicker.disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('does not gate Kling Control embedded submission on Kling v3 multi-prompt text', () => {
     const videoPromptArea: CanvasVideoPromptArea = {
       id: 'area-1',
@@ -560,6 +626,7 @@ describe('Canvas video prompt area tool', () => {
           onImagePromptCopy={vi.fn()}
           onImageDuplicate={vi.fn()}
           onRerunGeneration={vi.fn()}
+          onMetadataToPromptBar={vi.fn()}
           showMetadataOverlay={false}
           transformMode={null}
           onStartTransform={vi.fn()}
@@ -666,6 +733,7 @@ describe('Canvas video prompt area tool', () => {
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
+        onMetadataToPromptBar={vi.fn()}
         showMetadataOverlay={false}
         transformMode={null}
         onStartTransform={vi.fn()}
@@ -760,6 +828,7 @@ describe('Canvas video prompt area tool', () => {
           onImagePromptCopy={vi.fn()}
           onImageDuplicate={vi.fn()}
           onRerunGeneration={vi.fn()}
+          onMetadataToPromptBar={vi.fn()}
           showMetadataOverlay={false}
           transformMode={null}
           onStartTransform={vi.fn()}
@@ -873,6 +942,7 @@ describe('Canvas video prompt area tool', () => {
           onImagePromptCopy={vi.fn()}
           onImageDuplicate={vi.fn()}
           onRerunGeneration={vi.fn()}
+          onMetadataToPromptBar={vi.fn()}
           showMetadataOverlay={false}
           transformMode={null}
           onStartTransform={vi.fn()}
@@ -1007,6 +1077,7 @@ describe('Canvas video prompt area tool', () => {
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
+        onMetadataToPromptBar={vi.fn()}
         showMetadataOverlay={false}
         transformMode={null}
         onStartTransform={vi.fn()}
@@ -1341,6 +1412,7 @@ describe('Canvas video prompt area tool', () => {
             onImagePromptCopy={vi.fn()}
             onImageDuplicate={vi.fn()}
             onRerunGeneration={vi.fn()}
+            onMetadataToPromptBar={vi.fn()}
             showMetadataOverlay={false}
             transformMode={null}
             onStartTransform={vi.fn()}
@@ -1583,6 +1655,7 @@ describe('Canvas video prompt area tool', () => {
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
+        onMetadataToPromptBar={vi.fn()}
         showMetadataOverlay={false}
         transformMode={null}
         onStartTransform={vi.fn()}
@@ -1705,6 +1778,7 @@ describe('Canvas video prompt area tool', () => {
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
+        onMetadataToPromptBar={vi.fn()}
         showMetadataOverlay={false}
         transformMode={null}
         onStartTransform={vi.fn()}
@@ -1834,6 +1908,7 @@ describe('Canvas video prompt area tool', () => {
         onImagePromptCopy={vi.fn()}
         onImageDuplicate={vi.fn()}
         onRerunGeneration={vi.fn()}
+        onMetadataToPromptBar={vi.fn()}
         showMetadataOverlay={false}
         transformMode={null}
         onStartTransform={vi.fn()}

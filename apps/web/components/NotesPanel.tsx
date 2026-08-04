@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { DeleteIcon, MapPinIcon, NoteIcon, PlusIcon } from './Icons';
 import type { CanvasNote, Point } from '../types';
 import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
@@ -44,10 +44,8 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
 }) => {
   const textareaRefs = useRef(new Map<string, HTMLTextAreaElement>());
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
-  // Ref callbacks are cached per note id so re-renders don't detach/reattach every row
-  // (each reattach would rerun the textarea resize and force a layout reflow).
-  const textareaRefCallbacks = useRef(new Map<string, (element: HTMLTextAreaElement | null) => void>());
-  const rowRefCallbacks = useRef(new Map<string, (element: HTMLLIElement | null) => void>());
+  // One stable ref callback per role, reading the note id off the element, so re-renders never
+  // detach/reattach a row (each reattach would rerun the textarea resize and force a layout reflow).
   const handledFocusTokenRef = useRef(0);
 
   useLayoutEffect(() => {
@@ -59,37 +57,27 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
     });
   }, [notes]);
 
-  const getTextareaRef = useCallback((noteId: string) => {
-    let callback = textareaRefCallbacks.current.get(noteId);
-    if (!callback) {
-      callback = (element: HTMLTextAreaElement | null) => {
-        if (element) {
-          textareaRefs.current.set(noteId, element);
-          resizeTextareaToContent(element);
-        } else {
-          textareaRefs.current.delete(noteId);
-          textareaRefCallbacks.current.delete(noteId);
-        }
-      };
-      textareaRefCallbacks.current.set(noteId, callback);
+  const setTextareaRef = useCallback((element: HTMLTextAreaElement | null) => {
+    const noteId = element?.dataset.noteId;
+    if (!element || !noteId) {
+      return undefined;
     }
-    return callback;
+    textareaRefs.current.set(noteId, element);
+    resizeTextareaToContent(element);
+    return () => {
+      textareaRefs.current.delete(noteId); // React 19 runs this cleanup when the row unmounts.
+    };
   }, []);
 
-  const getRowRef = useCallback((noteId: string) => {
-    let callback = rowRefCallbacks.current.get(noteId);
-    if (!callback) {
-      callback = (element: HTMLLIElement | null) => {
-        if (element) {
-          rowRefs.current.set(noteId, element);
-        } else {
-          rowRefs.current.delete(noteId);
-          rowRefCallbacks.current.delete(noteId);
-        }
-      };
-      rowRefCallbacks.current.set(noteId, callback);
+  const setRowRef = useCallback((element: HTMLLIElement | null) => {
+    const noteId = element?.dataset.noteId;
+    if (!element || !noteId) {
+      return undefined;
     }
-    return callback;
+    rowRefs.current.set(noteId, element);
+    return () => {
+      rowRefs.current.delete(noteId); // React 19 runs this cleanup when the row unmounts.
+    };
   }, []);
 
   useEffect(() => {
@@ -175,7 +163,8 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
                     return (
                       <li
                         key={note.id}
-                        ref={getRowRef(note.id)}
+                        ref={setRowRef}
+                        data-note-id={note.id}
                         className="py-4"
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
@@ -207,7 +196,8 @@ const NotesPanelComponent: React.FC<NotesPanelProps> = ({
                           </button>
                         </div>
                         <textarea
-                          ref={getTextareaRef(note.id)}
+                          ref={setTextareaRef}
+                          data-note-id={note.id}
                           value={note.text}
                           placeholder="Write a note…"
                           aria-label={note.label !== undefined ? `Note for pin ${note.label}` : 'Note'}

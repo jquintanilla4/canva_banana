@@ -27,6 +27,7 @@ import {
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
   isInfinitalkAccelerationSelectionValue,
+  isInfinitalkDurationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
   isKrea2CreativitySelectionValue,
@@ -38,6 +39,9 @@ import {
   isRemovedHailuoModelId,
   isRemovedOneToAllAnimateModelId,
   isRecraftV4ProImageSizeSelectionValue,
+  isSeedance15AspectRatioSelectionValue,
+  isSeedance15DurationSelectionValue,
+  isSeedance15ResolutionSelectionValue,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
@@ -1909,6 +1913,46 @@ export const normalizeSnapshotImageMetadata = (
       const infinitalkAccelerationValue = (typed as { infinitalkAcceleration?: unknown }).infinitalkAcceleration;
       if (isInfinitalkAccelerationSelectionValue(infinitalkAccelerationValue)) {
         normalizedOptions.infinitalkAcceleration = infinitalkAccelerationValue;
+      }
+
+      const infinitalkDurationValue = (typed as { infinitalkDuration?: unknown }).infinitalkDuration;
+      if (isInfinitalkDurationSelectionValue(infinitalkDurationValue)) {
+        normalizedOptions.infinitalkDuration = infinitalkDurationValue;
+      }
+
+      const klingV3ControlKeepSoundValue = (typed as { klingV3ControlKeepSound?: unknown }).klingV3ControlKeepSound;
+      if (typeof klingV3ControlKeepSoundValue === 'boolean') {
+        normalizedOptions.klingV3ControlKeepSound = klingV3ControlKeepSoundValue;
+      }
+
+      const klingV3ControlOrientationValue = (typed as { klingV3ControlOrientation?: unknown }).klingV3ControlOrientation;
+      if (klingV3ControlOrientationValue === 'image' || klingV3ControlOrientationValue === 'video') {
+        normalizedOptions.klingV3ControlOrientation = klingV3ControlOrientationValue;
+      }
+
+      const seedance15AspectRatioValue = (typed as { seedance15AspectRatio?: unknown }).seedance15AspectRatio;
+      if (isSeedance15AspectRatioSelectionValue(seedance15AspectRatioValue)) {
+        normalizedOptions.seedance15AspectRatio = seedance15AspectRatioValue;
+      }
+
+      const seedance15ResolutionValue = (typed as { seedance15Resolution?: unknown }).seedance15Resolution;
+      if (isSeedance15ResolutionSelectionValue(seedance15ResolutionValue)) {
+        normalizedOptions.seedance15Resolution = seedance15ResolutionValue;
+      }
+
+      const seedance15DurationValue = (typed as { seedance15Duration?: unknown }).seedance15Duration;
+      if (isSeedance15DurationSelectionValue(seedance15DurationValue)) {
+        normalizedOptions.seedance15Duration = seedance15DurationValue;
+      }
+
+      const seedance15CameraFixedValue = (typed as { seedance15CameraFixed?: unknown }).seedance15CameraFixed;
+      if (typeof seedance15CameraFixedValue === 'boolean') {
+        normalizedOptions.seedance15CameraFixed = seedance15CameraFixedValue;
+      }
+
+      const seedance15AudioValue = (typed as { seedance15Audio?: unknown }).seedance15Audio;
+      if (typeof seedance15AudioValue === 'boolean') {
+        normalizedOptions.seedance15Audio = seedance15AudioValue;
       }
 
       const grokImagineVideoDurationValue = (typed as { grokImagineVideoDuration?: unknown }).grokImagineVideoDuration;

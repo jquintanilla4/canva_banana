@@ -6,9 +6,10 @@ import {
   KLING_V3_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
+  isRemovedHailuoModelId,
   isRemovedOneToAllAnimateModelId,
 } from '../services/modelConfig'; // Model ids and retired-model guard.
-import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, MinusIcon, StarIcon } from './Icons';
+import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, MetadataToPromptBarIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, MinusIcon, StarIcon } from './Icons';
 import {
   DOT_BASE_SIZE,
   DOT_MAX_SIZE,
@@ -118,6 +119,8 @@ interface CanvasProps {
   onCancelCrop: () => void;
   onVideoPromptAreaBorderColorChange?: (areaId: string, color: string) => void;
   onImagePromptCopy: (imageId: string) => void;
+  onMetadataToPromptBar: (imageId: string) => void;
+  getMetadataTransferBlockReason?: (imageId: string) => string | null; // Null means the saved generation can load into the prompt bar.
   onImageDuplicate: (imageId: string) => void;
   onRerunGeneration: (imageId: string) => void;
   showMetadataOverlay: boolean;
@@ -158,13 +161,14 @@ const ActionButton: React.FC<{
   onClick: () => void;
   disabled: boolean;
   title: string;
+  ariaLabel?: string; // Set when the tooltip explains a disabled state and the name should stay stable.
   children: React.ReactNode;
-}> = ({ onClick, disabled, title, children }) => (
+}> = ({ onClick, disabled, title, ariaLabel, children }) => (
   <Tooltip label={title}>
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label={title}
+      aria-label={ariaLabel ?? title}
       className="p-2.5 rounded-md transition-colors duration-200 bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
     >
       {children}
@@ -241,6 +245,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   onCancelCrop,
   onVideoPromptAreaBorderColorChange,
   onImagePromptCopy,
+  onMetadataToPromptBar,
+  getMetadataTransferBlockReason,
   onImageDuplicate,
   onRerunGeneration,
   showMetadataOverlay,
@@ -907,6 +913,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const selectedMediaIsPlaying = selectedVideoIsPlaying || selectedAudioIsPlaying;
   const selectedImagePrompt = getCanvasImagePrompt(selectedImage);
   const selectedImageHasGeneration = Boolean(selectedImage?.metadata?.generation);
+  const metadataTransferBlockReason = selectedImage && getMetadataTransferBlockReason
+    ? getMetadataTransferBlockReason(selectedImage.id)
+    : null; // Without the callback the button keeps its plain saved-metadata gate.
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
   const imageBeingTransformed = useMemo(() => transformMode ? images.find(img => img.id === transformMode.imageId) : null, [images, transformMode]);
   const selectedImageBounds = useMemo(() => selectedImage ? getImageBounds(selectedImage) : null, [getImageBounds, selectedImage]);
@@ -1401,9 +1410,14 @@ export const Canvas: React.FC<CanvasProps> = ({
             height: bar.height,
           };
         const selectedEmbeddedModelId = bar.modelId ?? SEEDANCE_2_VIDEO_MODEL_ID; // Legacy bars default to Volcengine Seedance 2.
-        const isRemovedOneToAllEmbeddedModel = isRemovedOneToAllAnimateModelId(selectedEmbeddedModelId); // Restored retired bars must remain identifiable but cannot run.
-        const removedEmbeddedModelOption = isRemovedOneToAllEmbeddedModel
-          ? { value: selectedEmbeddedModelId, label: '1-to-All Animate (Unavailable)', disabled: true }
+        const removedEmbeddedModelLabel = isRemovedOneToAllAnimateModelId(selectedEmbeddedModelId)
+          ? '1-to-All Animate (Unavailable)'
+          : isRemovedHailuoModelId(selectedEmbeddedModelId)
+            ? 'Hailuo 2.3 (Unavailable)'
+            : null; // Restored retired bars must remain identifiable but cannot run.
+        const isRemovedEmbeddedModel = removedEmbeddedModelLabel !== null;
+        const removedEmbeddedModelOption = removedEmbeddedModelLabel
+          ? { value: selectedEmbeddedModelId, label: removedEmbeddedModelLabel, disabled: true }
           : null; // Keep the retired choice visible while supported choices remain selectable.
         const embeddedModelOptionsForBar = removedEmbeddedModelOption
           ? [removedEmbeddedModelOption, ...embeddedVideoPromptBarModelOptions]
@@ -1501,7 +1515,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   onSubmit={() => onVideoPromptBarSubmit(bar.id)}
                   isLoading={isLoading}
                   inputDisabled={false}
-                  submitDisabled={isRemovedOneToAllEmbeddedModel || !barMembership || (
+                  submitDisabled={isRemovedEmbeddedModel || !barMembership || (
                     selectedEmbeddedModelId.includes('seedance-2')
                       && bar.seedance2Variant === 'reference'
                       && embeddedMediaCount === 0
@@ -1716,6 +1730,14 @@ export const Canvas: React.FC<CanvasProps> = ({
             title={selectedImageHasGeneration ? 'Re-run this generation' : 'No saved generation data'}
           >
             <RerunIcon className="w-4 h-4" />
+          </ActionButton>
+          <ActionButton
+            onClick={() => onMetadataToPromptBar(selectedImage.id)}
+            disabled={!selectedImageHasGeneration || Boolean(metadataTransferBlockReason)}
+            title={metadataTransferBlockReason ?? 'Metadata to Prompt Bar'}
+            ariaLabel="Metadata to Prompt Bar"
+          >
+            <MetadataToPromptBarIcon className="w-4 h-4 translate-x-px" />
           </ActionButton>
           <ActionButton
             onClick={() => onImagePromptCopy(selectedImage.id)}

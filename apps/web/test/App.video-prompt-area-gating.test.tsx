@@ -71,6 +71,13 @@ const mockState = vi.hoisted(() => {
   const importSnapshotWithPicker = vi.fn((callback: () => void) => callback());
   const setSelectedImageIds = vi.fn();
   const setReferenceImageIds = vi.fn();
+  const setReferenceVideoIds = vi.fn();
+  const setReferenceAudioIds = vi.fn();
+  const setSeedanceReferenceOrderIds = vi.fn();
+  const setElementImageIds = vi.fn();
+  const setVideoLastFrameImageId = vi.fn();
+  const setSourceVideoId = vi.fn();
+  const setSourceAudioId = vi.fn();
   const setLiveVideoPromptBars = vi.fn();
   const baseVideoPromptArea = {
     id: 'area-1',
@@ -276,6 +283,7 @@ const mockState = vi.hoisted(() => {
   falState.handleFalScaleFactorChange = vi.fn();
   falState.handleFalNoiseScaleChange = vi.fn();
   falState.handleFalCreativityChange = vi.fn();
+  falState.applyGenerationSettings = vi.fn(() => true);
 
   return {
     handleGenerate,
@@ -285,11 +293,20 @@ const mockState = vi.hoisted(() => {
     selectedImageIds: [] as string[],
     setSelectedImageIds,
     setReferenceImageIds,
+    setReferenceVideoIds,
+    setReferenceAudioIds,
+    setSeedanceReferenceOrderIds,
+    setElementImageIds,
+    setVideoLastFrameImageId,
+    setSourceVideoId,
+    setSourceAudioId,
     setLiveVideoPromptBars,
     falState,
     images: [] as CanvasImage[],
     displayedImages: [] as CanvasImage[],
     lastCanvasProps: null as Record<string, unknown> | null,
+    lastPromptBarProps: null as Record<string, unknown> | null,
+    lastToolbarProps: null as Record<string, unknown> | null,
     keyboardShortcuts: null as { onGenerate: () => void; onTogglePresentationMode?: () => void; isPresentationMode?: boolean } | null,
     cropMode: null as { imageId: string; rect: { x: number; y: number; width: number; height: number } } | null,
     transformMode: null as { imageId: string } | null,
@@ -312,29 +329,36 @@ vi.mock('../services/runtimeConfig', async () => {
 });
 
 vi.mock('../components/Toolbar', () => ({
-  Toolbar: ({ activeTool, onToolChange, isVideoPromptAreaToolEnabled }: { activeTool: Tool; onToolChange: (tool: Tool) => void; isVideoPromptAreaToolEnabled: boolean }) => (
-    <div>
-      <span data-testid="active-tool">{activeTool}</span>
-      <span data-testid="video-tool-enabled">{String(isVideoPromptAreaToolEnabled)}</span>
-      <button type="button" onClick={() => onToolChange(Tool.VIDEO_PROMPT_AREA)}>
-        Activate Video Prompt Area
-      </button>
-    </div>
-  ),
+  Toolbar: (props: { activeTool: Tool; onToolChange: (tool: Tool) => void; isVideoPromptAreaToolEnabled: boolean }) => {
+    mockState.lastToolbarProps = props;
+    return (
+      <div>
+        <span data-testid="active-tool">{props.activeTool}</span>
+        <span data-testid="video-tool-enabled">{String(props.isVideoPromptAreaToolEnabled)}</span>
+        <button type="button" onClick={() => props.onToolChange(Tool.VIDEO_PROMPT_AREA)}>
+          Activate Video Prompt Area
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock('../components/PromptBar', () => ({
-  PromptBar: ({ onSubmit, onModelModeChange, submitDisabled, leadingAccessory }: { onSubmit: () => void; onModelModeChange: (mode: 'image' | 'video') => void; submitDisabled?: boolean; leadingAccessory?: ReactNode }) => (
-    <div>
-      <button type="button" onClick={onSubmit} disabled={submitDisabled}>
-        Generate
-      </button>
-      <button type="button" onClick={() => onModelModeChange('image')}>
-        Switch To Image
-      </button>
-      {leadingAccessory}
-    </div>
-  ),
+  PromptBar: (props: { prompt: string; onSubmit: () => void; onModelModeChange: (mode: 'image' | 'video') => void; submitDisabled?: boolean; leadingAccessory?: ReactNode; focusRequestToken?: number }) => {
+    mockState.lastPromptBarProps = props;
+    return (
+      <div>
+        <span data-testid="footer-prompt">{props.prompt}</span>
+        <button type="button" onClick={props.onSubmit} disabled={props.submitDisabled}>
+          Generate
+        </button>
+        <button type="button" onClick={() => props.onModelModeChange('image')}>
+          Switch To Image
+        </button>
+        {props.leadingAccessory}
+      </div>
+    );
+  },
 }));
 
 vi.mock('../components/Canvas', () => ({
@@ -428,12 +452,13 @@ vi.mock('../hooks/useSelectionState', () => ({
     hasSingleImageSelected: false,
     setSelectedImageIds: mockState.setSelectedImageIds,
     setReferenceImageIds: mockState.setReferenceImageIds,
-    setReferenceVideoIds: vi.fn(),
-    setReferenceAudioIds: vi.fn(),
-    setElementImageIds: vi.fn(),
-    setVideoLastFrameImageId: vi.fn(),
-    setSourceVideoId: vi.fn(),
-    setSourceAudioId: vi.fn(),
+    setReferenceVideoIds: mockState.setReferenceVideoIds,
+    setReferenceAudioIds: mockState.setReferenceAudioIds,
+    setSeedanceReferenceOrderIds: mockState.setSeedanceReferenceOrderIds,
+    setElementImageIds: mockState.setElementImageIds,
+    setVideoLastFrameImageId: mockState.setVideoLastFrameImageId,
+    setSourceVideoId: mockState.setSourceVideoId,
+    setSourceAudioId: mockState.setSourceAudioId,
     handleImageSelection: vi.fn(),
     replaceCanvasSelection: vi.fn(),
   }),
@@ -547,6 +572,7 @@ vi.mock('../hooks/useVideoNegativePrompt', () => ({
   useVideoNegativePrompt: () => ({
     videoNegativePrompt: '',
     setVideoNegativePrompt: vi.fn(),
+    setVideoNegativePromptForModel: vi.fn(),
     shouldShowVideoNegativePrompt: false,
   }),
 }));
@@ -615,10 +641,19 @@ afterEach(() => {
   mockState.importSnapshotWithPicker.mockImplementation((callback: () => void) => callback()); // Default tests use the hidden-input fallback path.
   mockState.activeSnapshotFileName = null;
   mockState.setReferenceImageIds.mockClear();
+  mockState.setReferenceVideoIds.mockClear();
+  mockState.setReferenceAudioIds.mockClear();
+  mockState.setSeedanceReferenceOrderIds.mockClear();
+  mockState.setElementImageIds.mockClear();
+  mockState.setVideoLastFrameImageId.mockClear();
+  mockState.setSourceVideoId.mockClear();
+  mockState.setSourceAudioId.mockClear();
   mockState.setLiveVideoPromptBars.mockClear();
   mockState.images = [];
   mockState.displayedImages = [];
   mockState.lastCanvasProps = null;
+  mockState.lastPromptBarProps = null;
+  mockState.lastToolbarProps = null;
   mockState.keyboardShortcuts = null;
   mockState.cropMode = null;
   mockState.transformMode = null;
@@ -648,6 +683,8 @@ afterEach(() => {
     seedance2JimengModelVersion: 'seedance2.0fast',
   });
   mockState.falState.handleModelModeChange.mockClear();
+  mockState.falState.applyGenerationSettings.mockReset();
+  mockState.falState.applyGenerationSettings.mockReturnValue(true);
 });
 
 describe('App video prompt area gating', () => {
@@ -1229,6 +1266,102 @@ describe('App video prompt area gating', () => {
     });
 
     expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
+    expect(mockState.handleGenerate).not.toHaveBeenCalled();
+  });
+
+  it('replaces the prompt and restores saved generation settings and canvas inputs', () => {
+    const output = buildCanvasMedia('generated-output', 'video');
+    output.metadata = {
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'Restored generation prompt',
+        provider: 'fal',
+        modelId: 'fal-ai/kling-video/v3/pro',
+        modelMode: 'video',
+        primaryImageId: 'primary-image',
+        referenceImageIds: ['reference-image'],
+        referenceVideoIds: ['reference-video'],
+        referenceAudioIds: ['reference-audio'],
+        elementImageIds: ['element-image'],
+        videoLastFrameImageId: 'tail-image',
+        sourceVideoId: 'source-video',
+        sourceAudioId: 'source-audio',
+        falOptions: {
+          negativePrompt: 'No camera shake',
+          klingV3MultiPromptEnabled: false,
+          klingV3MultiPrompt: '',
+        },
+      },
+    };
+    mockState.images = [
+      output,
+      buildCanvasMedia('primary-image', 'image'),
+      buildCanvasMedia('reference-image', 'image'),
+      buildCanvasMedia('reference-video', 'video'),
+      buildCanvasMedia('reference-audio', 'audio'),
+      buildCanvasMedia('element-image', 'image'),
+      buildCanvasMedia('tail-image', 'image'),
+      buildCanvasMedia('source-video', 'video'),
+      buildCanvasMedia('source-audio', 'audio'),
+    ];
+    mockState.displayedImages = [...mockState.images];
+
+    render(<App />);
+    act(() => {
+      (mockState.lastPromptBarProps?.onPromptChange as ((prompt: string) => void) | undefined)?.('Existing prompt');
+      (mockState.lastToolbarProps?.onCameraSettingsChange as ((selection: unknown) => void) | undefined)?.({
+        cameraId: 'imax-camera',
+        lensId: 'hawk-v-lite',
+        focalLengthIds: ['35mm'],
+      });
+    });
+    act(() => {
+      (mockState.lastCanvasProps?.onMetadataToPromptBar as ((imageId: string) => void) | undefined)?.('generated-output');
+    });
+
+    expect(screen.getByTestId('footer-prompt').textContent).toBe('Restored generation prompt');
+    expect(mockState.falState.applyGenerationSettings).toHaveBeenCalledWith(output.metadata.generation);
+    expect(mockState.setSelectedImageIds).toHaveBeenCalledWith(['primary-image', 'source-video', 'source-audio']);
+    expect(mockState.setReferenceImageIds).toHaveBeenCalledWith(['reference-image']);
+    expect(mockState.setReferenceVideoIds).toHaveBeenCalledWith(['reference-video']);
+    expect(mockState.setReferenceAudioIds).toHaveBeenCalledWith(['reference-audio']);
+    expect(mockState.setSeedanceReferenceOrderIds).toHaveBeenCalledWith(['reference-image', 'reference-video', 'reference-audio']);
+    expect(mockState.setElementImageIds).toHaveBeenCalledWith(['element-image']);
+    expect(mockState.setVideoLastFrameImageId).toHaveBeenCalledWith('tail-image');
+    expect(mockState.setSourceVideoId).toHaveBeenCalledWith('source-video');
+    expect(mockState.setSourceAudioId).toHaveBeenCalledWith('source-audio');
+    expect(mockState.lastToolbarProps?.cameraSettings).toEqual({ cameraId: null, lensId: null, focalLengthIds: [] });
+    expect(mockState.lastPromptBarProps?.focusRequestToken).toBe(1);
+    expect(mockState.handleGenerate).not.toHaveBeenCalled();
+  });
+
+  it('loads only the prompt when the saved model is unavailable', () => {
+    const output = buildCanvasMedia('retired-output', 'image');
+    output.metadata = {
+      source: 'generated',
+      generation: {
+        kind: 'text_to_image',
+        prompt: 'Prompt from a retired model',
+        provider: 'fal',
+        modelId: 'retired/model',
+        modelMode: 'image',
+        primaryImageId: 'source-image',
+      },
+    };
+    mockState.images = [output, buildCanvasMedia('source-image', 'image')];
+    mockState.displayedImages = [...mockState.images];
+    mockState.falState.applyGenerationSettings.mockReturnValue(false);
+
+    render(<App />);
+    act(() => {
+      (mockState.lastCanvasProps?.onMetadataToPromptBar as ((imageId: string) => void) | undefined)?.('retired-output');
+    });
+
+    expect(screen.getByTestId('footer-prompt').textContent).toBe('Prompt from a retired model');
+    expect(mockState.setSelectedImageIds).not.toHaveBeenCalled();
+    expect(mockState.setReferenceImageIds).not.toHaveBeenCalled();
+    expect(mockState.lastPromptBarProps?.focusRequestToken).toBe(1);
     expect(mockState.handleGenerate).not.toHaveBeenCalled();
   });
 

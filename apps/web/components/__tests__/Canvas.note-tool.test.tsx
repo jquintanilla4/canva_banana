@@ -91,6 +91,7 @@ const renderCanvas = (overrides: HarnessOverrides = {}) => {
       onImagePromptCopy={vi.fn()}
       onImageDuplicate={vi.fn()}
       onRerunGeneration={vi.fn()}
+      onMetadataToPromptBar={vi.fn()}
       showMetadataOverlay={false}
       transformMode={null}
       onStartTransform={vi.fn()}

@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import type { ApiProviderId, FalVideoDuration } from '../types';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import type {
+  ApiProviderId,
+  FalVideoDuration,
+  GenerationFalOptions,
+  GenerationInputs,
+  GenerationJimengOptions,
+  GenerationVolcengineOptions,
+} from '../types';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
   DEFAULT_FAL_IMAGE_MODEL_ID,
@@ -14,17 +21,18 @@ import {
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
-  KLING_O3_VIDEO_EDIT_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
+  WAN_VISION_ENHANCER_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
@@ -38,6 +46,7 @@ import {
   isKrea2AspectRatioSelectionValue,
   isKrea2CreativitySelectionValue,
   isKrea2LargeModel as isKrea2LargeModelId,
+  isNanoBananaEditModelId,
   isKlingO3DurationSelectionValue,
   isKlingO3VideoModelId,
   isKlingV3CfgScaleSelectionValue,
@@ -65,6 +74,7 @@ import {
   isJimengSeedance2VideoModel,
   isVolcengineSeedance2VideoModel,
   isRecraftV4ProImageSizeSelectionValue,
+  isRecraftV4ProModel,
   KREA_2_DEFAULT_ASPECT_RATIO,
   KREA_2_DEFAULT_CREATIVITY,
   isWan27ImageAspectRatioSelectionValue,
@@ -76,12 +86,18 @@ import {
   isMiniMaxH3AspectRatioSelectionValue,
   isMiniMaxH3DurationSelectionValue,
   isMiniMaxH3Variant,
+  isUnavailableLegacyTransferModelId,
   normalizeMiniMaxH3AspectRatioForVariant,
   RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   RECRAFT_V4_PRO_MAX_COLORS,
   recraftHexToRgb,
 } from '../services/modelConfig';
+import {
+  applyGenerationTransferOptions,
+  resolveGenerationTransferModelId,
+  resolveGenerationTransferOptions,
+} from '../utils/generationTransferSettings';
 import type {
   FalAspectRatioSelectionValue,
   FalGptImage2QualitySelectionValue,
@@ -419,6 +435,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setFalScaleFactor: Dispatch<SetStateAction<number>>;
   setFalNoiseScale: Dispatch<SetStateAction<number>>;
   setFalCreativity: Dispatch<SetStateAction<number>>;
+  applyGenerationSettings: (generation: GenerationInputs) => boolean;
 };
 
 export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSettingsResult {
@@ -503,6 +520,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [falScaleFactor, setFalScaleFactor] = useState(2);
   const [falNoiseScale, setFalNoiseScale] = useState(0.1);
   const [falCreativity, setFalCreativity] = useState(0);
+  const pendingFalVideoDurationTransferRef = useRef<{ modelId: FalVideoModelId; duration: FalVideoDuration } | null>(null); // A saved duration must survive the target model's defaulting effect.
 
   const falModelId: FalModelId = useMemo(
     () => (falModelMode === 'video' ? falVideoModelId : falImageModelId),
@@ -543,6 +561,14 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, [apiProvider, falModelMode]);
 
   useEffect(() => {
+    const pendingTransfer = pendingFalVideoDurationTransferRef.current;
+    if (pendingTransfer) {
+      pendingFalVideoDurationTransferRef.current = null; // One model transition consumes the pending restore.
+      if (pendingTransfer.modelId === falVideoModelId) {
+        setFalVideoDuration(pendingTransfer.duration); // Metadata wins over ordinary model-selection defaults.
+        return;
+      }
+    }
     if (
       falVideoModelId === KLING_VIDEO_MODEL_ID
       || isKlingO3VideoModelId(falVideoModelId)
@@ -1171,6 +1197,124 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setFalCreativity(clamped);
   }, []);
 
+  const applyGenerationSettings = useCallback((generation: GenerationInputs): boolean => {
+    if (generation.provider === 'google') {
+      return true; // Google has no Fal controls to restore.
+    }
+    if (isUnavailableLegacyTransferModelId(generation.modelId)) {
+      return false; // Removed Kling and Wan models require an explicit new model choice.
+    }
+
+    const normalizedModelId = normalizeFalModelId(resolveGenerationTransferModelId(generation));
+    if (!normalizedModelId) {
+      return false; // Retired or unknown models cannot be represented in the prompt bar.
+    }
+
+    const options = resolveGenerationTransferOptions(generation, normalizedModelId);
+
+    if (isFalVideoModelId(normalizedModelId)) {
+      if (normalizedModelId !== falVideoModelId && options.videoDuration !== undefined) {
+        pendingFalVideoDurationTransferRef.current = { modelId: normalizedModelId, duration: options.videoDuration }; // Skip the default only for this transfer.
+      }
+      setFalModelMode('video');
+      setFalVideoModelId(normalizedModelId);
+    } else if (isFalImageModelId(normalizedModelId)) {
+      setFalModelMode('image');
+      setFalImageModelId(normalizedModelId);
+    } else {
+      return false; // Keep current settings intact when the model type is invalid.
+    }
+
+    applyGenerationTransferOptions(options, {
+      imageSizeSelection: setFalImageSizeSelection,
+      aspectRatioSelection: value => {
+        if (isKrea2LargeModelId(normalizedModelId) && isKrea2AspectRatioSelectionValue(value)) {
+          setKrea2AspectRatio(value); // Krea owns a dedicated aspect-ratio picker.
+          return;
+        }
+        setFalAspectRatioSelection(value);
+      },
+      resolutionSelection: setFalResolutionSelection,
+      flux2MaxImageSize: setFlux2MaxImageSize,
+      gptImage2Quality: setGptImage2Quality,
+      krea2Creativity: setKrea2Creativity,
+      numImages: value => setFalNumImages(
+        Math.min(getFalNumImageMaxForModel(normalizedModelId), Math.max(1, Math.floor(value))),
+      ), // Respect the restored model's output cap.
+      scaleFactor: value => setFalScaleFactor(Math.min(10, Math.max(1, Math.round(value)))),
+      noiseScale: value => setFalNoiseScale(Math.min(1, Math.max(0.1, value))),
+      creativity: value => setFalCreativity(Math.min(10, Math.max(0, value))),
+      videoDuration: setFalVideoDuration,
+      klingVariant: setKlingVariant,
+      klingV3Duration: setKlingV3Duration,
+      klingV3GenerateAudio: setKlingV3GenerateAudio,
+      klingV3CfgScale: setKlingV3CfgScale,
+      klingV3MultiPromptEnabled: setKlingV3MultiPromptEnabled,
+      klingV3MultiPrompt: setKlingV3MultiPrompt,
+      klingV3Shot1Duration: setKlingV3Shot1Duration,
+      klingV3Shot2Duration: setKlingV3Shot2Duration,
+      klingO3Variant: setKlingO3Variant,
+      klingO3Duration: setKlingO3Duration,
+      klingO3GenerateAudio: setKlingO3GenerateAudio,
+      klingO3KeepAudio: setKlingO3KeepAudio,
+      klingV3ControlKeepSound: setKlingV3ControlKeepSound,
+      klingV3ControlOrientation: setKlingV3ControlOrientation,
+      wanTargetResolution: setWanTargetResolution,
+      wanCreativity: setWanCreativity,
+      wanAnimateVariant: setWanAnimateVariant,
+      wanAnimateSteps: setWanAnimateSteps,
+      wanAnimateResolution: setWanAnimateResolution,
+      wanAnimateShift: setWanAnimateShift,
+      wanAnimateQuality: setWanAnimateQuality,
+      wanAnimateUseTurbo: setWanAnimateUseTurbo,
+      lipsyncSyncMode: setLipsyncSyncMode,
+      heygenEnableCaption: setHeygenEnableCaption,
+      heygenEnableDynamicDuration: setHeygenEnableDynamicDuration,
+      heygenDisableMusicTrack: setHeygenDisableMusicTrack,
+      heygenEnableSpeechEnhancement: setHeygenEnableSpeechEnhancement,
+      infinitalkResolution: setInfinitalkResolution,
+      infinitalkSeed: setInfinitalkSeed,
+      infinitalkAcceleration: setInfinitalkAcceleration,
+      infinitalkDuration: setInfinitalkDuration,
+      grokImagineVideoDuration: setGrokImagineVideoDuration,
+      grokImagineVideoResolution: setGrokImagineVideoResolution,
+      grokImagineVideoAspectRatio: setGrokImagineVideoAspectRatio,
+      veo31Variant: setVeo31Variant,
+      veo31Duration: setVeo31Duration,
+      veo31Resolution: setVeo31Resolution,
+      veo31AspectRatio: setVeo31AspectRatio,
+      veo31GenerateAudio: setVeo31GenerateAudio,
+      wan27VideoResolution: setWan27VideoResolution,
+      wan27VideoDuration: setWan27VideoDuration,
+      wan27VideoAspectRatio: setWan27VideoAspectRatio,
+      wan27VideoPromptExpansion: setWan27VideoPromptExpansion,
+      wan27VideoVariant: setWan27VideoVariant,
+      wan27VideoAudioSetting: setWan27VideoAudioSetting,
+      miniMaxH3Variant: setMiniMaxH3Variant,
+      miniMaxH3AspectRatio: setMiniMaxH3AspectRatio,
+      miniMaxH3Duration: setMiniMaxH3Duration,
+      seedance15AspectRatio: setSeedance15AspectRatio,
+      seedance15Resolution: setSeedance15Resolution,
+      seedance15Duration: setSeedance15Duration,
+      seedance15CameraFixed: setSeedance15CameraFixed,
+      seedance15Audio: setSeedance15Audio,
+      seedance2Variant: setSeedance2Variant,
+      seedance2JimengModelVersion: setSeedance2JimengModelVersion,
+      seedance2AspectRatio: setSeedance2AspectRatio,
+      seedance2Resolution: setSeedance2Resolution,
+      seedance2Duration: setSeedance2Duration,
+      seedance2GenerateAudio: setSeedance2GenerateAudio,
+      seedance2CameraFixed: setSeedance2CameraFixed,
+      recraftImageSize: setRecraftImageSize,
+      recraftBackgroundColor: value => setRecraftBackgroundColor({ ...value }),
+      recraftColors: value => setRecraftColors(value.map(color => ({ ...color }))),
+      wan27ImageAspectRatio: setWan27ImageAspectRatio,
+      wan27ImageMaxImages: setWan27ImageMaxImages,
+    }); // Each restorable control names its setter once; the shared walker skips options the metadata omits.
+
+    return true; // The supported model and every saved visible control are now restored.
+  }, [falVideoModelId]);
+
   return {
     falModelMode,
     falModelId,
@@ -1438,5 +1582,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setFalScaleFactor,
     setFalNoiseScale,
     setFalCreativity,
+    applyGenerationSettings,
   };
 }

@@ -89,6 +89,7 @@ import { useFalQueueJobs } from './hooks/useFalQueueJobs';
 import { useDebugLogState } from './hooks/useDebugLogState';
 import { useJimengSetup } from './hooks/useJimengSetup';
 import { useGenerationCanvasNotifications, type GenerationCanvasNotification } from './hooks/useGenerationCanvasNotifications';
+import { useGenerationPromptBarTransfer } from './hooks/useGenerationPromptBarTransfer';
 import { useFileNameVisibility } from './hooks/useFileNameVisibility';
 import { useTrackpadMode } from './hooks/useTrackpadMode';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
@@ -117,8 +118,10 @@ import {
 import { markCanvasMediaStoppedByIds, stopCanvasMediaPlaybackByIds } from './utils/canvasMediaPlayback';
 import { getCanvasImagePrompt } from './utils/canvasImagePrompt';
 import { applyGenerationPlacementSelection } from './utils/generationPlacementSelection';
+import { getGenerationTransferBlockReason } from './utils/generationPromptBarTransfer';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
 import { OVERLAY_LAYER_CLASS_NAMES } from './utils/overlayLayers';
+import { normalizeKrea2StyleStrength } from './utils/krea2StyleStrength';
 import { PlusIcon } from './components/Icons';
 import {
   EMPTY_CAMERA_SELECTION,
@@ -147,11 +150,6 @@ const AVAILABLE_PROVIDERS = PROVIDER_ORDER.filter(provider => providerAvailabili
 const PROVIDER_LABELS: Record<ApiProvider, string> = { google: 'Google', fal: 'FAL' }; // Mapping of provider IDs to display names
 const DEFAULT_API_PROVIDER: ApiProvider = AVAILABLE_PROVIDERS[0] ?? 'google'; // Default provider (first available or fallback)
 const clampStrokeSize = (value: number) => Math.min(MAX_STROKE_SIZE, Math.max(MIN_STROKE_SIZE, value));
-const normalizeKrea2StyleStrength = (value: unknown): number => {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  const rounded = Number.isFinite(parsed) ? Math.round(parsed * 10) / 10 : 1; // Krea sliders move by tenths.
-  return Math.min(2, Math.max(-2, rounded));
-};
 const areKrea2StrengthMapsEqual = (left: Record<string, number>, right: Record<string, number>): boolean => {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
@@ -278,6 +276,7 @@ export default function App() {
   const {
     videoNegativePrompt,
     setVideoNegativePrompt,
+    setVideoNegativePromptForModel,
     shouldShowVideoNegativePrompt,
   } = useVideoNegativePrompt({ isVideoMode: fal.isVideoMode, falVideoModelId: fal.falVideoModelId });
 
@@ -417,6 +416,11 @@ export default function App() {
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
+    if (usingFalProvider && fal.isMiniMaxH3VideoModel) {
+      setToastMessage('MiniMax H3 Standard does not use references. Tagged references were cleared.'); // Standard runs drop them at submit, so say so up front.
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
     const totalLimit = maxReferenceImages + 1;
     const referenceLimitLabel = usingFalProvider ? getFalModelLabel(fal.falModelId) : PROVIDER_LABELS.google; // Match label to active provider.
     setToastMessage(`${referenceLimitLabel} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
@@ -470,6 +474,7 @@ export default function App() {
     setReferenceImageIds,
     setReferenceVideoIds,
     setReferenceAudioIds,
+    setSeedanceReferenceOrderIds,
     setElementImageIds,
     setVideoLastFrameImageId,
     setSourceVideoId,
@@ -479,6 +484,29 @@ export default function App() {
   } = selection;
 
   const [krea2StyleReferenceStrengths, setKrea2StyleReferenceStrengths] = useState<Record<string, number>>({});
+  const resetMetadataEditContext = useCallback(() => {
+    setAppMode('CANVAS'); // Loaded edits use the normal canvas workflow.
+    setTool(Tool.SELECTION); // A neutral selection avoids reusing the current brush tool.
+  }, []); // Existing strokes belong to the user, so loading metadata never erases them.
+  const { handleMetadataToPromptBar, promptFocusRequestToken } = useGenerationPromptBarTransfer({
+    displayedImages,
+    providerAvailability,
+    applyGenerationSettings: fal.applyGenerationSettings,
+    selection,
+    setApiProvider,
+    setPrompt,
+    setCameraSettings,
+    setActiveEmbeddedPromptBarId,
+    setSelectedVideoPromptAreaId,
+    setVideoNegativePromptForModel,
+    setWan27ImageNegativePrompt,
+    setKrea2StyleReferenceStrengths,
+    setToastMessage,
+    resetEditContext: resetMetadataEditContext,
+  }); // Transfer state and compatibility policy stay outside the root component.
+  const getMetadataTransferBlockReason = useCallback((imageId: string): string | null => (
+    getGenerationTransferBlockReason(displayedImages.find(image => image.id === imageId)?.metadata?.generation, providerAvailability)
+  ), [displayedImages]); // The toolbar disables the action instead of letting it replace the prompt and fail.
   useEffect(() => {
     if (!isActiveKrea2LargeModel) {
       setKrea2StyleReferenceStrengths(prev => (Object.keys(prev).length === 0 ? prev : {}));
@@ -2189,6 +2217,8 @@ export default function App() {
           onCancelCrop={handleCancelCrop}
           onVideoPromptAreaBorderColorChange={handleVideoPromptAreaBorderColorChange}
           onImagePromptCopy={handleImagePromptCopy}
+          onMetadataToPromptBar={handleMetadataToPromptBar}
+          getMetadataTransferBlockReason={getMetadataTransferBlockReason}
           onImageDuplicate={handleDuplicateImage}
           onRerunGeneration={handleRerunGeneration}
           showMetadataOverlay={showMetadataOverlay}
@@ -2414,6 +2444,7 @@ export default function App() {
               </button>
             </Tooltip>
           ) : undefined}
+          focusRequestToken={promptFocusRequestToken}
         />
       )}
       </>)}

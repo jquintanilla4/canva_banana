@@ -1065,6 +1065,28 @@ export const isRemovedHailuoModelId = (value: string | undefined): boolean =>
   typeof value === 'string' && (REMOVED_HAILUO_VIDEO_MODEL_IDS as readonly string[]).includes(value); // Detect unsupported saved Hailuo generations.
 export const isRemovedOneToAllAnimateModelId = (value: string | undefined): boolean =>
   value === REMOVED_ONE_TO_ALL_ANIMATE_MODEL_ID; // Detect unsupported saved 1-to-All generations.
+const UNAVAILABLE_LEGACY_TRANSFER_MODEL_IDS: ReadonlySet<string> = new Set([
+  LEGACY_KLING_26_CONTROL_VIDEO_MODEL_ID,
+  LEGACY_KLING_26_CONTROL_VIDEO_PRO_MODEL_ID,
+  LEGACY_KLING_O1_REFERENCE_TO_VIDEO_MODEL_ID,
+  LEGACY_KLING_O1_VIDEO_EDIT_MODEL_ID,
+  LEGACY_KLING_O1_VIDEO_REF_V2V_MODEL_ID,
+  LEGACY_KLING_O1_VIDEO_FFLF_MODEL_ID,
+  LEGACY_WAN_26_VIDEO_MODEL_ID,
+  LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
+]); // normalizeFalModelId migrates these ids, so metadata transfer must block them before that happens.
+export const isUnavailableLegacyTransferModelId = (value: string | undefined): boolean =>
+  Boolean(value && UNAVAILABLE_LEGACY_TRANSFER_MODEL_IDS.has(value)); // Unknown legacy ids stay blocked by normal model validation.
+const VIDEO_NEGATIVE_PROMPT_MODEL_IDS = [
+  KLING_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
+  WAN_VISION_ENHANCER_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
+  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+] as const; // Only these video models own a negative-prompt bucket.
+export const isVideoNegativePromptModelId = (value: string | undefined): boolean =>
+  typeof value === 'string' && (VIDEO_NEGATIVE_PROMPT_MODEL_IDS as readonly string[]).includes(value); // Other video models must never write into a shared bucket.
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
   if (value === LEGACY_NANO_BANANA_MODEL_ID) {
     return NANO_BANANA_PRO_EDIT_MODEL_ID;

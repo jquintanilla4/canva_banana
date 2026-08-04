@@ -241,6 +241,13 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         audios: SEEDANCE_REFERENCE_AUDIO_LIMIT,
       };
     }
+    if (isMiniMaxH3StandardMode) {
+      return {
+        images: NO_REFERENCE_LIMIT,
+        videos: NO_REFERENCE_LIMIT,
+        audios: NO_REFERENCE_LIMIT,
+      }; // H3 Standard drops references at submit, so retained tags must clear here instead of silently vanishing.
+    }
     if (isWan27ReferenceMode) {
       return {
         images: WAN_27_REFERENCE_IMAGE_LIMIT,
@@ -262,7 +269,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       videos: NO_REFERENCE_LIMIT,
       audios: NO_REFERENCE_LIMIT,
     };
-  }, [falModelId, isFalProvider, isMultimodalReferenceMode, isWan27EditMode, isWan27ReferenceMode, referenceImageSlotOffset]);
+  }, [falModelId, isFalProvider, isMiniMaxH3StandardMode, isMultimodalReferenceMode, isWan27EditMode, isWan27ReferenceMode, referenceImageSlotOffset]);
 
   useEffect(() => {
     if (referenceVideoIds.length > referenceLimits.videos) {

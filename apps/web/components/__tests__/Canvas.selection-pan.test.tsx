@@ -69,6 +69,7 @@ const buildCanvasProps = (overrides: Partial<CanvasProps> = {}): CanvasProps => 
   onImagePromptCopy: vi.fn(),
   onImageDuplicate: vi.fn(),
   onRerunGeneration: vi.fn(),
+  onMetadataToPromptBar: vi.fn(),
   showMetadataOverlay: false,
   transformMode: null,
   onStartTransform: vi.fn(),
@@ -239,6 +240,70 @@ describe('Canvas selection temporary pan', () => {
     expect(onImagePromptCopy).toHaveBeenCalledWith('generated-1');
   });
 
+  it('sends saved generation metadata to the prompt bar action', () => {
+    const onMetadataToPromptBar = vi.fn();
+    const generatedImage = {
+      ...buildImage('generated-1'),
+      metadata: {
+        source: 'generated' as const,
+        generation: {
+          kind: 'text_to_image' as const,
+          prompt: 'Restore this prompt',
+          provider: 'fal' as const,
+          modelId: 'fal-ai/flux/dev',
+          modelMode: 'image' as const,
+        },
+      },
+    };
+
+    const { container } = render(<Canvas {...buildCanvasProps({
+      images: [generatedImage],
+      selectedImageIds: ['generated-1'],
+      onMetadataToPromptBar,
+    })} />);
+
+    const metadataButton = within(container).getByRole('button', { name: 'Metadata to Prompt Bar' }) as HTMLButtonElement;
+    fireEvent.click(metadataButton);
+
+    expect(metadataButton.disabled).toBe(false);
+    expect(onMetadataToPromptBar).toHaveBeenCalledWith('generated-1');
+  });
+
+  it('disables metadata transfer when selected media has no generation data', () => {
+    const { container } = render(<Canvas {...buildCanvasProps({
+      images: [buildImage('imported-1')],
+      selectedImageIds: ['imported-1'],
+    })} />);
+
+    expect((within(container).getByRole('button', { name: 'Metadata to Prompt Bar' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('disables metadata transfer and names the reason when the saved generation cannot load', () => {
+    const generated = buildImage('generated-1');
+    generated.metadata = {
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'Prompt from a retired model',
+        provider: 'fal',
+        modelId: 'fal-ai/kling-video/o1/image-to-video',
+        modelMode: 'video',
+      },
+    };
+    const { container } = render(<Canvas {...buildCanvasProps({
+      images: [generated],
+      selectedImageIds: ['generated-1'],
+      getMetadataTransferBlockReason: () => 'Saved model is no longer available',
+    })} />);
+
+    const button = within(container).getByRole('button', { name: 'Metadata to Prompt Bar' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true); // Blocking the click keeps the prompt bar from being cleared by a transfer that cannot finish.
+
+    fireEvent.mouseEnter(button.parentElement as HTMLElement);
+
+    expect(screen.getByRole('tooltip').textContent).toContain('Saved model is no longer available'); // The tooltip says why without renaming the control.
+  });
+
   it('toggles favorites through the committed image mutation channel', () => {
     const image = buildImage();
     const onImagesChange = vi.fn();
@@ -291,6 +356,7 @@ describe('Canvas selection temporary pan', () => {
     const view = within(container);
 
     expect(view.queryByRole('button', { name: 'Copy Generation Prompt' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Metadata to Prompt Bar' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Crop Image' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Duplicate Media' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Add to Favorites' })).toBeNull();
