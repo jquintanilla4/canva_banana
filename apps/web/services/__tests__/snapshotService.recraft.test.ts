@@ -1131,6 +1131,47 @@ describe('snapshotService (Jimeng metadata)', () => {
     expect(restored.videoPromptBars[0]?.modelId).toBe(hailuoModelId);
   });
 
+  it('preserves the removed 1-to-All id on restored embedded prompt bars', async () => {
+    const oneToAllModelId = 'fal-ai/one-to-all-animation/14b';
+    const snapshot = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      state: {
+        images: [],
+        notes: [],
+        paths: [],
+        videoPromptAreas: [],
+        videoPromptBars: [{
+          id: 'bar-one-to-all',
+          assignedAreaId: 'area-1',
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 72,
+          prompt: 'legacy 1-to-All prompt',
+          modelId: oneToAllModelId,
+          seedance2Variant: 'reference',
+          seedance2AspectRatio: '16:9',
+          seedance2Resolution: '720p',
+          seedance2Duration: '5',
+          seedance2GenerateAudio: false,
+          seedance2CameraFixed: false,
+        }],
+      },
+    };
+    const snapshotJson = JSON.stringify(snapshot);
+    const file = new File([snapshotJson], 'canvas.json', { type: 'application/json' }) as File & { text: () => Promise<string> };
+    file.text = () => Promise.resolve(snapshotJson); // Node's test File polyfill does not always include text().
+
+    const restored = await restoreSnapshotFromFile(file, {
+      brushSize: 20,
+      eraserSize: 20,
+      brushColor: '#ff0000',
+    });
+
+    expect(restored.videoPromptBars[0]?.modelId).toBe(oneToAllModelId);
+  });
+
   it('restores legacy embedded Jimeng prompt bar channel values from fal options', async () => {
     const snapshot = {
       version: 1,

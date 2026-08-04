@@ -135,7 +135,6 @@ export type GenerationFalOptions = Partial<{
   wanAnimateVariant: 'replace' | 'move';
   wanAnimateSteps: '10' | '20' | '30' | '40';
   wanAnimateResolution: '480p' | '580p' | '720p';
-  oneToAllAnimateResolution: '480p' | '580p' | '720p';
   wanAnimateShift: '5.0' | '6.0' | '7.0' | '8.0' | '9.0' | '10.0';
   wanAnimateQuality: 'high' | 'maximum';
   wanAnimateUseTurbo: boolean;

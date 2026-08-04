@@ -67,6 +67,18 @@ describe('falService (Wan 2.7 Video)', () => {
     expect(normalizeFalModelId(WAN_27_EDIT_VIDEO_MODEL_ID)).toBe(WAN_27_VIDEO_MODEL_ID);
   });
 
+  it('does not expose or submit the removed 1-to-All Animate model', async () => {
+    const removedModelId = 'fal-ai/one-to-all-animation/14b';
+
+    expect(FAL_VIDEO_MODEL_OPTIONS.some(model => (model.value as string) === removedModelId)).toBe(false);
+    expect(isFalModelId(removedModelId)).toBe(false);
+    await expect(generateImageToVideo('legacy animation', createTestImage(), {
+      modelId: removedModelId,
+      sourceVideoUrl: 'https://example.com/source.mp4',
+    })).rejects.toThrow('1-to-All Animate is no longer supported.');
+    expect(fal.subscribe).not.toHaveBeenCalled();
+  });
+
   it('routes no-image smart requests to the Wan 2.7 text-to-video endpoint', async () => {
     const result = await generateImageToVideo('wan t2v prompt', null, {
       modelId: WAN_27_VIDEO_MODEL_ID,

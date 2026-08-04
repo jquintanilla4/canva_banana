@@ -15,7 +15,6 @@ import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  ONE_TO_ALL_ANIMATE_MODEL_ID,
   RECRAFT_V4_PRO_MAX_COLORS,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
@@ -59,6 +58,7 @@ import {
   isLegacySora2ProVideoModelId,
   isNanoBananaEditModelId,
   isRemovedHailuoModelId,
+  isRemovedOneToAllAnimateModelId,
   isRecraftV4ProModel,
   isRecraftV4ProImageSizeSelectionValue,
   normalizeRecraftRgbColor,
@@ -498,7 +498,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     wanAnimateVariant,
     wanAnimateSteps,
     wanAnimateResolution,
-    oneToAllAnimateResolution,
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
@@ -610,6 +609,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const rawOverrideModelId = generationOverride?.modelId;
     const isLegacySora2ProRun = isLegacySora2ProVideoModelId(rawOverrideModelId); // Migrated Sora reruns always use Kling Standard.
     const isUnsupportedRemovedHailuoRun = isRemovedHailuoModelId(rawOverrideModelId); // Saved Hailuo requests must not fall back to another paid model.
+    const isUnsupportedRemovedOneToAllRun = isRemovedOneToAllAnimateModelId(rawOverrideModelId); // Retired 1-to-All reruns must not fall back to another paid model.
     const overrideModelId = normalizeFalModelId(rawOverrideModelId); // Accept legacy saved model ids.
     const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode : falModelMode;
     const falImageModelIdForRun = isFalImageModelId(overrideModelId) ? overrideModelId : falImageModelId;
@@ -735,7 +735,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const wanAnimateShiftForRun = falOptionsOverride.wanAnimateShift ?? wanAnimateShift;
     const wanAnimateQualityForRun = falOptionsOverride.wanAnimateQuality ?? wanAnimateQuality;
     const wanAnimateUseTurboForRun = falOptionsOverride.wanAnimateUseTurbo ?? wanAnimateUseTurbo;
-    const oneToAllAnimateResolutionForRun = falOptionsOverride.oneToAllAnimateResolution ?? oneToAllAnimateResolution;
     const lipsyncSyncModeForRun = isLipsyncSyncMode(falOptionsOverride.lipsyncSyncMode)
       ? falOptionsOverride.lipsyncSyncMode
       : lipsyncSyncMode; // Reruns can override current UI.
@@ -847,7 +846,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
       && !generationOverride
       && (
         falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID
-        || falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID
         || falVideoModelIdForRun === KLING_V3_CONTROL_VIDEO_MODEL_ID
         || falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID
       );
@@ -922,7 +920,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isKlingV3ControlVideoModel = isVideoMode && falVideoModelIdForRun === KLING_V3_CONTROL_VIDEO_MODEL_ID;
     const isWanVisionEnhancerVideoModel = isVideoMode && falVideoModelIdForRun === WAN_VISION_ENHANCER_MODEL_ID;
     const isWanAnimateVideoModel = isVideoMode && falVideoModelIdForRun === WAN_ANIMATE_MODEL_ID;
-    const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelIdForRun === ONE_TO_ALL_ANIMATE_MODEL_ID;
     const isScailVideoModel = isVideoMode && falVideoModelIdForRun === SCAIL_VIDEO_MODEL_ID;
     const isLipsyncVideoModel = isVideoMode && falVideoModelIdForRun === SYNC_LIPSYNC_MODEL_ID;
     const isHeygenV3LipsyncVideoModel = isVideoMode && falVideoModelIdForRun === HEYGEN_V3_LIPSYNC_MODEL_ID;
@@ -936,7 +933,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
     const isVeo31ExtendMode = isVeo31VideoModelForRun && veo31VariantForRun === 'extend';
     const isFalVideoInputMode = isWanVideoInputMode
-      || isOneToAllAnimateVideoModel
       || isLipsyncVideoModel
       || isHeygenV3LipsyncVideoModel
       || isInfinitalkVideoModel
@@ -962,7 +958,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ? (falVideoDurationForRun === '10' ? '10' : '5')
       : undefined;
     const normalizedVideoNegativePrompt =
-      (isKlingVideoModel || isKlingV3VideoModel || isWanVisionEnhancerVideoModel || isOneToAllAnimateVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun)
+      (isKlingVideoModel || isKlingV3VideoModel || isWanVisionEnhancerVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun)
         ? videoNegativePromptForRun.trim()
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
@@ -983,6 +979,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     if (isUnsupportedRemovedHailuoRun) {
       setError('Hailuo 2.3 is no longer available and cannot be regenerated. Select a supported video model and create a new generation instead.');
+      return;
+    }
+
+    if (isUnsupportedRemovedOneToAllRun) {
+      setError('1-to-All Animate is no longer available and cannot be regenerated. Select a supported video model and create a new generation instead.');
       return;
     }
 
@@ -1015,10 +1016,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
-    if (usingFal && isVideoMode && isOneToAllAnimateVideoModel && !activePrimary) {
-      setError('Select a still image to animate.');
-      return;
-    }
     if (usingFal && isVideoMode && isKlingV3ControlVideoModel && !activePrimary) {
       setError('Select a character image to guide the motion.');
       return;
@@ -1566,7 +1563,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
           wanAnimateQuality: wanAnimateQualityForRun,
           wanAnimateUseTurbo: wanAnimateUseTurboForRun,
         } : {}),
-        ...(isOneToAllAnimateVideoModel ? { oneToAllAnimateResolution: oneToAllAnimateResolutionForRun } : {}),
         ...(isLipsyncVideoModel ? { lipsyncSyncMode: lipsyncSyncModeForRun } : {}),
         ...(isHeygenV3LipsyncVideoModel ? {
           heygenEnableCaption: heygenEnableCaptionForRun,
@@ -1768,10 +1764,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Wan Animate Replace requires a still image. Capture a frame or upload an image.');
           return;
         }
-        if (isOneToAllAnimateVideoModel && primarySelection?.mediaType === 'video') {
-          setError('1-to-All Animate requires a still image. Capture a frame or upload an image.');
-          return;
-        }
         if (isScailVideoModel && primarySelection?.mediaType === 'video') {
           setError('Scail requires a still image. Capture a frame or upload an image.');
           return;
@@ -1950,10 +1942,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ? 'Select a video on the canvas to enhance.'
               : isWanAnimateVideoModel
                 ? 'Select a video on the canvas to replace a character.'
-                : isOneToAllAnimateVideoModel
-                  ? 'Select a video on the canvas to drive the animation.'
-                  : isScailVideoModel
-                    ? 'Select a video on the canvas to drive Scail.'
+                : isScailVideoModel
+                  ? 'Select a video on the canvas to drive Scail.'
                   : isKlingV3ControlVideoModel
                     ? 'Select a motion driver video on the canvas.'
                     : isWan27EditModeForRun
@@ -2041,7 +2031,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
         const videoSourceImage = ((isFalSeedance2VideoModelForRun || isMiniMaxH3VideoModelForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
           ? null
-          : (isWanAnimateVideoModel || isOneToAllAnimateVideoModel || isKlingV3ControlVideoModel || isScailVideoModel)
+          : (isWanAnimateVideoModel || isKlingV3ControlVideoModel || isScailVideoModel)
             ? activePrimary?.element as HTMLImageElement
             : (isKlingO3VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) ? null : (activePrimary?.element as HTMLImageElement | undefined) ?? null;
         const referenceImagesForRun = referenceImageIdsForRun
@@ -2158,7 +2148,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ?? actualGrokImagineVideoModelId
           ?? falVideoModelIdForRun;
         const durationForRequest = isKlingVideoModel ? videoDurationForRun : undefined;
-        const oneToAllNegativePromptForRequest = isOneToAllAnimateVideoModel ? videoNegativePromptForRun.trim() : undefined;
         const negativePromptForRequest =
           (isKlingVideoModel || isKlingV3VideoModel || isWanVisionEnhancerVideoModel || isVeo31VideoModelForRun || isWan27VideoModelForRun) && hasVideoNegativePrompt
             ? normalizedVideoNegativePrompt
@@ -2170,11 +2159,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           onPhaseUpdate: handleFalPhaseUpdate,
           modelId: videoModelIdForRequest,
           duration: durationForRequest,
-          negativePrompt: isOneToAllAnimateVideoModel ? oneToAllNegativePromptForRequest : negativePromptForRequest,
-          ...(isOneToAllAnimateVideoModel ? {
-            sourceVideoUrl: sourceVideoUrlForRequest,
-            resolution: oneToAllAnimateResolutionForRun,
-          } : {}),
+          negativePrompt: negativePromptForRequest,
           ...(isScailVideoModel ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
           } : {}),
@@ -3027,9 +3012,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     wanAnimateShift: wanAnimateShiftForRun,
                     wanAnimateQuality: wanAnimateQualityForRun,
                     wanAnimateUseTurbo: wanAnimateUseTurboForRun,
-                  } : {}),
-                  ...(isOneToAllAnimateVideoModel ? {
-                    oneToAllAnimateResolution: oneToAllAnimateResolutionForRun,
                   } : {}),
                 },
               },

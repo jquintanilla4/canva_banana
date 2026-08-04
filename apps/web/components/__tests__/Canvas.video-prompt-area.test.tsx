@@ -353,6 +353,74 @@ describe('Canvas video prompt area tool', () => {
     expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('labels restored 1-to-All prompt bars as unavailable and blocks submission', () => {
+    const videoPromptArea: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 40,
+      y: 60,
+      width: 720,
+      height: 360,
+      promptBarId: 'bar-1',
+      orderedMediaIds: [],
+    };
+    const videoPromptBar: CanvasVideoPromptBar = {
+      id: 'bar-1',
+      assignedAreaId: 'area-1',
+      modelId: 'fal-ai/one-to-all-animation/14b',
+      x: 0,
+      y: 0,
+      width: 720,
+      height: 190,
+      prompt: 'Legacy animation prompt',
+      negativePrompt: '',
+      seedance2Variant: 'reference',
+      seedance2AspectRatio: '16:9',
+      seedance2Resolution: '720p',
+      seedance2Duration: '5',
+      seedance2GenerateAudio: false,
+      seedance2CameraFixed: false,
+      klingV3MultiPrompt: '',
+      klingV3Duration: '5',
+      klingV3GenerateAudio: true,
+      klingV3CfgScale: '0.5',
+      klingV3MultiPromptEnabled: false,
+      klingV3Shot1Duration: '5',
+      klingV3Shot2Duration: '5',
+    };
+
+    render(
+      <Canvas
+        {...buildCanvasProps({
+          videoPromptAreas: [videoPromptArea],
+          videoPromptBars: [videoPromptBar],
+          videoPromptAreaMemberships: {
+            'area-1': {
+              orderedMediaIds: [],
+              acceptedImageIds: [],
+              acceptedVideoIds: [],
+              acceptedAudioIds: [],
+              elementImageIds: [],
+              ignoredMediaIds: [],
+              orderLabels: {},
+            },
+          },
+        })}
+      />,
+    );
+
+    const modelPicker = screen.getByRole('combobox', { name: 'Select video model' }) as HTMLButtonElement;
+    expect(modelPicker.textContent).toContain('1-to-All Animate (Unavailable)');
+    expect(modelPicker.disabled).toBe(false); // Users must still be able to choose a supported replacement.
+    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(modelPicker);
+
+    expect((screen.getByRole('option', { name: '1-to-All Animate (Unavailable)' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('option', { name: 'Seedance 2' })).toBeTruthy();
+  });
+
   it('does not gate Kling Control embedded submission on Kling v3 multi-prompt text', () => {
     const videoPromptArea: CanvasVideoPromptArea = {
       id: 'area-1',

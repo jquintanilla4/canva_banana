@@ -30,7 +30,6 @@ import {
   GROK_IMAGINE_VIDEO_MODEL_ID,
   isGptImage2EditModelId,
   isNanoBananaEditModelId,
-  ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
@@ -388,11 +387,6 @@ export default function App() {
     if (usingFalProvider && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
       setToastMessage('Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.');
       setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && fal.falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID && maxReferenceImages === 0) {
-      setToastMessage('Tip: Shift-click toggles reference selection. For One-to-All Animation, click the pose video, then click the image to animate (Cmd/Ctrl+click for multi-select).');
-      setTimeout(() => setToastMessage(null), 2000);
       return;
     }
     if (usingFalProvider && fal.falModelId === SEEDREAM_V45_MODEL_ID && maxReferenceImages >= 10) {
@@ -1508,7 +1502,6 @@ export default function App() {
       wanAnimateVariant: options.wanAnimateVariant ?? fal.wanAnimateVariant,
       wanAnimateSteps: options.wanAnimateSteps ?? fal.wanAnimateSteps,
       wanAnimateResolution: options.wanAnimateResolution ?? fal.wanAnimateResolution,
-      oneToAllAnimateResolution: options.oneToAllAnimateResolution ?? fal.oneToAllAnimateResolution,
       wanAnimateShift: options.wanAnimateShift ?? fal.wanAnimateShift,
       wanAnimateQuality: options.wanAnimateQuality ?? fal.wanAnimateQuality,
       wanAnimateUseTurbo: options.wanAnimateUseTurbo ?? fal.wanAnimateUseTurbo,
@@ -1586,7 +1579,6 @@ export default function App() {
       onWanAnimateVariantChange: value => updateFalOption('wanAnimateVariant', value),
       onWanAnimateStepsChange: value => updateFalOption('wanAnimateSteps', value),
       onWanAnimateResolutionChange: value => updateFalOption('wanAnimateResolution', value),
-      onOneToAllAnimateResolutionChange: value => updateFalOption('oneToAllAnimateResolution', value),
       onWanAnimateShiftChange: value => updateFalOption('wanAnimateShift', value),
       onWanAnimateQualityChange: value => updateFalOption('wanAnimateQuality', value),
       onWanAnimateTurboChange: value => updateFalOption('wanAnimateUseTurbo', value),
@@ -1764,7 +1756,6 @@ export default function App() {
     wanAnimateVariant: fal.wanAnimateVariant,
     wanAnimateSteps: fal.wanAnimateSteps,
     wanAnimateResolution: fal.wanAnimateResolution,
-    oneToAllAnimateResolution: fal.oneToAllAnimateResolution,
     wanAnimateShift: fal.wanAnimateShift,
     wanAnimateQuality: fal.wanAnimateQuality,
     wanAnimateUseTurbo: fal.wanAnimateUseTurbo,
@@ -1844,7 +1835,6 @@ export default function App() {
     onWanAnimateVariantChange: fal.handleWanAnimateVariantChange,
     onWanAnimateStepsChange: fal.handleWanAnimateStepsChange,
     onWanAnimateResolutionChange: fal.handleWanAnimateResolutionChange,
-    onOneToAllAnimateResolutionChange: fal.handleOneToAllAnimateResolutionChange,
     onWanAnimateShiftChange: fal.handleWanAnimateShiftChange,
     onWanAnimateQualityChange: fal.handleWanAnimateQualityChange,
     onWanAnimateTurboChange: fal.handleWanAnimateTurboChange,
@@ -2171,7 +2161,7 @@ export default function App() {
           isSeedance15FflfMode={fal.isSeedance15VideoModel}
           isKlingV3ControlVideoInputMode={fal.isKlingV3ControlVideoModel}
           isVeo31ExtendMode={isVeo31ExtendMode}
-          isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || fal.isOneToAllAnimateVideoModel || isScailVideoModel}
+          isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || isScailVideoModel}
           isWan27VideoMode={fal.isWan27VideoModel}
           onError={setError}
           onMediaPlaybackRejected={handleMediaPlaybackRejected}

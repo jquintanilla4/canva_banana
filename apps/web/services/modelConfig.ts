@@ -55,7 +55,6 @@ export const WAN_ANIMATE_REPLACE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/replace
 export const WAN_ANIMATE_MOVE_MODEL_ID = 'fal-ai/wan/v2.2-14b/animate/move' as const;
 export const WAN_ANIMATE_MODEL_ID = WAN_ANIMATE_REPLACE_MODEL_ID;
 export const WAN_VISION_ENHANCER_MODEL_ID = 'fal-ai/wan-vision-enhancer' as const;
-export const ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as const;
 export const SYNC_LIPSYNC_MODEL_ID = 'fal-ai/sync-lipsync/v3' as const; // Sync v3 endpoint id.
 export const HEYGEN_V3_LIPSYNC_MODEL_ID = 'fal-ai/heygen/v3/lipsync/precision' as const; // HeyGen precision lipsync endpoint.
 export const INFINITALK_VIDEO_MODEL_ID = 'fal-ai/infinitalk/video-to-video' as const;
@@ -100,8 +99,6 @@ export type KlingV3ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
   'oversaturated, overexposed, static, blurry details, subtitles, stylized, artwork, painting, still frame, overall gray, worst quality, low quality, JPEG artifacts, ugly, mutated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, static motion, cluttered background, three legs, crowded background, walking backwards';
-export const ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT =
-  'black background, Aerial view, aerial view, overexposed, low quality, deformation, a poor composition, bad hands, bad teeth, bad eyes, bad limbs, distortion';
 export const WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT = 'low resolution, error, worst quality, low quality, deformed, extra fingers';
 
 export type WanTargetResolution = '720p' | '1080p';
@@ -144,7 +141,6 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
 export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_OPTIONS_BASE);
 
 const FAL_VIDEO_MODEL_OPTIONS_BASE = [
-  { value: ONE_TO_ALL_ANIMATE_MODEL_ID, label: '1-to-All Animate' },
   { value: GROK_IMAGINE_VIDEO_MODEL_ID, label: 'Grok Imagine' },
   { value: HEYGEN_V3_LIPSYNC_MODEL_ID, label: 'HeyGen V3 Lipsync' },
   { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
@@ -1052,6 +1048,7 @@ const REMOVED_HAILUO_VIDEO_MODEL_IDS = [
   'fal-ai/minimax/hailuo-2.3/standard/image-to-video',
   'fal-ai/minimax/hailuo-2.3/pro/image-to-video',
 ] as const; // Keep removed ids detectable so saved generations can be blocked safely.
+const REMOVED_ONE_TO_ALL_ANIMATE_MODEL_ID = 'fal-ai/one-to-all-animation/14b' as const; // Keep the retired id detectable for safe rerun blocking.
 const LEGACY_WAN_26_VIDEO_MODEL_ID = 'wan/v2.6/image-to-video' as const;
 const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image' as const;
 const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image' as const;
@@ -1066,6 +1063,8 @@ export const isLegacySora2ProVideoModelId = (value: string | undefined): boolean
   value === LEGACY_SORA_2_PRO_VIDEO_MODEL_ID; // Detect saved Sora reruns that migrate to Kling Standard.
 export const isRemovedHailuoModelId = (value: string | undefined): boolean =>
   typeof value === 'string' && (REMOVED_HAILUO_VIDEO_MODEL_IDS as readonly string[]).includes(value); // Detect unsupported saved Hailuo generations.
+export const isRemovedOneToAllAnimateModelId = (value: string | undefined): boolean =>
+  value === REMOVED_ONE_TO_ALL_ANIMATE_MODEL_ID; // Detect unsupported saved 1-to-All generations.
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
   if (value === LEGACY_NANO_BANANA_MODEL_ID) {
     return NANO_BANANA_PRO_EDIT_MODEL_ID;
@@ -1240,7 +1239,6 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [KLING_VIDEO_MODEL_ID]: 0,
   [KLING_V3_CONTROL_VIDEO_MODEL_ID]: 0,
   [WAN_ANIMATE_MODEL_ID]: 0,
-  [ONE_TO_ALL_ANIMATE_MODEL_ID]: 0,
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,
   [SYNC_LIPSYNC_MODEL_ID]: 0,
   [INFINITALK_VIDEO_MODEL_ID]: 0,

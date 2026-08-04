@@ -152,7 +152,6 @@ import {
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_ASPECT_RATIO_OPTIONS,
   WAN_27_IMAGE_MAX_IMAGES_OPTIONS,
-  ONE_TO_ALL_ANIMATE_MODEL_ID,
 } from './modelConfig';
 
 type PromptBarSelectControl = {
@@ -554,7 +553,6 @@ export type PromptBarControlsInput = {
   wanAnimateVariant: WanAnimateVariant;
   wanAnimateSteps: WanAnimateStepsSelectionValue;
   wanAnimateResolution: WanAnimateResolutionSelectionValue;
-  oneToAllAnimateResolution: WanAnimateResolutionSelectionValue;
   wanAnimateShift: WanAnimateShiftSelectionValue;
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
@@ -633,7 +631,6 @@ export type PromptBarControlsInput = {
   onWanAnimateVariantChange: (value: string) => void;
   onWanAnimateStepsChange: (value: string) => void;
   onWanAnimateResolutionChange: (value: string) => void;
-  onOneToAllAnimateResolutionChange: (value: string) => void;
   onWanAnimateShiftChange: (value: string) => void;
   onWanAnimateQualityChange: (value: string) => void;
   onWanAnimateTurboChange: (value: boolean) => void;
@@ -748,7 +745,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     wanAnimateVariant,
     wanAnimateSteps,
     wanAnimateResolution,
-    oneToAllAnimateResolution,
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
@@ -827,7 +823,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onWanAnimateVariantChange,
     onWanAnimateStepsChange,
     onWanAnimateResolutionChange,
-    onOneToAllAnimateResolutionChange,
     onWanAnimateShiftChange,
     onWanAnimateQualityChange,
     onWanAnimateTurboChange,
@@ -892,7 +887,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   } = input;
 
   const controls: PromptBarModelControl[] = [];
-  const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
 
   if (isKlingVideoModel) {
     controls.push({
@@ -1092,19 +1086,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       ],
       value: wanAnimateUseTurbo ? 'on' : 'off',
       onChange: (value: string) => onWanAnimateTurboChange(value === 'on'),
-      disabled: isLoading,
-    });
-  }
-
-  if (isOneToAllAnimateVideoModel) {
-    controls.push({
-      id: 'one-to-all-resolution-select',
-      prefixLabel: 'Resolution',
-      hideSelectedValue: true,
-      ariaLabel: 'Select 1-to-All Animate resolution',
-      options: WAN_ANIMATE_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: oneToAllAnimateResolution,
-      onChange: onOneToAllAnimateResolutionChange,
       disabled: isLoading,
     });
   }

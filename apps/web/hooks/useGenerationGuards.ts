@@ -7,7 +7,6 @@ import {
   INFINITALK_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   isRecraftV4ProModel,
-  ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
@@ -107,7 +106,6 @@ export function useGenerationGuards({
   const isKlingO3VideoInputMode = isKlingO3EditMode;
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
-  const isOneToAllAnimateVideoModel = isVideoMode && falModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isScailVideoModel = isVideoMode && falModelId === SCAIL_VIDEO_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
   const isHeygenV3LipsyncVideoModel = isVideoMode && falModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
@@ -122,7 +120,6 @@ export function useGenerationGuards({
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
   const isFalVideoInputMode = isWanVideoInputMode
-    || isOneToAllAnimateVideoModel
     || isAudioInputMode
     || isKlingV3ControlVideoModel
     || isVeo31ExtendMode
@@ -160,9 +157,7 @@ export function useGenerationGuards({
     const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
     const hasPrimaryVideoSelected = primarySelectionMediaType === 'video';
     const isGrokImagineVideoEditMode = isGrokImagineVideoModel && hasPrimaryVideoSelected;
-    const hasWanAnimateStillImage = isWanAnimateVideoModel || isOneToAllAnimateVideoModel
-      ? hasSelectedStillImage
-      : hasPrimaryImage;
+    const hasWanAnimateStillImage = isWanAnimateVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const hasScailStillImage = isScailVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const hasKlingV3ControlStillImage = isKlingV3ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const isRecraftTextToImage = usingFal && !isVideoMode && isRecraftV4ProModel(falModelId); // Recraft t2i is Fal-only.
@@ -188,7 +183,6 @@ export function useGenerationGuards({
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
     const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isSeedance2VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
-    const requiresSelectedImageForOneToAll = usingFal && isOneToAllAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKlingV3Control = usingFal && isKlingV3ControlVideoModel && !hasKlingV3ControlStillImage;
     const requiresSelectedImageForScail = usingFal && isScailVideoModel && !hasScailStillImage;
     const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
@@ -209,7 +203,6 @@ export function useGenerationGuards({
       requiresSelectedImageForUpscale ||
       requiresSelectedImageForVideo ||
       requiresSelectedImageForWanAnimate ||
-      requiresSelectedImageForOneToAll ||
       requiresSelectedImageForKlingV3Control ||
       requiresSelectedImageForScail ||
       requiresSourceVideoForVideoInput ||
@@ -287,14 +280,6 @@ export function useGenerationGuards({
             return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select a still image to replace the character.`;
           }
           return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Ready to generate.`;
-        }
-        if (isOneToAllAnimateVideoModel) {
-          if (!hasSourceVideo) {
-            return 'Select a pose video, then select a reference image to animate...';
-          }
-          return hasWanAnimateStillImage
-            ? 'Describe the motion or scene you want to animate...'
-            : 'Select a reference image to animate...';
         }
         if (isScailVideoModel) {
           if (!hasSourceVideo) {
@@ -407,7 +392,6 @@ export function useGenerationGuards({
     isScailVideoModel,
     isInfinitalkVideoModel,
     isLipsyncVideoModel,
-    isOneToAllAnimateVideoModel,
     isWan27VideoModel,
     isWan27ReferenceMode,
     isWan27EditMode,

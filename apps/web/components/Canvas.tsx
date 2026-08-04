@@ -1,7 +1,13 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob, prepareVideoForPlayback } from '../services/mediaService';
-import { JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
+import {
+  JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
+  MINIMAX_H3_VIDEO_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
+  isRemovedOneToAllAnimateModelId,
+} from '../services/modelConfig'; // Model ids and retired-model guard.
 import { LayerUpIcon, LayerDownIcon, CropIcon, CancelIcon, ConfirmIcon, CopyIcon, TransformIcon, RerunIcon, DuplicateIcon, PlayIcon, PauseIcon, SnapshotIcon, MinusIcon, StarIcon } from './Icons';
 import {
   DOT_BASE_SIZE,
@@ -1395,7 +1401,16 @@ export const Canvas: React.FC<CanvasProps> = ({
             height: bar.height,
           };
         const selectedEmbeddedModelId = bar.modelId ?? SEEDANCE_2_VIDEO_MODEL_ID; // Legacy bars default to Volcengine Seedance 2.
-        const selectedEmbeddedModelLabel = embeddedVideoPromptBarModelOptions.find(option => option.value === selectedEmbeddedModelId)?.label ?? 'Seedance 2';
+        const isRemovedOneToAllEmbeddedModel = isRemovedOneToAllAnimateModelId(selectedEmbeddedModelId); // Restored retired bars must remain identifiable but cannot run.
+        const removedEmbeddedModelOption = isRemovedOneToAllEmbeddedModel
+          ? { value: selectedEmbeddedModelId, label: '1-to-All Animate (Unavailable)', disabled: true }
+          : null; // Keep the retired choice visible while supported choices remain selectable.
+        const embeddedModelOptionsForBar = removedEmbeddedModelOption
+          ? [removedEmbeddedModelOption, ...embeddedVideoPromptBarModelOptions]
+          : embeddedVideoPromptBarModelOptions;
+        const selectedEmbeddedModelLabel = removedEmbeddedModelOption?.label
+          ?? embeddedVideoPromptBarModelOptions.find(option => option.value === selectedEmbeddedModelId)?.label
+          ?? 'Seedance 2';
         const embeddedMediaCount = barMembership
           ? Number(Boolean(barMembership.primaryImageId))
             + barMembership.acceptedImageIds.length
@@ -1486,7 +1501,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   onSubmit={() => onVideoPromptBarSubmit(bar.id)}
                   isLoading={isLoading}
                   inputDisabled={false}
-                  submitDisabled={!barMembership || (
+                  submitDisabled={isRemovedOneToAllEmbeddedModel || !barMembership || (
                     selectedEmbeddedModelId.includes('seedance-2')
                       && bar.seedance2Variant === 'reference'
                       && embeddedMediaCount === 0
@@ -1499,7 +1514,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                       && Boolean(bar.klingV3MultiPromptEnabled)
                       && (!bar.prompt.trim() || !bar.klingV3MultiPrompt?.trim())
                   )}
-                  modelOptions={embeddedVideoPromptBarModelOptions}
+                  modelOptions={embeddedModelOptionsForBar}
                   selectedModel={selectedEmbeddedModelId}
                   onModelChange={(modelId) => onVideoPromptBarUpdate(bar.id, currentBar => normalizeEmbeddedPromptBarForModel(currentBar, modelId))}
                   modelSelectDisabled={isLoading}

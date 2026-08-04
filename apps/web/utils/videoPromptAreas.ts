@@ -19,7 +19,6 @@ import {
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -191,7 +190,7 @@ export const getVideoPromptAreaCapabilityProfile = (
     return imageOnlyProfile(resolvedModelId);
   }
 
-  if (resolvedModelId === WAN_ANIMATE_MODEL_ID || resolvedModelId === ONE_TO_ALL_ANIMATE_MODEL_ID || resolvedModelId === SCAIL_VIDEO_MODEL_ID || resolvedModelId === KLING_V3_CONTROL_VIDEO_MODEL_ID) {
+  if (resolvedModelId === WAN_ANIMATE_MODEL_ID || resolvedModelId === SCAIL_VIDEO_MODEL_ID || resolvedModelId === KLING_V3_CONTROL_VIDEO_MODEL_ID) {
     return imageOnlyProfile(resolvedModelId, {
       defaultVideoRole: 'sourceVideo',
       supportedMediaTypes: ['image', 'video'],

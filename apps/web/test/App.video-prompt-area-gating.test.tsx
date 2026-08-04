@@ -119,7 +119,6 @@ const mockState = vi.hoisted(() => {
     isKlingO3VideoModel: false,
     isKlingV3ControlVideoModel: false,
     isWanAnimateVideoModel: false,
-    isOneToAllAnimateVideoModel: false,
     isLipsyncVideoModel: false,
     isHeygenV3LipsyncVideoModel: false,
     isInfinitalkVideoModel: false,
@@ -161,7 +160,6 @@ const mockState = vi.hoisted(() => {
     wanAnimateVariant: 'replace',
     wanAnimateSteps: '10',
     wanAnimateResolution: '480p',
-    oneToAllAnimateResolution: '480p',
     wanAnimateShift: '5.0',
     wanAnimateQuality: 'high',
     wanAnimateUseTurbo: false,
@@ -231,7 +229,6 @@ const mockState = vi.hoisted(() => {
   falState.handleWanAnimateVariantChange = vi.fn();
   falState.handleWanAnimateStepsChange = vi.fn();
   falState.handleWanAnimateResolutionChange = vi.fn();
-  falState.handleOneToAllAnimateResolutionChange = vi.fn();
   falState.handleWanAnimateShiftChange = vi.fn();
   falState.handleWanAnimateQualityChange = vi.fn();
   falState.handleWanAnimateTurboChange = vi.fn();

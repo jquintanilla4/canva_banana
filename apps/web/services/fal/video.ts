@@ -11,13 +11,12 @@ import {
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
-  ONE_TO_ALL_ANIMATE_MODEL_ID,
-  ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT,
   SCAIL_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MOVE_MODEL_ID,
   INFINITALK_DURATION_TO_NUM_FRAMES,
   isKlingO3DurationSelectionValue,
+  isRemovedOneToAllAnimateModelId,
 } from '../modelConfig'; // Canonical model IDs.
 import {
   INFINITALK_VIDEO_MODEL_ID,
@@ -128,6 +127,9 @@ export const generateImageToVideo = async (
 
   const isImplicitDefaultModel = !options.modelId; // Missing ids use H3 Standard so default calls remain usable.
   const modelId = options.modelId || MINIMAX_H3_VIDEO_MODEL_ID; // Default to the supported MiniMax family.
+  if (isRemovedOneToAllAnimateModelId(modelId)) {
+    throw new Error('1-to-All Animate is no longer supported.'); // Reject direct calls before any upload or provider request.
+  }
   const duration = options.duration; // Optional duration override.
   const isVeo31ImageToVideoModel = modelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID; // Veo 3.1 i2v route.
   const isVeo31FflfModel = modelId === VEO_31_FFLF_VIDEO_MODEL_ID; // Veo 3.1 fflf route.
@@ -770,41 +772,6 @@ export const generateImageToVideo = async (
       ...(seed !== undefined ? { seed } : {}),
       ...(acceleration ? { acceleration } : {}),
       ...(numFrames !== undefined ? { num_frames: numFrames } : {}),
-    };
-
-    return subscribeForVideoUrl(modelId, inputPayload, options);
-  }
-
-  const isOneToAllAnimateModel = modelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
-  if (isOneToAllAnimateModel) {
-    if (!options.sourceVideoUrl) {
-      throw new Error('1-to-All Animate requires a source video.');
-    }
-    if (!image) {
-      throw new Error('1-to-All Animate requires a still image.');
-    }
-
-    const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) {
-      throw new Error('1-to-All Animate requires a prompt.');
-    }
-
-    const negativePrompt = typeof options.negativePrompt === 'string'
-      ? options.negativePrompt.trim()
-      : ONE_TO_ALL_DEFAULT_NEGATIVE_PROMPT;
-
-    const imageUrl = await uploadImageElementToFal(image, options);
-
-    const resolution = options.resolution === '480p' || options.resolution === '580p' || options.resolution === '720p'
-      ? options.resolution
-      : undefined;
-
-    const inputPayload: Record<string, unknown> = {
-      prompt: trimmedPrompt,
-      negative_prompt: negativePrompt,
-      image_url: imageUrl,
-      video_url: options.sourceVideoUrl,
-      ...(resolution ? { resolution } : {}),
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);

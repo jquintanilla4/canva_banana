@@ -3,7 +3,6 @@ import {
   DEFAULT_MAX_REFERENCE_IMAGES,
   getMaxReferenceImages,
   KLING_VIDEO_MODEL_ID,
-  ONE_TO_ALL_ANIMATE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
@@ -129,7 +128,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && (
       falVideoModelId === WAN_VISION_ENHANCER_MODEL_ID
       || falVideoModelId === WAN_ANIMATE_MODEL_ID
-      || falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID
     );
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isScailVideoModel = apiProvider === 'fal'
@@ -328,7 +326,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     });
   }, [isMultimodalReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
 
-  // Clear sourceVideoId when leaving a video input mode (Kling O3 / Wan / 1-to-All / Scail / Lip Sync / HeyGen).
+  // Clear sourceVideoId when leaving a video input mode (Kling O3 / Wan / Scail / Lip Sync / HeyGen).
   useEffect(() => {
     if (!isVideoInputMode && sourceVideoId) {
       setSourceVideoId(null);
@@ -384,9 +382,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     const isKlingVideoSelection = apiProvider === 'fal'
       && falModelMode === 'video'
       && falVideoModelId === KLING_VIDEO_MODEL_ID;
-    const isOneToAllVideoSelection = apiProvider === 'fal'
-      && falModelMode === 'video'
-      && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
     const isKlingO3VideoSelection = apiProvider === 'fal'
       && falModelMode === 'video'
       && isKlingO3VideoModelId(falVideoModelId);
@@ -466,10 +461,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (reference && targetImage?.mediaType === 'video') {
-      if (isOneToAllVideoSelection) {
-        onReferenceLimit(0);
-        return;
-      }
       onError('Reference images must be still images.');
       return;
     }

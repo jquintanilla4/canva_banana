@@ -36,6 +36,7 @@ import {
   isKlingV3ShotDurationSelectionValue,
   isLipsyncSyncMode,
   isRemovedHailuoModelId,
+  isRemovedOneToAllAnimateModelId,
   isRecraftV4ProImageSizeSelectionValue,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
@@ -138,7 +139,6 @@ export type SnapshotManifestV2 = {
 	      wanAnimateVariant?: string;
 	      wanAnimateSteps?: string;
 	      wanAnimateResolution?: string;
-        oneToAllAnimateResolution?: string;
 	      wanAnimateShift?: string;
 	      wanAnimateQuality?: string;
 	      wanAnimateUseTurbo?: boolean;
@@ -306,7 +306,6 @@ export type SnapshotMetaState = {
   wanAnimateVariant?: string;
   wanAnimateSteps?: string;
   wanAnimateResolution?: string;
-  oneToAllAnimateResolution?: string;
   wanAnimateShift?: string;
   wanAnimateQuality?: string;
   wanAnimateUseTurbo?: boolean;
@@ -1523,9 +1522,9 @@ export const restoreSnapshotFromFile = async (
   });
   const sanitizedVideoPromptBars: CanvasVideoPromptBar[] = snapshotVideoPromptBars.map(bar => {
     const rawModelId = typeof bar?.modelId === 'string' ? bar.modelId : undefined;
-    const modelId = rawModelId && (isFalVideoModelId(rawModelId) || isRemovedHailuoModelId(rawModelId))
+    const modelId = rawModelId && (isFalVideoModelId(rawModelId) || isRemovedHailuoModelId(rawModelId) || isRemovedOneToAllAnimateModelId(rawModelId))
       ? rawModelId
-      : SEEDANCE_2_VIDEO_MODEL_ID; // Keep removed Hailuo ids so generation can block them safely.
+      : SEEDANCE_2_VIDEO_MODEL_ID; // Keep removed model ids so generation can block them safely.
     const isJimengBar = modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
     const falOptions = bar?.falOptions && typeof bar.falOptions === 'object' ? { ...bar.falOptions } : undefined;
     const falJimengModelVersion: CanvasVideoPromptBar['seedance2JimengModelVersion'] | undefined = falOptions && isJimengSeedance2ModelVersion((falOptions as { seedance2JimengModelVersion?: unknown }).seedance2JimengModelVersion)
@@ -1834,11 +1833,6 @@ export const normalizeSnapshotImageMetadata = (
       const wanAnimateResolutionValue = (typed as { wanAnimateResolution?: unknown }).wanAnimateResolution;
       if (wanAnimateResolutionValue === '480p' || wanAnimateResolutionValue === '580p' || wanAnimateResolutionValue === '720p') {
         normalizedOptions.wanAnimateResolution = wanAnimateResolutionValue;
-      }
-
-      const oneToAllAnimateResolutionValue = (typed as { oneToAllAnimateResolution?: unknown }).oneToAllAnimateResolution;
-      if (oneToAllAnimateResolutionValue === '480p' || oneToAllAnimateResolutionValue === '580p' || oneToAllAnimateResolutionValue === '720p') {
-        normalizedOptions.oneToAllAnimateResolution = oneToAllAnimateResolutionValue;
       }
 
       const wanAnimateShiftValue = (typed as { wanAnimateShift?: unknown }).wanAnimateShift;

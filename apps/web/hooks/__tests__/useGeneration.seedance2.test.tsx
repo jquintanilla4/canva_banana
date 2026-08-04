@@ -94,7 +94,6 @@ const createFalStub = (): UseFalSettingsResult => ({
   wanAnimateVariant: 'replace',
   wanAnimateSteps: '10',
   wanAnimateResolution: '480p',
-  oneToAllAnimateResolution: '480p',
   wanAnimateShift: '5.0',
   wanAnimateQuality: 'high',
   wanAnimateUseTurbo: false,
@@ -1502,6 +1501,41 @@ describe('useGeneration (seedance 2)', () => {
     });
 
     expect(setError).toHaveBeenCalledWith('Hailuo 2.3 is no longer available and cannot be regenerated. Select a supported video model and create a new generation instead.');
+    expect(generateImageToVideo).not.toHaveBeenCalled();
+  });
+
+  it('blocks removed 1-to-All Animate reruns without falling back to the selected video model', async () => {
+    const setError = vi.fn();
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal: createFalStub(),
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate({
+        kind: 'video',
+        prompt: 'legacy 1-to-All rerun',
+        provider: 'fal',
+        modelId: 'fal-ai/one-to-all-animation/14b',
+        modelMode: 'video',
+      });
+    });
+
+    expect(setError).toHaveBeenCalledWith('1-to-All Animate is no longer available and cannot be regenerated. Select a supported video model and create a new generation instead.');
     expect(generateImageToVideo).not.toHaveBeenCalled();
   });
 

@@ -17,7 +17,6 @@ import {
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  ONE_TO_ALL_ANIMATE_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
@@ -155,7 +154,6 @@ type FalDerivedState = {
   isKlingO3VideoModel: boolean;
   isKlingV3ControlVideoModel: boolean;
   isWanAnimateVideoModel: boolean;
-  isOneToAllAnimateVideoModel: boolean;
   isLipsyncVideoModel: boolean;
   isHeygenV3LipsyncVideoModel: boolean;
   isInfinitalkVideoModel: boolean;
@@ -200,7 +198,6 @@ type FalHandlers = {
   handleWanAnimateVariantChange: (value: string) => void;
   handleWanAnimateStepsChange: (value: string) => void;
   handleWanAnimateResolutionChange: (value: string) => void;
-  handleOneToAllAnimateResolutionChange: (value: string) => void;
   handleWanAnimateShiftChange: (value: string) => void;
   handleWanAnimateQualityChange: (value: string) => void;
   handleWanAnimateTurboChange: (value: boolean) => void;
@@ -286,7 +283,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   wanAnimateVariant: WanAnimateVariant;
   wanAnimateSteps: WanAnimateStepsSelectionValue;
   wanAnimateResolution: WanAnimateResolutionSelectionValue;
-  oneToAllAnimateResolution: WanAnimateResolutionSelectionValue;
   wanAnimateShift: WanAnimateShiftSelectionValue;
   wanAnimateQuality: WanAnimateQualitySelectionValue;
   wanAnimateUseTurbo: boolean;
@@ -367,7 +363,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setWanAnimateVariant: Dispatch<SetStateAction<WanAnimateVariant>>;
   setWanAnimateSteps: Dispatch<SetStateAction<WanAnimateStepsSelectionValue>>;
   setWanAnimateResolution: Dispatch<SetStateAction<WanAnimateResolutionSelectionValue>>;
-  setOneToAllAnimateResolution: Dispatch<SetStateAction<WanAnimateResolutionSelectionValue>>;
   setWanAnimateShift: Dispatch<SetStateAction<WanAnimateShiftSelectionValue>>;
   setWanAnimateQuality: Dispatch<SetStateAction<WanAnimateQualitySelectionValue>>;
   setWanAnimateUseTurbo: Dispatch<SetStateAction<boolean>>;
@@ -451,7 +446,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [wanAnimateVariant, setWanAnimateVariant] = useState<WanAnimateVariant>('replace');
   const [wanAnimateSteps, setWanAnimateSteps] = useState<WanAnimateStepsSelectionValue>('20');
   const [wanAnimateResolution, setWanAnimateResolution] = useState<WanAnimateResolutionSelectionValue>('480p');
-  const [oneToAllAnimateResolution, setOneToAllAnimateResolution] = useState<WanAnimateResolutionSelectionValue>('480p');
   const [wanAnimateShift, setWanAnimateShift] = useState<WanAnimateShiftSelectionValue>('5.0');
   const [wanAnimateQuality, setWanAnimateQuality] = useState<WanAnimateQualitySelectionValue>('high');
   const [wanAnimateUseTurbo, setWanAnimateUseTurbo] = useState<boolean>(false);
@@ -520,7 +514,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isKlingO3VideoModel = isVideoMode && isKlingO3VideoModelId(falVideoModelId);
   const isKlingV3ControlVideoModel = isVideoMode && falVideoModelId === KLING_V3_CONTROL_VIDEO_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falVideoModelId === WAN_ANIMATE_MODEL_ID;
-  const isOneToAllAnimateVideoModel = isVideoMode && falVideoModelId === ONE_TO_ALL_ANIMATE_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falVideoModelId === SYNC_LIPSYNC_MODEL_ID;
   const isHeygenV3LipsyncVideoModel = isVideoMode && falVideoModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
   const isInfinitalkVideoModel = isVideoMode && falVideoModelId === INFINITALK_VIDEO_MODEL_ID;
@@ -822,12 +815,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const handleWanAnimateResolutionChange = useCallback((value: string) => {
     if (value === '480p' || value === '580p' || value === '720p') {
       setWanAnimateResolution(value);
-    }
-  }, []);
-
-  const handleOneToAllAnimateResolutionChange = useCallback((value: string) => {
-    if (value === '480p' || value === '580p' || value === '720p') {
-      setOneToAllAnimateResolution(value);
     }
   }, []);
 
@@ -1209,7 +1196,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     wanAnimateVariant,
     wanAnimateSteps,
     wanAnimateResolution,
-    oneToAllAnimateResolution,
     wanAnimateShift,
     wanAnimateQuality,
     wanAnimateUseTurbo,
@@ -1277,7 +1263,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isKlingO3VideoModel,
     isKlingV3ControlVideoModel,
     isWanAnimateVideoModel,
-    isOneToAllAnimateVideoModel,
     isLipsyncVideoModel,
     isHeygenV3LipsyncVideoModel,
     isInfinitalkVideoModel,
@@ -1315,7 +1300,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleWanAnimateVariantChange,
     handleWanAnimateStepsChange,
     handleWanAnimateResolutionChange,
-    handleOneToAllAnimateResolutionChange,
     handleWanAnimateShiftChange,
     handleWanAnimateQualityChange,
     handleWanAnimateTurboChange,
@@ -1398,7 +1382,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setWanAnimateVariant,
     setWanAnimateSteps,
     setWanAnimateResolution,
-    setOneToAllAnimateResolution,
     setWanAnimateShift,
     setWanAnimateQuality,
     setWanAnimateUseTurbo,

@@ -149,7 +149,6 @@ const createFalStub = (overrides: Partial<UseFalSettingsResult> = {}): UseFalSet
   wanAnimateVariant: 'replace',
   wanAnimateSteps: '10',
   wanAnimateResolution: '480p',
-  oneToAllAnimateResolution: '480p',
   wanAnimateShift: '5.0',
   wanAnimateQuality: 'high',
   wanAnimateUseTurbo: false,
