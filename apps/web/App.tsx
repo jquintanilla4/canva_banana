@@ -1,4 +1,5 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { createValueStore, type ValueStore } from './utils/valueStore';
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas, type PanToAnchorRequest } from './components/Canvas';
@@ -92,6 +93,7 @@ import { useGenerationCanvasNotifications, type GenerationCanvasNotification } f
 import { useGenerationPromptBarTransfer } from './hooks/useGenerationPromptBarTransfer';
 import { useFileNameVisibility } from './hooks/useFileNameVisibility';
 import { useTrackpadMode } from './hooks/useTrackpadMode';
+import { useCanvasStressHarness } from './hooks/useCanvasStressHarness';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
 import { createDesktopSnapshotSource } from './services/desktopSnapshotSource';
 import { writeClipboardText } from './services/clipboardService';
@@ -163,6 +165,25 @@ const formatZoomPercentage = (scale: number): string => {
   return `${Math.round(percentage)}%`;
 }; // Lower zoom levels keep one decimal so tiny changes stay legible in the badge.
 
+// Reads the zoom level from an external store so wheel-zoom updates re-render only this
+// badge instead of the whole App tree.
+function ZoomLevelBadge({ store, trackpadMode }: { store: ValueStore<number>; trackpadMode: boolean }) {
+  const canvasScale = useSyncExternalStore(store.subscribe, store.get);
+  return (
+    <div
+      className="pointer-events-none flex shrink-0 items-center rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
+      aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}${trackpadMode ? ', Trackpad mode on' : ''}`}
+    >
+      <span>Zoom {formatZoomPercentage(canvasScale)}</span>
+      {trackpadMode && (
+        <span className="ml-2 border-l border-cyan-300/30 pl-2 text-[10px] tracking-[0.12em] text-cyan-200">
+          Trackpad
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Root component wires up canvas state, generation controls, and provider-specific settings.
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('CANVAS');
@@ -228,7 +249,7 @@ export default function App() {
   const [zoomToSelectionTrigger, setZoomToSelectionTrigger] = useState(0);
   const [zoomInTrigger, setZoomInTrigger] = useState(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
-  const [canvasScale, setCanvasScale] = useState(1);
+  const canvasScaleStore = useMemo(() => createValueStore(1), []);
   const [showZoomLevelBadge, setShowZoomLevelBadge] = useState(true);
   const { showFileName, toggleFileName } = useFileNameVisibility(); // The user's View-menu choice survives desktop relaunches.
   const { trackpadMode, toggleTrackpadMode } = useTrackpadMode(); // Trackpad zoom remains an explicit persisted opt-in.
@@ -675,6 +696,8 @@ export default function App() {
     setLiveImages,
     handleCommit,
   });
+
+  useCanvasStressHarness(handleCommit); // Dev-only synthetic media command lives outside App wiring.
 
   const {
     isOpen: isResizeToastOpen,
@@ -1390,6 +1413,11 @@ export default function App() {
   const acceptedVideoPromptElementIds = useMemo(() => (
     videoPromptAreaMembershipList.flatMap(membership => membership.elementImageIds)
   ), [videoPromptAreaMembershipList]);
+  // Stable identity matters: this feeds Canvas's draw callback, and a fresh array every
+  // App render would force a full canvas repaint on unrelated state changes.
+  const canvasElementImageIds = useMemo(() => (
+    Array.from(new Set([...elementImageIds, ...acceptedVideoPromptElementIds]))
+  ), [elementImageIds, acceptedVideoPromptElementIds]);
   const seedance2ReferenceAssetCount = effectiveSeedanceReferenceImageIds.length + effectiveSeedanceReferenceVideoIds.length + effectiveSeedanceReferenceAudioIds.length; // Seedance reference mode treats selected media as effective refs too.
   const canvasReferenceOrderLabels = useMemo(() => ({
     ...(klingReferenceOrderLabels ?? {}),
@@ -2127,17 +2155,7 @@ export default function App() {
           </div>
           <div className="flex items-center justify-end">
             {showZoomLevelBadge && (
-              <div
-                className="pointer-events-none flex shrink-0 items-center rounded-full border border-white/10 bg-gray-900/78 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-100 shadow-lg backdrop-blur-sm"
-                aria-label={`Canvas zoom ${formatZoomPercentage(canvasScale)}${trackpadMode ? ', Trackpad mode on' : ''}`}
-              >
-                <span>Zoom {formatZoomPercentage(canvasScale)}</span>
-                {trackpadMode && (
-                  <span className="ml-2 border-l border-cyan-300/30 pl-2 text-[10px] tracking-[0.12em] text-cyan-200">
-                    Trackpad
-                  </span>
-                )}
-              </div>
+              <ZoomLevelBadge store={canvasScaleStore} trackpadMode={trackpadMode} />
             )}
           </div>
         </div>
@@ -2179,7 +2197,7 @@ export default function App() {
           krea2StyleReferenceStrengths={krea2StyleReferenceStrengths}
           onKrea2StyleReferenceStrengthChange={handleKrea2StyleReferenceStrengthChange}
           disabledMediaIds={ignoredVideoPromptMediaIds}
-          elementImageIds={Array.from(new Set([...elementImageIds, ...acceptedVideoPromptElementIds]))}
+          elementImageIds={canvasElementImageIds}
           elementImageOrderLabels={canvasElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
@@ -2203,7 +2221,7 @@ export default function App() {
           zoomOutTrigger={zoomOutTrigger}
           trackpadMode={trackpadMode}
           panToAnchorRequest={panToAnchorRequest}
-          onScaleChange={setCanvasScale}
+          onScaleChange={canvasScaleStore.set}
           onAnchorNoteCreate={createNote}
           onAnchorClick={focusNoteInPanel}
           onImageOrderChange={handleImageOrderChange}

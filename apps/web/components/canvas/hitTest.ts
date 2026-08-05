@@ -1,6 +1,6 @@
 import type { CanvasImage, CanvasNote, Point } from '../../types';
 import { CROP_HANDLE_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from './constants';
-import { getNotePinGeometry, imageLocalToWorld, worldToImageLocal } from './geometry';
+import { getImageBounds, getNotePinGeometry, imageLocalToWorld, worldToImageLocal } from './geometry';
 
 const VIDEO_PLAY_CONTROL_HIT_RADIUS_PX = 28; // Keep the painted placeholder Play icon easy to press at every zoom level.
 
@@ -48,13 +48,20 @@ export function getNoteAnchorAtPoint(point: Point, notes: CanvasNote[], scale: n
   return null;
 }
 
+export function isPointInImage(point: Point, image: CanvasImage): boolean {
+  const bounds = getImageBounds(image); // Cached AABB rejects most candidates without trig.
+  if (point.x < bounds.minX || point.x > bounds.maxX || point.y < bounds.minY || point.y > bounds.maxY) {
+    return false;
+  }
+  const localPoint = worldToImageLocal(point, image);
+  return localPoint.x >= 0 && localPoint.x <= image.width && localPoint.y >= 0 && localPoint.y <= image.height;
+}
+
 export function getImageAtPoint(point: Point, images: CanvasImage[]): CanvasImage | null {
   // Iterate backwards to select the top-most image
   for (let i = images.length - 1; i >= 0; i--) {
-    const img = images[i];
-    const localPoint = worldToImageLocal(point, img);
-    if (localPoint.x >= 0 && localPoint.x <= img.width && localPoint.y >= 0 && localPoint.y <= img.height) {
-      return img;
+    if (isPointInImage(point, images[i])) {
+      return images[i];
     }
   }
   return null;

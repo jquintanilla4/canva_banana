@@ -304,14 +304,18 @@ describe('drawCanvas culling and path cache', () => {
   });
 
   it.each([
-    { label: 'minimum square', width: 20, height: 20 },
-    { label: 'short panorama', width: 100, height: 2 },
-    { label: 'narrow portrait', width: 2, height: 100 },
-  ])('keeps favorite chrome inside $label media', ({ width, height }) => {
+    // Scale/pan keep each item above the chrome threshold and inside the viewport;
+    // the star containment assertions below are in world units, unaffected by zoom.
+    { label: 'minimum square', width: 20, height: 20, scale: 2, pan: { x: 0, y: 0 } },
+    { label: 'short panorama', width: 100, height: 2, scale: 1, pan: { x: 0, y: 0 } },
+    // Tall and narrow: the chrome gate measures the LONGER on-screen side, so this stays
+    // starred at 1:1 even though its width is below MIN_CHROME_SCREEN_PX.
+    { label: 'narrow portrait', width: 2, height: 100, scale: 1, pan: { x: 0, y: 0 } },
+  ])('keeps favorite chrome inside $label media', ({ width, height, scale, pan }) => {
     const favorite = { ...buildImage('favorite', 20), width, height, isFavorite: true };
     const ctx = buildContext();
 
-    drawBase({ ctx, images: [favorite] });
+    drawBase({ ctx, images: [favorite], scale, pan });
 
     const points = [
       ...vi.mocked(ctx.moveTo).mock.calls,
@@ -453,10 +457,13 @@ describe('drawCanvas culling and path cache', () => {
       tool: Tool.ANNOTATE,
     };
 
-    drawBase({ ctx, paths: [path], renderCache: cache });
+    // The cache keys on the paths array identity — appending a point always replaces the
+    // outer array in state, so a stable reference means unchanged content.
+    const stablePaths = [path];
+    drawBase({ ctx, paths: stablePaths, renderCache: cache });
     const firstStrokeCount = vi.mocked(pathCtx.stroke).mock.calls.length;
 
-    drawBase({ ctx, paths: [path], renderCache: cache });
+    drawBase({ ctx, paths: stablePaths, renderCache: cache });
     expect(vi.mocked(pathCtx.stroke).mock.calls.length).toBe(firstStrokeCount);
 
     drawBase({

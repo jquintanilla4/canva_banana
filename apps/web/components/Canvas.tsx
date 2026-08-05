@@ -26,7 +26,9 @@ import {
 import { getImageBounds } from './canvas/geometry';
 import { getCanvasWheelZoomMultiplier } from './canvas/wheelZoom';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
-import { createCanvasRenderCache, drawCanvas } from './canvas/render/drawCanvas';
+import { createCanvasRenderCache, drawCanvas, drawDotGridLayer } from './canvas/render/drawCanvas';
+import { createImageLodCache, disposeImageLodCache, pruneImageLodCache, type ImageLodCache } from './canvas/render/imageLodCache';
+import { drainCanvasPerfStats, isCanvasPerfHudEnabled, recordCanvasDraw } from './canvas/render/perfHud';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
 import { useCanvasPlaybackLoop } from './canvas/hooks/useCanvasPlaybackLoop';
@@ -265,6 +267,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 }) => {
   type VideoPromptAreaDragMode = 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br'; // Area resizing should track which corner the user grabbed.
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // The dot grid gets its own canvas beneath the DOM overlays, matching the paint order
+  // of the CSS background it replaced. Painting it into the scene canvas (which sits
+  // above those overlays) would show dots through opaque panels.
+  const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoPromptAreaColorPickerRef = useRef<HTMLDivElement>(null);
   const canvasInteractionGuardRef = useRef<ReturnType<typeof createCanvasInteractionGuard> | null>(null);
@@ -291,9 +297,23 @@ export const Canvas: React.FC<CanvasProps> = ({
   const prevZoomOutTrigger = useRef(zoomOutTrigger);
   const prevImagesLength = useRef(images.length);
   const previousMediaImagesRef = useRef<CanvasImage[]>([]);
+  const imagesRef = useRef(images);
+  imagesRef.current = images; // Mirror for stable callbacks that need the live array.
   const playbackAttemptIdsRef = useRef<Record<string, number>>({});
   const scaleRef = useRef(scale);
   const panRef = useRef(pan);
+  const drawRef = useRef<() => void>(() => {});
+  const frameRequestRef = useRef<number | null>(null);
+  const lastNotifiedScaleRef = useRef<number | null>(null);
+  const onScaleChangeRef = useRef(onScaleChange);
+  const scheduleFrameRef = useRef<() => void>(() => {});
+  const imageLodCacheRef = useRef<ImageLodCache | null>(null);
+  const buildImageLodCache = () => createImageLodCache({
+    requestRedraw: () => scheduleFrameRef.current(), // Repaint once freshly downscaled bitmaps land.
+  });
+  if (imageLodCacheRef.current === null) {
+    imageLodCacheRef.current = buildImageLodCache();
+  }
 
   if (canvasInteractionGuardRef.current === null) {
     canvasInteractionGuardRef.current = createCanvasInteractionGuard(); // Keeps click-through state stable across Canvas renders.
@@ -308,6 +328,20 @@ export const Canvas: React.FC<CanvasProps> = ({
   const hasCanvasVisualContent = images.length > 0 || notes.some(note => note.anchor); // Panel-only notes have no canvas footprint.
 
   const getCanvasContext = () => canvasRef.current?.getContext('2d');
+
+  const perfHudEnabled = useMemo(() => isCanvasPerfHudEnabled(), []);
+  const perfHudRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!perfHudEnabled) return;
+    const interval = window.setInterval(() => {
+      const hud = perfHudRef.current;
+      if (!hud) return;
+      const { draws, totalMs, maxMs } = drainCanvasPerfStats();
+      const average = draws > 0 ? totalMs / draws : 0;
+      hud.textContent = `${draws * 2} draws/s · avg ${average.toFixed(1)} ms · max ${maxMs.toFixed(1)} ms`;
+    }, 500);
+    return () => window.clearInterval(interval);
+  }, [perfHudEnabled]);
 
   const getNextPlaybackAttemptId = useCallback((mediaId: string) => {
     const nextAttemptId = (playbackAttemptIdsRef.current[mediaId] ?? 0) + 1; // Make older play failures harmless.
@@ -389,11 +423,44 @@ export const Canvas: React.FC<CanvasProps> = ({
     onCommit({ images: updatedImages });
   }, [images, onCommit, onImagesChange]);
 
+  useEffect(() => {
+    onScaleChangeRef.current = onScaleChange;
+  }, [onScaleChange]);
+
+  // Coalesce pan/zoom updates into one draw + one React state flush per animation frame.
+  // panRef/scaleRef are the source of truth during gestures; React state trails by at most
+  // one frame and only feeds the DOM overlays.
+  const scheduleFrame = useCallback(() => {
+    if (frameRequestRef.current !== null) return;
+    frameRequestRef.current = -1; // Mark scheduled before requesting so a synchronously-invoked rAF (tests) can clear it.
+    const requestId = requestAnimationFrame(() => {
+      frameRequestRef.current = null;
+      drawRef.current();
+      setPan(panRef.current);
+      setScale(scaleRef.current);
+      if (lastNotifiedScaleRef.current !== scaleRef.current) {
+        lastNotifiedScaleRef.current = scaleRef.current;
+        onScaleChangeRef.current?.(scaleRef.current);
+      }
+    });
+    if (frameRequestRef.current !== null) {
+      frameRequestRef.current = requestId;
+    }
+  }, []);
+  scheduleFrameRef.current = scheduleFrame;
+
+  useEffect(() => () => {
+    if (frameRequestRef.current !== null) {
+      cancelAnimationFrame(frameRequestRef.current);
+      frameRequestRef.current = null;
+    }
+  }, []);
+
   const setPanSmoothly = useCallback((nextPan: Point) => {
     panRef.current = nextPan;
-    setPan(nextPan);
+    scheduleFrame();
     return nextPan;
-  }, []);
+  }, [scheduleFrame]);
 
   const {
     currentTool,
@@ -426,6 +493,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     paths,
     pan,
     scale,
+    panRef,
+    scaleRef,
     brushSize,
     eraserSize,
     brushColor,
@@ -469,20 +538,40 @@ export const Canvas: React.FC<CanvasProps> = ({
     };
 
     scaleRef.current = clampedScale;
-    setScale(clampedScale);
-    setPanSmoothly(updatedPan);
-  }, [setPanSmoothly]);
+    panRef.current = updatedPan;
+    scheduleFrame();
+  }, [scheduleFrame]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = getCanvasContext();
     if (!canvas || !ctx) return;
 
+    const drawStart = perfHudEnabled ? performance.now() : 0;
+
+    // The dot grid renders inside the canvas frame; deriving its geometry here keeps it
+    // in lockstep with the live (ref-held) view transform.
+    const liveScale = scaleRef.current;
+    const gridSpacing = Math.max(
+      GRID_MIN_SIZE,
+      Math.min(GRID_MAX_SIZE, GRID_BASE_SIZE * GRID_VISUAL_SCALE * Math.max(liveScale * 0.25, MIN_SCALE)),
+    );
+    const gridDotRadius = Math.max(
+      DOT_MIN_SIZE,
+      Math.min(DOT_MAX_SIZE, DOT_BASE_SIZE * GRID_VISUAL_SCALE * Math.sqrt(liveScale)),
+    );
+
+    const gridCanvas = gridCanvasRef.current;
+    const gridCtx = gridCanvas?.getContext('2d');
+    if (gridCanvas && gridCtx) {
+      drawDotGridLayer(gridCtx, gridCanvas, renderCacheRef.current, panRef.current, gridSpacing, gridDotRadius);
+    }
+
     drawCanvas({
       canvas,
       ctx,
-      pan,
-      scale,
+      pan: panRef.current,
+      scale: liveScale,
       images,
       notes,
       paths,
@@ -510,10 +599,19 @@ export const Canvas: React.FC<CanvasProps> = ({
       cropMode: effectiveCropMode,
       transformMode: effectiveTransformMode,
       renderCache: renderCacheRef.current,
+      imageLodCache: imageLodCacheRef.current ?? undefined,
       audioPlaybackTimes: audioPlaybackTimesRef.current,
       isPresentationMode,
     });
-  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, pan, paths, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, scale, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
+
+    if (perfHudEnabled) {
+      recordCanvasDraw(performance.now() - drawStart);
+    }
+  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
+
+  useEffect(() => {
+    drawRef.current = draw;
+  }, [draw]);
 
   const getBoundsForItems = useCallback((targetImages: CanvasImage[], targetNotes: CanvasNote[]) => {
     if (targetImages.length === 0 && targetNotes.length === 0) {
@@ -589,9 +687,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     const newPanY = canvasHeight / 2 - bboxCenterY * clampedScale;
 
     scaleRef.current = clampedScale;
-    setScale(clampedScale);
-    setPanSmoothly({ x: newPanX, y: newPanY });
-  }, [setPanSmoothly]);
+    panRef.current = { x: newPanX, y: newPanY };
+    scheduleFrame();
+  }, [scheduleFrame]);
 
   const zoomToFit = useCallback(() => {
     const bounds = getBoundsForItems(images, notes);
@@ -661,15 +759,6 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [panToAnchorRequest, setPanSmoothly]);
 
   useEffect(() => {
-    scaleRef.current = scale;
-    onScaleChange?.(scale);
-  }, [onScaleChange, scale]);
-
-  useEffect(() => {
-    panRef.current = pan;
-  }, [pan]);
-
-  useEffect(() => {
     const container = containerRef.current;
     if (!container) {
       return;
@@ -707,28 +796,39 @@ export const Canvas: React.FC<CanvasProps> = ({
     const resizeCanvas = () => {
       const width = container.clientWidth;
       const height = container.clientHeight;
-      canvas.width = width;
-      canvas.height = height;
-      draw();
+      // Assigning canvas.width/height reallocates the backing bitmap and resets the 2D
+      // context even when the value is unchanged, so only touch it on a real size change.
+      const gridCanvas = gridCanvasRef.current;
+      let gridResized = false;
+      if (gridCanvas && (gridCanvas.width !== width || gridCanvas.height !== height)) {
+        gridCanvas.width = width;
+        gridCanvas.height = height;
+        gridResized = true;
+      }
+      if (canvas.width !== width || canvas.height !== height || gridResized) {
+        canvas.width = width;
+        canvas.height = height;
+        drawRef.current();
+      }
     };
 
     resizeCanvas();
 
     const observer = typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(resizeCanvas)
-      : null;
+      : null; // Supported modern browsers and Electron provide ResizeObserver, so no resize fallback is needed.
     observer?.observe(container);
 
-    window.addEventListener('resize', resizeCanvas);
     return () => {
       observer?.disconnect();
-      window.removeEventListener('resize', resizeCanvas);
     };
-  }, [draw]);
+    // Mount-only: the observer covers container/window resizes, and drawRef keeps the
+    // callback current without re-registering per render.
+  }, []);
 
   useEffect(() => {
-    draw();
-  }, [draw]);
+    scheduleFrame();
+  }, [draw, scheduleFrame]);
 
   useEffect(() => {
     const currentImageIds = new Set(images.map(img => img.id)); // Track media that still exists on the canvas.
@@ -738,11 +838,26 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
     });
     previousMediaImagesRef.current = images.filter(img => img.mediaType === 'video' || img.mediaType === 'audio');
+    if (imageLodCacheRef.current) {
+      pruneImageLodCache(imageLodCacheRef.current, images); // Drop bitmaps for removed/replaced media.
+    }
   }, [images]);
 
-  useEffect(() => () => {
-    previousMediaImagesRef.current.forEach(stopCanvasMediaPlayback); // Stop playback when the canvas unmounts.
-  }, []);
+  useEffect(() => {
+    // StrictMode's simulated unmount/remount runs the cleanup below against the same ref
+    // object, so a cache disposed by that dry run must be replaced — otherwise `disposed`
+    // stays true for the session and the LOD path never produces a bitmap in dev.
+    if (imageLodCacheRef.current?.disposed) {
+      imageLodCacheRef.current = buildImageLodCache();
+      scheduleFrameRef.current();
+    }
+    return () => {
+      previousMediaImagesRef.current.forEach(stopCanvasMediaPlayback); // Stop playback when the canvas unmounts.
+      if (imageLodCacheRef.current) {
+        disposeImageLodCache(imageLodCacheRef.current);
+      }
+    };
+  }, []); // Mount-only: buildImageLodCache only reads refs, so it needs no dependency tracking.
 
   useEffect(() => {
     let isCurrentSync = true; // Ignore stale autoplay failures after history moves again.
@@ -758,18 +873,51 @@ export const Canvas: React.FC<CanvasProps> = ({
     };
   }, [images, onMediaPlaybackRejected]);
 
-  useCanvasPlaybackLoop({ images, draw, audioPlaybackTimesRef });
-
-  useEffect(() => {
-    images.forEach(img => {
-      if (!isVideoImage(img)) {
-        return;
+  // Gate the playback redraw loop on viewport visibility so offscreen playing media
+  // doesn't force full-scene repaints at display rate.
+  const isPlayingMediaVisible = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return false;
+    const liveScale = Math.max(scaleRef.current, 0.0001);
+    const livePan = panRef.current;
+    const viewport = {
+      minX: -livePan.x / liveScale,
+      minY: -livePan.y / liveScale,
+      maxX: (canvas.width - livePan.x) / liveScale,
+      maxY: (canvas.height - livePan.y) / liveScale,
+    };
+    return imagesRef.current.some(img => {
+      if (!img.isPlaying || (img.mediaType !== 'video' && img.mediaType !== 'audio')) {
+        return false;
       }
-      const video = img.element;
-      const shouldUnmute = hoveredVideoId === img.id && img.isPlaying && img.hasAudio !== false;
-      video.muted = !shouldUnmute;
-      video.volume = shouldUnmute ? 1 : 0;
+      const bounds = getImageBounds(img);
+      return bounds.minX <= viewport.maxX && bounds.maxX >= viewport.minX
+        && bounds.minY <= viewport.maxY && bounds.maxY >= viewport.minY;
     });
+  }, []);
+
+  useCanvasPlaybackLoop({ images, scheduleDraw: scheduleFrame, isPlayingMediaVisible, audioPlaybackTimesRef });
+
+  // Hover unmute touches only the previously and newly hovered elements — videos are
+  // muted at creation and by playback sync, so no full sweep is needed.
+  const unmutedVideoIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const nextUnmuted = hoveredVideoId
+      ? images.find(img => img.id === hoveredVideoId && isVideoImage(img) && img.isPlaying && img.hasAudio !== false)
+      : undefined;
+    const prevId = unmutedVideoIdRef.current;
+    if (prevId && prevId !== nextUnmuted?.id) {
+      const prev = images.find(img => img.id === prevId);
+      if (prev && isVideoImage(prev)) {
+        prev.element.muted = true;
+        prev.element.volume = 0;
+      }
+    }
+    if (nextUnmuted && isVideoImage(nextUnmuted)) {
+      nextUnmuted.element.muted = false;
+      nextUnmuted.element.volume = 1;
+    }
+    unmutedVideoIdRef.current = nextUnmuted?.id ?? null;
   }, [hoveredVideoId, images, isVideoImage]);
 
   // Auto-fit and center images when first dropped onto an empty canvas.
@@ -807,14 +955,14 @@ export const Canvas: React.FC<CanvasProps> = ({
           const newPanY = canvasHeight / 2 - bboxCenterY * clampedScale;
 
           scaleRef.current = clampedScale;
-          setScale(clampedScale);
-          setPanSmoothly({ x: newPanX, y: newPanY });
+          panRef.current = { x: newPanX, y: newPanY };
+          scheduleFrame();
         }
       }
     }
 
     prevImagesLength.current = images.length;
-  }, [images, getBoundsForItems, setPanSmoothly]);
+  }, [images, getBoundsForItems, scheduleFrame]);
 
   useEffect(() => {
     if (containerRef.current) {
@@ -938,23 +1086,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const croppingBounds = useMemo(() => imageBeingCropped ? getImageBounds(imageBeingCropped) : null, [getImageBounds, imageBeingCropped]);
   const transformingBounds = useMemo(() => imageBeingTransformed ? getImageBounds(imageBeingTransformed) : null, [getImageBounds, imageBeingTransformed]);
 
-  const gridSpacing = useMemo(() => {
-    const size = GRID_BASE_SIZE * GRID_VISUAL_SCALE * Math.max(scale * 0.25, MIN_SCALE); // Shrink the grid layer without touching canvas coordinates.
-    return Math.max(GRID_MIN_SIZE, Math.min(GRID_MAX_SIZE, size));
-  }, [scale]);
-
-  const dotRadius = useMemo(() => {
-    const scaled = DOT_BASE_SIZE * GRID_VISUAL_SCALE * Math.sqrt(scale); // Keep dot size in step with the tighter grid spacing.
-    return Math.max(DOT_MIN_SIZE, Math.min(DOT_MAX_SIZE, scaled));
-  }, [scale]);
-
   const brushPreviewDiameter = currentTool === Tool.ERASE ? eraserSize : brushSize;
   const shouldRenderBrushPreview = !isPresentationMode && brushPreviewPosition && (currentTool === Tool.BRUSH || currentTool === Tool.ERASE) && brushPreviewDiameter > 0;
-
-  const backgroundImage = useMemo(
-    () => `radial-gradient(circle, rgba(255,255,255,0.2) ${dotRadius}px, transparent ${dotRadius}px)`,
-    [dotRadius],
-  );
 
   const [isCapturingFrame, setIsCapturingFrame] = useState(false);
 
@@ -1037,10 +1170,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
     const rect = canvas.getBoundingClientRect();
     return {
-      x: (clientX - rect.left - pan.x) / scale,
-      y: (clientY - rect.top - pan.y) / scale,
+      x: (clientX - rect.left - panRef.current.x) / scaleRef.current,
+      y: (clientY - rect.top - panRef.current.y) / scaleRef.current,
     };
-  }, [pan.x, pan.y, scale]);
+  }, []);
 
   const handleVideoPromptAreaPointerDown = useCallback((areaId: string, mode: VideoPromptAreaDragMode) => (event: React.MouseEvent<HTMLElement>) => {
     event.preventDefault();
@@ -1276,12 +1409,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       className="relative z-0 w-full h-full min-h-0 bg-black overflow-hidden outline-none focus:outline-none"
       tabIndex={0}
       data-canvas-root="true"
-      style={{
-        backgroundImage,
-        backgroundSize: `${gridSpacing}px ${gridSpacing}px`,
-        // Sync the dot grid background position with the canvas pan offset.
-        backgroundPosition: `${pan.x}px ${pan.y}px`,
-      }}
+      data-canvas-pan={`${pan.x} ${pan.y}`}
       onMouseDownCapture={handleMouseDownCapture}
       onMouseDown={handleMouseDownWithInteractionGuard}
       onMouseMove={handleMouseMoveWithOverlays}
@@ -1299,6 +1427,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <canvas ref={gridCanvasRef} className="pointer-events-none absolute inset-0 block h-full w-full z-0" />
       {!isPresentationMode && videoPromptAreas.map(area => (
         <div
           key={area.id}
@@ -1324,6 +1453,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         </div>
       ))}
       <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full z-10" />
+      {perfHudEnabled && (
+        <div
+          ref={perfHudRef}
+          className="pointer-events-none absolute bottom-2 left-2 z-50 rounded bg-black/70 px-2 py-1 font-mono text-[11px] text-lime-300"
+        />
+      )}
       {!isPresentationMode && videoPromptAreas.map(area => {
         const screenLeft = area.x * scale + pan.x;
         const screenTop = area.y * scale + pan.y;

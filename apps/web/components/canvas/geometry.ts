@@ -61,20 +61,40 @@ export const imageLocalToWorld = (local: Point, image: CanvasImage): Point => {
   };
 };
 
-export const getImageBounds = (image: CanvasImage) => {
-  const corners = [
-    imageLocalToWorld({ x: 0, y: 0 }, image),
-    imageLocalToWorld({ x: image.width, y: 0 }, image),
-    imageLocalToWorld({ x: 0, y: image.height }, image),
-    imageLocalToWorld({ x: image.width, y: image.height }, image),
-  ];
-  const xs = corners.map(c => c.x);
-  const ys = corners.map(c => c.y);
-  return {
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minY: Math.min(...ys),
-    maxY: Math.max(...ys),
-  };
-};
+export type ImageBounds = { minX: number; minY: number; maxX: number; maxY: number };
 
+// CanvasImage objects are replaced immutably whenever their geometry changes, so object
+// identity is a valid cache key. This runs per image per frame (culling, hit tests),
+// which makes recomputing corner transforms and allocating intermediates too expensive.
+const imageBoundsCache = new WeakMap<CanvasImage, ImageBounds>();
+
+export const getImageBounds = (image: CanvasImage): ImageBounds => {
+  const cached = imageBoundsCache.get(image);
+  if (cached) return cached;
+
+  const rotation = getImageRotation(image);
+  let bounds: ImageBounds;
+  if (rotation === 0) {
+    bounds = {
+      minX: image.x,
+      minY: image.y,
+      maxX: image.x + image.width,
+      maxY: image.y + image.height,
+    };
+  } else {
+    const cos = Math.abs(Math.cos(rotation)); // Exact AABB uses trigonometric extents without corner allocations.
+    const sin = Math.abs(Math.sin(rotation));
+    const halfWidth = (image.width * cos + image.height * sin) / 2;
+    const halfHeight = (image.width * sin + image.height * cos) / 2;
+    const centerX = image.x + image.width / 2;
+    const centerY = image.y + image.height / 2;
+    bounds = {
+      minX: centerX - halfWidth,
+      minY: centerY - halfHeight,
+      maxX: centerX + halfWidth,
+      maxY: centerY + halfHeight,
+    };
+  }
+  imageBoundsCache.set(image, bounds);
+  return bounds;
+};

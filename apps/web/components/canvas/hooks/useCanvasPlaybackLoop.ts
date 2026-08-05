@@ -1,15 +1,21 @@
 import { useEffect, type RefObject } from 'react';
 import type { CanvasImage } from '../../../types';
 
+// While every playing item is offscreen, poll visibility at this interval instead of
+// redrawing the whole scene at display rate.
+const OFFSCREEN_VISIBILITY_POLL_MS = 250;
+
 type UseCanvasPlaybackLoopArgs = {
   images: CanvasImage[];
-  draw: () => void;
+  scheduleDraw: () => void; // Stable coalesced repaint request that is safe every frame.
+  isPlayingMediaVisible: () => boolean; // Reports whether playing media intersects the viewport.
   audioPlaybackTimesRef: RefObject<Record<string, number>>;
 };
 
 export const useCanvasPlaybackLoop = ({
   images,
-  draw,
+  scheduleDraw,
+  isPlayingMediaVisible,
   audioPlaybackTimesRef,
 }: UseCanvasPlaybackLoopArgs): void => {
   useEffect(() => {
@@ -44,19 +50,34 @@ export const useCanvasPlaybackLoop = ({
       return;
     }
 
-    let rafId = requestAnimationFrame(() => {});
+    let rafId: number | null = null;
+    let timeoutId: number | null = null;
+    let cancelled = false;
 
     const tick = () => {
+      if (cancelled) return;
+      rafId = null;
+      timeoutId = null;
       images.forEach(img => {
         if (img.mediaType === 'audio' && img.isPlaying && img.audioElement) {
           audioPlaybackTimesRef.current[img.id] = img.audioElement.currentTime; // Store live time without React state.
         }
       });
-      draw();
-      rafId = requestAnimationFrame(tick);
+      if (isPlayingMediaVisible()) {
+        scheduleDraw();
+        rafId = requestAnimationFrame(tick);
+      } else {
+        // Offscreen media keeps playing; only the redraw work is skipped until it
+        // scrolls back into view.
+        timeoutId = window.setTimeout(tick, OFFSCREEN_VISIBILITY_POLL_MS);
+      }
     };
 
     rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [audioPlaybackTimesRef, draw, images]);
+    return () => {
+      cancelled = true;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
+  }, [audioPlaybackTimesRef, images, isPlayingMediaVisible, scheduleDraw]);
 };

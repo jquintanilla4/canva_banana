@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type ComponentProps, useState } from 'react';
 import { Canvas } from '../Canvas';
 import { buildSeedance2PromptBarControls } from '../../services/promptBarConfig';
@@ -85,6 +85,29 @@ const buildCanvasProps = (overrides: Partial<ComponentProps<typeof Canvas>> = {}
 });
 
 describe('Canvas video prompt area tool', () => {
+  beforeAll(() => {
+    // Pan/zoom state flushes inside a rAF callback, so zoom tests need it to run
+    // synchronously; the depth guard still breaks self-rescheduling loops.
+    let rafDepth = 0;
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      value: vi.fn((callback: FrameRequestCallback): number => {
+        if (rafDepth > 2) return 0;
+        rafDepth += 1;
+        try {
+          callback(performance.now());
+        } finally {
+          rafDepth -= 1;
+        }
+        return 0;
+      }),
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+      value: vi.fn(),
+      configurable: true,
+    });
+  });
+
   afterEach(() => {
     cleanup();
   });

@@ -44,7 +44,12 @@ const PlaybackLoopHarness = ({
   useEffect(() => {
     observedTimesRef.current = audioPlaybackTimesRef.current; // Expose the mutable cache for assertions.
   }, [observedTimesRef]);
-  useCanvasPlaybackLoop({ images, draw: vi.fn(), audioPlaybackTimesRef });
+  useCanvasPlaybackLoop({
+    images,
+    scheduleDraw: vi.fn(),
+    isPlayingMediaVisible: () => true,
+    audioPlaybackTimesRef,
+  });
   return null;
 };
 

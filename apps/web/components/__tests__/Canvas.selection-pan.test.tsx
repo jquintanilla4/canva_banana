@@ -203,10 +203,22 @@ describe('Canvas selection temporary pan', () => {
       value: vi.fn(() => null),
       configurable: true,
     }); // jsdom has no real canvas context.
+    // Pan/zoom state flushes inside a rAF callback, so interaction tests need it to run
+    // synchronously; the depth guard still breaks self-rescheduling playback loops.
+    let rafDepth = 0;
     Object.defineProperty(globalThis, 'requestAnimationFrame', {
-      value: vi.fn(() => 0),
+      value: vi.fn((callback: FrameRequestCallback): number => {
+        if (rafDepth > 2) return 0;
+        rafDepth += 1;
+        try {
+          callback(performance.now());
+        } finally {
+          rafDepth -= 1;
+        }
+        return 0;
+      }),
       configurable: true,
-    }); // Avoid playback draw loops in interaction tests.
+    });
     Object.defineProperty(globalThis, 'cancelAnimationFrame', {
       value: vi.fn(),
       configurable: true,
@@ -397,9 +409,21 @@ describe('Canvas selection temporary pan', () => {
     fireEvent.mouseUp(root, { clientX: 20, clientY: 20, button: 0, altKey: true });
     dragCanvas(root, { x: 0, y: 0 }, { x: 420, y: 320 }, 0, { metaKey: true });
 
-    expect(root.style.backgroundPosition).toBe('470px 385px');
+    expect(root.dataset.canvasPan).toBe('470 385');
     expect(onImageSelect).not.toHaveBeenCalled();
     expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
+  });
+
+  it('refreshes video hover audio when a pan gesture ends', () => {
+    const videoImage = buildVideo();
+    const videoElement = videoImage.element as HTMLVideoElement;
+    const { container } = render(<Canvas {...buildCanvasProps({ images: [videoImage], tool: Tool.PAN })} />);
+    const root = container.querySelector('[data-canvas-root="true"]') as HTMLElement;
+
+    dragCanvas(root, { x: 20, y: 20 }, { x: 70, y: 70 });
+
+    expect(videoElement.muted).toBe(false);
+    expect(videoElement.volume).toBe(1);
   });
 
   it('does not clear selection with Escape in presentation mode', () => {
@@ -428,17 +452,17 @@ describe('Canvas selection temporary pan', () => {
 
     root.focus();
     expect(document.activeElement).toBe(root);
-    expect(root.style.backgroundPosition).toBe('0px 0px');
+    expect(root.dataset.canvasPan).toBe('0 0');
 
     fireEvent.keyDown(window, { key: ' ', code: 'Space' });
     dragCanvas(root, { x: 100, y: 120 }, { x: 150, y: 185 });
 
-    expect(root.style.backgroundPosition).toBe('50px 65px');
+    expect(root.dataset.canvasPan).toBe('50 65');
 
     fireEvent.keyUp(window, { key: ' ', code: 'Space' });
     dragCanvas(root, { x: 200, y: 220 }, { x: 260, y: 300 });
 
-    expect(root.style.backgroundPosition).toBe('50px 65px');
+    expect(root.dataset.canvasPan).toBe('50 65');
   });
 
   it('does not activate temporary pan when an embedded prompt bar textarea owns focus', () => {
@@ -496,7 +520,7 @@ describe('Canvas selection temporary pan', () => {
     fireEvent.keyDown(window, { key: ' ', code: 'Space' });
     dragCanvas(root, { x: 160, y: 180 }, { x: 220, y: 260 });
 
-    expect(root.style.backgroundPosition).toBe('0px 0px');
+    expect(root.dataset.canvasPan).toBe('0 0');
   });
 
   it('clears the temporary pan override when the window blurs', () => {
@@ -508,7 +532,7 @@ describe('Canvas selection temporary pan', () => {
     fireEvent.blur(window);
     dragCanvas(root, { x: 100, y: 120 }, { x: 150, y: 185 });
 
-    expect(root.style.backgroundPosition).toBe('0px 0px');
+    expect(root.dataset.canvasPan).toBe('0 0');
   });
 
   it('keeps middle mouse temporary free-selection panning intact', () => {
@@ -517,7 +541,7 @@ describe('Canvas selection temporary pan', () => {
 
     dragCanvas(root, { x: 120, y: 150 }, { x: 180, y: 230 }, 1);
 
-    expect(root.style.backgroundPosition).toBe('60px 80px');
+    expect(root.dataset.canvasPan).toBe('60 80');
   });
 
   it.each([
@@ -631,7 +655,7 @@ describe('Canvas selection temporary pan', () => {
 
     dragCanvas(root, { x: 700, y: 600 }, { x: 750, y: 660 });
 
-    expect(root.style.backgroundPosition).toBe('50px 60px');
+    expect(root.dataset.canvasPan).toBe('50 60');
     expect(onImageSelect).not.toHaveBeenCalled();
     expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
   });
@@ -651,7 +675,7 @@ describe('Canvas selection temporary pan', () => {
     fireEvent.mouseDown(root, { clientX: 260, clientY: 240, button: 0 });
     fireEvent.mouseUp(root, { clientX: 260, clientY: 240, button: 0 });
 
-    expect(root.style.backgroundPosition).toBe('0px 0px');
+    expect(root.dataset.canvasPan).toBe('0 0');
     expect(onVideoPromptAreaSelect).not.toHaveBeenCalled();
     expect(onImageSelect).not.toHaveBeenCalled();
   });
@@ -691,7 +715,7 @@ describe('Canvas selection temporary pan', () => {
 
     dragCanvas(root, { x: 260, y: 240 }, { x: 330, y: 310 }, 2);
 
-    expect(root.style.backgroundPosition).toBe('0px 0px');
+    expect(root.dataset.canvasPan).toBe('0 0');
     expect(onVideoPromptAreaSelect).toHaveBeenCalledTimes(1);
     expect(onImageSelect).toHaveBeenCalledTimes(1);
   });

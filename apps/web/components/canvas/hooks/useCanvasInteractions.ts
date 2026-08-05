@@ -7,6 +7,7 @@ import {
   getImageAtPoint,
   getNoteAnchorAtPoint,
   getTransformActionForPoint,
+  isPointInImage,
   isPointInVideoPlayControl,
   type CropAction,
   type TransformAction,
@@ -47,6 +48,10 @@ type UseCanvasInteractionsArgs = {
   paths: Path[];
   pan: Point;
   scale: number;
+  // Live view transform. React's pan/scale props above trail these by up to one frame
+  // during rAF-coalesced gestures, so all pointer math must read the refs.
+  panRef: RefObject<Point>;
+  scaleRef: RefObject<number>;
   brushSize: number;
   eraserSize: number;
   brushColor: string;
@@ -104,6 +109,8 @@ export function useCanvasInteractions({
   paths,
   pan,
   scale,
+  panRef,
+  scaleRef,
   brushSize,
   eraserSize,
   brushColor,
@@ -184,14 +191,51 @@ export function useCanvasInteractions({
 
   const currentTool = pointerTemporaryTool ?? keyboardTemporaryTool ?? tool;
 
-  const getTransformedPoint = (clientX: number, clientY: number): Point => {
+  // getBoundingClientRect forces a synchronous layout, so cache the canvas rect across
+  // mouse events and invalidate it whenever the page can have moved it.
+  const canvasRectRef = useRef<DOMRect | null>(null);
+  const getCanvasRect = (): DOMRect | null => {
     const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (clientX - rect.left - pan.x) / scale,
-      y: (clientY - rect.top - pan.y) / scale,
+    if (!canvas) return null;
+    if (canvasRectRef.current === null) {
+      canvasRectRef.current = canvas.getBoundingClientRect();
+    }
+    return canvasRectRef.current;
+  };
+
+  const invalidateCanvasRect = () => {
+    canvasRectRef.current = null;
+  };
+
+  useEffect(() => {
+    window.addEventListener('resize', invalidateCanvasRect);
+    window.addEventListener('scroll', invalidateCanvasRect, true);
+    // In-app layout changes (panel toggles, prompt-bar growth) move the canvas without a
+    // window resize or scroll, so watch the element itself as well.
+    const observer = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(invalidateCanvasRect)
+      : null;
+    const canvas = canvasRef.current;
+    if (canvas) observer?.observe(canvas);
+    return () => {
+      window.removeEventListener('resize', invalidateCanvasRect);
+      window.removeEventListener('scroll', invalidateCanvasRect, true);
+      observer?.disconnect();
     };
+  }, []); // Mount-only: invalidateCanvasRect and canvasRef are stable across renders.
+
+  const getTransformedPoint = (clientX: number, clientY: number): Point => {
+    const rect = getCanvasRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: (clientX - rect.left - panRef.current.x) / scaleRef.current,
+      y: (clientY - rect.top - panRef.current.y) / scaleRef.current,
+    };
+  };
+
+  const refreshHoveredVideo = (clientX: number, clientY: number): void => {
+    const hoveredImage = getImageAtPoint(getTransformedPoint(clientX, clientY), images);
+    setHoveredVideoId(hoveredImage?.mediaType === 'video' ? hoveredImage.id : null);
   };
 
   useEffect(() => {
@@ -292,14 +336,20 @@ export function useCanvasInteractions({
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (shouldIgnoreCanvasMouseDown(e.nativeEvent)) return; // Interactive UI cannot start Canvas gestures.
+    canvasRectRef.current = null; // Re-measure once per gesture in case layout shifted.
     containerRef.current?.focus({ preventScroll: true });
+
+    // Every screen-space quantity below (hit tolerances, stroke width) must come from the
+    // same zoom as getTransformedPoint's world point. The React `scale` prop can trail the
+    // ref by a frame after a pinch, and mixing the two resolves clicks to the wrong handle.
+    const liveScale = scaleRef.current;
 
     if (cropMode) {
       const point = getTransformedPoint(e.clientX, e.clientY);
       const imageToCrop = images.find(img => img.id === cropMode.imageId);
       if (!imageToCrop) return;
 
-      const action = getCropActionForPoint(point, imageToCrop, cropMode.rect, scale);
+      const action = getCropActionForPoint(point, imageToCrop, cropMode.rect, liveScale);
       if (action) {
         setCropAction(action);
         setCropDragStart({ point, rect: cropMode.rect });
@@ -312,7 +362,7 @@ export function useCanvasInteractions({
       const imageToTransform = images.find(img => img.id === transformMode.imageId);
       if (!imageToTransform) return;
 
-      const action = getTransformActionForPoint(point, imageToTransform, scale);
+      const action = getTransformActionForPoint(point, imageToTransform, liveScale);
       if (action) {
         const centerX = imageToTransform.x + imageToTransform.width / 2;
         const centerY = imageToTransform.y + imageToTransform.height / 2;
@@ -352,7 +402,7 @@ export function useCanvasInteractions({
       if (e.button !== 0) {
         return; // Only left-click places or opens pins; right/middle clicks keep their defaults.
       }
-      const existingPin = getNoteAnchorAtPoint(point, notes, scale);
+      const existingPin = getNoteAnchorAtPoint(point, notes, liveScale);
       if (existingPin) {
         onAnchorClick(existingPin.id);
         return;
@@ -386,7 +436,7 @@ export function useCanvasInteractions({
       && image?.mediaType === 'video'
       && image.element instanceof HTMLVideoElement
       && image.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
-      && isPointInVideoPlayControl(point, image, scale)
+      && isPointInVideoPlayControl(point, image, liveScale)
     ); // Keep the painted Play control available to selection and pan gestures.
 
     const beginDrag = (imageIdsToDrag: string[]) => {
@@ -407,7 +457,7 @@ export function useCanvasInteractions({
     if (activeTool === Tool.SELECTION || activeTool === Tool.FREE_SELECTION) {
       if (!canUpdateSelection) {
         if (activeTool === Tool.FREE_SELECTION) {
-          const start = { x: e.clientX - pan.x, y: e.clientY - pan.y }; // Free-select can still act as a navigation hand.
+          const start = { x: e.clientX - panRef.current.x, y: e.clientY - panRef.current.y }; // Free-select can still act as a navigation hand.
           panStartRef.current = start;
           setPanStart(start);
           isPanningRef.current = true;
@@ -417,7 +467,7 @@ export function useCanvasInteractions({
       }
 
       // Note anchor pins sit above images: click opens the note, drag repositions the pin.
-      const pin = getNoteAnchorAtPoint(point, notes, scale);
+      const pin = getNoteAnchorAtPoint(point, notes, liveScale);
       if (pin?.anchor && e.button === 0) {
         pinDragRef.current = {
           noteId: pin.id,
@@ -505,7 +555,7 @@ export function useCanvasInteractions({
       }
 
       if (activeTool === Tool.FREE_SELECTION) {
-        const start = { x: e.clientX - pan.x, y: e.clientY - pan.y }; // Left-click pans only; right-click clears selection.
+        const start = { x: e.clientX - panRef.current.x, y: e.clientY - panRef.current.y }; // Left-click pans only; right-click clears selection.
         panStartRef.current = start;
         setPanStart(start);
         isPanningRef.current = true;
@@ -541,7 +591,7 @@ export function useCanvasInteractions({
         return;
       } // Pan and presentation modes hide or bypass the selected-item playback bar.
       setIsPanning(true);
-      const start = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+      const start = { x: e.clientX - panRef.current.x, y: e.clientY - panRef.current.y };
       panStartRef.current = start;
       setPanStart(start);
       isPanningRef.current = true;
@@ -564,7 +614,7 @@ export function useCanvasInteractions({
       const newPath: Path = {
         points: [point],
         color: brushColor,
-        size: baseStrokeSize / scale,
+        size: baseStrokeSize / liveScale,
         tool: pathTool,
       };
       onPathsChange([...paths, newPath]);
@@ -572,24 +622,26 @@ export function useCanvasInteractions({
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const container = containerRef.current;
     const isBrushLikeTool = currentTool === Tool.BRUSH || currentTool === Tool.ERASE;
-    if (container && isBrushLikeTool) {
-      const rect = container.getBoundingClientRect();
-      const nextPosition = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      setBrushPreviewPosition(nextPosition);
+    if (isBrushLikeTool) {
+      const rect = getCanvasRect(); // The inset canvas and container share this cached rectangle.
+      if (rect) {
+        setBrushPreviewPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      }
     } else if (brushPreviewPosition !== null) {
       setBrushPreviewPosition(null);
     }
 
     const hoverPoint = getTransformedPoint(e.clientX, e.clientY);
-    const hoveredImage = getImageAtPoint(hoverPoint, images);
-    if (hoveredImage?.mediaType === 'video') {
-      if (hoveredVideoId !== hoveredImage.id) {
-        setHoveredVideoId(hoveredImage.id);
+
+    // Every gesture below early-returns before the idle hover hit test, so re-validate the
+    // hovered video here or hover-unmute survives a pan that drags it off screen. This is
+    // a single-item check, not the full O(n) hit test the idle path runs.
+    if (hoveredVideoId !== null) {
+      const stillHovered = images.find(img => img.id === hoveredVideoId);
+      if (!stillHovered || !isPointInImage(hoverPoint, stillHovered)) {
+        setHoveredVideoId(null);
       }
-    } else if (hoveredVideoId !== null) {
-      setHoveredVideoId(null);
     }
 
     const pinDrag = pinDragRef.current;
@@ -601,8 +653,8 @@ export function useCanvasInteractions({
       }
       pinDrag.moved = true;
       const nextAnchor = {
-        x: pinDrag.startAnchor.x + dx / scale,
-        y: pinDrag.startAnchor.y + dy / scale,
+        x: pinDrag.startAnchor.x + dx / scaleRef.current,
+        y: pinDrag.startAnchor.y + dy / scaleRef.current,
       };
       onNotesChange(notes.map(note => (note.id === pinDrag.noteId ? { ...note, anchor: nextAnchor } : note)));
       return;
@@ -814,8 +866,8 @@ export function useCanvasInteractions({
     }
 
     if (canUpdateSelection && isDragging && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && dragStartPoint) {
-      const dx = (e.clientX - dragStartPoint.x) / scale;
-      const dy = (e.clientY - dragStartPoint.y) / scale;
+      const dx = (e.clientX - dragStartPoint.x) / scaleRef.current;
+      const dy = (e.clientY - dragStartPoint.y) / scaleRef.current;
 
       if (draggedImageIds.length && dragStartImagePositions) {
         const updatedImages = images.map(image => {
@@ -831,46 +883,58 @@ export function useCanvasInteractions({
       return;
     }
 
-    if (containerRef.current) {
-      const point = getTransformedPoint(e.clientX, e.clientY);
-      let cursor = containerRef.current.style.cursor;
-
-      if (cropMode) {
-        const imageToCrop = images.find(img => img.id === cropMode.imageId);
-        const action = imageToCrop ? getCropActionForPoint(point, imageToCrop, cropMode.rect, scale) : null;
-        switch (action) {
-          case 'move': cursor = 'move'; break;
-          case 'resize-tl': case 'resize-br': cursor = 'nwse-resize'; break;
-          case 'resize-tr': case 'resize-bl': cursor = 'nesw-resize'; break;
-          case 'resize-t': case 'resize-b': cursor = 'ns-resize'; break;
-          case 'resize-r': case 'resize-l': cursor = 'ew-resize'; break;
-          default: cursor = 'default';
-        }
-      } else if (transformMode) {
-        const imageToTransform = images.find(img => img.id === transformMode.imageId);
-        const action = imageToTransform ? getTransformActionForPoint(point, imageToTransform, scale) : null;
-        switch (action) {
-          case 'rotate': cursor = 'grab'; break;
-          case 'scale-tl': case 'scale-br': cursor = 'nwse-resize'; break;
-          case 'scale-tr': case 'scale-bl': cursor = 'nesw-resize'; break;
-          case 'scale-t': case 'scale-b': cursor = 'ns-resize'; break;
-          case 'scale-r': case 'scale-l': cursor = 'ew-resize'; break;
-          default: cursor = 'default';
-        }
-      } else if (canUpdateSelection && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && !isDragging && !isPanning) {
-        const objectOnPoint = getNoteAnchorAtPoint(point, notes, scale) || getImageAtPoint(point, images);
-        const baseCursor = currentTool === Tool.SELECTION ? 'default' : 'grab';
-        cursor = objectOnPoint ? 'pointer' : baseCursor;
-      }
-      containerRef.current.style.cursor = cursor;
+    if (isDrawing) {
+      const newPaths = [...paths];
+      newPaths[newPaths.length - 1].points.push(hoverPoint);
+      onPathsChange(newPaths);
+      return;
     }
 
-    if (!isDrawing) return;
+    // Idle hover: one O(n) hit test shared by hover-unmute and cursor choice. Gestures
+    // above all early-return, so none of this work runs while panning or dragging.
+    const container = containerRef.current;
+    if (!container) return;
 
-    const point = getTransformedPoint(e.clientX, e.clientY);
-    const newPaths = [...paths];
-    newPaths[newPaths.length - 1].points.push(point);
-    onPathsChange(newPaths);
+    const hoveredImage = getImageAtPoint(hoverPoint, images);
+    if (hoveredImage?.mediaType === 'video') {
+      if (hoveredVideoId !== hoveredImage.id) {
+        setHoveredVideoId(hoveredImage.id);
+      }
+    } else if (hoveredVideoId !== null) {
+      setHoveredVideoId(null);
+    }
+
+    let cursor: string | null = null;
+    if (cropMode) {
+      const imageToCrop = images.find(img => img.id === cropMode.imageId);
+      const action = imageToCrop ? getCropActionForPoint(hoverPoint, imageToCrop, cropMode.rect, scaleRef.current) : null;
+      switch (action) {
+        case 'move': cursor = 'move'; break;
+        case 'resize-tl': case 'resize-br': cursor = 'nwse-resize'; break;
+        case 'resize-tr': case 'resize-bl': cursor = 'nesw-resize'; break;
+        case 'resize-t': case 'resize-b': cursor = 'ns-resize'; break;
+        case 'resize-r': case 'resize-l': cursor = 'ew-resize'; break;
+        default: cursor = 'default';
+      }
+    } else if (transformMode) {
+      const imageToTransform = images.find(img => img.id === transformMode.imageId);
+      const action = imageToTransform ? getTransformActionForPoint(hoverPoint, imageToTransform, scaleRef.current) : null;
+      switch (action) {
+        case 'rotate': cursor = 'grab'; break;
+        case 'scale-tl': case 'scale-br': cursor = 'nwse-resize'; break;
+        case 'scale-tr': case 'scale-bl': cursor = 'nesw-resize'; break;
+        case 'scale-t': case 'scale-b': cursor = 'ns-resize'; break;
+        case 'scale-r': case 'scale-l': cursor = 'ew-resize'; break;
+        default: cursor = 'default';
+      }
+    } else if (canUpdateSelection && (currentTool === Tool.SELECTION || currentTool === Tool.FREE_SELECTION) && !isDragging && !isPanning) {
+      const objectOnPoint = getNoteAnchorAtPoint(hoverPoint, notes, scaleRef.current) || hoveredImage;
+      const baseCursor = currentTool === Tool.SELECTION ? 'default' : 'grab';
+      cursor = objectOnPoint ? 'pointer' : baseCursor;
+    }
+    if (cursor !== null && container.style.cursor !== cursor) {
+      container.style.cursor = cursor;
+    }
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -916,8 +980,8 @@ export function useCanvasInteractions({
         maxY: Math.max(marqueeStart.y, currentPoint.y),
       };
 
-      const pixelWidth = Math.abs(currentPoint.x - marqueeStart.x) * scale;
-      const pixelHeight = Math.abs(currentPoint.y - marqueeStart.y) * scale;
+      const pixelWidth = Math.abs(currentPoint.x - marqueeStart.x) * scaleRef.current;
+      const pixelHeight = Math.abs(currentPoint.y - marqueeStart.y) * scaleRef.current;
       const isSignificant = Math.max(pixelWidth, pixelHeight) > 3;
 
       if (isSignificant) {
@@ -941,8 +1005,8 @@ export function useCanvasInteractions({
         setVideoPromptAreaCurrent(null);
         return;
       }
-      const pixelWidth = Math.abs(videoPromptAreaCurrent.x - videoPromptAreaStart.x) * scale;
-      const pixelHeight = Math.abs(videoPromptAreaCurrent.y - videoPromptAreaStart.y) * scale;
+      const pixelWidth = Math.abs(videoPromptAreaCurrent.x - videoPromptAreaStart.x) * scaleRef.current;
+      const pixelHeight = Math.abs(videoPromptAreaCurrent.y - videoPromptAreaStart.y) * scaleRef.current;
       if (Math.max(pixelWidth, pixelHeight) <= MIN_DRAG_PREVIEW_PX) {
         setVideoPromptAreaStart(null);
         setVideoPromptAreaCurrent(null);
@@ -1000,9 +1064,10 @@ export function useCanvasInteractions({
       if (pointerTemporaryTool) {
         setPointerTemporaryTool(null);
       }
-      if (isPanning) {
+      if (isPanningRef.current) {
         isPanningRef.current = false;
         setIsPanning(false);
+        if (e.type !== 'mouseleave') refreshHoveredVideo(e.clientX, e.clientY); // Sync hover after middle-button navigation ends.
       }
       if (isDragging) {
         onCommit();
@@ -1019,11 +1084,14 @@ export function useCanvasInteractions({
     }
 
     const wasActive = isDrawing || isDragging;
+    const wasPanning = isPanningRef.current;
 
     setIsDrawing(false);
     isPanningRef.current = false;
     setIsPanning(false);
     setIsDragging(false);
+
+    if (wasPanning && e.type !== 'mouseleave') refreshHoveredVideo(e.clientX, e.clientY); // Match video audio state to the release point.
 
     setDragStartPoint(null);
     setDragStartImagePositions(null);
@@ -1048,7 +1116,7 @@ export function useCanvasInteractions({
     if (!canUpdateSelection) return;
     if (cropMode) return;
     const point = getTransformedPoint(e.clientX, e.clientY);
-    const pin = getNoteAnchorAtPoint(point, notes, scale);
+    const pin = getNoteAnchorAtPoint(point, notes, scaleRef.current); // Match the hit tolerance to the point's live zoom.
     if (pin) {
       onAnchorClick(pin.id);
     }
@@ -1068,7 +1136,10 @@ export function useCanvasInteractions({
     if (stopBoundaryDragEvent(e)) return;
     e.preventDefault();
     e.stopPropagation();
-    if (!isDraggingOver) setIsDraggingOver(true);
+    if (!isDraggingOver) {
+      invalidateCanvasRect(); // A drag can begin without any prior canvas gesture to re-measure.
+      setIsDraggingOver(true);
+    }
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
@@ -1085,6 +1156,7 @@ export function useCanvasInteractions({
     setIsDraggingOver(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      invalidateCanvasRect(); // The drop position must not be derived from a stale origin.
       const point = getTransformedPoint(e.clientX, e.clientY);
       onFilesDrop(e.dataTransfer.files, point);
     }

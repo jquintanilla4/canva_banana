@@ -3,6 +3,7 @@ import { Tool, type CanvasImage, type CanvasNote, type Path, type Point } from '
 import { CROP_HANDLE_SIZE, NOTE_PIN_BORDER, NOTE_PIN_FILL, NOTE_PIN_LABEL_FONT_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
 import { getImageBounds, getImageCenter, getImageRotation, getNotePinGeometry } from '../geometry';
 import { isVideoImage } from '../mediaGuards';
+import { beginLodFrame, endLodFrame, getLodDrawSource, type ImageLodCache } from './imageLodCache';
 import { fitTextWithinBox } from './text';
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
@@ -15,14 +16,52 @@ const FAVORITE_STAR_RADIUS_RATIO = 0.058; // ~11.6% of the item's smaller dimens
 const FAVORITE_STAR_PREFERRED_MIN_RADIUS = 10;
 const FAVORITE_STAR_BACKDROP_RATIO = 1.3; // Backdrop half-size relative to the star's outer radius.
 
+type TextFitResult = { fontSize: number; lineHeight: number; lines: string[] };
+
+const TEXT_FIT_CACHE_MAX_ENTRIES = 500;
+
+// Items smaller than this on screen skip badges and favorite stars — the chrome would be
+// illegible anyway, and its layout cost dominates zoomed-out frames. Measured against the
+// item's LONGER on-screen side, so a tall narrow item still keeps its markers.
+export const MIN_CHROME_SCREEN_PX = 40;
+
+// Re-rasterize the path layer when zoom drifts this far from the view scale the bitmap
+// was rasterized at. Both sides of this comparison are raw view scales — never a clamped
+// raster resolution — so a fresh raster always satisfies its own predicate and the cache
+// converges instead of re-stroking every frame.
+const PATH_RASTER_SCALE_MIN_RATIO = 0.5;
+const PATH_RASTER_SCALE_MAX_RATIO = 1.25; // Above this the blit would upscale visibly.
+const PATH_LAYER_MAX_PX = 4096; // Cap the offscreen path bitmap's longest side.
+// World margin rasterized around the viewport so short pans stay cache hits. Coverage is
+// sacrificed before resolution, so strokes stay crisp no matter how far apart they are.
+const PATH_LAYER_VIEWPORT_MARGIN_RATIO = 0.35;
+
 export type CanvasRenderCache = {
   pathCanvas: HTMLCanvasElement | null;
-  pathSignature: string | null;
+  // Identity of the paths array the bitmap was rasterized from. Appending a point
+  // replaces the outer array, so reference equality detects every content change in O(1).
+  pathsRef: Path[] | null;
+  pathBounds: CanvasRect | null; // Recomputed only when pathsRef changes.
+  pathRasterScale: number; // Bitmap pixels per world unit.
+  pathViewScale: number; // The view scale the bitmap was rasterized at.
+  pathWorldRect: CanvasRect | null; // World region the bitmap covers.
+  dotGridTile: HTMLCanvasElement | null;
+  dotGridPattern: CanvasPattern | null;
+  dotGridKey: string | null;
+  textFitCache: Map<string, TextFitResult>;
 };
 
 export const createCanvasRenderCache = (): CanvasRenderCache => ({
   pathCanvas: null,
-  pathSignature: null,
+  pathsRef: null,
+  pathBounds: null,
+  pathRasterScale: 0,
+  pathViewScale: 0,
+  pathWorldRect: null,
+  dotGridTile: null,
+  dotGridPattern: null,
+  dotGridKey: null,
+  textFitCache: new Map(),
 });
 
 const getWorldViewport = (canvas: HTMLCanvasElement, pan: Point, scale: number): CanvasRect => {
@@ -46,25 +85,51 @@ const rectsIntersect = (a: CanvasRect, b: CanvasRect): boolean => (
   a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
 );
 
+const intersectRects = (a: CanvasRect, b: CanvasRect): CanvasRect | null => {
+  const minX = Math.max(a.minX, b.minX);
+  const minY = Math.max(a.minY, b.minY);
+  const maxX = Math.min(a.maxX, b.maxX);
+  const maxY = Math.min(a.maxY, b.maxY);
+  if (maxX < minX || maxY < minY) return null;
+  return { minX, minY, maxX, maxY };
+};
+
+const rectContains = (outer: CanvasRect, inner: CanvasRect): boolean => (
+  outer.minX <= inner.minX && outer.maxX >= inner.maxX
+  && outer.minY <= inner.minY && outer.maxY >= inner.maxY
+);
+
+// Shrinks [min, max] toward [keepMin, keepMax] until it fits maxSpan, never dropping any
+// of the keep range — the result still covers everything currently on screen.
+const fitSpanAroundKeep = (
+  min: number,
+  max: number,
+  keepMin: number,
+  keepMax: number,
+  maxSpan: number,
+): [number, number] => {
+  if (max - min <= maxSpan) return [min, max];
+  const span = Math.max(maxSpan, keepMax - keepMin);
+  const center = (keepMin + keepMax) / 2;
+  let lo = center - span / 2;
+  let hi = center + span / 2;
+  if (lo < min) {
+    hi = Math.min(max, hi + (min - lo));
+    lo = min;
+  }
+  if (hi > max) {
+    lo = Math.max(min, lo - (hi - max));
+    hi = max;
+  }
+  return [lo, hi];
+};
+
 const getAudioPlaybackTime = (
   image: CanvasImage,
   audioPlaybackTimes?: Readonly<Record<string, number>>,
 ): number | undefined => (
   image.isPlaying ? audioPlaybackTimes?.[image.id] ?? image.currentPlaybackTime : image.currentPlaybackTime
 );
-
-const getPathLayerSignature = (params: {
-  canvas: HTMLCanvasElement;
-  pan: Point;
-  scale: number;
-  paths: Path[];
-}): string => {
-  const { canvas, pan, scale, paths } = params;
-  const pathSignature = paths.map(path => (
-    `${path.tool}:${path.color}:${path.size}:${path.points.map(point => `${point.x},${point.y}`).join('|')}`
-  )).join(';');
-  return `${canvas.width}x${canvas.height}:${pan.x},${pan.y}:${scale}:${pathSignature}`;
-};
 
 const getReusablePathCanvas = (cache: CanvasRenderCache, width: number, height: number): HTMLCanvasElement => {
   if (!cache.pathCanvas) {
@@ -73,9 +138,174 @@ const getReusablePathCanvas = (cache: CanvasRenderCache, width: number, height: 
   if (cache.pathCanvas.width !== width || cache.pathCanvas.height !== height) {
     cache.pathCanvas.width = width;
     cache.pathCanvas.height = height;
-    cache.pathSignature = null; // Size changes invalidate the cached pixels.
   }
   return cache.pathCanvas;
+};
+
+const computePathBounds = (paths: Path[]): CanvasRect | null => {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxStroke = 0;
+  paths.forEach(path => {
+    if (path.size > maxStroke) maxStroke = path.size;
+    path.points.forEach(point => {
+      if (point.x < minX) minX = point.x;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.y > maxY) maxY = point.y;
+    });
+  });
+  if (!Number.isFinite(minX)) return null;
+  const margin = maxStroke / 2 + 2;
+  return { minX: minX - margin, minY: minY - margin, maxX: maxX + margin, maxY: maxY + margin };
+};
+
+// The path layer is rasterized in WORLD space and blitted under the scene transform, so
+// panning is a cache hit; only content changes, panning past the margin, or real zoom
+// drift re-stroke. The rasterized region is clipped to the padded viewport so resolution
+// tracks screen resolution regardless of how far apart the strokes are in world space.
+const drawPathLayer = (
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  cache: CanvasRenderCache,
+  paths: Path[],
+  pan: Point,
+  scale: number,
+): void => {
+  if (cache.pathsRef !== paths) {
+    cache.pathsRef = paths;
+    cache.pathBounds = computePathBounds(paths);
+    cache.pathWorldRect = null; // Content changed: the cached bitmap is stale.
+  }
+  const bounds = cache.pathBounds;
+  if (!bounds) return;
+
+  const viewport = getWorldViewport(canvas, pan, scale);
+  const visible = intersectRects(bounds, viewport);
+  if (!visible) return; // Every stroke is offscreen; keep the bitmap for the way back.
+
+  const viewScaleRatio = cache.pathViewScale > 0 ? scale / cache.pathViewScale : Infinity;
+  const needsRaster = !cache.pathWorldRect
+    || !rectContains(cache.pathWorldRect, visible)
+    || viewScaleRatio < PATH_RASTER_SCALE_MIN_RATIO
+    || viewScaleRatio > PATH_RASTER_SCALE_MAX_RATIO;
+
+  if (needsRaster) {
+    const marginWorld = Math.max(viewport.maxX - viewport.minX, viewport.maxY - viewport.minY)
+      * PATH_LAYER_VIEWPORT_MARGIN_RATIO;
+    const padded = intersectRects(bounds, expandRect(viewport, marginWorld)) ?? visible;
+
+    // Prefer screen resolution: shrink coverage toward the visible region first, and only
+    // fall back to a lower raster resolution if even that exceeds the bitmap cap.
+    const targetScale = Math.max(scale, 0.05);
+    const maxWorldSpan = PATH_LAYER_MAX_PX / targetScale;
+    const [rectMinX, rectMaxX] = fitSpanAroundKeep(padded.minX, padded.maxX, visible.minX, visible.maxX, maxWorldSpan);
+    const [rectMinY, rectMaxY] = fitSpanAroundKeep(padded.minY, padded.maxY, visible.minY, visible.maxY, maxWorldSpan);
+    const worldRect: CanvasRect = { minX: rectMinX, minY: rectMinY, maxX: rectMaxX, maxY: rectMaxY };
+
+    const worldWidth = Math.max(worldRect.maxX - worldRect.minX, 1e-6);
+    const worldHeight = Math.max(worldRect.maxY - worldRect.minY, 1e-6);
+    const rasterScale = Math.min(
+      targetScale,
+      PATH_LAYER_MAX_PX / worldWidth,
+      PATH_LAYER_MAX_PX / worldHeight,
+    );
+
+    const bitmapWidth = Math.max(1, Math.ceil(worldWidth * rasterScale));
+    const bitmapHeight = Math.max(1, Math.ceil(worldHeight * rasterScale));
+    const pathCanvas = getReusablePathCanvas(cache, bitmapWidth, bitmapHeight);
+    const pathCtx = pathCanvas.getContext('2d');
+    if (!pathCtx) return;
+
+    pathCtx.setTransform?.(1, 0, 0, 1, 0, 0);
+    pathCtx.clearRect(0, 0, pathCanvas.width, pathCanvas.height);
+    pathCtx.scale(rasterScale, rasterScale);
+    pathCtx.translate(-worldRect.minX, -worldRect.minY);
+
+    paths.forEach(path => { // Preserve the drawing and erasing sequence.
+      if (path.tool === Tool.ERASE) {
+        pathCtx.globalCompositeOperation = 'destination-out';
+        pathCtx.strokeStyle = 'rgba(0,0,0,1)'; // Erasing ignores color but still needs full alpha.
+      } else {
+        pathCtx.globalCompositeOperation = 'source-over';
+        pathCtx.strokeStyle = path.color;
+      }
+
+      pathCtx.lineWidth = path.size;
+      pathCtx.lineCap = 'round';
+      pathCtx.lineJoin = 'round';
+      pathCtx.beginPath();
+      path.points.forEach((point, index) => {
+        if (index === 0) pathCtx.moveTo(point.x, point.y);
+        else pathCtx.lineTo(point.x, point.y);
+      });
+      pathCtx.stroke();
+    });
+
+    pathCtx.globalCompositeOperation = 'source-over';
+    cache.pathRasterScale = rasterScale;
+    cache.pathViewScale = scale;
+    cache.pathWorldRect = worldRect;
+  }
+
+  if (cache.pathCanvas && cache.pathWorldRect) {
+    const rect = cache.pathWorldRect;
+    ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.scale(scale, scale);
+    ctx.drawImage(cache.pathCanvas, rect.minX, rect.minY, rect.maxX - rect.minX, rect.maxY - rect.minY);
+    ctx.restore();
+  }
+};
+
+// One pattern-filled rect replaces the CSS radial-gradient background, whose
+// backgroundPosition changes forced a full-viewport DOM repaint on every pan frame.
+// This paints its own canvas, which sits UNDER the DOM overlays (video prompt area
+// panels) that the CSS background used to sit under — the scene canvas is above them.
+export const drawDotGridLayer = (
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  cache: CanvasRenderCache,
+  pan: Point,
+  spacing: number,
+  dotRadius: number,
+): void => {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!(spacing > 0) || !(dotRadius > 0)) return;
+  if (typeof ctx.createPattern !== 'function') return; // Mocked/limited 2D contexts.
+
+  const key = `${spacing}|${dotRadius}`;
+  if (cache.dotGridKey !== key || !cache.dotGridPattern) {
+    if (!cache.dotGridTile) {
+      cache.dotGridTile = document.createElement('canvas');
+    }
+    const tile = cache.dotGridTile;
+    const tileSize = Math.max(1, Math.round(spacing));
+    tile.width = tileSize;
+    tile.height = tileSize;
+    const tileCtx = tile.getContext('2d');
+    if (!tileCtx) return;
+    tileCtx.clearRect(0, 0, tileSize, tileSize);
+    tileCtx.fillStyle = 'rgba(255,255,255,0.2)';
+    tileCtx.beginPath();
+    tileCtx.arc(tileSize / 2, tileSize / 2, dotRadius, 0, Math.PI * 2);
+    tileCtx.fill();
+    const pattern = ctx.createPattern(tile, 'repeat');
+    if (!pattern) return;
+    cache.dotGridPattern = pattern;
+    cache.dotGridKey = key;
+  }
+
+  const tileSize = Math.max(1, Math.round(spacing));
+  const offsetX = ((pan.x % tileSize) + tileSize) % tileSize;
+  const offsetY = ((pan.y % tileSize) + tileSize) % tileSize;
+  ctx.save();
+  ctx.translate(offsetX - tileSize, offsetY - tileSize);
+  ctx.fillStyle = cache.dotGridPattern;
+  ctx.fillRect(0, 0, canvas.width + tileSize * 2, canvas.height + tileSize * 2);
+  ctx.restore();
 };
 
 const drawCanvasBadge = (
@@ -209,6 +439,7 @@ type DrawCanvasArgs = {
   cropMode: CropModeState | null;
   transformMode: TransformModeState | null;
   renderCache?: CanvasRenderCache;
+  imageLodCache?: ImageLodCache;
   audioPlaybackTimes?: Readonly<Record<string, number>>;
   isPresentationMode?: boolean;
 };
@@ -245,6 +476,7 @@ export function drawCanvas({
   cropMode,
   transformMode,
   renderCache,
+  imageLodCache,
   audioPlaybackTimes,
   isPresentationMode = false,
 }: DrawCanvasArgs) {
@@ -256,12 +488,27 @@ export function drawCanvas({
   ctx.translate(pan.x, pan.y);
   ctx.scale(scale, scale);
 
+  if (imageLodCache) {
+    beginLodFrame(imageLodCache); // Protects this frame's bitmaps from LRU eviction.
+  }
+
+  const disabledSet = new Set(disabledMediaIds); // Sets keep per-image membership checks constant-time.
+  const selectedSet = new Set(selectedImageIds);
+  const referenceTaggedSet = new Set([...referenceImageIds, ...referenceVideoIds, ...referenceAudioIds]);
+  const krea2Set = new Set(krea2StyleReferenceImageIds ?? referenceImageIds); // Fall back for older callers.
+  const elementSet = new Set(elementImageIds);
+
   // Draw images
   images.forEach(image => {
     if (!rectsIntersect(getImageBounds(image), viewport)) {
       return; // Skip fully offscreen media and its badges.
     }
-    const isDisabledMedia = disabledMediaIds.includes(image.id);
+    const isDisabledMedia = disabledSet.has(image.id);
+    const showItemChrome = shouldShowCanvasChrome
+      && Math.max(image.width, image.height) * scale >= MIN_CHROME_SCREEN_PX;
+    // The metadata overlay is a band of wrapped text, so it additionally needs horizontal
+    // room; below that its fit pass is pure cost for something unreadable.
+    const showItemTextOverlay = showItemChrome && image.width * scale >= MIN_CHROME_SCREEN_PX;
     const rotation = getImageRotation(image);
     const center = getImageCenter(image);
     const halfWidth = image.width / 2;
@@ -286,7 +533,12 @@ export function drawCanvas({
     if (isVideoWaitingForFrame) {
       drawVideoPlaceholder(ctx, baseX, baseY, image.width, image.height, scale);
     } else {
-      ctx.drawImage(image.element, baseX, baseY, image.width, image.height);
+      // Zoomed out, the LOD cache substitutes a pre-downscaled bitmap so drawImage isn't
+      // resampling the full-resolution source per item per frame.
+      const drawSource = imageLodCache
+        ? getLodDrawSource(imageLodCache, image, scale)
+        : image.element;
+      ctx.drawImage(drawSource, baseX, baseY, image.width, image.height);
     }
 
     // Draw playhead for audio objects
@@ -314,87 +566,95 @@ export function drawCanvas({
     }
 
     const metadata = image.metadata;
-    const promptText = metadata?.prompt?.trim() ?? '';
-    const modelLabel = metadata?.modelLabel?.trim() ?? '';
-    const segments: string[] = [];
+    // String assembly and text fitting only run when the overlay can actually render;
+    // below the chrome threshold the text would be sub-pixel anyway.
+    if (showItemTextOverlay && showMetadataOverlay && metadata && metadata.source !== 'imported') {
+      const promptText = metadata.prompt?.trim() ?? '';
+      const modelLabel = metadata.modelLabel?.trim() ?? '';
+      const segments: string[] = [];
 
-    if (modelLabel.length > 0) {
-      segments.push(modelLabel);
-    }
+      if (modelLabel.length > 0) {
+        segments.push(modelLabel);
+      }
 
-    const upscaleFactor = metadata?.upscaleFactor;
-    if (typeof upscaleFactor === 'number' && Number.isFinite(upscaleFactor) && upscaleFactor > 0) {
-      const formattedFactor = Number.isInteger(upscaleFactor)
-        ? `${upscaleFactor}x`
-        : `${Number.parseFloat(upscaleFactor.toFixed(2))}x`;
-      segments.push(formattedFactor);
-    }
+      const upscaleFactor = metadata.upscaleFactor;
+      if (typeof upscaleFactor === 'number' && Number.isFinite(upscaleFactor) && upscaleFactor > 0) {
+        const formattedFactor = Number.isInteger(upscaleFactor)
+          ? `${upscaleFactor}x`
+          : `${Number.parseFloat(upscaleFactor.toFixed(2))}x`;
+        segments.push(formattedFactor);
+      }
 
-    const noiseScale = metadata?.noiseScale;
-    if (typeof noiseScale === 'number' && Number.isFinite(noiseScale)) {
-      const formattedNoise = (Math.round(noiseScale * 10) / 10).toFixed(1);
-      segments.push(formattedNoise);
-    }
+      const noiseScale = metadata.noiseScale;
+      if (typeof noiseScale === 'number' && Number.isFinite(noiseScale)) {
+        const formattedNoise = (Math.round(noiseScale * 10) / 10).toFixed(1);
+        segments.push(formattedNoise);
+      }
 
-    const creativity = metadata?.creativity;
-    if (typeof creativity === 'number' && Number.isFinite(creativity)) {
-      segments.push(`Creativity ${creativity.toFixed(1)}`);
-    }
+      const creativity = metadata.creativity;
+      if (typeof creativity === 'number' && Number.isFinite(creativity)) {
+        segments.push(`Creativity ${creativity.toFixed(1)}`);
+      }
 
-    if (promptText.length > 0) {
-      segments.push(promptText);
-    }
+      if (promptText.length > 0) {
+        segments.push(promptText);
+      }
 
-    const overlayText = segments.join('; ');
-    const hasOverlayText = overlayText.length > 0;
-    const shouldShowMetadata = shouldShowCanvasChrome && showMetadataOverlay && hasOverlayText && metadata?.source !== 'imported';
+      const overlayText = segments.join('; ');
 
-    if (shouldShowMetadata) {
-      const overlayHeight = image.height * 0.15;
-      const overlayY = baseY + image.height - overlayHeight;
-      const paddingInner = Math.max(8, overlayHeight * 0.1);
-      const textAreaWidth = Math.max(image.width - paddingInner * 2, 0);
-      const overlayInnerHeight = Math.max(overlayHeight - paddingInner * 2, 0);
+      if (overlayText.length > 0) {
+        const overlayHeight = image.height * 0.15;
+        const overlayY = baseY + image.height - overlayHeight;
+        const paddingInner = Math.max(8, overlayHeight * 0.1);
+        const textAreaWidth = Math.max(image.width - paddingInner * 2, 0);
+        const overlayInnerHeight = Math.max(overlayHeight - paddingInner * 2, 0);
 
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(baseX, overlayY, image.width, overlayHeight);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(baseX, overlayY, image.width, overlayHeight);
 
-      if (textAreaWidth > 0 && overlayInnerHeight > 0) {
-        const baseFontSize = Math.max(14, overlayHeight * 0.35);
-        const { fontSize: fittedFontSize, lineHeight, lines } = fitTextWithinBox(
-          ctx,
-          overlayText,
-          textAreaWidth,
-          overlayInnerHeight,
-          baseFontSize,
-        );
+        if (textAreaWidth > 0 && overlayInnerHeight > 0) {
+          const baseFontSize = Math.max(14, overlayHeight * 0.35);
+          // The fit is deterministic per (text, box) in world units, so it caches across
+          // frames and zoom levels; without this the per-word measureText loop runs per
+          // image per frame.
+          const fitKey = `${overlayText}\u0000${Math.round(textAreaWidth)}\u0000${Math.round(overlayInnerHeight)}\u0000${Math.round(baseFontSize)}`;
+          let fit = renderCache?.textFitCache.get(fitKey);
+          if (!fit) {
+            fit = fitTextWithinBox(ctx, overlayText, textAreaWidth, overlayInnerHeight, baseFontSize);
+            if (renderCache) {
+              if (renderCache.textFitCache.size >= TEXT_FIT_CACHE_MAX_ENTRIES) {
+                renderCache.textFitCache.clear();
+              }
+              renderCache.textFitCache.set(fitKey, fit);
+            }
+          }
+          const { fontSize: fittedFontSize, lineHeight, lines } = fit;
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(baseX + paddingInner, overlayY + paddingInner, textAreaWidth, overlayInnerHeight);
-        ctx.clip();
-        ctx.fillStyle = '#ffffff';
-        ctx.font = `${fittedFontSize}px sans-serif`;
-        lines.forEach((line, lineIndex) => {
-          const textY = overlayY + paddingInner + fittedFontSize + lineIndex * lineHeight;
-          ctx.fillText(line, baseX + paddingInner, textY);
-        });
-        ctx.restore();
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(baseX + paddingInner, overlayY + paddingInner, textAreaWidth, overlayInnerHeight);
+          ctx.clip();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `${fittedFontSize}px sans-serif`;
+          lines.forEach((line, lineIndex) => {
+            const textY = overlayY + paddingInner + fittedFontSize + lineIndex * lineHeight;
+            ctx.fillText(line, baseX + paddingInner, textY);
+          });
+          ctx.restore();
+        }
       }
     }
 
     ctx.globalAlpha = 1;
 
     const padding = 5 / scale;
-    const isFflfSelectedVideo = isKlingO3ReferenceMode && image.mediaType === 'video' && selectedImageIds.includes(image.id);
+    const isSelected = selectedSet.has(image.id);
+    const isFflfSelectedVideo = isKlingO3ReferenceMode && image.mediaType === 'video' && isSelected;
 
-    const isReferenceTagged = referenceImageIds.includes(image.id)
-      || referenceVideoIds.includes(image.id)
-      || referenceAudioIds.includes(image.id); // Seedance reference mode can tag non-image media.
-    const krea2StyleReferenceIds = krea2StyleReferenceImageIds ?? referenceImageIds; // Fall back for older callers.
-    const isKrea2StyleReferenceTagged = krea2StyleReferenceIds.includes(image.id); // Only actual Krea style inputs.
+    const isReferenceTagged = referenceTaggedSet.has(image.id); // Seedance reference mode can tag non-image media.
+    const isKrea2StyleReferenceTagged = krea2Set.has(image.id); // Only actual Krea style inputs.
 
-    if (shouldShowCanvasChrome && elementImageIds.includes(image.id)) {
+    if (shouldShowCanvasChrome && elementSet.has(image.id)) {
       ctx.strokeStyle = '#a855f7'; // purple-500 for elements
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
@@ -418,7 +678,7 @@ export function drawCanvas({
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (shouldShowCanvasChrome && selectedImageIds.includes(image.id) && image.mediaType === 'audio') {
+    } else if (shouldShowCanvasChrome && isSelected && image.mediaType === 'audio') {
       ctx.strokeStyle = '#eab308'; // yellow-500 for audio
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
@@ -426,7 +686,7 @@ export function drawCanvas({
       ctx.setLineDash([]);
 
       // Draw audio duration badge
-      if (image.audioDuration) {
+      if (showItemChrome && image.audioDuration) {
         const currentTime = audioPlaybackTime ?? 0;
         const totalTime = image.audioDuration;
         const durationText = image.isPlaying
@@ -455,7 +715,7 @@ export function drawCanvas({
         ctx.fillStyle = '#000000';
         ctx.fillText(durationText, badgeX + badgePaddingX, badgeY + badgeHeight / 2);
       }
-    } else if (shouldShowCanvasChrome && isWan27VideoMode && selectedImageIds.includes(image.id) && image.mediaType === 'image') {
+    } else if (shouldShowCanvasChrome && isWan27VideoMode && isSelected && image.mediaType === 'image') {
       ctx.strokeStyle = '#3b82f6'; // blue-500 for images in Wan 2.7 mode
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
@@ -467,7 +727,7 @@ export function drawCanvas({
       ctx.setLineDash([6 / scale, 4 / scale]);
       ctx.strokeRect(baseX - padding, baseY - padding, image.width + padding * 2, image.height + padding * 2);
       ctx.setLineDash([]);
-    } else if (shouldShowCanvasChrome && selectedImageIds.includes(image.id)) {
+    } else if (shouldShowCanvasChrome && isSelected) {
       ctx.strokeStyle = '#0ea5e9'; // sky-500
       ctx.lineWidth = 4 / scale;
       ctx.setLineDash([6 / scale, 4 / scale]);
@@ -496,7 +756,7 @@ export function drawCanvas({
           : null
       : null; // Only video first/last-frame modes should label selected stills this way.
     const referenceOrderLabel = frameRoleLabel ?? (isKlingSourceVideo ? 'Video' : referenceImageOrderLabels?.[image.id]);
-    const shouldShowReferenceBadge = shouldShowCanvasChrome && !!referenceOrderLabel;
+    const shouldShowReferenceBadge = showItemChrome && !!referenceOrderLabel;
     if (shouldShowReferenceBadge) {
       const badgeX = baseX - padding;
       const badgeY = baseY - padding - ((24 / scale) + (6 / scale) * 2) - 2 / scale;
@@ -524,7 +784,7 @@ export function drawCanvas({
     }
 
     const elementOrderLabel = elementImageOrderLabels?.[image.id];
-    if (shouldShowCanvasChrome && elementOrderLabel) {
+    if (showItemChrome && elementOrderLabel) {
       const badgeX = baseX - padding;
       const badgeY = baseY - padding - ((24 / scale) + (6 / scale) * 2) - 2 / scale;
       drawCanvasBadge(ctx, elementOrderLabel, badgeX, badgeY, scale, {
@@ -534,7 +794,7 @@ export function drawCanvas({
       });
     }
 
-    if (shouldShowCanvasChrome && image.isFavorite) {
+    if (showItemChrome && image.isFavorite) {
       const starOuterRadius = getFavoriteStarRadius(image.width, image.height);
       if (starOuterRadius !== null) {
         const starInset = starOuterRadius * FAVORITE_STAR_INSET_RATIO;
@@ -544,6 +804,10 @@ export function drawCanvas({
 
     ctx.restore();
   });
+
+  if (imageLodCache) {
+    endLodFrame(imageLodCache); // Retry deferred eviction after visible tiers are protected.
+  }
 
   if (shouldShowCanvasChrome && cropMode) {
     const imageToCrop = images.find(img => img.id === cropMode.imageId);
@@ -687,9 +951,19 @@ export function drawCanvas({
         return; // Skip fully offscreen pins.
       }
 
-      ctx.shadowColor = 'rgba(0,0,0,0.45)';
-      ctx.shadowBlur = 6 / scale;
-      ctx.shadowOffsetY = 2 / scale;
+      // Pseudo-shadow: offset dark copies of the pin shapes. ctx.shadowBlur forces an
+      // expensive filter pass per pin per frame, which adds up with many notes.
+      const pinShadowOffsetY = 2 / scale;
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(pin.headCenterX - pin.tailHalfWidth, pin.headCenterY + pin.headRadius * 0.6 + pinShadowOffsetY);
+      ctx.lineTo(pin.headCenterX + pin.tailHalfWidth, pin.headCenterY + pin.headRadius * 0.6 + pinShadowOffsetY);
+      ctx.lineTo(note.anchor.x, note.anchor.y + pinShadowOffsetY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(pin.headCenterX, pin.headCenterY + pinShadowOffsetY, pin.headRadius, 0, Math.PI * 2);
+      ctx.fill();
 
       // Tail: triangle from the head down to the anchor tip.
       ctx.beginPath();
@@ -704,7 +978,6 @@ export function drawCanvas({
       ctx.beginPath();
       ctx.arc(pin.headCenterX, pin.headCenterY, pin.headRadius, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowColor = 'transparent';
       ctx.stroke();
 
       if (note.label !== undefined) {
@@ -721,47 +994,10 @@ export function drawCanvas({
   // --- 2. Draw path overlay ---
   if (paths.length > 0) {
     const cache = renderCache ?? createCanvasRenderCache();
-    const pathCanvas = getReusablePathCanvas(cache, canvas.width, canvas.height);
-    const pathCtx = pathCanvas.getContext('2d');
-    const nextPathSignature = getPathLayerSignature({ canvas, pan, scale, paths });
-
-    if (pathCtx) {
-      if (cache.pathSignature !== nextPathSignature) {
-        pathCtx.setTransform?.(1, 0, 0, 1, 0, 0);
-        pathCtx.clearRect(0, 0, pathCanvas.width, pathCanvas.height);
-        pathCtx.translate(pan.x, pan.y);
-        pathCtx.scale(scale, scale);
-
-        // Process all paths in order to respect drawing/erasing sequence
-        paths.forEach(path => {
-          if (path.tool === Tool.ERASE) {
-            pathCtx.globalCompositeOperation = 'destination-out';
-            // For destination-out, color doesn't matter, but alpha must be 1.
-            pathCtx.strokeStyle = 'rgba(0,0,0,1)';
-          } else {
-            pathCtx.globalCompositeOperation = 'source-over';
-            pathCtx.strokeStyle = path.color;
-          }
-
-          pathCtx.lineWidth = path.size;
-          pathCtx.lineCap = 'round';
-          pathCtx.lineJoin = 'round';
-          pathCtx.beginPath();
-          path.points.forEach((point, index) => {
-            if (index === 0) pathCtx.moveTo(point.x, point.y);
-            else pathCtx.lineTo(point.x, point.y);
-          });
-          pathCtx.stroke();
-        });
-
-        pathCtx.globalCompositeOperation = 'source-over';
-        cache.pathSignature = nextPathSignature; // Reuse the path bitmap until inputs change.
-      }
-
-      // Draw the path canvas onto the main canvas
-      ctx.drawImage(pathCanvas, 0, 0);
-    }
+    drawPathLayer(ctx, canvas, cache, paths, pan, scale);
   } else if (renderCache) {
-    renderCache.pathSignature = null;
+    renderCache.pathsRef = null;
+    renderCache.pathBounds = null;
+    renderCache.pathWorldRect = null;
   }
 }
