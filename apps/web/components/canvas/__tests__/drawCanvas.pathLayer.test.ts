@@ -61,11 +61,12 @@ describe('drawCanvas path layer cache', () => {
   const cache = createCanvasRenderCache();
   const canvas = buildCanvas();
 
-  const draw = (paths: Path[], pan: Point, scale: number) => drawCanvas({
+  const draw = (paths: Path[], pan: Point, scale: number, isViewGesture = false) => drawCanvas({
     canvas,
     ctx: buildContext(),
     pan,
     scale,
+    isViewGesture,
     images: [],
     notes: [],
     paths,
@@ -131,6 +132,19 @@ describe('drawCanvas path layer cache', () => {
     draw(paths, { x: 0, y: 0 }, 1);
     expect(countRasters(() => draw(paths, { x: 0, y: 0 }, 4)).rasters).toBe(1);
     expect(countRasters(() => draw(paths, { x: 0, y: 0 }, 4)).rasters).toBe(0);
+    expect(cache.pathViewScale).toBe(4);
+  });
+
+  it('blits the stale raster during a zoom gesture, then re-rasterizes at settle', () => {
+    const paths = [buildPath([{ x: 0, y: 0 }, { x: 40, y: 40 }])];
+
+    draw(paths, { x: 0, y: 0 }, 1);
+    // Scale drift far outside [0.5, 1.25] mid-gesture: blit the stale bitmap, no re-stroke.
+    expect(countRasters(() => draw(paths, { x: 0, y: 0 }, 4, true)).rasters).toBe(0);
+    expect(cache.pathViewScale).toBe(1); // The stale raster is untouched.
+
+    // The settle frame (gesture over) re-rasters sharp at the new scale.
+    expect(countRasters(() => draw(paths, { x: 0, y: 0 }, 4)).rasters).toBe(1);
     expect(cache.pathViewScale).toBe(4);
   });
 

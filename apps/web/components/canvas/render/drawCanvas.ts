@@ -1,5 +1,5 @@
 import { formatDuration } from '../../../services/audioService';
-import { Tool, type CanvasImage, type CanvasNote, type Path, type Point } from '../../../types';
+import { Tool, type CanvasImage, type CanvasImageMetadata, type CanvasNote, type Path, type Point } from '../../../types';
 import { CROP_HANDLE_SIZE, NOTE_PIN_BORDER, NOTE_PIN_FILL, NOTE_PIN_LABEL_FONT_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
 import { getImageBounds, getImageCenter, getImageRotation, getNotePinGeometry } from '../geometry';
 import { isVideoImage } from '../mediaGuards';
@@ -17,8 +17,15 @@ const FAVORITE_STAR_PREFERRED_MIN_RADIUS = 10;
 const FAVORITE_STAR_BACKDROP_RATIO = 1.3; // Backdrop half-size relative to the star's outer radius.
 
 type TextFitResult = { fontSize: number; lineHeight: number; lines: string[] };
+// fit stays null until the text is first drawn at readable size, so toggling the overlay
+// on while zoomed far out never pays the measureText-heavy fit for hundreds of items.
+type OverlayEntry = { overlayText: string; fit: TextFitResult | null };
 
-const TEXT_FIT_CACHE_MAX_ENTRIES = 500;
+// Below these screen sizes the metadata text is illegible; its layout and fill are pure
+// cost, and zoomed out they dominate the frame. The dark band still draws so the toggle
+// reads as on.
+const OVERLAY_TEXT_MIN_BAND_SCREEN_PX = 6;
+const OVERLAY_TEXT_MIN_FONT_SCREEN_PX = 3.5;
 
 // Items smaller than this on screen skip badges and favorite stars — the chrome would be
 // illegible anyway, and its layout cost dominates zoomed-out frames. Measured against the
@@ -48,7 +55,10 @@ export type CanvasRenderCache = {
   dotGridTile: HTMLCanvasElement | null;
   dotGridPattern: CanvasPattern | null;
   dotGridKey: string | null;
-  textFitCache: Map<string, TextFitResult>;
+  // Overlay text and its fit are pure functions of the item object (world-unit box,
+  // metadata text), so entries key on item identity like getImageBounds and are GC'd
+  // with the item. null marks items whose overlay text is empty.
+  overlayFitCache: WeakMap<CanvasImage, OverlayEntry | null>;
 };
 
 export const createCanvasRenderCache = (): CanvasRenderCache => ({
@@ -61,7 +71,7 @@ export const createCanvasRenderCache = (): CanvasRenderCache => ({
   dotGridTile: null,
   dotGridPattern: null,
   dotGridKey: null,
-  textFitCache: new Map(),
+  overlayFitCache: new WeakMap(),
 });
 
 const getWorldViewport = (canvas: HTMLCanvasElement, pan: Point, scale: number): CanvasRect => {
@@ -173,6 +183,7 @@ const drawPathLayer = (
   paths: Path[],
   pan: Point,
   scale: number,
+  isViewGesture: boolean,
 ): void => {
   if (cache.pathsRef !== paths) {
     cache.pathsRef = paths;
@@ -187,10 +198,18 @@ const drawPathLayer = (
   if (!visible) return; // Every stroke is offscreen; keep the bitmap for the way back.
 
   const viewScaleRatio = cache.pathViewScale > 0 ? scale / cache.pathViewScale : Infinity;
-  const needsRaster = !cache.pathWorldRect
-    || !rectContains(cache.pathWorldRect, visible)
-    || viewScaleRatio < PATH_RASTER_SCALE_MIN_RATIO
-    || viewScaleRatio > PATH_RASTER_SCALE_MAX_RATIO;
+  // Mid-gesture (pan or zoom), scale drift alone blits the existing bitmap under the
+  // live transform instead of re-stroking (briefly soft/oversharp but geometrically
+  // correct); the settle frame re-rasters sharp. A fast 3%→19% sweep would otherwise
+  // re-stroke the full layer at up to 4096² several times, synchronously inside gesture
+  // frames. Coverage misses still raster even mid-gesture — a long pan must not leave
+  // strokes missing at the leading edge.
+  const needsRaster = isViewGesture
+    ? (!cache.pathWorldRect || !rectContains(cache.pathWorldRect, visible))
+    : (!cache.pathWorldRect
+      || !rectContains(cache.pathWorldRect, visible)
+      || viewScaleRatio < PATH_RASTER_SCALE_MIN_RATIO
+      || viewScaleRatio > PATH_RASTER_SCALE_MAX_RATIO);
 
   if (needsRaster) {
     const marginWorld = Math.max(viewport.maxX - viewport.minX, viewport.maxY - viewport.minY)
@@ -276,13 +295,17 @@ export const drawDotGridLayer = (
   if (!(spacing > 0) || !(dotRadius > 0)) return;
   if (typeof ctx.createPattern !== 'function') return; // Mocked/limited 2D contexts.
 
-  const key = `${spacing}|${dotRadius}`;
+  // The tile is drawn at integer size anyway, so key on the quantized values: a raw
+  // float key changes every zoom frame and turned continuous zooming into a tile
+  // rebuild + createPattern per frame. Quarter-pixel radius steps are invisible.
+  const tileSize = Math.max(1, Math.round(spacing));
+  const quantRadius = Math.max(0.25, Math.round(dotRadius * 4) / 4);
+  const key = `${tileSize}|${quantRadius}`;
   if (cache.dotGridKey !== key || !cache.dotGridPattern) {
     if (!cache.dotGridTile) {
       cache.dotGridTile = document.createElement('canvas');
     }
     const tile = cache.dotGridTile;
-    const tileSize = Math.max(1, Math.round(spacing));
     tile.width = tileSize;
     tile.height = tileSize;
     const tileCtx = tile.getContext('2d');
@@ -290,7 +313,7 @@ export const drawDotGridLayer = (
     tileCtx.clearRect(0, 0, tileSize, tileSize);
     tileCtx.fillStyle = 'rgba(255,255,255,0.2)';
     tileCtx.beginPath();
-    tileCtx.arc(tileSize / 2, tileSize / 2, dotRadius, 0, Math.PI * 2);
+    tileCtx.arc(tileSize / 2, tileSize / 2, quantRadius, 0, Math.PI * 2);
     tileCtx.fill();
     const pattern = ctx.createPattern(tile, 'repeat');
     if (!pattern) return;
@@ -298,7 +321,6 @@ export const drawDotGridLayer = (
     cache.dotGridKey = key;
   }
 
-  const tileSize = Math.max(1, Math.round(spacing));
   const offsetX = ((pan.x % tileSize) + tileSize) % tileSize;
   const offsetY = ((pan.y % tileSize) + tileSize) % tileSize;
   ctx.save();
@@ -306,6 +328,40 @@ export const drawDotGridLayer = (
   ctx.fillStyle = cache.dotGridPattern;
   ctx.fillRect(0, 0, canvas.width + tileSize * 2, canvas.height + tileSize * 2);
   ctx.restore();
+};
+
+const buildOverlayText = (metadata: CanvasImageMetadata): string => {
+  const segments: string[] = [];
+
+  const modelLabel = metadata.modelLabel?.trim() ?? '';
+  if (modelLabel.length > 0) {
+    segments.push(modelLabel);
+  }
+
+  const upscaleFactor = metadata.upscaleFactor;
+  if (typeof upscaleFactor === 'number' && Number.isFinite(upscaleFactor) && upscaleFactor > 0) {
+    const formattedFactor = Number.isInteger(upscaleFactor)
+      ? `${upscaleFactor}x`
+      : `${Number.parseFloat(upscaleFactor.toFixed(2))}x`;
+    segments.push(formattedFactor);
+  }
+
+  const noiseScale = metadata.noiseScale;
+  if (typeof noiseScale === 'number' && Number.isFinite(noiseScale)) {
+    segments.push((Math.round(noiseScale * 10) / 10).toFixed(1));
+  }
+
+  const creativity = metadata.creativity;
+  if (typeof creativity === 'number' && Number.isFinite(creativity)) {
+    segments.push(`Creativity ${creativity.toFixed(1)}`);
+  }
+
+  const promptText = metadata.prompt?.trim() ?? '';
+  if (promptText.length > 0) {
+    segments.push(promptText);
+  }
+
+  return segments.join('; ');
 };
 
 const drawCanvasBadge = (
@@ -442,6 +498,9 @@ type DrawCanvasArgs = {
   imageLodCache?: ImageLodCache;
   audioPlaybackTimes?: Readonly<Record<string, number>>;
   isPresentationMode?: boolean;
+  // True while a view gesture (pan or zoom) is in flight; expensive reconciliation (LOD
+  // tier jobs, path scale-drift re-raster) is deferred to the settle frame that follows.
+  isViewGesture?: boolean;
 };
 
 export function drawCanvas({
@@ -479,6 +538,7 @@ export function drawCanvas({
   imageLodCache,
   audioPlaybackTimes,
   isPresentationMode = false,
+  isViewGesture = false,
 }: DrawCanvasArgs) {
   // --- 1. Draw scene (images, notes, selections) ---
   const shouldShowCanvasChrome = !isPresentationMode;
@@ -489,8 +549,11 @@ export function drawCanvas({
   ctx.scale(scale, scale);
 
   if (imageLodCache) {
-    beginLodFrame(imageLodCache); // Protects this frame's bitmaps from LRU eviction.
+    // Protects this frame's bitmaps from LRU eviction; a live gesture also narrows decode
+    // concurrency so tier generation never competes with interaction frames.
+    beginLodFrame(imageLodCache, { throttleJobs: isViewGesture });
   }
+  const lodOpts = { deferTierJobs: isViewGesture }; // Hoisted so the item loop allocates nothing.
 
   const disabledSet = new Set(disabledMediaIds); // Sets keep per-image membership checks constant-time.
   const selectedSet = new Set(selectedImageIds);
@@ -536,7 +599,7 @@ export function drawCanvas({
       // Zoomed out, the LOD cache substitutes a pre-downscaled bitmap so drawImage isn't
       // resampling the full-resolution source per item per frame.
       const drawSource = imageLodCache
-        ? getLodDrawSource(imageLodCache, image, scale)
+        ? getLodDrawSource(imageLodCache, image, scale, lodOpts)
         : image.element;
       ctx.drawImage(drawSource, baseX, baseY, image.width, image.height);
     }
@@ -566,43 +629,17 @@ export function drawCanvas({
     }
 
     const metadata = image.metadata;
-    // String assembly and text fitting only run when the overlay can actually render;
-    // below the chrome threshold the text would be sub-pixel anyway.
     if (showItemTextOverlay && showMetadataOverlay && metadata && metadata.source !== 'imported') {
-      const promptText = metadata.prompt?.trim() ?? '';
-      const modelLabel = metadata.modelLabel?.trim() ?? '';
-      const segments: string[] = [];
-
-      if (modelLabel.length > 0) {
-        segments.push(modelLabel);
+      // Warm frames do a single WeakMap lookup: no string assembly, no key hashing of
+      // multi-KB prompts, both of which used to run per visible item per frame.
+      let entry = renderCache?.overlayFitCache.get(image);
+      if (entry === undefined) {
+        const overlayText = buildOverlayText(metadata);
+        entry = overlayText.length > 0 ? { overlayText, fit: null } : null;
+        renderCache?.overlayFitCache.set(image, entry);
       }
 
-      const upscaleFactor = metadata.upscaleFactor;
-      if (typeof upscaleFactor === 'number' && Number.isFinite(upscaleFactor) && upscaleFactor > 0) {
-        const formattedFactor = Number.isInteger(upscaleFactor)
-          ? `${upscaleFactor}x`
-          : `${Number.parseFloat(upscaleFactor.toFixed(2))}x`;
-        segments.push(formattedFactor);
-      }
-
-      const noiseScale = metadata.noiseScale;
-      if (typeof noiseScale === 'number' && Number.isFinite(noiseScale)) {
-        const formattedNoise = (Math.round(noiseScale * 10) / 10).toFixed(1);
-        segments.push(formattedNoise);
-      }
-
-      const creativity = metadata.creativity;
-      if (typeof creativity === 'number' && Number.isFinite(creativity)) {
-        segments.push(`Creativity ${creativity.toFixed(1)}`);
-      }
-
-      if (promptText.length > 0) {
-        segments.push(promptText);
-      }
-
-      const overlayText = segments.join('; ');
-
-      if (overlayText.length > 0) {
+      if (entry) {
         const overlayHeight = image.height * 0.15;
         const overlayY = baseY + image.height - overlayHeight;
         const paddingInner = Math.max(8, overlayHeight * 0.1);
@@ -612,35 +649,37 @@ export function drawCanvas({
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.fillRect(baseX, overlayY, image.width, overlayHeight);
 
-        if (textAreaWidth > 0 && overlayInnerHeight > 0) {
-          const baseFontSize = Math.max(14, overlayHeight * 0.35);
-          // The fit is deterministic per (text, box) in world units, so it caches across
-          // frames and zoom levels; without this the per-word measureText loop runs per
-          // image per frame.
-          const fitKey = `${overlayText}\u0000${Math.round(textAreaWidth)}\u0000${Math.round(overlayInnerHeight)}\u0000${Math.round(baseFontSize)}`;
-          let fit = renderCache?.textFitCache.get(fitKey);
-          if (!fit) {
-            fit = fitTextWithinBox(ctx, overlayText, textAreaWidth, overlayInnerHeight, baseFontSize);
-            if (renderCache) {
-              if (renderCache.textFitCache.size >= TEXT_FIT_CACHE_MAX_ENTRIES) {
-                renderCache.textFitCache.clear();
-              }
-              renderCache.textFitCache.set(fitKey, fit);
-            }
+        const textIsReadable = overlayInnerHeight * scale >= OVERLAY_TEXT_MIN_BAND_SCREEN_PX;
+        if (textAreaWidth > 0 && overlayInnerHeight > 0 && textIsReadable) {
+          if (!entry.fit) {
+            // Deferring the fit to the first readable draw amortizes the per-word
+            // measureText loop over zoom-ins instead of paying it for every visible item
+            // in the same frame the overlay is toggled on.
+            const baseFontSize = Math.max(14, overlayHeight * 0.35);
+            const fit = fitTextWithinBox(ctx, entry.overlayText, textAreaWidth, overlayInnerHeight, baseFontSize);
+            // Keep only the lines the clip reveals; overflow fillText calls are pure cost.
+            const maxLines = Math.max(1, Math.floor(overlayInnerHeight / fit.lineHeight));
+            entry.fit = {
+              fontSize: fit.fontSize,
+              lineHeight: fit.lineHeight,
+              lines: fit.lines.length > maxLines ? fit.lines.slice(0, maxLines) : fit.lines,
+            };
           }
-          const { fontSize: fittedFontSize, lineHeight, lines } = fit;
+          const { fontSize: fittedFontSize, lineHeight, lines } = entry.fit;
 
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(baseX + paddingInner, overlayY + paddingInner, textAreaWidth, overlayInnerHeight);
-          ctx.clip();
-          ctx.fillStyle = '#ffffff';
-          ctx.font = `${fittedFontSize}px sans-serif`;
-          lines.forEach((line, lineIndex) => {
-            const textY = overlayY + paddingInner + fittedFontSize + lineIndex * lineHeight;
-            ctx.fillText(line, baseX + paddingInner, textY);
-          });
-          ctx.restore();
+          if (fittedFontSize * scale >= OVERLAY_TEXT_MIN_FONT_SCREEN_PX) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(baseX + paddingInner, overlayY + paddingInner, textAreaWidth, overlayInnerHeight);
+            ctx.clip();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `${fittedFontSize}px sans-serif`;
+            lines.forEach((line, lineIndex) => {
+              const textY = overlayY + paddingInner + fittedFontSize + lineIndex * lineHeight;
+              ctx.fillText(line, baseX + paddingInner, textY);
+            });
+            ctx.restore();
+          }
         }
       }
     }
@@ -994,7 +1033,7 @@ export function drawCanvas({
   // --- 2. Draw path overlay ---
   if (paths.length > 0) {
     const cache = renderCache ?? createCanvasRenderCache();
-    drawPathLayer(ctx, canvas, cache, paths, pan, scale);
+    drawPathLayer(ctx, canvas, cache, paths, pan, scale, isViewGesture);
   } else if (renderCache) {
     renderCache.pathsRef = null;
     renderCache.pathBounds = null;

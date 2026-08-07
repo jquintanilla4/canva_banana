@@ -7,6 +7,9 @@ const STRESS_SOURCE_POOL_LIMIT = 8;
 const STRESS_ITEM_WIDTH = 2048;
 const STRESS_ITEM_HEIGHT = 1152;
 const STRESS_ITEM_GAP = 100;
+// ~1.5 KB, matching the long generation prompts real documents carry, so the metadata
+// overlay's per-item text cost is reproducible with the stress harness.
+const STRESS_PROMPT = 'Cinematic wide shot of a rain-soaked neon city at night, reflective asphalt, volumetric fog rolling between elevated train tracks, dramatic rim lighting on a lone figure under a transparent umbrella, shallow depth of field, heavy film grain, anamorphic lens flares, ultra detailed, 8k. '.repeat(6);
 
 type CanvasStressWindow = Window & {
   __stressCanvas?: (count?: number) => string;
@@ -50,6 +53,11 @@ const createStressImages = (count: number): CanvasImage[] => {
     naturalWidth: STRESS_ITEM_WIDTH,
     naturalHeight: STRESS_ITEM_HEIGHT,
     file: new File([''], `stress-${index}.png`, { type: 'image/png' }),
+    metadata: {
+      source: 'generated',
+      modelLabel: 'Stress Harness',
+      prompt: `${STRESS_PROMPT} #${index}`, // Distinct per item, like real generations.
+    },
   } as CanvasImage));
 };
 

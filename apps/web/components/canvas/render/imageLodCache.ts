@@ -16,6 +16,18 @@ const LOD_DEMOTE_RATIO = 0.85;
 
 const DEFAULT_MAX_BYTES = 400 * 1024 * 1024; // Keep a generous desktop cache while enforcing a hard ceiling.
 const DEFAULT_MAX_CONCURRENT_JOBS = 4;
+// Background prewarm never occupies more than this many decode slots, so a burst of
+// visible-tier jobs always has capacity the moment it arrives.
+const PREWARM_MAX_CONCURRENT_JOBS = 2;
+
+// A zoom jump across a tier boundary re-tiers every visible item in the same settle
+// frame. Enqueueing them all at once turns the next second into a 4-wide decode storm
+// that competes with pan frames, so new tier jobs are metered per frame — each landing
+// batch triggers a redraw, which refills the next slice until the view is sharp.
+const MAX_TIER_ENQUEUES_PER_FRAME = 8;
+// While the user is actively panning/zooming, tier decodes also run narrower so the
+// thread pool stays responsive; the full width returns the moment the view rests.
+const GESTURE_MAX_CONCURRENT_JOBS = 2;
 
 export type LodBitmap = {
   readonly width: number;
@@ -80,9 +92,16 @@ export type ImageLodCache = {
   requestedJobKeys: Set<string>; // Queued tiers needed by the frame currently being drawn.
   budgetBlocked: Map<string, BudgetBlockedTier>; // Prevents over-budget misses from regenerating every frame.
   jobQueue: LodJob[];
+  // Low-priority smallest-tier jobs for items nothing has drawn yet. Runs only on idle
+  // decode capacity and survives endLodFrame's viewport culling: its whole point is to
+  // cover items BEFORE they enter the viewport, so panning never falls back to a
+  // full-resolution drawImage of a cold source.
+  prewarmQueue: LodJob[];
   runningJobs: number;
   totalBytes: number;
   frameId: number;
+  frameEnqueueBudget: number; // Remaining new tier jobs this frame may queue.
+  gestureThrottled: boolean; // Narrow decode concurrency while a view gesture is live.
   redrawQueued: boolean;
   disposed: boolean;
   maxBytes: number;
@@ -149,9 +168,12 @@ export function createImageLodCache(options: ImageLodCacheOptions = {}): ImageLo
     requestedJobKeys: new Set(),
     budgetBlocked: new Map(),
     jobQueue: [],
+    prewarmQueue: [],
     runningJobs: 0,
     totalBytes: 0,
     frameId: 0,
+    frameEnqueueBudget: Number.POSITIVE_INFINITY, // Unmetered until the first beginLodFrame.
+    gestureThrottled: false,
     redrawQueued: false,
     disposed: false,
     maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES,
@@ -275,56 +297,70 @@ const flushRedraw = (cache: ImageLodCache): void => {
   });
 };
 
+const startJob = (cache: ImageLodCache, job: LodJob): void => {
+  cache.runningJobs += 1;
+  cache.bitmapFactory(job.source, job.width, job.height)
+    .then(bitmap => {
+      cache.runningJobs -= 1;
+      cache.pending.delete(job.key);
+      if (cache.disposed) {
+        bitmap.close();
+        return;
+      }
+      const entry = cache.entries.get(job.imageId); // The source may have changed while the job ran.
+      if (!entry || entry.revision !== job.entryRevision || entry.source !== job.source || entry.videoTimeKey !== job.videoTimeKey) {
+        bitmap.close();
+        pumpJobs(cache);
+        return;
+      }
+      const bytes = bitmap.width * bitmap.height * 4;
+      if (!evictUntilFits(cache, bytes, entry)) {
+        bitmap.close();
+        cache.budgetBlocked.set(job.key, {
+          imageId: job.imageId,
+          entryRevision: job.entryRevision,
+          bytes,
+        }); // Fall back to the source without exceeding the cache or regenerating every frame.
+        pumpJobs(cache);
+        return;
+      }
+      entry.tiers.set(job.tierSize, { bitmap, bytes, lastUsedFrame: cache.frameId });
+      cache.totalBytes += bytes;
+      flushRedraw(cache);
+      pumpJobs(cache);
+    })
+    .catch(() => {
+      cache.runningJobs -= 1;
+      cache.pending.delete(job.key);
+      if (cache.disposed) return;
+      const entry = cache.entries.get(job.imageId);
+      if (entry?.revision === job.entryRevision && entry.source === job.source && entry.videoTimeKey === job.videoTimeKey) {
+        entry.failed = true; // Tainted or undecodable source: draw full-res forever.
+      }
+      pumpJobs(cache);
+    });
+};
+
 const pumpJobs = (cache: ImageLodCache): void => {
-  while (!cache.disposed && cache.runningJobs < cache.maxConcurrentJobs && cache.jobQueue.length > 0) {
-    const job = cache.jobQueue.pop()!; // LIFO: the most recently requested view wins.
-    cache.runningJobs += 1;
-    cache.bitmapFactory(job.source, job.width, job.height)
-      .then(bitmap => {
-        cache.runningJobs -= 1;
-        cache.pending.delete(job.key);
-        if (cache.disposed) {
-          bitmap.close();
-          return;
-        }
-        const entry = cache.entries.get(job.imageId); // The source may have changed while the job ran.
-        if (!entry || entry.revision !== job.entryRevision || entry.source !== job.source || entry.videoTimeKey !== job.videoTimeKey) {
-          bitmap.close();
-          pumpJobs(cache);
-          return;
-        }
-        const bytes = bitmap.width * bitmap.height * 4;
-        if (!evictUntilFits(cache, bytes, entry)) {
-          bitmap.close();
-          cache.budgetBlocked.set(job.key, {
-            imageId: job.imageId,
-            entryRevision: job.entryRevision,
-            bytes,
-          }); // Fall back to the source without exceeding the cache or regenerating every frame.
-          pumpJobs(cache);
-          return;
-        }
-        entry.tiers.set(job.tierSize, { bitmap, bytes, lastUsedFrame: cache.frameId });
-        cache.totalBytes += bytes;
-        flushRedraw(cache);
-        pumpJobs(cache);
-      })
-      .catch(() => {
-        cache.runningJobs -= 1;
-        cache.pending.delete(job.key);
-        if (cache.disposed) return;
-        const entry = cache.entries.get(job.imageId);
-        if (entry?.revision === job.entryRevision && entry.source === job.source && entry.videoTimeKey === job.videoTimeKey) {
-          entry.failed = true; // Tainted or undecodable source: draw full-res forever.
-        }
-        pumpJobs(cache);
-      });
+  const regularCap = cache.gestureThrottled
+    ? Math.min(cache.maxConcurrentJobs, GESTURE_MAX_CONCURRENT_JOBS)
+    : cache.maxConcurrentJobs;
+  while (!cache.disposed && cache.runningJobs < regularCap && cache.jobQueue.length > 0) {
+    startJob(cache, cache.jobQueue.pop()!); // LIFO: the most recently requested view wins.
+  }
+  // Prewarm strictly yields to visible-tier work: it runs only when the regular queue is
+  // drained, and holds fewer slots so an arriving burst always has decode capacity.
+  const prewarmCap = Math.min(cache.maxConcurrentJobs, PREWARM_MAX_CONCURRENT_JOBS);
+  while (!cache.disposed && cache.jobQueue.length === 0 && cache.runningJobs < prewarmCap && cache.prewarmQueue.length > 0) {
+    startJob(cache, cache.prewarmQueue.shift()!); // FIFO: cover the document in load order.
   }
 };
 
-export function beginLodFrame(cache: ImageLodCache): void { // Starts LRU bookkeeping for a new paint.
+export function beginLodFrame(cache: ImageLodCache, opts?: { throttleJobs?: boolean }): void { // Starts LRU bookkeeping for a new paint.
   cache.frameId += 1;
   cache.requestedJobKeys.clear();
+  cache.frameEnqueueBudget = MAX_TIER_ENQUEUES_PER_FRAME;
+  cache.gestureThrottled = opts?.throttleJobs ?? false;
 }
 
 export function endLodFrame(cache: ImageLodCache): void {
@@ -352,9 +388,72 @@ export function endLodFrame(cache: ImageLodCache): void {
   }
 }
 
+// Queues background smallest-tier generation for every item that has no cached tier yet.
+// Call when the images array changes (load, generation, edit): the cold-entry fallback in
+// getLodDrawSource is a full-resolution drawImage, and panning a large zoomed-out document
+// hits it for every item entering the viewport until some tier exists. The smallest tier
+// is ~37 KB for a 16:9 item, so covering an entire large document is a few MB.
+export function prewarmImageLodCache(cache: ImageLodCache, images: readonly CanvasImage[]): void {
+  if (cache.disposed) return;
+  const queuedIds = new Set(cache.prewarmQueue.map(job => job.imageId));
+  images.forEach(image => {
+    let videoTimeKey: number | null = null;
+    if (isVideoImage(image)) {
+      // Undecoded videos draw a cheap placeholder (and createImageBitmap on them would
+      // reject, permanently marking the entry failed); playing ones bypass the cache.
+      if (image.isPlaying || image.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      videoTimeKey = image.element.currentTime;
+    }
+    const element = image.element;
+    const natural = getSourceNaturalSize(element);
+    const naturalLongest = Math.max(natural.width, natural.height);
+    if (naturalLongest <= LOD_MIN_SOURCE_SIZE) return; // Small sources always draw directly.
+    if (queuedIds.has(image.id)) return;
+
+    let entry = cache.entries.get(image.id);
+    if (entry && (entry.source !== element || entry.videoTimeKey !== videoTimeKey)) {
+      return; // Stale entry; the draw path (or prune) reconciles it first.
+    }
+    if (entry && (entry.failed || entry.tiers.size > 0)) return; // Already warm enough to avoid the full-res fallback.
+    if (!entry) {
+      entry = {
+        revision: cache.nextEntryRevision++,
+        source: element,
+        tiers: new Map(),
+        lastTier: null,
+        failed: false,
+        videoTimeKey,
+      };
+      cache.entries.set(image.id, entry);
+    }
+
+    const tierSize = LOD_TIER_SIZES[0];
+    const jobKey = `${image.id}:${entry.revision}:${tierSize}`;
+    if (cache.pending.has(jobKey) || cache.budgetBlocked.has(jobKey)) return;
+    cache.pending.add(jobKey);
+    const dims = computeTierDimensions(natural.width, natural.height, tierSize);
+    cache.prewarmQueue.push({
+      key: jobKey,
+      imageId: image.id,
+      entryRevision: entry.revision,
+      source: element,
+      tierSize,
+      width: dims.width,
+      height: dims.height,
+      videoTimeKey,
+    });
+  });
+  pumpJobs(cache);
+}
+
 // Synchronous frame-time lookup. Returns what ctx.drawImage should use THIS frame and
 // schedules async generation on a miss (fallback: nearest cached tier, else the element).
-export function getLodDrawSource(cache: ImageLodCache, image: CanvasImage, scale: number): CanvasImageSource {
+export function getLodDrawSource(
+  cache: ImageLodCache,
+  image: CanvasImage,
+  scale: number,
+  opts?: { deferTierJobs?: boolean },
+): CanvasImageSource {
   let videoTimeKey: number | null = null;
   if (isVideoImage(image)) {
     if (image.isPlaying) {
@@ -405,22 +504,33 @@ export function getLodDrawSource(cache: ImageLodCache, image: CanvasImage, scale
     return cached.bitmap as unknown as CanvasImageSource;
   }
 
-  const jobKey = `${image.id}:${entry.revision}:${tierSize}`; // Queue a miss while drawing the best cached fallback.
-  cache.requestedJobKeys.add(jobKey);
-  if (!cache.pending.has(jobKey) && !cache.budgetBlocked.has(jobKey)) {
-    cache.pending.add(jobKey);
-    const dims = computeTierDimensions(natural.width, natural.height, tierSize);
-    cache.jobQueue.push({
-      key: jobKey,
-      imageId: image.id,
-      entryRevision: entry.revision,
-      source: element,
-      tierSize,
-      width: dims.width,
-      height: dims.height,
-      videoTimeKey,
-    });
-    pumpJobs(cache);
+  // During a view gesture (pan or zoom), tier promotions are deferred: the nearest cached
+  // tier keeps drawing (momentarily soft) and the settle frame enqueues the real tier. Skipping
+  // requestedJobKeys also lets endLodFrame cancel promotions queued by earlier frames
+  // of the same sweep. Cold entries still enqueue — with no tier at all the fallback is
+  // a full-res drawImage, which costs more than the job it would skip.
+  if (!(opts?.deferTierJobs && entry.tiers.size > 0)) {
+    const jobKey = `${image.id}:${entry.revision}:${tierSize}`; // Queue a miss while drawing the best cached fallback.
+    cache.requestedJobKeys.add(jobKey);
+    // The per-frame budget meters NEW work only; already-queued keys stay requested so
+    // endLodFrame keeps them. Over-budget misses draw their fallback and retry on a later
+    // frame — every landing batch requests a redraw, so the refill chain sustains itself.
+    if (!cache.pending.has(jobKey) && !cache.budgetBlocked.has(jobKey) && cache.frameEnqueueBudget > 0) {
+      cache.frameEnqueueBudget -= 1;
+      cache.pending.add(jobKey);
+      const dims = computeTierDimensions(natural.width, natural.height, tierSize);
+      cache.jobQueue.push({
+        key: jobKey,
+        imageId: image.id,
+        entryRevision: entry.revision,
+        source: element,
+        tierSize,
+        width: dims.width,
+        height: dims.height,
+        videoTimeKey,
+      });
+      pumpJobs(cache);
+    }
   }
 
   // Prefer the nearest larger cached tier (sharper), then the nearest smaller one
@@ -475,7 +585,7 @@ export function pruneImageLodCache(cache: ImageLodCache, images: readonly Canvas
     }
   });
 
-  cache.jobQueue = cache.jobQueue.filter(job => {
+  const keepCurrentJob = (job: LodJob): boolean => {
     const entry = cache.entries.get(job.imageId);
     const isCurrentJob = liveElements.get(job.imageId) === job.source
       && entry?.revision === job.entryRevision
@@ -483,12 +593,15 @@ export function pruneImageLodCache(cache: ImageLodCache, images: readonly Canvas
       && entry.videoTimeKey === job.videoTimeKey;
     if (!isCurrentJob) cache.pending.delete(job.key); // Queued work can be cancelled before bitmap creation starts.
     return isCurrentJob;
-  });
+  };
+  cache.jobQueue = cache.jobQueue.filter(keepCurrentJob);
+  cache.prewarmQueue = cache.prewarmQueue.filter(keepCurrentJob);
 }
 
 export function disposeImageLodCache(cache: ImageLodCache): void {
   cache.disposed = true;
   cache.jobQueue.length = 0;
+  cache.prewarmQueue.length = 0;
   cache.entries.forEach(entry => {
     entry.tiers.forEach(tier => tier.bitmap.close());
     entry.tiers.clear();

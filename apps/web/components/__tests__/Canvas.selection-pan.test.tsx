@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { type ComponentProps } from 'react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { StrictMode, type ComponentProps } from 'react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
 import { Tool, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
 import { createLazyVideoFromUrl } from '../../services/mediaService';
+import * as imageLodCache from '../canvas/render/imageLodCache';
 
 type CanvasProps = ComponentProps<typeof Canvas>;
 
@@ -198,11 +199,17 @@ const buildVideoPromptBar = (): CanvasVideoPromptBar => ({
 }); // Minimal embedded prompt bar fixture.
 
 describe('Canvas selection temporary pan', () => {
+  afterEach(cleanup); // Unmount every Canvas so gesture timers and animation frames are canceled.
+
   beforeAll(() => {
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
       value: vi.fn(() => null),
       configurable: true,
     }); // jsdom has no real canvas context.
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      value: vi.fn(),
+      configurable: true,
+    }); // Canvas unmount pauses media, which jsdom does not implement.
     // Pan/zoom state flushes inside a rAF callback, so interaction tests need it to run
     // synchronously; the depth guard still breaks self-rescheduling playback loops.
     let rafDepth = 0;
@@ -223,6 +230,21 @@ describe('Canvas selection temporary pan', () => {
       value: vi.fn(),
       configurable: true,
     }); // Match the no-op RAF stub.
+  });
+
+  it('prewarms the replacement image cache during a StrictMode remount', () => {
+    const prewarmSpy = vi.spyOn(imageLodCache, 'prewarmImageLodCache');
+    const image = buildImage();
+
+    render(
+      <StrictMode>
+        <Canvas {...buildCanvasProps({ images: [image] })} />
+      </StrictMode>,
+    );
+
+    const prewarmCalls = prewarmSpy.mock.calls.length;
+    prewarmSpy.mockRestore();
+    expect(prewarmCalls).toBe(2); // Initial cache plus the StrictMode replacement.
   });
 
   it('enables prompt copy from saved generation metadata', () => {

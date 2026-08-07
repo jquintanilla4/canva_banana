@@ -27,7 +27,7 @@ import { getImageBounds } from './canvas/geometry';
 import { getCanvasWheelZoomMultiplier } from './canvas/wheelZoom';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { createCanvasRenderCache, drawCanvas, drawDotGridLayer } from './canvas/render/drawCanvas';
-import { createImageLodCache, disposeImageLodCache, pruneImageLodCache, type ImageLodCache } from './canvas/render/imageLodCache';
+import { createImageLodCache, disposeImageLodCache, prewarmImageLodCache, pruneImageLodCache, type ImageLodCache } from './canvas/render/imageLodCache';
 import { drainCanvasPerfStats, isCanvasPerfHudEnabled, recordCanvasDraw } from './canvas/render/perfHud';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
@@ -139,6 +139,12 @@ interface CanvasProps {
   onScaleChange?: (scale: number) => void;
   isPresentationMode?: boolean;
 }
+
+// A pan/zoom event marks the view gesture live for ACTIVE_MS; the settle frame fires
+// SETTLE_MS after the last event, just past the window, so exactly one non-gesture
+// frame reconciles the deferred work (LOD tiers, path raster).
+const VIEW_GESTURE_ACTIVE_MS = 150;
+const VIEW_GESTURE_SETTLE_MS = 160;
 
 const normalizeEmbeddedPromptBarForModel = (bar: CanvasVideoPromptBar, modelId: string): CanvasVideoPromptBar => {
   if (modelId !== JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {
@@ -307,6 +313,14 @@ export const Canvas: React.FC<CanvasProps> = ({
   const lastNotifiedScaleRef = useRef<number | null>(null);
   const onScaleChangeRef = useRef(onScaleChange);
   const scheduleFrameRef = useRef<() => void>(() => {});
+  // View-gesture window (pan or zoom): draw frames before this timestamp defer LOD tier
+  // jobs and path re-rasterization; the settle timeout fires one reconciling frame after
+  // the gesture.
+  const viewGestureUntilRef = useRef(0);
+  const viewSettleTimeoutRef = useRef<number | null>(null);
+  // Wheel events arrive at trackpad rate and getBoundingClientRect forces layout, so the
+  // rect is cached until something can move the container (resize, scroll).
+  const wheelRectRef = useRef<DOMRect | null>(null);
   const imageLodCacheRef = useRef<ImageLodCache | null>(null);
   const buildImageLodCache = () => createImageLodCache({
     requestRedraw: () => scheduleFrameRef.current(), // Repaint once freshly downscaled bitmaps land.
@@ -456,11 +470,34 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, []);
 
+  // Marks a view gesture (pan or zoom) as live for the draw path (which defers LOD tier
+  // jobs and path re-rasterization) and schedules one settle frame after the event
+  // stream goes quiet to reconcile both in a single pass. Refs only: the pan/scale state
+  // contract and draw's dependency list stay untouched.
+  const markViewGesture = useCallback(() => {
+    viewGestureUntilRef.current = performance.now() + VIEW_GESTURE_ACTIVE_MS;
+    if (viewSettleTimeoutRef.current !== null) {
+      window.clearTimeout(viewSettleTimeoutRef.current);
+    }
+    viewSettleTimeoutRef.current = window.setTimeout(() => {
+      viewSettleTimeoutRef.current = null;
+      scheduleFrameRef.current();
+    }, VIEW_GESTURE_SETTLE_MS);
+  }, []);
+
+  useEffect(() => () => {
+    if (viewSettleTimeoutRef.current !== null) {
+      window.clearTimeout(viewSettleTimeoutRef.current);
+      viewSettleTimeoutRef.current = null;
+    }
+  }, []);
+
   const setPanSmoothly = useCallback((nextPan: Point) => {
     panRef.current = nextPan;
+    markViewGesture(); // Panning defers LOD tier churn the same way zooming does.
     scheduleFrame();
     return nextPan;
-  }, [scheduleFrame]);
+  }, [markViewGesture, scheduleFrame]);
 
   const {
     currentTool,
@@ -539,8 +576,9 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     scaleRef.current = clampedScale;
     panRef.current = updatedPan;
+    markViewGesture();
     scheduleFrame();
-  }, [scheduleFrame]);
+  }, [markViewGesture, scheduleFrame]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -602,6 +640,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       imageLodCache: imageLodCacheRef.current ?? undefined,
       audioPlaybackTimes: audioPlaybackTimesRef.current,
       isPresentationMode,
+      isViewGesture: performance.now() < viewGestureUntilRef.current,
     });
 
     if (perfHudEnabled) {
@@ -767,24 +806,32 @@ export const Canvas: React.FC<CanvasProps> = ({
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
 
-      const rect = container.getBoundingClientRect();
+      const rect = wheelRectRef.current ??= container.getBoundingClientRect();
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
 
       const multiplier = getCanvasWheelZoomMultiplier({
         deltaY: event.deltaY,
         deltaMode: event.deltaMode,
-        pageHeight: container.clientHeight,
+        pageHeight: rect.height,
         trackpadMode,
       });
       applyZoom(multiplier, { x: mouseX, y: mouseY });
     };
 
+    const invalidateWheelRect = () => {
+      wheelRectRef.current = null;
+    };
+
     // Attach a non-passive wheel listener so we can prevent the browser's default scroll.
     container.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('resize', invalidateWheelRect);
+    window.addEventListener('scroll', invalidateWheelRect, true); // Capture: any scrolling ancestor moves the container.
 
     return () => {
       container.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('resize', invalidateWheelRect);
+      window.removeEventListener('scroll', invalidateWheelRect, true);
     };
   }, [applyZoom, trackpadMode]);
 
@@ -794,6 +841,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!canvas || !container) return;
 
     const resizeCanvas = () => {
+      wheelRectRef.current = null; // Container size changes move the wheel-anchor rect.
       const width = container.clientWidth;
       const height = container.clientHeight;
       // Assigning canvas.width/height reallocates the backing bitmap and resets the 2D
@@ -840,6 +888,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     previousMediaImagesRef.current = images.filter(img => img.mediaType === 'video' || img.mediaType === 'audio');
     if (imageLodCacheRef.current) {
       pruneImageLodCache(imageLodCacheRef.current, images); // Drop bitmaps for removed/replaced media.
+      // Backfill the smallest tier for anything cold on idle decode capacity, so panning
+      // a zoomed-out document never falls back to full-resolution drawImage calls.
+      prewarmImageLodCache(imageLodCacheRef.current, images);
     }
   }, [images]);
 
