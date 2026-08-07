@@ -77,6 +77,7 @@ type LodJob = {
   width: number;
   height: number;
   videoTimeKey: number | null;
+  isPrewarm: boolean; // Background jobs redraw only if their tier became visible while running.
 };
 
 type BudgetBlockedTier = {
@@ -98,6 +99,7 @@ export type ImageLodCache = {
   // full-resolution drawImage of a cold source.
   prewarmQueue: LodJob[];
   runningJobs: number;
+  runningPrewarmJobs: number; // Keeps background workers from consuming the visible-work quota.
   totalBytes: number;
   frameId: number;
   frameEnqueueBudget: number; // Remaining new tier jobs this frame may queue.
@@ -170,6 +172,7 @@ export function createImageLodCache(options: ImageLodCacheOptions = {}): ImageLo
     jobQueue: [],
     prewarmQueue: [],
     runningJobs: 0,
+    runningPrewarmJobs: 0,
     totalBytes: 0,
     frameId: 0,
     frameEnqueueBudget: Number.POSITIVE_INFINITY, // Unmetered until the first beginLodFrame.
@@ -297,11 +300,59 @@ const flushRedraw = (cache: ImageLodCache): void => {
   });
 };
 
+const createLodEntry = (
+  cache: ImageLodCache,
+  element: HTMLImageElement | HTMLVideoElement,
+  videoTimeKey: number | null,
+): LodEntry => ({
+  revision: cache.nextEntryRevision++,
+  source: element,
+  tiers: new Map(),
+  lastTier: null,
+  failed: false,
+  videoTimeKey,
+});
+
+const buildTierJobKey = (imageId: string, entryRevision: number, tierSize: number): string =>
+  `${imageId}:${entryRevision}:${tierSize}`;
+
+const buildTierJob = (
+  jobKey: string,
+  imageId: string,
+  entry: LodEntry,
+  tierSize: number,
+  natural: { width: number; height: number },
+  isPrewarm: boolean,
+): LodJob => {
+  const dims = computeTierDimensions(natural.width, natural.height, tierSize);
+  return {
+    key: jobKey,
+    imageId,
+    entryRevision: entry.revision,
+    source: entry.source,
+    tierSize,
+    width: dims.width,
+    height: dims.height,
+    videoTimeKey: entry.videoTimeKey,
+    isPrewarm,
+  };
+};
+
 const startJob = (cache: ImageLodCache, job: LodJob): void => {
   cache.runningJobs += 1;
+  if (job.isPrewarm) cache.runningPrewarmJobs += 1;
+  const finishJob = () => {
+    cache.runningJobs -= 1;
+    if (job.isPrewarm) cache.runningPrewarmJobs -= 1;
+  };
+  const redrawIfNeeded = () => {
+    if (!job.isPrewarm || cache.requestedJobKeys.has(job.key)) {
+      flushRedraw(cache); // A running prewarm may become visible before it finishes.
+    }
+  };
   cache.bitmapFactory(job.source, job.width, job.height)
     .then(bitmap => {
-      cache.runningJobs -= 1;
+      finishJob();
       cache.pending.delete(job.key);
       if (cache.disposed) {
         bitmap.close();
@@ -310,6 +361,7 @@ const startJob = (cache: ImageLodCache, job: LodJob): void => {
       const entry = cache.entries.get(job.imageId); // The source may have changed while the job ran.
       if (!entry || entry.revision !== job.entryRevision || entry.source !== job.source || entry.videoTimeKey !== job.videoTimeKey) {
         bitmap.close();
+        redrawIfNeeded(); // Visible jobs keep the enqueue-budget refill chain alive even when nothing lands.
         pumpJobs(cache);
         return;
       }
@@ -321,22 +373,24 @@ const startJob = (cache: ImageLodCache, job: LodJob): void => {
           entryRevision: job.entryRevision,
           bytes,
         }); // Fall back to the source without exceeding the cache or regenerating every frame.
+        redrawIfNeeded();
         pumpJobs(cache);
         return;
       }
       entry.tiers.set(job.tierSize, { bitmap, bytes, lastUsedFrame: cache.frameId });
       cache.totalBytes += bytes;
-      flushRedraw(cache);
+      redrawIfNeeded();
       pumpJobs(cache);
     })
     .catch(() => {
-      cache.runningJobs -= 1;
+      finishJob();
       cache.pending.delete(job.key);
       if (cache.disposed) return;
       const entry = cache.entries.get(job.imageId);
       if (entry?.revision === job.entryRevision && entry.source === job.source && entry.videoTimeKey === job.videoTimeKey) {
         entry.failed = true; // Tainted or undecodable source: draw full-res forever.
       }
+      redrawIfNeeded(); // Keep visible work moving without repainting for offscreen prewarms.
       pumpJobs(cache);
     });
 };
@@ -345,22 +399,41 @@ const pumpJobs = (cache: ImageLodCache): void => {
   const regularCap = cache.gestureThrottled
     ? Math.min(cache.maxConcurrentJobs, GESTURE_MAX_CONCURRENT_JOBS)
     : cache.maxConcurrentJobs;
-  while (!cache.disposed && cache.runningJobs < regularCap && cache.jobQueue.length > 0) {
+  while (
+    !cache.disposed
+    && cache.runningJobs < cache.maxConcurrentJobs
+    && cache.runningJobs - cache.runningPrewarmJobs < regularCap
+    && cache.jobQueue.length > 0
+  ) {
     startJob(cache, cache.jobQueue.pop()!); // LIFO: the most recently requested view wins.
   }
   // Prewarm strictly yields to visible-tier work: it runs only when the regular queue is
-  // drained, and holds fewer slots so an arriving burst always has decode capacity.
-  const prewarmCap = Math.min(cache.maxConcurrentJobs, PREWARM_MAX_CONCURRENT_JOBS);
-  while (!cache.disposed && cache.jobQueue.length === 0 && cache.runningJobs < prewarmCap && cache.prewarmQueue.length > 0) {
+  // drained, and holds fewer slots so an arriving burst always has decode capacity. During
+  // a gesture the regular cap narrows to 2, so prewarm shrinks to one slot — otherwise it
+  // could occupy both and make a cold visible item wait behind offscreen fill.
+  const prewarmCap = cache.gestureThrottled
+    ? 1
+    : Math.min(cache.maxConcurrentJobs, PREWARM_MAX_CONCURRENT_JOBS);
+  while (
+    !cache.disposed
+    && cache.jobQueue.length === 0
+    && cache.runningJobs < cache.maxConcurrentJobs
+    && cache.runningPrewarmJobs < prewarmCap
+    && cache.prewarmQueue.length > 0
+  ) {
     startJob(cache, cache.prewarmQueue.shift()!); // FIFO: cover the document in load order.
   }
 };
 
 export function beginLodFrame(cache: ImageLodCache, opts?: { throttleJobs?: boolean }): void { // Starts LRU bookkeeping for a new paint.
+  const wasGestureThrottled = cache.gestureThrottled;
   cache.frameId += 1;
   cache.requestedJobKeys.clear();
   cache.frameEnqueueBudget = MAX_TIER_ENQUEUES_PER_FRAME;
   cache.gestureThrottled = opts?.throttleJobs ?? false;
+  if (wasGestureThrottled && !cache.gestureThrottled) {
+    pumpJobs(cache); // Fill the worker slots restored by the settle frame.
+  }
 }
 
 export function endLodFrame(cache: ImageLodCache): void {
@@ -387,6 +460,18 @@ export function endLodFrame(cache: ImageLodCache): void {
     break;
   }
 }
+
+// A queued prewarm job whose key the draw path now needs must jump to the viewport-driven
+// queue: prewarm drains FIFO on idle capacity only, so a visible item stuck behind it
+// would keep drawing its full-resolution source for potentially hundreds of decodes.
+const promotePrewarmJob = (cache: ImageLodCache, jobKey: string): void => {
+  const index = cache.prewarmQueue.findIndex(job => job.key === jobKey);
+  if (index === -1) return;
+  const [job] = cache.prewarmQueue.splice(index, 1);
+  job.isPrewarm = false;
+  cache.jobQueue.push(job);
+  pumpJobs(cache);
+};
 
 // Queues background smallest-tier generation for every item that has no cached tier yet.
 // Call when the images array changes (load, generation, edit): the cold-entry fallback in
@@ -416,32 +501,15 @@ export function prewarmImageLodCache(cache: ImageLodCache, images: readonly Canv
     }
     if (entry && (entry.failed || entry.tiers.size > 0)) return; // Already warm enough to avoid the full-res fallback.
     if (!entry) {
-      entry = {
-        revision: cache.nextEntryRevision++,
-        source: element,
-        tiers: new Map(),
-        lastTier: null,
-        failed: false,
-        videoTimeKey,
-      };
+      entry = createLodEntry(cache, element, videoTimeKey);
       cache.entries.set(image.id, entry);
     }
 
     const tierSize = LOD_TIER_SIZES[0];
-    const jobKey = `${image.id}:${entry.revision}:${tierSize}`;
+    const jobKey = buildTierJobKey(image.id, entry.revision, tierSize);
     if (cache.pending.has(jobKey) || cache.budgetBlocked.has(jobKey)) return;
     cache.pending.add(jobKey);
-    const dims = computeTierDimensions(natural.width, natural.height, tierSize);
-    cache.prewarmQueue.push({
-      key: jobKey,
-      imageId: image.id,
-      entryRevision: entry.revision,
-      source: element,
-      tierSize,
-      width: dims.width,
-      height: dims.height,
-      videoTimeKey,
-    });
+    cache.prewarmQueue.push(buildTierJob(jobKey, image.id, entry, tierSize, natural, true));
   });
   pumpJobs(cache);
 }
@@ -452,7 +520,6 @@ export function getLodDrawSource(
   cache: ImageLodCache,
   image: CanvasImage,
   scale: number,
-  opts?: { deferTierJobs?: boolean },
 ): CanvasImageSource {
   let videoTimeKey: number | null = null;
   if (isVideoImage(image)) {
@@ -486,14 +553,7 @@ export function getLodDrawSource(
   }
 
   if (!entry) {
-    entry = {
-      revision: cache.nextEntryRevision++,
-      source: element,
-      tiers: new Map(),
-      lastTier: null,
-      failed: false,
-      videoTimeKey,
-    };
+    entry = createLodEntry(cache, element, videoTimeKey);
     cache.entries.set(image.id, entry);
   }
 
@@ -504,31 +564,31 @@ export function getLodDrawSource(
     return cached.bitmap as unknown as CanvasImageSource;
   }
 
+  const jobKey = buildTierJobKey(image.id, entry.revision, tierSize);
   // During a view gesture (pan or zoom), tier promotions are deferred: the nearest cached
-  // tier keeps drawing (momentarily soft) and the settle frame enqueues the real tier. Skipping
-  // requestedJobKeys also lets endLodFrame cancel promotions queued by earlier frames
-  // of the same sweep. Cold entries still enqueue — with no tier at all the fallback is
-  // a full-res drawImage, which costs more than the job it would skip.
-  if (!(opts?.deferTierJobs && entry.tiers.size > 0)) {
-    const jobKey = `${image.id}:${entry.revision}:${tierSize}`; // Queue a miss while drawing the best cached fallback.
+  // tier keeps drawing (momentarily soft) and the settle frame enqueues the real tier.
+  // Skipping requestedJobKeys also lets endLodFrame cancel promotions queued by earlier
+  // frames of the same sweep — except budget-blocked keys, which must stay marked
+  // requested or endLodFrame would purge blocks for items that never left the viewport
+  // and the settle frame would re-decode them just to re-block. Cold entries still
+  // enqueue — with no tier at all the fallback is a full-res drawImage, which costs more
+  // than the job it would skip.
+  if (cache.gestureThrottled && entry.tiers.size > 0) {
+    if (cache.budgetBlocked.has(jobKey)) {
+      cache.requestedJobKeys.add(jobKey);
+    }
+  } else {
     cache.requestedJobKeys.add(jobKey);
-    // The per-frame budget meters NEW work only; already-queued keys stay requested so
-    // endLodFrame keeps them. Over-budget misses draw their fallback and retry on a later
-    // frame — every landing batch requests a redraw, so the refill chain sustains itself.
-    if (!cache.pending.has(jobKey) && !cache.budgetBlocked.has(jobKey) && cache.frameEnqueueBudget > 0) {
+    if (cache.pending.has(jobKey)) {
+      promotePrewarmJob(cache, jobKey); // A queued prewarm job for this key must not stall a visible item.
+    } else if (!cache.budgetBlocked.has(jobKey) && cache.frameEnqueueBudget > 0) {
+      // The per-frame budget meters NEW work only; already-queued keys stay requested so
+      // endLodFrame keeps them. Over-budget misses draw their fallback and retry on a
+      // later frame — every landing batch requests a redraw, so the refill chain
+      // sustains itself.
       cache.frameEnqueueBudget -= 1;
       cache.pending.add(jobKey);
-      const dims = computeTierDimensions(natural.width, natural.height, tierSize);
-      cache.jobQueue.push({
-        key: jobKey,
-        imageId: image.id,
-        entryRevision: entry.revision,
-        source: element,
-        tierSize,
-        width: dims.width,
-        height: dims.height,
-        videoTimeKey,
-      });
+      cache.jobQueue.push(buildTierJob(jobKey, image.id, entry, tierSize, natural, false));
       pumpJobs(cache);
     }
   }

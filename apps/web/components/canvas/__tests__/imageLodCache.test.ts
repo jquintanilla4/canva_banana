@@ -477,7 +477,7 @@ describe('imageLodCache', () => {
     expect(requestRedraw).not.toHaveBeenCalled();
   });
 
-  it('defers tier promotions during a zoom gesture when a fallback tier exists', async () => {
+  it('defers tier promotions during a view gesture when a fallback tier exists', async () => {
     const { factory, flush, created } = buildControlledFactory();
     const cache = createImageLodCache({ bitmapFactory: factory });
     const image = buildImage('a');
@@ -487,9 +487,9 @@ describe('imageLodCache', () => {
     await flush();
     expect(created).toHaveLength(1);
 
-    beginLodFrame(cache);
+    beginLodFrame(cache, { throttleJobs: true });
     // 2048 * 0.1 ≈ 205 → tier 256 promotion; mid-gesture it draws the cached 128 instead.
-    expect(getLodDrawSource(cache, image, 0.1, { deferTierJobs: true })).toBe(created[0]);
+    expect(getLodDrawSource(cache, image, 0.1)).toBe(created[0]);
     endLodFrame(cache);
     await flush();
     expect(created).toHaveLength(1); // No promotion job was enqueued.
@@ -499,21 +499,38 @@ describe('imageLodCache', () => {
     await flush();
     expect(created).toHaveLength(2);
     expect(created[1].width).toBe(256);
-    beginLodFrame(cache);
-    expect(getLodDrawSource(cache, image, 0.1, { deferTierJobs: true })).toBe(created[1]);
+    beginLodFrame(cache, { throttleJobs: true });
+    expect(getLodDrawSource(cache, image, 0.1)).toBe(created[1]);
   });
 
-  it('still enqueues a first tier for cold entries during a zoom gesture', async () => {
+  it('still enqueues a first tier for cold entries during a view gesture', async () => {
     const { factory, flush, created } = buildControlledFactory();
     const cache = createImageLodCache({ bitmapFactory: factory });
     const image = buildImage('a');
 
-    beginLodFrame(cache);
+    beginLodFrame(cache, { throttleJobs: true });
     // With no cached tier the fallback is a full-res drawImage — worse than the job.
-    expect(getLodDrawSource(cache, image, 0.05, { deferTierJobs: true })).toBe(image.element);
+    expect(getLodDrawSource(cache, image, 0.05)).toBe(image.element);
     await flush();
     expect(created).toHaveLength(1);
     expect(created[0].width).toBe(128);
+  });
+
+  it('starts queued visible jobs when a settle frame lifts the gesture cap', () => {
+    const { factory, pendingResolves } = buildControlledFactory();
+    const cache = createImageLodCache({ bitmapFactory: factory, maxConcurrentJobs: 4 });
+
+    beginLodFrame(cache, { throttleJobs: true });
+    for (let index = 0; index < 5; index += 1) {
+      getLodDrawSource(cache, buildImage(`image-${index}`), 0.05);
+    }
+    expect(cache.runningJobs).toBe(2);
+    expect(cache.jobQueue).toHaveLength(3);
+
+    beginLodFrame(cache); // The settle frame restores all four worker slots.
+
+    expect(cache.runningJobs).toBe(4);
+    expect(pendingResolves).toHaveLength(4);
   });
 
   it('cancels promotions queued by earlier frames once deferral kicks in', async () => {
@@ -532,12 +549,64 @@ describe('imageLodCache', () => {
     endLodFrame(cache);
     expect(cache.jobQueue.map(job => job.imageId)).toEqual(['a']);
 
-    beginLodFrame(cache);
+    beginLodFrame(cache, { throttleJobs: true });
     getLodDrawSource(cache, busy, 0.05);
-    getLodDrawSource(cache, image, 0.1, { deferTierJobs: true }); // Gesture began: promotion no longer requested.
+    getLodDrawSource(cache, image, 0.1); // Gesture began: promotion no longer requested.
     endLodFrame(cache);
     expect(cache.jobQueue).toHaveLength(0);
     expect([...cache.pending].some(key => key.startsWith('a:'))).toBe(false);
+  });
+
+  it('keeps budget-blocked entries for items that stay visible through a gesture', async () => {
+    const { factory, flush, created } = buildControlledFactory();
+    // 128 tier (36,864 B) fits; adding the 256 tier (147,456 B) would exceed the ceiling.
+    const cache = createImageLodCache({ bitmapFactory: factory, maxBytes: 150_000 });
+    const image = buildImage('a');
+
+    beginLodFrame(cache);
+    getLodDrawSource(cache, image, 0.05);
+    await flush();
+
+    beginLodFrame(cache);
+    getLodDrawSource(cache, image, 0.1); // Draws the protected 128 fallback, queues 256.
+    await flush();
+    expect(cache.budgetBlocked.size).toBe(1); // The 256 tier cannot fit beside the in-use 128.
+
+    beginLodFrame(cache, { throttleJobs: true });
+    expect(getLodDrawSource(cache, image, 0.1)).toBe(created[0]); // Deferral serves the cached 128.
+    endLodFrame(cache);
+    expect(cache.budgetBlocked.size).toBe(1); // Still visible: the block must survive the gesture frame.
+  });
+
+  it('promotes queued prewarm work when its item becomes visible', () => {
+    const { factory } = buildControlledFactory();
+    const cache = createImageLodCache({ bitmapFactory: factory, maxConcurrentJobs: 1 });
+    const busy = buildImage('busy');
+    const cold = buildImage('cold');
+
+    beginLodFrame(cache);
+    getLodDrawSource(cache, busy, 0.05); // Occupies the only worker.
+    prewarmImageLodCache(cache, [cold]);
+    expect(cache.prewarmQueue).toHaveLength(1);
+
+    getLodDrawSource(cache, cold, 0.05); // Now visible: must not wait behind the prewarm FIFO.
+    expect(cache.prewarmQueue).toHaveLength(0);
+    expect(cache.jobQueue.map(job => job.imageId)).toEqual(['cold']);
+  });
+
+  it('requests a redraw even when a job lands nothing, so budget-deferred misses retry', async () => {
+    const failingFactory: LodBitmapFactory = () => Promise.reject(new Error('undecodable'));
+    const requestRedraw = vi.fn();
+    const cache = createImageLodCache({ bitmapFactory: failingFactory, requestRedraw });
+    const image = buildImage('a');
+
+    beginLodFrame(cache);
+    getLodDrawSource(cache, image, 0.05);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(requestRedraw).toHaveBeenCalled(); // The refill chain must not depend on a tier landing.
   });
 
   it('meters new tier enqueues per frame and picks up the remainder next frame', () => {
@@ -583,6 +652,33 @@ describe('imageLodCache', () => {
     expect(getLodDrawSource(cache, image, 0.05)).toBe(created[0]); // The prewarmed entry serves the draw path directly.
   });
 
+  it('does not redraw when an offscreen prewarm finishes', async () => {
+    const { factory, flush } = buildControlledFactory();
+    const requestRedraw = vi.fn();
+    const cache = createImageLodCache({ bitmapFactory: factory, requestRedraw });
+
+    prewarmImageLodCache(cache, [buildImage('offscreen')]);
+    await flush();
+    await Promise.resolve();
+
+    expect(requestRedraw).not.toHaveBeenCalled();
+  });
+
+  it('redraws when a running prewarm becomes visible before it finishes', async () => {
+    const { factory, flush } = buildControlledFactory();
+    const requestRedraw = vi.fn();
+    const cache = createImageLodCache({ bitmapFactory: factory, requestRedraw });
+    const image = buildImage('visible');
+
+    prewarmImageLodCache(cache, [image]);
+    beginLodFrame(cache);
+    getLodDrawSource(cache, image, 0.05);
+    await flush();
+    await Promise.resolve();
+
+    expect(requestRedraw).toHaveBeenCalledTimes(1);
+  });
+
   it('prewarm skips small sources and items that already own a tier', async () => {
     const { factory, flush, created } = buildControlledFactory();
     const cache = createImageLodCache({ bitmapFactory: factory });
@@ -619,6 +715,22 @@ describe('imageLodCache', () => {
     await flush();
     // Once a running prewarm finishes, the visible job takes the slot before prewarm #3.
     expect(created.map(bitmap => bitmap.width)).toEqual([128, 128, 256, 128]);
+  });
+
+  it('starts visible gesture work while earlier prewarms are still running', () => {
+    const { factory, pendingResolves } = buildControlledFactory();
+    const cache = createImageLodCache({ bitmapFactory: factory, maxConcurrentJobs: 4 });
+    const cold = [buildImage('cold-0'), buildImage('cold-1')];
+
+    prewarmImageLodCache(cache, cold);
+    expect(cache.runningPrewarmJobs).toBe(2);
+
+    beginLodFrame(cache, { throttleJobs: true });
+    getLodDrawSource(cache, buildImage('visible'), 0.1);
+
+    expect(pendingResolves).toHaveLength(3); // Visible work starts without waiting for either prewarm.
+    expect(cache.runningJobs).toBe(3);
+    expect(cache.runningPrewarmJobs).toBe(2);
   });
 
   it('prune drops queued prewarm work for removed media', () => {

@@ -17,9 +17,15 @@ const FAVORITE_STAR_PREFERRED_MIN_RADIUS = 10;
 const FAVORITE_STAR_BACKDROP_RATIO = 1.3; // Backdrop half-size relative to the star's outer radius.
 
 type TextFitResult = { fontSize: number; lineHeight: number; lines: string[] };
-// fit stays null until the text is first drawn at readable size, so toggling the overlay
-// on while zoomed far out never pays the measureText-heavy fit for hundreds of items.
-type OverlayEntry = { overlayText: string; fit: TextFitResult | null };
+// fits stays empty until the text is first drawn at readable size, so toggling the
+// overlay on while zoomed far out never pays the measureText-heavy fit for hundreds of
+// items. Fits are keyed per world-unit box size because duplicated items can share one
+// metadata object at different dimensions.
+type OverlayEntry = { overlayText: string; fits: Map<string, TextFitResult> };
+
+// Resizing an item mints new fit box sizes under the same metadata; cap the per-entry
+// variants so a long resize session cannot accumulate stale layouts.
+const OVERLAY_FIT_VARIANTS_MAX = 8;
 
 // Below these screen sizes the metadata text is illegible; its layout and fill are pure
 // cost, and zoomed out they dominate the frame. The dark band still draws so the toggle
@@ -55,10 +61,10 @@ export type CanvasRenderCache = {
   dotGridTile: HTMLCanvasElement | null;
   dotGridPattern: CanvasPattern | null;
   dotGridKey: string | null;
-  // Overlay text and its fit are pure functions of the item object (world-unit box,
-  // metadata text), so entries key on item identity like getImageBounds and are GC'd
-  // with the item. null marks items whose overlay text is empty.
-  overlayFitCache: WeakMap<CanvasImage, OverlayEntry | null>;
+  // Keyed on metadata identity, NOT the CanvasImage: drags immutably replace the item
+  // object every pointermove while the metadata reference survives the spread, so this
+  // stays warm through moves. null marks metadata whose overlay text is empty.
+  overlayFitCache: WeakMap<CanvasImageMetadata, OverlayEntry | null>;
 };
 
 export const createCanvasRenderCache = (): CanvasRenderCache => ({
@@ -553,7 +559,6 @@ export function drawCanvas({
     // concurrency so tier generation never competes with interaction frames.
     beginLodFrame(imageLodCache, { throttleJobs: isViewGesture });
   }
-  const lodOpts = { deferTierJobs: isViewGesture }; // Hoisted so the item loop allocates nothing.
 
   const disabledSet = new Set(disabledMediaIds); // Sets keep per-image membership checks constant-time.
   const selectedSet = new Set(selectedImageIds);
@@ -599,7 +604,7 @@ export function drawCanvas({
       // Zoomed out, the LOD cache substitutes a pre-downscaled bitmap so drawImage isn't
       // resampling the full-resolution source per item per frame.
       const drawSource = imageLodCache
-        ? getLodDrawSource(imageLodCache, image, scale, lodOpts)
+        ? getLodDrawSource(imageLodCache, image, scale)
         : image.element;
       ctx.drawImage(drawSource, baseX, baseY, image.width, image.height);
     }
@@ -632,11 +637,11 @@ export function drawCanvas({
     if (showItemTextOverlay && showMetadataOverlay && metadata && metadata.source !== 'imported') {
       // Warm frames do a single WeakMap lookup: no string assembly, no key hashing of
       // multi-KB prompts, both of which used to run per visible item per frame.
-      let entry = renderCache?.overlayFitCache.get(image);
+      let entry = renderCache?.overlayFitCache.get(metadata);
       if (entry === undefined) {
         const overlayText = buildOverlayText(metadata);
-        entry = overlayText.length > 0 ? { overlayText, fit: null } : null;
-        renderCache?.overlayFitCache.set(image, entry);
+        entry = overlayText.length > 0 ? { overlayText, fits: new Map() } : null;
+        renderCache?.overlayFitCache.set(metadata, entry);
       }
 
       if (entry) {
@@ -651,21 +656,27 @@ export function drawCanvas({
 
         const textIsReadable = overlayInnerHeight * scale >= OVERLAY_TEXT_MIN_BAND_SCREEN_PX;
         if (textAreaWidth > 0 && overlayInnerHeight > 0 && textIsReadable) {
-          if (!entry.fit) {
+          const fitKey = `${image.width}|${image.height}`;
+          let fit = entry.fits.get(fitKey);
+          if (!fit) {
             // Deferring the fit to the first readable draw amortizes the per-word
             // measureText loop over zoom-ins instead of paying it for every visible item
             // in the same frame the overlay is toggled on.
             const baseFontSize = Math.max(14, overlayHeight * 0.35);
-            const fit = fitTextWithinBox(ctx, entry.overlayText, textAreaWidth, overlayInnerHeight, baseFontSize);
+            const rawFit = fitTextWithinBox(ctx, entry.overlayText, textAreaWidth, overlayInnerHeight, baseFontSize);
             // Keep only the lines the clip reveals; overflow fillText calls are pure cost.
-            const maxLines = Math.max(1, Math.floor(overlayInnerHeight / fit.lineHeight));
-            entry.fit = {
-              fontSize: fit.fontSize,
-              lineHeight: fit.lineHeight,
-              lines: fit.lines.length > maxLines ? fit.lines.slice(0, maxLines) : fit.lines,
+            const maxLines = Math.max(1, Math.floor(overlayInnerHeight / rawFit.lineHeight));
+            fit = {
+              fontSize: rawFit.fontSize,
+              lineHeight: rawFit.lineHeight,
+              lines: rawFit.lines.length > maxLines ? rawFit.lines.slice(0, maxLines) : rawFit.lines,
             };
+            if (entry.fits.size >= OVERLAY_FIT_VARIANTS_MAX) {
+              entry.fits.clear();
+            }
+            entry.fits.set(fitKey, fit);
           }
-          const { fontSize: fittedFontSize, lineHeight, lines } = entry.fit;
+          const { fontSize: fittedFontSize, lineHeight, lines } = fit;
 
           if (fittedFontSize * scale >= OVERLAY_TEXT_MIN_FONT_SCREEN_PX) {
             ctx.save();

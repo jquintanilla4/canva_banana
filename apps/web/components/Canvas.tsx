@@ -146,6 +146,10 @@ interface CanvasProps {
 const VIEW_GESTURE_ACTIVE_MS = 150;
 const VIEW_GESTURE_SETTLE_MS = 160;
 
+// Upper bound on wheel-rect staleness; one layout read per burst window keeps wheel
+// handling cheap while container moves invisible to resize/scroll listeners self-heal.
+const WHEEL_RECT_TTL_MS = 300;
+
 const normalizeEmbeddedPromptBarForModel = (bar: CanvasVideoPromptBar, modelId: string): CanvasVideoPromptBar => {
   if (modelId !== JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {
     return { ...bar, modelId };
@@ -319,9 +323,12 @@ export const Canvas: React.FC<CanvasProps> = ({
   const viewGestureUntilRef = useRef(0);
   const viewSettleTimeoutRef = useRef<number | null>(null);
   // Wheel events arrive at trackpad rate and getBoundingClientRect forces layout, so the
-  // rect is cached until something can move the container (resize, scroll).
-  const wheelRectRef = useRef<DOMRect | null>(null);
+  // rect is cached across a wheel burst. Resize/scroll invalidate it eagerly, and a short
+  // TTL bounds staleness from container moves those listeners cannot see (CSS transforms,
+  // sibling layout shifts).
+  const wheelRectRef = useRef<{ rect: DOMRect; time: number } | null>(null);
   const imageLodCacheRef = useRef<ImageLodCache | null>(null);
+  const prewarmedElementsRef = useRef<Array<HTMLImageElement | HTMLVideoElement>>([]);
   const buildImageLodCache = () => createImageLodCache({
     requestRedraw: () => scheduleFrameRef.current(), // Repaint once freshly downscaled bitmaps land.
   });
@@ -492,9 +499,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, []);
 
-  const setPanSmoothly = useCallback((nextPan: Point) => {
+  const setPanSmoothly = useCallback((nextPan: Point, opts?: { gesture?: boolean }) => {
     panRef.current = nextPan;
-    markViewGesture(); // Panning defers LOD tier churn the same way zooming does.
+    // Interactive pans defer LOD tier churn the same way zooming does; programmatic
+    // one-shot jumps opt out so the destination frame renders sharp immediately.
+    if (opts?.gesture !== false) {
+      markViewGesture();
+    }
     scheduleFrame();
     return nextPan;
   }, [markViewGesture, scheduleFrame]);
@@ -709,7 +720,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       setPanSmoothly({
         x: canvasWidth / 2 - (bounds.minX + bboxWidth / 2) * scaleRef.current,
         y: canvasHeight / 2 - (bounds.minY + bboxHeight / 2) * scaleRef.current,
-      });
+      }, { gesture: false });
       return;
     }
 
@@ -794,7 +805,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     setPanSmoothly({
       x: canvas.clientWidth / 2 - panToAnchorRequest.x * currentScale,
       y: canvas.clientHeight / 2 - panToAnchorRequest.y * currentScale,
-    });
+    }, { gesture: false });
   }, [panToAnchorRequest, setPanSmoothly]);
 
   useEffect(() => {
@@ -806,7 +817,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
 
-      const rect = wheelRectRef.current ??= container.getBoundingClientRect();
+      const now = performance.now();
+      let cached = wheelRectRef.current;
+      if (!cached || now - cached.time > WHEEL_RECT_TTL_MS) {
+        cached = { rect: container.getBoundingClientRect(), time: now };
+        wheelRectRef.current = cached;
+      }
+      const rect = cached.rect;
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
 
@@ -889,8 +906,16 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (imageLodCacheRef.current) {
       pruneImageLodCache(imageLodCacheRef.current, images); // Drop bitmaps for removed/replaced media.
       // Backfill the smallest tier for anything cold on idle decode capacity, so panning
-      // a zoomed-out document never falls back to full-resolution drawImage calls.
-      prewarmImageLodCache(imageLodCacheRef.current, images);
+      // a zoomed-out document never falls back to full-resolution drawImage calls. Drags
+      // replace item objects every pointermove without touching elements, so skip the
+      // O(n) prewarm scan unless the element list actually changed.
+      const prevElements = prewarmedElementsRef.current;
+      const elementsUnchanged = prevElements.length === images.length
+        && images.every((img, index) => img.element === prevElements[index]);
+      if (!elementsUnchanged) {
+        prewarmedElementsRef.current = images.map(img => img.element);
+        prewarmImageLodCache(imageLodCacheRef.current, images);
+      }
     }
   }, [images]);
 
@@ -900,6 +925,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     // stays true for the session and the LOD path never produces a bitmap in dev.
     if (imageLodCacheRef.current?.disposed) {
       imageLodCacheRef.current = buildImageLodCache();
+      prewarmedElementsRef.current = imagesRef.current.map(image => image.element);
+      prewarmImageLodCache(imageLodCacheRef.current, imagesRef.current); // The replacement cache starts cold even though its elements are unchanged.
       scheduleFrameRef.current();
     }
     return () => {
