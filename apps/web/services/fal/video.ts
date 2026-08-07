@@ -5,8 +5,24 @@ import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
 import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue normalizers.
 import { logFalEvent } from './logging'; // Fal debug logging.
 import { emitFalPhase } from './phase'; // Phase update helper.
-import { collectReferenceUploadUrls, uploadImageElementToFal, uploadVideoToFal } from './media'; // Media upload helpers.
-import { convertReferencePromptMentionsToOrderedLabels } from '../../utils/seedancePromptMentions';
+import { collectReferenceUploadUrls, REFERENCE_UPLOAD_CONCURRENCY, uploadImageElementToFal, uploadVideoToFal } from './media'; // Media upload helpers.
+import { convertReferencePromptMentionsToOrderedLabels, normalizeSeedanceReferencePromptMentions } from '../../utils/seedancePromptMentions';
+import { mapWithConcurrency } from '../../utils/mapWithConcurrency';
+import { ensureRealSnapshotFile } from '../snapshotService';
+import { convertAudioBlobToWav } from '../audioService';
+import { readIsoBmffVideoFrameRate } from '../../utils/isoBmffVideoFrameRate';
+import {
+  SEEDANCE25_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE25_REFERENCE_AUDIO_MAX_BYTES,
+  SEEDANCE25_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE25_REFERENCE_IMAGE_MAX_BYTES,
+  SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT,
+  SEEDANCE25_REFERENCE_VIDEO_LIMIT,
+  SEEDANCE25_REFERENCE_VIDEO_MAX_BYTES,
+  getSeedance25AudioReferenceFileError,
+  getSeedance25VideoReferenceFileError,
+  isSeedance25AudioReferenceFormatSupported,
+} from '../../utils/seedance25References';
 import {
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
@@ -29,6 +45,10 @@ import {
   FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_REFERENCE_TO_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_TEXT_TO_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   MINIMAX_H3_IMAGE_TO_VIDEO_MODEL_ID,
   MINIMAX_H3_REFERENCE_TO_VIDEO_MODEL_ID,
   MINIMAX_H3_TEXT_TO_VIDEO_MODEL_ID,
@@ -669,6 +689,140 @@ export const generateImageToVideo = async (
     }
 
     return subscribeForVideoUrl(FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID, sharedPayload, options);
+  }
+
+  if (modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      throw new Error('Seedance 2.5 (FAL) requires a prompt.');
+    }
+
+    const variant = options.seedance25Variant === 'smart' ? 'smart' : 'reference';
+    const aspectRatio = options.seedance25AspectRatio === 'adaptive' ? 'auto' : options.seedance25AspectRatio ?? 'auto';
+    const sharedPayload = {
+      prompt: trimmedPrompt,
+      resolution: options.seedance25Resolution ?? '720p',
+      duration: options.seedance25Duration ?? 'auto',
+      generate_audio: options.seedance25GenerateAudio ?? true,
+    };
+
+    if (variant === 'smart' && ((options.referenceVideos?.length ?? 0) > 0 || (options.referenceAudios?.length ?? 0) > 0)) {
+      throw new Error('Seedance 2.5 (FAL) Smart accepts text and still-image inputs only.');
+    }
+
+    if (variant === 'reference') {
+      const referenceVideos = options.referenceVideos ?? [];
+      const referenceAudios = options.referenceAudios ?? [];
+      const totalReferenceFiles = referenceImages.length + referenceVideos.length + referenceAudios.length;
+      if (totalReferenceFiles === 0) {
+        throw new Error('Seedance 2.5 (FAL) Reference requires at least one reference asset.');
+      }
+      if (referenceImages.length > SEEDANCE25_REFERENCE_IMAGE_LIMIT || referenceVideos.length > SEEDANCE25_REFERENCE_VIDEO_LIMIT || referenceAudios.length > SEEDANCE25_REFERENCE_AUDIO_LIMIT) {
+        throw new Error(`Seedance 2.5 (FAL) Reference supports up to ${SEEDANCE25_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE25_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE25_REFERENCE_AUDIO_LIMIT} audio clips.`);
+      }
+      if (totalReferenceFiles > SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT) {
+        throw new Error(`Seedance 2.5 (FAL) Reference supports up to ${SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT} total reference files.`);
+      } // Backstop only: the modality caps above sum to the total, so this fires last, matching useGeneration's order.
+      if (referenceAudios.length > 0 && referenceImages.length + referenceVideos.length === 0) {
+        throw new Error('Seedance 2.5 (FAL) audio references require at least one image or video reference.');
+      }
+      const videoFileErrors = await Promise.all(referenceVideos.map(async file => (
+        getSeedance25VideoReferenceFileError(file, undefined, undefined, await readIsoBmffVideoFrameRate(file))
+      )));
+      const videoFileError = videoFileErrors.find(Boolean);
+      if (videoFileError) {
+        throw new Error(videoFileError);
+      }
+      const audioFileError = referenceAudios
+        .filter(isSeedance25AudioReferenceFormatSupported) // Provider-ready files can be validated before the upload pool.
+        .map(getSeedance25AudioReferenceFileError)
+        .find(Boolean);
+      if (audioFileError) {
+        throw new Error(audioFileError);
+      }
+
+      const uploads = [
+        ...referenceImages.map((referenceImage, index) => ({
+          kind: 'image' as const,
+          upload: () => uploadImageElementToFal(referenceImage, {
+            ...options,
+            label: `Seedance 2.5 reference image ${index + 1}`,
+            maxBytes: SEEDANCE25_REFERENCE_IMAGE_MAX_BYTES,
+            maxBytesError: 'Seedance 2.5 reference images must be 30 MB or smaller.',
+          }),
+        })),
+        ...referenceVideos.map((referenceVideo, index) => ({
+          kind: 'video' as const,
+          upload: async () => uploadVideoToFal(
+            await ensureRealSnapshotFile(referenceVideo),
+            {
+              ...options,
+              label: `Seedance 2.5 reference video ${index + 1}`,
+              maxBytes: SEEDANCE25_REFERENCE_VIDEO_MAX_BYTES,
+              maxBytesError: 'Seedance 2.5 reference videos must be 200 MB or smaller.',
+            },
+          ),
+        })),
+        ...referenceAudios.map((referenceAudio, index) => ({
+          kind: 'audio' as const,
+          upload: async () => {
+            const realFile = await ensureRealSnapshotFile(referenceAudio);
+            const uploadFile = isSeedance25AudioReferenceFormatSupported(realFile)
+              ? realFile
+              : new File([await convertAudioBlobToWav(realFile)], `seedance25-fal-reference-audio-${index + 1}.wav`, { type: 'audio/wav' });
+            const uploadFileError = getSeedance25AudioReferenceFileError(uploadFile);
+            if (uploadFileError) {
+              throw new Error(uploadFileError);
+            }
+            return uploadVideoToFal(uploadFile, {
+              ...options,
+              label: `Seedance 2.5 reference audio ${index + 1}`,
+              maxBytes: SEEDANCE25_REFERENCE_AUDIO_MAX_BYTES,
+              maxBytesError: 'Seedance 2.5 reference audio files must be 15 MB or smaller.',
+            });
+          },
+        })),
+      ];
+      const uploadedReferences = await mapWithConcurrency(uploads, REFERENCE_UPLOAD_CONCURRENCY, async upload => ({
+        kind: upload.kind,
+        url: await upload.upload(),
+      })); // One pool preserves support for 50 refs without saturating the browser.
+      const imageUrls = uploadedReferences.filter(upload => upload.kind === 'image').map(upload => upload.url);
+      const videoUrls = uploadedReferences.filter(upload => upload.kind === 'video').map(upload => upload.url);
+      const audioUrls = uploadedReferences.filter(upload => upload.kind === 'audio').map(upload => upload.url);
+
+      return subscribeForVideoUrl(FAL_SEEDANCE_25_REFERENCE_TO_VIDEO_MODEL_ID, {
+        ...sharedPayload,
+        prompt: normalizeSeedanceReferencePromptMentions(trimmedPrompt),
+        aspect_ratio: aspectRatio,
+        ...(imageUrls.length ? { image_urls: imageUrls } : {}),
+        ...(videoUrls.length ? { video_urls: videoUrls } : {}),
+        ...(audioUrls.length ? { audio_urls: audioUrls } : {}),
+      }, options);
+    }
+
+    if (image) {
+      const smartImageUploadOptions = {
+        ...options,
+        maxBytes: SEEDANCE25_REFERENCE_IMAGE_MAX_BYTES,
+        maxBytesError: 'Seedance 2.5 input images must be 30 MB or smaller.',
+      };
+      const imageUrl = await uploadImageElementToFal(image, { ...smartImageUploadOptions, label: 'Seedance 2.5 starting image' });
+      const tailImageUrl = options.tailImage
+        ? await uploadImageElementToFal(options.tailImage, { ...smartImageUploadOptions, label: 'Seedance 2.5 ending image' })
+        : undefined;
+      return subscribeForVideoUrl(FAL_SEEDANCE_25_IMAGE_TO_VIDEO_MODEL_ID, {
+        ...sharedPayload,
+        aspect_ratio: 'auto', // Fal requires image-to-video requests to derive the ratio from the starting image.
+        image_url: imageUrl,
+        ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
+      }, options);
+    }
+
+    return subscribeForVideoUrl(FAL_SEEDANCE_25_TEXT_TO_VIDEO_MODEL_ID, {
+      ...sharedPayload,
+      aspect_ratio: aspectRatio,
+    }, options);
   }
 
   if (modelId === MINIMAX_H3_VIDEO_MODEL_ID) {

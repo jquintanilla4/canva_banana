@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEffectiveSeedanceReferenceIds } from '../seedanceReferences';
+import { buildEffectiveSeedanceReferenceIds, limitEffectiveSeedanceReferenceIds } from '../seedanceReferences';
 import type { CanvasImage } from '../../types';
 
 const makeCanvasItem = (id: string, mediaType: CanvasImage['mediaType']): CanvasImage => ({
@@ -98,5 +98,32 @@ describe('buildEffectiveSeedanceReferenceIds', () => {
     });
 
     expect(result.referenceImageIds).toEqual(['selected-image']);
+  });
+});
+
+describe('limitEffectiveSeedanceReferenceIds', () => {
+  it('keeps 50 mixed Seedance 2.5 references and rejects the 51st', () => {
+    const imageIds = Array.from({ length: 31 }, (_, index) => `image-${index + 1}`);
+    const videoIds = Array.from({ length: 10 }, (_, index) => `video-${index + 1}`);
+    const audioIds = Array.from({ length: 10 }, (_, index) => `audio-${index + 1}`);
+    const images = [
+      ...imageIds.map(id => makeCanvasItem(id, 'image')),
+      ...videoIds.map(id => makeCanvasItem(id, 'video')),
+      ...audioIds.map(id => makeCanvasItem(id, 'audio')),
+    ];
+    const firstFiftyIds = [...imageIds.slice(0, 30), ...videoIds, ...audioIds];
+
+    const result = limitEffectiveSeedanceReferenceIds({
+      images,
+      selectedImageIds: [],
+      referenceImageIds: imageIds,
+      referenceVideoIds: videoIds,
+      referenceAudioIds: audioIds,
+      orderedReferenceIds: [...firstFiftyIds, imageIds[30]],
+      limits: { images: 31, videos: 10, audios: 10, total: 50 },
+    });
+
+    expect(result.acceptedReferenceIds).toEqual(firstFiftyIds);
+    expect(result.violation).toBe('total');
   });
 });

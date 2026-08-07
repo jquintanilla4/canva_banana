@@ -5,15 +5,25 @@ import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
 import { logFalEvent } from './logging'; // Fal debug logging.
 import { emitFalPhase } from './phase'; // Phase update helper.
 import type { FalPhaseOptions } from './types'; // Phase callback options.
+import { mapWithConcurrency } from '../../utils/mapWithConcurrency';
 
-const REFERENCE_UPLOAD_CONCURRENCY = 3; // Keep browser uploads from saturating the connection.
+export const REFERENCE_UPLOAD_CONCURRENCY = 3; // Keep browser uploads from saturating the connection.
+const COMPRESSED_IMAGE_MIME_TYPES = ['image/webp', 'image/jpeg'] as const;
+const MIN_COMPRESSED_IMAGE_QUALITY = 0.02;
+const MAX_COMPRESSED_IMAGE_QUALITY = 0.92;
+const COMPRESSED_IMAGE_QUALITY_SEARCH_STEPS = 6;
 
 export interface FalUploadOptions extends FalPhaseOptions {
   label?: string; // Human-readable upload label.
+  maxBytes?: number; // Optional endpoint-specific upload cap.
+  maxBytesError?: string; // User-facing message when the cap is exceeded.
 }
 
 const uploadBlobToFal = async (blob: Blob, options: FalUploadOptions = {}): Promise<string> => { // Upload one blob with phase logs.
   ensureFalClientConfigured();
+  if (options.maxBytes !== undefined && blob.size > options.maxBytes) {
+    throw new Error(options.maxBytesError ?? `${options.label ?? 'Fal media'} is too large.`);
+  }
   const label = options.label ?? 'Fal media'; // Fallback label for debug logs.
   const startedAt = Date.now();
   emitFalPhase(options, 'fal-storage', {
@@ -63,7 +73,7 @@ const imageToCanvas = (image: HTMLImageElement): HTMLCanvasElement => { // Raste
   return canvas;
 };
 
-const canvasToBlob = (canvas: HTMLCanvasElement, mimeType: string = 'image/png'): Promise<Blob> => { // Convert canvas to blob.
+const canvasToBlob = (canvas: HTMLCanvasElement, mimeType: string = 'image/png', quality?: number): Promise<Blob> => { // Convert canvas to blob.
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => {
       if (!blob) {
@@ -71,12 +81,52 @@ const canvasToBlob = (canvas: HTMLCanvasElement, mimeType: string = 'image/png')
         return;
       }
       resolve(blob);
-    }, mimeType);
+    }, mimeType, quality);
   });
 };
 
+const canvasToBlobWithinMaxBytes = async (canvas: HTMLCanvasElement, maxBytes: number): Promise<Blob> => {
+  const pngBlob = await canvasToBlob(canvas);
+  if (pngBlob.size <= maxBytes) {
+    return pngBlob;
+  }
+
+  for (const mimeType of COMPRESSED_IMAGE_MIME_TYPES) {
+    const highestQualityBlob = await canvasToBlob(canvas, mimeType, MAX_COMPRESSED_IMAGE_QUALITY);
+    if (highestQualityBlob.type === mimeType && highestQualityBlob.size <= maxBytes) {
+      return highestQualityBlob;
+    }
+    const lowestQualityBlob = await canvasToBlob(canvas, mimeType, MIN_COMPRESSED_IMAGE_QUALITY);
+    if (lowestQualityBlob.type !== mimeType || lowestQualityBlob.size > maxBytes) {
+      continue; // Try the next browser-supported compressed format.
+    }
+
+    let bestBlob = lowestQualityBlob;
+    let lowerQuality = MIN_COMPRESSED_IMAGE_QUALITY;
+    let upperQuality = MAX_COMPRESSED_IMAGE_QUALITY;
+    for (let step = 0; step < COMPRESSED_IMAGE_QUALITY_SEARCH_STEPS; step += 1) {
+      const candidateQuality = (lowerQuality + upperQuality) / 2;
+      const candidateBlob = await canvasToBlob(canvas, mimeType, candidateQuality);
+      if (candidateBlob.type !== mimeType) {
+        break;
+      }
+      if (candidateBlob.size <= maxBytes) {
+        bestBlob = candidateBlob;
+        lowerQuality = candidateQuality;
+      } else {
+        upperQuality = candidateQuality;
+      }
+    }
+    return bestBlob; // Keep the highest bounded quality found for the first supported format.
+  }
+
+  return pngBlob; // The upload guard reports the configured size error when compression cannot fit.
+};
+
 const uploadCanvasToFal = async (canvas: HTMLCanvasElement, options?: FalUploadOptions): Promise<string> => { // Upload canvas via Fal storage.
-  const blob = await canvasToBlob(canvas);
+  const blob = options?.maxBytes === undefined
+    ? await canvasToBlob(canvas)
+    : await canvasToBlobWithinMaxBytes(canvas, options.maxBytes);
   return uploadBlobToFal(blob, { ...options, label: options?.label ?? 'image' });
 };
 
@@ -145,24 +195,6 @@ const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimen
 
   ctx.globalCompositeOperation = 'source-over';
   return canvas;
-};
-
-const mapWithConcurrency = async <T, R>(
-  items: T[],
-  limit: number,
-  mapper: (item: T, index: number) => Promise<R>,
-): Promise<R[]> => { // Run async work with a small concurrency cap.
-  const results: R[] = [];
-  let nextIndex = 0;
-  const workerCount = Math.min(limit, items.length);
-  await Promise.all(Array.from({ length: workerCount }, async () => {
-    while (nextIndex < items.length) {
-      const currentIndex = nextIndex;
-      nextIndex += 1;
-      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
-    }
-  }));
-  return results;
 };
 
 const collectReferenceUploadUrls = async (

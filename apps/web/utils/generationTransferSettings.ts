@@ -11,6 +11,7 @@ import {
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_EDIT_MODEL_ID,
@@ -118,6 +119,15 @@ export const getGenerationTransferOptionDefaults = (
   }
   if (modelId === SEEDANCE_15_VIDEO_MODEL_ID) {
     return { seedance15AspectRatio: '16:9', seedance15Resolution: '720p', seedance15Duration: '5', seedance15CameraFixed: false, seedance15Audio: false }; // Seedance 1.5 defaults.
+  }
+  if (modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
+    return {
+      seedance25Variant: 'reference',
+      seedance25AspectRatio: 'adaptive',
+      seedance25Resolution: '720p',
+      seedance25Duration: 'auto',
+      seedance25GenerateAudio: true,
+    }; // Seedance 2.5 follows the provider defaults.
   }
   if (isSeedance2VideoModelId(modelId)) {
     return {

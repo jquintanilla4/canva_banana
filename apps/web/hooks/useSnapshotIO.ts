@@ -53,6 +53,10 @@ import {
   isJimengSeedance2ModelVersion,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isSeedance25AspectRatioSelectionValue,
+  isSeedance25DurationSelectionValue,
+  isSeedance25ResolutionSelectionValue,
+  isSeedance25Variant,
   isVeo31AspectRatioSelectionValue,
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
@@ -328,6 +332,11 @@ export function useSnapshotIO({
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance25Variant,
+    seedance25AspectRatio,
+    seedance25Resolution,
+    seedance25Duration,
+    seedance25GenerateAudio,
     klingV3Duration,
     klingV3GenerateAudio,
     klingV3CfgScale,
@@ -381,6 +390,11 @@ export function useSnapshotIO({
     setSeedance2Duration,
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
+    setSeedance25Variant,
+    setSeedance25AspectRatio,
+    setSeedance25Resolution,
+    setSeedance25Duration,
+    setSeedance25GenerateAudio,
     setKlingV3Duration,
     setKlingV3GenerateAudio,
     setKlingV3CfgScale,
@@ -467,6 +481,11 @@ export function useSnapshotIO({
       seedance2Duration,
       seedance2GenerateAudio,
       seedance2CameraFixed,
+      seedance25Variant,
+      seedance25AspectRatio,
+      seedance25Resolution,
+      seedance25Duration,
+      seedance25GenerateAudio,
       klingV3Duration,
       klingV3GenerateAudio,
       klingV3CfgScale,
@@ -541,6 +560,11 @@ export function useSnapshotIO({
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance25Variant,
+    seedance25AspectRatio,
+    seedance25Resolution,
+    seedance25Duration,
+    seedance25GenerateAudio,
     klingV3Duration,
     klingV3GenerateAudio,
     klingV3CfgScale,
@@ -1136,6 +1160,21 @@ export function useSnapshotIO({
         if (typeof meta.seedance2CameraFixed === 'boolean') {
           setSeedance2CameraFixed(meta.seedance2CameraFixed);
         }
+        if (isSeedance25Variant(meta.seedance25Variant)) {
+          setSeedance25Variant(meta.seedance25Variant);
+        }
+        if (isSeedance25AspectRatioSelectionValue(meta.seedance25AspectRatio)) {
+          setSeedance25AspectRatio(meta.seedance25AspectRatio);
+        }
+        if (isSeedance25ResolutionSelectionValue(meta.seedance25Resolution)) {
+          setSeedance25Resolution(meta.seedance25Resolution);
+        }
+        if (isSeedance25DurationSelectionValue(meta.seedance25Duration)) {
+          setSeedance25Duration(meta.seedance25Duration);
+        }
+        if (typeof meta.seedance25GenerateAudio === 'boolean') {
+          setSeedance25GenerateAudio(meta.seedance25GenerateAudio);
+        }
         if (isKlingV3DurationSelectionValue(meta.klingV3Duration)) {
           setKlingV3Duration(meta.klingV3Duration);
         }
@@ -1261,6 +1300,11 @@ export function useSnapshotIO({
     setSeedance2Duration,
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
+    setSeedance25Variant,
+    setSeedance25AspectRatio,
+    setSeedance25Resolution,
+    setSeedance25Duration,
+    setSeedance25GenerateAudio,
     setFalImageModelId,
     setFalImageSizeSelection,
     setFalModelMode,

@@ -148,4 +148,14 @@ describe('falService (Seedance 2 FAL)', () => {
     }));
     expect(subscribeInput).not.toHaveProperty('camera_fixed');
   });
+
+  it('keeps the Seedance 2 Reference cap at 12 total files', async () => {
+    vi.mocked(fal.storage.upload).mockResolvedValue('https://example.com/reference.png');
+
+    await expect(generateImageToVideo('Too many legacy references', null, {
+      modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      seedance2Variant: 'reference',
+      referenceImages: Array.from({ length: 13 }, createTestImage),
+    })).rejects.toThrow('Seedance 2 (FAL) Reference supports up to 12 total reference files.');
+  });
 });

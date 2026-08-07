@@ -46,6 +46,10 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isSeedance25AspectRatioSelectionValue,
+  isSeedance25DurationSelectionValue,
+  isSeedance25ResolutionSelectionValue,
+  isSeedance25Variant,
   isMiniMaxH3AspectRatioSelectionValue,
   isMiniMaxH3DurationSelectionValue,
   isMiniMaxH3Variant,
@@ -174,6 +178,11 @@ export type SnapshotManifestV2 = {
         seedance2Duration?: string;
         seedance2GenerateAudio?: boolean;
         seedance2CameraFixed?: boolean;
+        seedance25Variant?: string;
+        seedance25AspectRatio?: string;
+        seedance25Resolution?: string;
+        seedance25Duration?: string;
+        seedance25GenerateAudio?: boolean;
         klingV3Duration?: string;
         klingV3GenerateAudio?: boolean;
         klingV3CfgScale?: string;
@@ -343,6 +352,11 @@ export type SnapshotMetaState = {
   seedance2Duration?: string;
   seedance2GenerateAudio?: boolean;
   seedance2CameraFixed?: boolean;
+  seedance25Variant?: string;
+  seedance25AspectRatio?: string;
+  seedance25Resolution?: string;
+  seedance25Duration?: string;
+  seedance25GenerateAudio?: boolean;
   klingV3Duration?: string;
   klingV3GenerateAudio?: boolean;
   klingV3CfgScale?: string;
@@ -2032,6 +2046,22 @@ export const normalizeSnapshotImageMetadata = (
       const seedance2GenerateAudioValue = (typed as { seedance2GenerateAudio?: unknown }).seedance2GenerateAudio;
       if (typeof seedance2GenerateAudioValue === 'boolean') {
         normalizedOptions.seedance2GenerateAudio = seedance2GenerateAudioValue;
+      }
+      if (isSeedance25Variant((typed as { seedance25Variant?: unknown }).seedance25Variant)) {
+        normalizedOptions.seedance25Variant = typed.seedance25Variant;
+      }
+      if (isSeedance25AspectRatioSelectionValue((typed as { seedance25AspectRatio?: unknown }).seedance25AspectRatio)) {
+        normalizedOptions.seedance25AspectRatio = typed.seedance25AspectRatio;
+      }
+      if (isSeedance25ResolutionSelectionValue((typed as { seedance25Resolution?: unknown }).seedance25Resolution)) {
+        normalizedOptions.seedance25Resolution = typed.seedance25Resolution;
+      }
+      if (isSeedance25DurationSelectionValue((typed as { seedance25Duration?: unknown }).seedance25Duration)) {
+        normalizedOptions.seedance25Duration = typed.seedance25Duration;
+      }
+      const seedance25GenerateAudioValue = (typed as { seedance25GenerateAudio?: unknown }).seedance25GenerateAudio;
+      if (typeof seedance25GenerateAudioValue === 'boolean') {
+        normalizedOptions.seedance25GenerateAudio = seedance25GenerateAudioValue;
       }
 
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;

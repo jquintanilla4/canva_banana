@@ -1580,8 +1580,16 @@ describe('Canvas video prompt area tool', () => {
     expect(state.falOptions?.seedance2Resolution).toBe('720p');
   });
 
-  it('keeps Smart embedded submits enabled with no accepted area media but blocks empty Reference submits', () => {
-    const buildCanvas = (seedance2Variant: 'smart' | 'reference') => (
+  it('uses each Seedance family variant when gating empty embedded submits', () => {
+    const buildCanvas = ({
+      modelId,
+      seedance2Variant,
+      seedance25Variant,
+    }: {
+      modelId?: string;
+      seedance2Variant: 'smart' | 'reference';
+      seedance25Variant?: 'smart' | 'reference';
+    }) => (
       <Canvas
         images={[]}
         onImagesChange={vi.fn()}
@@ -1602,9 +1610,11 @@ describe('Canvas video prompt area tool', () => {
         videoPromptBars={[{
           id: 'bar-1',
           assignedAreaId: 'area-1',
+          modelId,
           prompt: 'Area prompt',
           negativePrompt: '',
           seedance2Variant,
+          ...(seedance25Variant ? { falOptions: { seedance25Variant } } : {}),
           seedance2AspectRatio: '16:9',
           seedance2Resolution: '720p',
           seedance2Duration: '5',
@@ -1689,16 +1699,35 @@ describe('Canvas video prompt area tool', () => {
         onVideoPromptBarUpdate={vi.fn()}
         onVideoPromptBarSubmit={vi.fn()}
         buildVideoPromptBarControls={() => []}
-        embeddedVideoPromptBarModelOptions={[{ value: 'volcengine/seedance-2', label: 'Seedance 2' }]}
+        embeddedVideoPromptBarModelOptions={[
+          { value: 'volcengine/seedance-2', label: 'Seedance 2' },
+          { value: 'bytedance/seedance-2.5', label: 'Seedance 2.5 (FAL)' },
+        ]}
         onCommit={vi.fn()}
       />
     );
 
-    const { rerender } = render(buildCanvas('smart'));
+    const { rerender } = render(buildCanvas({ seedance2Variant: 'smart' }));
 
     expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(false);
 
-    rerender(buildCanvas('reference'));
+    rerender(buildCanvas({ seedance2Variant: 'reference' }));
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
+
+    rerender(buildCanvas({
+      modelId: 'bytedance/seedance-2.5',
+      seedance2Variant: 'reference',
+      seedance25Variant: 'smart',
+    }));
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(false);
+
+    rerender(buildCanvas({
+      modelId: 'bytedance/seedance-2.5',
+      seedance2Variant: 'smart',
+      seedance25Variant: 'reference',
+    }));
 
     expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
   });

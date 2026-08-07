@@ -80,3 +80,6 @@ AGENTS.md
 
 # Claude Code
 .claude/
+
+# Agent tooling lockfiles
+skills-lock.json

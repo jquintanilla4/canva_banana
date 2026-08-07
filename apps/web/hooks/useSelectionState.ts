@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_MAX_REFERENCE_IMAGES,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   getMaxReferenceImages,
   KLING_VIDEO_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
@@ -13,10 +14,18 @@ import {
 import type { ApiProviderId, CanvasImage } from '../types';
 import type { UseFalSettingsResult } from './useFalSettings';
 import {
+  limitEffectiveSeedanceReferenceIds,
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from '../utils/seedanceReferences';
+import {
+  SEEDANCE25_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE25_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT,
+  SEEDANCE25_REFERENCE_VIDEO_LIMIT,
+} from '../utils/seedance25References';
 
 type SelectionFalSettings = Pick<
   UseFalSettingsResult,
@@ -44,6 +53,8 @@ type SelectionFalSettings = Pick<
   isKrea2LargeModel?: UseFalSettingsResult['isKrea2LargeModel']; // Older test stubs do not carry this image flag.
   isMiniMaxH3VideoModel?: UseFalSettingsResult['isMiniMaxH3VideoModel']; // Older test stubs predate H3.
   miniMaxH3Variant?: UseFalSettingsResult['miniMaxH3Variant']; // Missing H3 state defaults to Reference elsewhere.
+  isSeedance25VideoModel?: UseFalSettingsResult['isSeedance25VideoModel']; // Seedance 2.5 is optional for older test stubs.
+  seedance25Variant?: UseFalSettingsResult['seedance25Variant']; // Missing 2.5 state defaults to Reference elsewhere.
 };
 
 type SelectionOptions = {
@@ -115,6 +126,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     seedance2Variant,
+    isSeedance25VideoModel = false,
+    seedance25Variant = 'reference',
     isVeo31VideoModel,
     veo31Variant,
   } = fal;
@@ -152,12 +165,22 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isSeedance2VideoModel
     && seedance2Variant === 'reference';
+  const isSeedance25ReferenceMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isSeedance25VideoModel
+    && seedance25Variant === 'reference';
   const isMiniMaxH3ReferenceMode = apiProvider === 'fal'
     && falModelMode === 'video'
     && isMiniMaxH3VideoModel
     && miniMaxH3Variant === 'reference';
-  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isMiniMaxH3ReferenceMode;
-  const multimodalReferenceLabel = isMiniMaxH3ReferenceMode ? 'MiniMax H3' : 'Seedance 2';
+  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode;
+  const multimodalReferenceLabel = isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode ? 'Seedance 2.5' : 'Seedance 2';
+  const multimodalReferenceLimits = useMemo(() => isSeedance25ReferenceMode
+    ? { images: SEEDANCE25_REFERENCE_IMAGE_LIMIT, videos: SEEDANCE25_REFERENCE_VIDEO_LIMIT, audios: SEEDANCE25_REFERENCE_AUDIO_LIMIT }
+    : { images: SEEDANCE_REFERENCE_IMAGE_LIMIT, videos: SEEDANCE_REFERENCE_VIDEO_LIMIT, audios: SEEDANCE_REFERENCE_AUDIO_LIMIT }, [isSeedance25ReferenceMode]);
+  const multimodalReferenceTotalLimit = isSeedance25ReferenceMode
+    ? SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT
+    : SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT;
   const isVideoInputMode = isKlingO3VideoInputMode
     || isWanVideoInputMode
     || isAudioInputMode
@@ -172,6 +195,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isSeedance2VideoModel
     && seedance2Variant === 'smart';
+  const isSeedance25SmartMode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isSeedance25VideoModel
+    && seedance25Variant === 'smart';
+  const isFalSeedance2SmartMode = isSeedance2SmartMode && falModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID; // The FAL endpoints drop references at submit; Volcengine/Jimeng keep their own behavior.
   const isMiniMaxH3StandardMode = apiProvider === 'fal'
     && falModelMode === 'video'
     && isMiniMaxH3VideoModel
@@ -236,9 +264,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const referenceLimits = useMemo(() => {
     if (isMultimodalReferenceMode) {
       return {
-        images: SEEDANCE_REFERENCE_IMAGE_LIMIT,
-        videos: SEEDANCE_REFERENCE_VIDEO_LIMIT,
-        audios: SEEDANCE_REFERENCE_AUDIO_LIMIT,
+        ...multimodalReferenceLimits,
       };
     }
     if (isMiniMaxH3StandardMode) {
@@ -247,6 +273,20 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         videos: NO_REFERENCE_LIMIT,
         audios: NO_REFERENCE_LIMIT,
       }; // H3 Standard drops references at submit, so retained tags must clear here instead of silently vanishing.
+    }
+    if (isSeedance25SmartMode) {
+      return {
+        images: NO_REFERENCE_LIMIT,
+        videos: NO_REFERENCE_LIMIT,
+        audios: NO_REFERENCE_LIMIT,
+      }; // Seedance 2.5 Smart drops references at submit, so retained tags must clear here instead of silently vanishing.
+    }
+    if (isFalSeedance2SmartMode) {
+      return {
+        images: NO_REFERENCE_LIMIT,
+        videos: NO_REFERENCE_LIMIT,
+        audios: NO_REFERENCE_LIMIT,
+      }; // Seedance 2 (FAL) Smart drops references at submit, so retained tags must clear here instead of silently vanishing.
     }
     if (isWan27ReferenceMode) {
       return {
@@ -269,18 +309,18 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       videos: NO_REFERENCE_LIMIT,
       audios: NO_REFERENCE_LIMIT,
     };
-  }, [falModelId, isFalProvider, isMiniMaxH3StandardMode, isMultimodalReferenceMode, isWan27EditMode, isWan27ReferenceMode, referenceImageSlotOffset]);
+  }, [falModelId, isFalProvider, isFalSeedance2SmartMode, isMiniMaxH3StandardMode, isMultimodalReferenceMode, isSeedance25SmartMode, isWan27EditMode, isWan27ReferenceMode, multimodalReferenceLimits, referenceImageSlotOffset]);
 
   useEffect(() => {
     if (referenceVideoIds.length > referenceLimits.videos) {
       if (isMultimodalReferenceMode) {
-        onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
+        onError(`${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits.videos} videos.`);
       }
       setReferenceVideoIds(prevIds => prevIds.slice(0, referenceLimits.videos));
     }
     if (referenceAudioIds.length > referenceLimits.audios) {
       if (isMultimodalReferenceMode) {
-        onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
+        onError(`${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits.audios} audio tracks.`);
       }
       setReferenceAudioIds(prevIds => prevIds.slice(0, referenceLimits.audios));
     }
@@ -292,6 +332,18 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       setReferenceImageIds(prevIds => prevIds.slice(0, referenceLimits.images));
     }
   }, [isKlingO3VideoModel, isMultimodalReferenceMode, multimodalReferenceLabel, onError, onReferenceLimit, referenceAudioIds.length, referenceImageIds.length, referenceLimits, referenceVideoIds.length]);
+
+  useEffect(() => {
+    if ((!isSeedance25SmartMode && !isFalSeedance2SmartMode) || selectedImageIds.length <= 1) {
+      return;
+    }
+    const primarySelection = images.find(image => image.id === selectedImageIds[0]);
+    if (!isImageCanvasMedia(primarySelection)) {
+      return; // Keep unsupported video or audio selections visible so the existing guard can explain them.
+    }
+    setSelectedImageIds(prevIds => prevIds.length > 1 ? [prevIds[0]] : prevIds); // Smart uses one selected still; the end frame has its own explicit role.
+    onReferenceLimit(0);
+  }, [images, isFalSeedance2SmartMode, isSeedance25SmartMode, onReferenceLimit, selectedImageIds]);
 
   useEffect(() => {
     if (isActiveKrea2LargeModel || !primaryImageId) {
@@ -332,6 +384,46 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return isUnchanged ? prevIds : nextIds;
     });
   }, [isMultimodalReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, selectedImageIds]);
+
+  useEffect(() => {
+    if (!isMultimodalReferenceMode) {
+      return;
+    }
+    const { acceptedReferenceIds, violation } = limitEffectiveSeedanceReferenceIds({
+      images,
+      selectedImageIds,
+      referenceImageIds,
+      referenceVideoIds,
+      referenceAudioIds,
+      orderedReferenceIds: seedanceReferenceOrderIds,
+      limits: { ...multimodalReferenceLimits, total: multimodalReferenceTotalLimit },
+    });
+    if (!violation) {
+      return;
+    }
+    const acceptedReferenceIdSet = new Set(acceptedReferenceIds);
+    const keepAcceptedIds = (ids: string[]) => ids.filter(id => acceptedReferenceIdSet.has(id));
+    setSelectedImageIds(keepAcceptedIds);
+    setReferenceImageIds(keepAcceptedIds);
+    setReferenceVideoIds(keepAcceptedIds);
+    setReferenceAudioIds(keepAcceptedIds);
+    const rejectionMessage = violation === 'total'
+      ? `${multimodalReferenceLabel} reference supports up to ${multimodalReferenceTotalLimit} total files.`
+      : `${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits[violation]} ${violation === 'audios' ? 'audio tracks' : violation}.`;
+    onError(rejectionMessage);
+  }, [
+    images,
+    isMultimodalReferenceMode,
+    multimodalReferenceLabel,
+    multimodalReferenceLimits,
+    multimodalReferenceTotalLimit,
+    onError,
+    referenceAudioIds,
+    referenceImageIds,
+    referenceVideoIds,
+    seedanceReferenceOrderIds,
+    selectedImageIds,
+  ]);
 
   // Clear sourceVideoId when leaving a video input mode (Kling O3 / Wan / Scail / Lip Sync / HeyGen).
   useEffect(() => {
@@ -402,10 +494,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         if (prevIds.includes(imageId)) {
           return prevIds.filter(id => id !== imageId);
         }
-        if (prevIds.length < SEEDANCE_REFERENCE_VIDEO_LIMIT) {
+        if (prevIds.length < multimodalReferenceLimits.videos) {
           return [...prevIds, imageId];
         }
-        onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos.`);
+        onError(`${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits.videos} videos.`);
         return prevIds;
       });
       return;
@@ -453,10 +545,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         if (prevIds.includes(imageId)) {
           return prevIds.filter(id => id !== imageId);
         }
-        if (prevIds.length < SEEDANCE_REFERENCE_AUDIO_LIMIT) {
+        if (prevIds.length < multimodalReferenceLimits.audios) {
           return [...prevIds, imageId];
         }
-        onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks.`);
+        onError(`${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits.audios} audio tracks.`);
         return prevIds;
       });
       return;
@@ -477,7 +569,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isMiniMaxH3StandardMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isSeedance25SmartMode && !isMiniMaxH3StandardMode && !isVeo31TailCapable) {
         return;
       }
       if (!imageId) {
@@ -551,10 +643,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
           if (prevIds.includes(imageId)) {
             return prevIds.filter(id => id !== imageId);
           }
-          if (prevIds.length < SEEDANCE_REFERENCE_IMAGE_LIMIT) {
+          if (prevIds.length < multimodalReferenceLimits.images) {
             return [...prevIds, imageId];
           }
-          onError(`${multimodalReferenceLabel} reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images.`);
+          onError(`${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits.images} images.`);
           return prevIds;
         });
         return;
@@ -723,6 +815,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isWan27SmartMode,
     isSeedance15FflfMode,
     isSeedance2SmartMode,
+    isSeedance25SmartMode,
     isMiniMaxH3StandardMode,
     isVeo31TailCapable,
     klingVariant,
@@ -743,6 +836,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     sourceAudioId,
     isMultimodalReferenceMode,
     multimodalReferenceLabel,
+    multimodalReferenceLimits,
     isWan27ReferenceMode,
     isActiveKrea2LargeModel,
     referenceImageSlotOffset,

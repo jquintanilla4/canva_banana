@@ -97,6 +97,10 @@ export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
 export type Seedance2Variant = 'smart' | 'reference';
+export type Seedance25Variant = 'smart' | 'reference';
+export type Seedance25AspectRatio = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
+export type Seedance25Resolution = '480p' | '720p';
+export type Seedance25Duration = 'auto' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
 export type MiniMaxH3Variant = 'standard' | 'reference';
 export type JimengSeedance2ModelVersion = 'seedance2.0fast' | 'seedance2.0' | 'seedance2.0_vip' | 'seedance2.0fast_vip';
 export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
@@ -180,6 +184,11 @@ export type GenerationFalOptions = Partial<{
   seedance2Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   seedance2GenerateAudio: boolean;
   seedance2JimengModelVersion: JimengSeedance2ModelVersion;
+  seedance25Variant: Seedance25Variant;
+  seedance25AspectRatio: Seedance25AspectRatio;
+  seedance25Resolution: Seedance25Resolution;
+  seedance25Duration: Seedance25Duration;
+  seedance25GenerateAudio: boolean;
   recraftImageSize: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];

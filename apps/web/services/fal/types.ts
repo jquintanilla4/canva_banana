@@ -200,9 +200,14 @@ export interface GenerateVideoOptions {
   seedance2Resolution?: '480p' | '720p' | '1080p';
   seedance2Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   seedance2GenerateAudio?: boolean;
+  seedance25Variant?: 'smart' | 'reference';
+  seedance25AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
+  seedance25Resolution?: '480p' | '720p';
+  seedance25Duration?: 'auto' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
+  seedance25GenerateAudio?: boolean;
   referenceVideos?: File[];
   referenceAudios?: File[];
-} // Optional controls for image-to-video.
+} // Optional controls for the video generation models.
 
 export interface RemoveBackgroundOptions {
   onQueueUpdate?: (update: FalQueueUpdate) => void;

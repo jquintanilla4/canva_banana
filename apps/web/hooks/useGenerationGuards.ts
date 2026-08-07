@@ -19,6 +19,11 @@ import {
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from '../utils/seedanceReferences';
+import {
+  SEEDANCE25_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE25_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE25_REFERENCE_VIDEO_LIMIT,
+} from '../utils/seedance25References';
 
 type Args = {
   apiProvider: 'google' | 'fal';
@@ -47,6 +52,9 @@ type Args = {
   isSeedance2VideoModel: boolean;
   seedance2Variant: 'smart' | 'reference';
   seedance2ReferenceAssetCount: number;
+  isSeedance25VideoModel?: boolean;
+  seedance25Variant?: 'smart' | 'reference';
+  seedance25ReferenceAssetCount?: number;
   wan27VideoVariant?: 'smart' | 'reference' | 'edit';
   wan27ReferenceAssetCount?: number;
   veo31Variant: 'i2v-fflf' | 'extend';
@@ -94,6 +102,9 @@ export function useGenerationGuards({
   isSeedance2VideoModel,
   seedance2Variant,
   seedance2ReferenceAssetCount,
+  isSeedance25VideoModel = false,
+  seedance25Variant = 'reference',
+  seedance25ReferenceAssetCount = 0,
   wan27VideoVariant,
   wan27ReferenceAssetCount = 0,
   veo31Variant,
@@ -116,6 +127,7 @@ export function useGenerationGuards({
   const isWan27EditMode = isWan27VideoModel && wan27VideoVariant === 'edit';
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isSeedance2ReferenceMode = isSeedance2VideoModel && seedance2Variant === 'reference';
+  const isSeedance25ReferenceMode = isSeedance25VideoModel && seedance25Variant === 'reference';
   const isMiniMaxH3ReferenceMode = isMiniMaxH3VideoModel && miniMaxH3Variant === 'reference';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
@@ -131,6 +143,12 @@ export function useGenerationGuards({
     && isVideoMode
     && isSeedance2VideoModel
     && !isSeedance2ReferenceMode
+    && primarySelectionMediaType !== null
+    && !hasPrimaryImage;
+  const hasSeedance25SmartUnsupportedSelection = apiProvider === 'fal'
+    && isVideoMode
+    && isSeedance25VideoModel
+    && !isSeedance25ReferenceMode
     && primarySelectionMediaType !== null
     && !hasPrimaryImage;
   const hasMiniMaxH3StandardUnsupportedSelection = apiProvider === 'fal'
@@ -181,7 +199,7 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isSeedance2VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isSeedance2VideoModel && !isSeedance25VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKlingV3Control = usingFal && isKlingV3ControlVideoModel && !hasKlingV3ControlStillImage;
     const requiresSelectedImageForScail = usingFal && isScailVideoModel && !hasScailStillImage;
@@ -195,8 +213,10 @@ export function useGenerationGuards({
       (shouldValidateFalOptions && isNumImagesInvalid) ||
       (usingFal && isMiniMaxH3ReferenceMode && miniMaxH3ReferenceAssetCount === 0) ||
       (usingFal && isSeedance2ReferenceMode && seedance2ReferenceAssetCount === 0) ||
+      (usingFal && isSeedance25ReferenceMode && seedance25ReferenceAssetCount === 0) ||
       (usingFal && isWan27ReferenceMode && !hasWan27ReferenceAssets) ||
       hasSeedance2SmartUnsupportedSelection ||
+      hasSeedance25SmartUnsupportedSelection ||
       hasMiniMaxH3StandardUnsupportedSelection ||
       hasWan27SmartUnsupportedSelection ||
       hasKlingV3UnsupportedSelection ||
@@ -237,6 +257,19 @@ export function useGenerationGuards({
             return 'Describe the motion or scene you want this image to turn into, or shift-click another still image to set the end frame...';
           }
           return 'Describe the video you want to create, or select an image for image-to-video...';
+        }
+        if (isSeedance25VideoModel) {
+          if (isSeedance25ReferenceMode) {
+            return seedance25ReferenceAssetCount > 0
+              ? `Seedance 2.5 Reference: select or shift-click up to ${SEEDANCE25_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE25_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE25_REFERENCE_AUDIO_LIMIT} audio clips as @Image1, @Video1, or @Audio1, then describe the scene you want...`
+              : 'Seedance 2.5 Reference: select canvas media to label @Image1, @Video1, or @Audio1 references, then describe the scene...';
+          }
+          if (hasSeedance25SmartUnsupportedSelection) {
+            return 'Seedance 2.5 Smart uses a still image as the first frame. Clear the current video or audio selection to run text-to-video...';
+          }
+          return hasPrimaryImage
+            ? 'Describe the motion or scene you want this image to turn into, or shift-click another still image to set the end frame...'
+            : 'Describe the video you want to create, or select an image for image-to-video...';
         }
         if (isWan27VideoModel) {
           if (isWan27EditMode) {
@@ -371,6 +404,7 @@ export function useGenerationGuards({
     hasSourceVideo,
     hasMiniMaxH3StandardUnsupportedSelection,
     hasSeedance2SmartUnsupportedSelection,
+    hasSeedance25SmartUnsupportedSelection,
     hasWan27SmartUnsupportedSelection,
     hasKlingV3UnsupportedSelection,
     primarySelectionMediaType,
@@ -388,6 +422,8 @@ export function useGenerationGuards({
     isMiniMaxH3VideoModel,
     isMiniMaxH3ReferenceMode,
     isSeedance2VideoModel,
+    isSeedance25VideoModel,
+    isSeedance25ReferenceMode,
     isWanAnimateVideoModel,
     isScailVideoModel,
     isInfinitalkVideoModel,
@@ -404,6 +440,8 @@ export function useGenerationGuards({
     miniMaxH3Variant,
     seedance2ReferenceAssetCount,
     seedance2Variant,
+    seedance25ReferenceAssetCount,
+    seedance25Variant,
     wan27ReferenceAssetCount,
     tool,
   ]);

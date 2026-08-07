@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
@@ -35,6 +36,11 @@ import {
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from './seedanceReferences';
+import {
+  SEEDANCE25_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE25_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE25_REFERENCE_VIDEO_LIMIT,
+} from './seedance25References';
 
 type CanvasPoint = { x: number; y: number };
 export type EmbeddedVideoPromptBarSizeMode = 'full' | 'mini';
@@ -63,6 +69,14 @@ export const SEEDANCE_2_VIDEO_PROMPT_PROFILE: VideoModelCapabilityProfile = {
   maxVideos: SEEDANCE_REFERENCE_VIDEO_LIMIT,
   maxAudios: SEEDANCE_REFERENCE_AUDIO_LIMIT,
   maxElements: 0,
+};
+
+export const SEEDANCE_25_VIDEO_PROMPT_PROFILE: VideoModelCapabilityProfile = {
+  ...SEEDANCE_2_VIDEO_PROMPT_PROFILE,
+  id: 'seedance-2.5-reference',
+  maxImages: SEEDANCE25_REFERENCE_IMAGE_LIMIT,
+  maxVideos: SEEDANCE25_REFERENCE_VIDEO_LIMIT,
+  maxAudios: SEEDANCE25_REFERENCE_AUDIO_LIMIT,
 };
 
 export const getEmbeddedVideoPromptBarModelId = (modelId: string | undefined): string =>
@@ -102,6 +116,13 @@ export const getVideoPromptAreaCapabilityProfile = (
       return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: resolvedModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID });
     }
     return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId };
+  }
+
+  if (resolvedModelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
+    if (falOptions?.seedance25Variant === 'smart') {
+      return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: true });
+    }
+    return { ...SEEDANCE_25_VIDEO_PROMPT_PROFILE, id: resolvedModelId };
   }
 
   if (resolvedModelId === MINIMAX_H3_VIDEO_MODEL_ID) {

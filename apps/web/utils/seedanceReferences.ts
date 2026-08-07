@@ -25,6 +25,15 @@ type SeedanceReferenceIds = {
   referenceAudioIds: string[];
 };
 
+type SeedanceReferenceLimits = {
+  images: number;
+  videos: number;
+  audios: number;
+  total: number;
+};
+
+export type SeedanceReferenceLimitViolation = 'images' | 'videos' | 'audios' | 'total';
+
 const dedupeIds = (ids: string[]): string[] => Array.from(new Set(ids)); // Keeps labels and payload order stable.
 
 const orderSeedanceReferenceIds = (
@@ -90,3 +99,58 @@ export const buildEffectiveSeedanceReferenceIds = ({
     referenceAudioIds: nextReferenceAudioIds, // Audio labels stay aligned with user pick order too.
   };
 };
+
+export const limitEffectiveSeedanceReferenceIds = ({
+  images,
+  selectedImageIds,
+  referenceImageIds,
+  referenceVideoIds,
+  referenceAudioIds,
+  orderedReferenceIds = [],
+  limits,
+}: Omit<BuildEffectiveSeedanceReferenceIdsArgs, 'enabled'> & {
+  limits: SeedanceReferenceLimits;
+}): { acceptedReferenceIds: string[]; violation: SeedanceReferenceLimitViolation | null } => {
+  const canvasItemById = new Map(images.map(image => [image.id, image]));
+  const effectiveReferenceIds = dedupeIds([
+    ...selectedImageIds,
+    ...referenceImageIds,
+    ...referenceVideoIds,
+    ...referenceAudioIds,
+  ]);
+  const orderedIds = orderSeedanceReferenceIds(effectiveReferenceIds, orderedReferenceIds);
+  const acceptedReferenceIds: string[] = [];
+  let acceptedImageCount = 0;
+  let acceptedVideoCount = 0;
+  let acceptedAudioCount = 0;
+  let violation: SeedanceReferenceLimitViolation | null = null;
+
+  orderedIds.forEach(id => {
+    const mediaType = canvasItemById.get(id)?.mediaType;
+    if (!mediaType) {
+      return;
+    }
+    if (acceptedReferenceIds.length >= limits.total) {
+      violation ??= 'total';
+      return;
+    }
+    if (mediaType === 'image' && acceptedImageCount >= limits.images) {
+      violation ??= 'images';
+      return;
+    }
+    if (mediaType === 'video' && acceptedVideoCount >= limits.videos) {
+      violation ??= 'videos';
+      return;
+    }
+    if (mediaType === 'audio' && acceptedAudioCount >= limits.audios) {
+      violation ??= 'audios';
+      return;
+    }
+    acceptedReferenceIds.push(id);
+    if (mediaType === 'image') acceptedImageCount += 1;
+    if (mediaType === 'video') acceptedVideoCount += 1;
+    if (mediaType === 'audio') acceptedAudioCount += 1;
+  });
+
+  return { acceptedReferenceIds, violation };
+}; // Apply per-modality and total caps after selected and tagged media are merged.

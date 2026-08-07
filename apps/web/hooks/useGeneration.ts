@@ -13,6 +13,7 @@ import {
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   RECRAFT_V4_PRO_MAX_COLORS,
@@ -67,6 +68,10 @@ import {
   isJimengSeedance2ModelVersion,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isSeedance25AspectRatioSelectionValue,
+  isSeedance25DurationSelectionValue,
+  isSeedance25ResolutionSelectionValue,
+  isSeedance25Variant,
   isSeedance15AspectRatioSelectionValue,
   isSeedance15DurationSelectionValue,
   isSeedance15ResolutionSelectionValue,
@@ -179,7 +184,19 @@ import {
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
 } from '../utils/seedanceReferences';
+import {
+  SEEDANCE25_REFERENCE_AUDIO_LIMIT,
+  SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS,
+  SEEDANCE25_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE25_REFERENCE_MEDIA_MAX_DURATION_SECONDS,
+  SEEDANCE25_REFERENCE_MEDIA_MIN_DURATION_SECONDS,
+  SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT,
+  SEEDANCE25_REFERENCE_VIDEO_LIMIT,
+  SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
+  getSeedance25VideoReferenceFileError,
+} from '../utils/seedance25References';
 import { getCanvasMediaDurationSeconds, resolveCanvasMediaDurationSeconds, resolveOptionalCanvasMediaDurationSeconds } from '../utils/canvasMediaDuration';
+import { readIsoBmffVideoFrameRate } from '../utils/isoBmffVideoFrameRate';
 import {
   getSeedanceReferencePromptMentionError,
   normalizeSeedanceReferencePromptMentions,
@@ -536,6 +553,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance25Variant,
+    seedance25AspectRatio,
+    seedance25Resolution,
+    seedance25Duration,
+    seedance25GenerateAudio,
     isSeedance15VideoModel,
     flux2MaxImageSize,
     isFlux2MaxModel,
@@ -825,10 +847,26 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const seedance2CameraFixedForRun = typeof seedanceOptionsOverride.seedance2CameraFixed === 'boolean'
       ? seedanceOptionsOverride.seedance2CameraFixed
       : seedance2CameraFixed;
+    const seedance25VariantForRun = isSeedance25Variant(falOptionsOverride.seedance25Variant)
+      ? falOptionsOverride.seedance25Variant
+      : seedance25Variant;
+    const seedance25AspectRatioForRun = isSeedance25AspectRatioSelectionValue(falOptionsOverride.seedance25AspectRatio)
+      ? falOptionsOverride.seedance25AspectRatio
+      : seedance25AspectRatio;
+    const seedance25ResolutionForRun = isSeedance25ResolutionSelectionValue(falOptionsOverride.seedance25Resolution)
+      ? falOptionsOverride.seedance25Resolution
+      : seedance25Resolution;
+    const seedance25DurationForRun = isSeedance25DurationSelectionValue(falOptionsOverride.seedance25Duration)
+      ? falOptionsOverride.seedance25Duration
+      : seedance25Duration;
+    const seedance25GenerateAudioForRun = typeof falOptionsOverride.seedance25GenerateAudio === 'boolean'
+      ? falOptionsOverride.seedance25GenerateAudio
+      : seedance25GenerateAudio;
     const shouldMergeSeedanceReferenceIdsForRun = apiProviderForRun === 'fal'
       && falModelModeForRun === 'video'
       && (
         ((falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === FAL_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) && seedance2VariantForRun === 'reference')
+        || (falVideoModelIdForRun === FAL_SEEDANCE_25_VIDEO_MODEL_ID && seedance25VariantForRun === 'reference')
         || (falVideoModelIdForRun === MINIMAX_H3_VIDEO_MODEL_ID && miniMaxH3VariantForRun === 'reference')
       )
       && !generationOverride; // Multimodal reference models merge selected media into ordered labels.
@@ -941,12 +979,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const actualWanAnimateModelId = isWanAnimateVideoModel ? getWanAnimateVideoEndpoint(wanAnimateVariantForRun) : null;
     const isVeo31TailCapable = isVeo31VideoModelForRun && veo31VariantForRun === 'i2v-fflf';
     const isFalSeedance2VideoModelForRun = isVideoMode && falVideoModelIdForRun === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+    const isFalSeedance25VideoModelForRun = isVideoMode && falVideoModelIdForRun === FAL_SEEDANCE_25_VIDEO_MODEL_ID;
     const isMiniMaxH3VideoModelForRun = isVideoMode && falVideoModelIdForRun === MINIMAX_H3_VIDEO_MODEL_ID;
     const isJimengSeedance2VideoModelForRun = isVideoMode && falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
     const isAnySeedance2VideoModelForRun = isVideoMode && (falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID || isFalSeedance2VideoModelForRun || isJimengSeedance2VideoModelForRun);
     const isSeedance2ReferenceModeForRun = isAnySeedance2VideoModelForRun && seedance2VariantForRun === 'reference';
+    const isSeedance25ReferenceModeForRun = isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'reference';
     const isMiniMaxH3ReferenceModeForRun = isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'reference';
-    const isMultimodalReferenceModeForRun = isSeedance2ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun;
+    const isMultimodalReferenceModeForRun = isSeedance2ReferenceModeForRun || isSeedance25ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun;
     const shouldPersistReferenceInputsForRun = !isMiniMaxH3VideoModelForRun || isMiniMaxH3ReferenceModeForRun; // H3 Standard ignores references retained from Reference mode.
     const wan27AudioIdForRun = isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun ? sourceAudioIdForRun : null; // Wan 2.7 Smart supports optional audio.
     const videoDurationForRun: FalVideoDuration | undefined = isKlingVideoModel
@@ -962,7 +1002,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isKlingV3ControlPromptOptional = usingFal && isVideoMode && isKlingV3ControlVideoModel; // Kling Control v3 prompt is optional.
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional));
-    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isMiniMaxH3VideoModelForRun && !isAnySeedance2VideoModelForRun && !isWan27VideoModelForRun && !isKlingO3VideoInputMode && !isFalVideoInputMode
+    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isMiniMaxH3VideoModelForRun && !isAnySeedance2VideoModelForRun && !isFalSeedance25VideoModelForRun && !isWan27VideoModelForRun && !isKlingO3VideoInputMode && !isFalVideoInputMode
       && !(isGrokImagineVideoModel && isGrokImagineVideoEditMode);
     const generationKind: GenerationKind = overrideKind
       ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
@@ -1056,6 +1096,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     ? `${baseModelLabel} ${wan27VideoVariantForRun === 'reference' ? 'Reference' : wan27VideoVariantForRun === 'edit' ? 'Edit' : 'Smart'}`
                   : isFalSeedance2VideoModelForRun || isJimengSeedance2VideoModelForRun
                     ? buildSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun)
+                  : isFalSeedance25VideoModelForRun
+                    ? buildSeedance2ModelLabel(baseModelLabel, seedance25VariantForRun)
                   : isMiniMaxH3VideoModelForRun
                     ? `${baseModelLabel} ${miniMaxH3VariantForRun === 'reference' ? 'Reference' : 'Standard'}`
                     : baseModelLabel;
@@ -1613,6 +1655,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
           seedance2Duration: seedance2DurationForRun,
           seedance2GenerateAudio: seedance2GenerateAudioForRun,
         } : {}),
+        ...(isFalSeedance25VideoModelForRun ? {
+          seedance25Variant: seedance25VariantForRun,
+          seedance25AspectRatio: seedance25AspectRatioForRun,
+          seedance25Resolution: seedance25ResolutionForRun,
+          seedance25Duration: seedance25DurationForRun,
+          seedance25GenerateAudio: seedance25GenerateAudioForRun,
+        } : {}),
         ...(isKlingV3ControlVideoModel ? {
           klingV3ControlKeepSound: klingV3ControlKeepSoundForRun,
           klingV3ControlOrientation: klingV3ControlOrientationForRun,
@@ -1804,8 +1853,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
 
-        if (isFalSeedance2VideoModelForRun || isMiniMaxH3VideoModelForRun) {
-          const multimodalModelLabel = isMiniMaxH3VideoModelForRun ? 'MiniMax H3' : 'Seedance 2';
+        if (isFalSeedance2VideoModelForRun || isFalSeedance25VideoModelForRun || isMiniMaxH3VideoModelForRun) {
+          const multimodalModelLabel = isMiniMaxH3VideoModelForRun ? 'MiniMax H3' : isFalSeedance25VideoModelForRun ? 'Seedance 2.5' : 'Seedance 2';
+          const referenceImageLimit = isFalSeedance25VideoModelForRun ? SEEDANCE25_REFERENCE_IMAGE_LIMIT : SEEDANCE_REFERENCE_IMAGE_LIMIT;
+          const referenceVideoLimit = isFalSeedance25VideoModelForRun ? SEEDANCE25_REFERENCE_VIDEO_LIMIT : SEEDANCE_REFERENCE_VIDEO_LIMIT;
+          const referenceAudioLimit = isFalSeedance25VideoModelForRun ? SEEDANCE25_REFERENCE_AUDIO_LIMIT : SEEDANCE_REFERENCE_AUDIO_LIMIT;
+          const referenceTotalLimit = isFalSeedance25VideoModelForRun ? SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT : SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT;
+          const referenceMinDuration = isFalSeedance25VideoModelForRun ? SEEDANCE25_REFERENCE_MEDIA_MIN_DURATION_SECONDS : SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS;
+          const referenceMaxDuration = isFalSeedance25VideoModelForRun ? SEEDANCE25_REFERENCE_MEDIA_MAX_DURATION_SECONDS : SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS;
+          const referenceVideoTotalDurationLimit = isFalSeedance25VideoModelForRun ? SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS : SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS;
+          const referenceAudioTotalDurationLimit = isFalSeedance25VideoModelForRun ? SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS : SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS;
           const referenceAssetCount = referenceImageIdsForRun.length + referenceVideoIdsForRun.length + referenceAudioIdsForRun.length;
           const seedancePromptForRun = isMultimodalReferenceModeForRun
             ? normalizeSeedanceReferencePromptMentions(trimmedPrompt)
@@ -1837,15 +1894,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
           if (isMultimodalReferenceModeForRun) {
             if (
-              referenceImageIdsForRun.length > SEEDANCE_REFERENCE_IMAGE_LIMIT
-              || referenceVideoIdsForRun.length > SEEDANCE_REFERENCE_VIDEO_LIMIT
-              || referenceAudioIdsForRun.length > SEEDANCE_REFERENCE_AUDIO_LIMIT
+              referenceImageIdsForRun.length > referenceImageLimit
+              || referenceVideoIdsForRun.length > referenceVideoLimit
+              || referenceAudioIdsForRun.length > referenceAudioLimit
             ) {
-              setError(`${multimodalModelLabel} Reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips.`);
+              setError(`${multimodalModelLabel} Reference supports up to ${referenceImageLimit} images, ${referenceVideoLimit} videos, and ${referenceAudioLimit} audio clips.`);
               return;
             }
-            if (referenceAssetCount > SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT) {
-              setError(`${multimodalModelLabel} Reference supports up to ${SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT} total reference files.`);
+            if (referenceAssetCount > referenceTotalLimit) {
+              setError(`${multimodalModelLabel} Reference supports up to ${referenceTotalLimit} total reference files.`);
               return;
             }
             if (referenceAudioIdsForRun.length > 0 && referenceImageIdsForRun.length + referenceVideoIdsForRun.length === 0) {
@@ -1868,14 +1925,33 @@ export const useGeneration = (args: UseGenerationArgs) => {
               setError(`${multimodalModelLabel} video references must be videos on the canvas.`);
               return;
             }
+            if (isFalSeedance25VideoModelForRun) {
+              const referenceVideoFileErrors = await Promise.all(seedanceReferenceVideoCanvasItems.map(async item => {
+                const hasReliableDimensions = Number.isFinite(item.naturalWidth)
+                  && Number.isFinite(item.naturalHeight)
+                  && item.naturalWidth > 0
+                  && item.naturalHeight > 0;
+                return getSeedance25VideoReferenceFileError(
+                  item.file,
+                  hasReliableDimensions ? item.naturalWidth : undefined,
+                  hasReliableDimensions ? item.naturalHeight : undefined,
+                  await readIsoBmffVideoFrameRate(item.file),
+                );
+              })); // File metadata is available without materializing snapshot-backed video bytes.
+              const referenceVideoFileError = referenceVideoFileErrors.find(Boolean);
+              if (referenceVideoFileError) {
+                setError(referenceVideoFileError);
+                return;
+              }
+            }
             const referenceVideoDurations = await Promise.all(seedanceReferenceVideoCanvasItems.map(resolveCanvasMediaDurationSeconds)); // Fal validates persisted or on-demand durations.
-            if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS || durationSeconds > SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)) {
-              setError(`${multimodalModelLabel} reference videos must each be between ${SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS} and ${SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS} seconds.`);
+            if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < referenceMinDuration || durationSeconds > referenceMaxDuration)) {
+              setError(`${multimodalModelLabel} reference videos must each be between ${referenceMinDuration} and ${referenceMaxDuration} seconds.`);
               return;
             }
             const totalReferenceVideoDurationSeconds = referenceVideoDurations.reduce((totalDurationSeconds, durationSeconds) => totalDurationSeconds + (durationSeconds ?? 0), 0);
-            if (totalReferenceVideoDurationSeconds > SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS) {
-              setError(`${multimodalModelLabel} reference videos must total ${SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS} seconds or less.`);
+            if (totalReferenceVideoDurationSeconds > referenceVideoTotalDurationLimit) {
+              setError(`${multimodalModelLabel} reference videos must total ${referenceVideoTotalDurationLimit} seconds or less.`);
               return;
             }
 
@@ -1886,14 +1962,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
               setError(`${multimodalModelLabel} audio references must be audio clips on the canvas.`);
               return;
             }
-            const referenceAudioDurations = seedanceReferenceAudioCanvasItems.map(getCanvasMediaDurationSeconds); // Fal Seedance validates the same audio duration limits locally.
-            if (referenceAudioDurations.some(durationSeconds => durationSeconds === null || durationSeconds < SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS || durationSeconds > SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)) {
-              setError(`${multimodalModelLabel} reference audio clips must each be between ${SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS} and ${SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS} seconds.`);
+            const referenceAudioDurations = seedanceReferenceAudioCanvasItems.map(getCanvasMediaDurationSeconds); // Fal Seedance validates these per-model audio duration limits remotely too.
+            if (referenceAudioDurations.some(durationSeconds => durationSeconds === null || durationSeconds < referenceMinDuration || durationSeconds > referenceMaxDuration)) {
+              setError(`${multimodalModelLabel} reference audio clips must each be between ${referenceMinDuration} and ${referenceMaxDuration} seconds.`);
               return;
             }
             const totalReferenceAudioDurationSeconds = referenceAudioDurations.reduce((totalDurationSeconds, durationSeconds) => totalDurationSeconds + (durationSeconds ?? 0), 0);
-            if (totalReferenceAudioDurationSeconds > SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS) {
-              setError(`${multimodalModelLabel} reference audio clips must total ${SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS} seconds or less.`);
+            if (totalReferenceAudioDurationSeconds > referenceAudioTotalDurationLimit) {
+              setError(`${multimodalModelLabel} reference audio clips must total ${referenceAudioTotalDurationLimit} seconds or less.`);
               return;
             }
           }
@@ -1917,6 +1993,28 @@ export const useGeneration = (args: UseGenerationArgs) => {
               images,
             });
 
+            if (!confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
+              return;
+            }
+          }
+          if (isFalSeedance25VideoModelForRun) {
+            const seedanceRequestKey = buildSeedance2RequestKey({
+              provider: generationProviderForRun,
+              modelId: falModelIdForRun,
+              prompt: seedancePromptForRun,
+              variant: seedance25VariantForRun,
+              aspectRatio: seedance25AspectRatioForRun,
+              resolution: seedance25ResolutionForRun,
+              duration: seedance25DurationForRun,
+              generateAudio: seedance25GenerateAudioForRun,
+              cameraFixed: false,
+              primaryImageId: primaryImageIdForRun,
+              videoLastFrameImageId: videoLastFrameImageIdForRun,
+              referenceImageIds: referenceImageIdsForRun,
+              referenceVideoIds: referenceVideoIdsForRun,
+              referenceAudioIds: referenceAudioIdsForRun,
+              images,
+            });
             if (!confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
               return;
             }
@@ -1973,7 +2071,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             });
             setToastMessage(null);
           }
-        } else if (!activePrimary && !isKlingV3VideoModel && !isWan27VideoModelForRun && !isMiniMaxH3VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun))) {
+        } else if (!activePrimary && !isKlingV3VideoModel && !isWan27VideoModelForRun && !isMiniMaxH3VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun)) && !isFalSeedance25VideoModelForRun) {
           throw new Error('Unable to find the starting frame for this video.');
         }
 
@@ -2024,7 +2122,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
 
-        const videoSourceImage = ((isFalSeedance2VideoModelForRun || isMiniMaxH3VideoModelForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
+        const videoSourceImage = ((isFalSeedance2VideoModelForRun || isFalSeedance25VideoModelForRun || isMiniMaxH3VideoModelForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
           ? null
           : (isWanAnimateVideoModel || isKlingV3ControlVideoModel || isScailVideoModel)
             ? activePrimary?.element as HTMLImageElement
@@ -2034,10 +2132,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
           .filter(isImageCanvasMedia)
           .map(img => img.element as HTMLImageElement);
         const seedanceReferenceVideoFilesForRun = isMultimodalReferenceModeForRun
-          ? await Promise.all(seedanceReferenceVideoCanvasItems.map(async (img, index) => {
-            const realFile = await ensureRealSnapshotFile(img.file);
-            return new File([realFile], img.file.name || `seedance2-fal-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
-          }))
+          ? isFalSeedance25VideoModelForRun
+            ? seedanceReferenceVideoCanvasItems.map(img => img.file) // Fal materializes these lazily inside its bounded upload pool.
+            : await Promise.all(seedanceReferenceVideoCanvasItems.map(async (img, index) => {
+              const realFile = await ensureRealSnapshotFile(img.file);
+              return new File([realFile], img.file.name || `seedance2-fal-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
+            }))
           : [];
         const wan27ReferenceVideoFilesForRun = isWan27ReferenceModeForRun
           ? await Promise.all(wan27ReferenceVideoCanvasItems.map(async (img, index) => {
@@ -2046,14 +2146,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }))
           : [];
         const seedanceReferenceAudioFilesForRun = isMultimodalReferenceModeForRun
-          ? await Promise.all(seedanceReferenceAudioCanvasItems.map(async (img, index) => {
-            const realFile = await ensureRealSnapshotFile(img.file);
-            if (realFile.type === 'audio/webm') {
-              const wavBlob = await convertAudioBlobToWav(realFile);
-              return new File([wavBlob], `seedance2-fal-reference-audio-${index + 1}.wav`, { type: 'audio/wav' });
-            }
-            return new File([realFile], img.file.name || `seedance2-fal-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
-          }))
+          ? isFalSeedance25VideoModelForRun
+            ? seedanceReferenceAudioCanvasItems.map(img => img.file) // Fal prepares these lazily inside the bounded Seedance 2.5 upload pool.
+            : await Promise.all(seedanceReferenceAudioCanvasItems.map(async (img, index) => {
+              const realFile = await ensureRealSnapshotFile(img.file);
+              if (realFile.type === 'audio/webm') {
+                const wavBlob = await convertAudioBlobToWav(realFile);
+                return new File([wavBlob], `seedance2-fal-reference-audio-${index + 1}.wav`, { type: 'audio/wav' });
+              }
+              return new File([realFile], img.file.name || `seedance2-fal-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
+            }))
           : [];
         const elementImagesForRun = elementImageIdsForRun
           .map(id => images.find(img => img.id === id))
@@ -2108,7 +2210,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart') || (isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'standard'); // Allow end-frame input for tail-capable variants.
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart') || (isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'smart') || (isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'standard'); // Allow end-frame input for tail-capable variants.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -2284,6 +2386,18 @@ export const useGeneration = (args: UseGenerationArgs) => {
               referenceAudios: seedanceReferenceAudioFilesForRun,
             } : {}),
           } : {}),
+          ...(isFalSeedance25VideoModelForRun ? {
+            seedance25Variant: seedance25VariantForRun,
+            seedance25AspectRatio: seedance25AspectRatioForRun,
+            seedance25Resolution: seedance25ResolutionForRun,
+            seedance25Duration: seedance25DurationForRun,
+            seedance25GenerateAudio: seedance25GenerateAudioForRun,
+            ...(isSeedance25ReferenceModeForRun ? {
+              referenceImages: referenceImagesForRun,
+              referenceVideos: seedanceReferenceVideoFilesForRun,
+              referenceAudios: seedanceReferenceAudioFilesForRun,
+            } : {}),
+          } : {}),
           onQueueUpdate: (update: FalQueueUpdate) => {
             setFalJobs(prev => prev.map(job => {
               if (job.id !== falJobId) {
@@ -2378,6 +2492,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             || (isVeo31VideoModelForRun && veo31GenerateAudioForRun)
             || (isKlingV3VideoModel && klingV3GenerateAudioForRun)
             || (isFalSeedance2VideoModelForRun && seedance2GenerateAudioForRun)
+            || (isFalSeedance25VideoModelForRun && seedance25GenerateAudioForRun)
             || isMiniMaxH3VideoModelForRun; // MiniMax H3 always generates native audio.
 
           const newVideo: CanvasImage = {
@@ -3143,6 +3258,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance25Variant,
+    seedance25AspectRatio,
+    seedance25Resolution,
+    seedance25Duration,
+    seedance25GenerateAudio,
     isSeedance15VideoModel,
     wan27ImageAspectRatio,
     wan27ImageMaxImages,

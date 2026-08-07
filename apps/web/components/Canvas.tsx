@@ -3,6 +3,7 @@ import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptA
 import { getNaturalSize, loadImageFromBlob, prepareVideoForPlayback } from '../services/mediaService';
 import {
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -27,6 +28,7 @@ import { getImageBounds } from './canvas/geometry';
 import { getCanvasWheelZoomMultiplier } from './canvas/wheelZoom';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { createCanvasRenderCache, drawCanvas, drawDotGridLayer } from './canvas/render/drawCanvas';
+import { isEmbeddedSeedanceReferenceMode } from '../utils/embeddedVideoRouting';
 import { createImageLodCache, disposeImageLodCache, prewarmImageLodCache, pruneImageLodCache, type ImageLodCache } from './canvas/render/imageLodCache';
 import { drainCanvasPerfStats, isCanvasPerfHudEnabled, recordCanvasDraw } from './canvas/render/perfHud';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
@@ -151,6 +153,20 @@ const VIEW_GESTURE_SETTLE_MS = 160;
 const WHEEL_RECT_TTL_MS = 300;
 
 const normalizeEmbeddedPromptBarForModel = (bar: CanvasVideoPromptBar, modelId: string): CanvasVideoPromptBar => {
+  if (modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
+    return {
+      ...bar,
+      modelId,
+      falOptions: {
+        ...(bar.falOptions ?? {}),
+        seedance25Variant: bar.falOptions?.seedance25Variant ?? 'reference',
+        seedance25AspectRatio: bar.falOptions?.seedance25AspectRatio ?? 'adaptive',
+        seedance25Resolution: bar.falOptions?.seedance25Resolution ?? '720p',
+        seedance25Duration: bar.falOptions?.seedance25Duration ?? 'auto',
+        seedance25GenerateAudio: bar.falOptions?.seedance25GenerateAudio ?? true,
+      },
+    };
+  }
   if (modelId !== JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {
     return { ...bar, modelId };
   }
@@ -1729,8 +1745,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   isLoading={isLoading}
                   inputDisabled={false}
                   submitDisabled={isRemovedEmbeddedModel || !barMembership || (
-                    selectedEmbeddedModelId.includes('seedance-2')
-                      && bar.seedance2Variant === 'reference'
+                    isEmbeddedSeedanceReferenceMode(bar, selectedEmbeddedModelId)
                       && embeddedMediaCount === 0
                   ) || (
                     selectedEmbeddedModelId === MINIMAX_H3_VIDEO_MODEL_ID

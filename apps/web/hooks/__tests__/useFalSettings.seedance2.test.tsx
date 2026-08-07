@@ -8,4 +8,16 @@ describe('useFalSettings (Seedance 2)', () => {
 
     expect(result.current.seedance2Variant).toBe('reference');
   });
+
+  it('keeps Seedance 2.5 on its separate provider defaults', () => {
+    const { result } = renderHook(() => useFalSettings({ apiProvider: 'fal' }));
+
+    expect(result.current.seedance25Variant).toBe('reference');
+    expect(result.current.seedance25AspectRatio).toBe('adaptive');
+    expect(result.current.seedance25Resolution).toBe('720p');
+    expect(result.current.seedance25Duration).toBe('auto');
+    expect(result.current.seedance25GenerateAudio).toBe(true);
+    expect(result.current.seedance2Duration).toBe('5');
+    expect(result.current.seedance2GenerateAudio).toBe(false);
+  });
 });

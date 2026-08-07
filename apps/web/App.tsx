@@ -47,6 +47,7 @@ import {
   SEEDREAM_V45_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_VIDEO_MODEL_OPTIONS,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
@@ -104,6 +105,7 @@ import {
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from './utils/seedanceReferences';
+import { SEEDANCE25_REFERENCE_AUDIO_LIMIT, SEEDANCE25_REFERENCE_IMAGE_LIMIT, SEEDANCE25_REFERENCE_VIDEO_LIMIT } from './utils/seedance25References';
 import {
   buildEmbeddedVideoGenerationOverrides,
   buildVideoPromptAreaMembership,
@@ -442,11 +444,26 @@ export default function App() {
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
+    if (usingFalProvider && fal.isSeedance25VideoModel && fal.seedance25Variant === 'reference') {
+      setToastMessage(`Seedance 2.5 Reference supports up to ${SEEDANCE25_REFERENCE_IMAGE_LIMIT} image references.`);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+    if (usingFalProvider && fal.isSeedance25VideoModel) {
+      setToastMessage('Seedance 2.5 Smart doesn\'t use references — tagged references were removed. Switch to Reference mode to use them.'); // Smart runs drop them at submit, so say so up front.
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+    if (usingFalProvider && fal.falModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID && fal.seedance2Variant === 'smart') {
+      setToastMessage('Seedance 2 Smart doesn\'t use references — tagged references were removed. Switch to Reference mode to use them.'); // FAL Smart runs drop them at submit, so say so up front.
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
     const totalLimit = maxReferenceImages + 1;
     const referenceLimitLabel = usingFalProvider ? getFalModelLabel(fal.falModelId) : PROVIDER_LABELS.google; // Match label to active provider.
     setToastMessage(`${referenceLimitLabel} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [apiProvider, fal.falModelId, fal.isKlingO3EditMode, fal.isKrea2LargeModel, fal.isMiniMaxH3VideoModel, fal.miniMaxH3Variant, setToastMessage]);
+  }, [apiProvider, fal.falModelId, fal.isKlingO3EditMode, fal.isKrea2LargeModel, fal.isMiniMaxH3VideoModel, fal.isSeedance25VideoModel, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
 
   const isKlingO3ReferenceMode = fal.isKlingO3VideoModel && fal.klingO3Variant === 'reference';
   const isVeo31TailCapable = fal.isVeo31VideoModel && fal.veo31Variant === 'i2v-fflf';
@@ -463,6 +480,7 @@ export default function App() {
     || (fal.isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode)
     || fal.isSeedance15VideoModel
     || isMiniMaxH3StandardMode
+    || (fal.isSeedance25VideoModel && fal.seedance25Variant === 'smart')
     || (fal.isSeedance2VideoModel && !fal.isJimengSeedance2VideoModel && fal.seedance2Variant === 'smart'); // End-frame capable modes.
   const referenceImageSlotOffset = isGptImage2EditModelId(fal.falModelId) && tool === Tool.ANNOTATE ? 1 : 0; // Annotate uploads one extra input image.
   const isActiveKrea2LargeModel = apiProvider === 'fal' && fal.isKrea2LargeModel; // Krea behavior only applies while Fal is active.
@@ -578,7 +596,14 @@ export default function App() {
       assignedAreaId: targetArea.id,
       prompt: '',
       negativePrompt: '',
-      modelId: fal.isSeedance2VideoModel ? fal.falVideoModelId : SEEDANCE_2_VIDEO_MODEL_ID,
+      modelId: fal.isSeedance2VideoModel || fal.isSeedance25VideoModel ? fal.falVideoModelId : SEEDANCE_2_VIDEO_MODEL_ID,
+      ...(fal.isSeedance25VideoModel ? { falOptions: {
+        seedance25Variant: fal.seedance25Variant,
+        seedance25AspectRatio: fal.seedance25AspectRatio,
+        seedance25Resolution: fal.seedance25Resolution,
+        seedance25Duration: fal.seedance25Duration,
+        seedance25GenerateAudio: fal.seedance25GenerateAudio,
+      } } : {}),
       seedance2Variant: 'reference',
       seedance2JimengModelVersion: fal.seedance2JimengModelVersion,
       seedance2AspectRatio: '16:9',
@@ -602,7 +627,7 @@ export default function App() {
       )),
       videoPromptBars: [...prevState.videoPromptBars, newBar],
     }));
-  }, [displayedVideoPromptAreas, fal.falVideoModelId, fal.isSeedance2VideoModel, fal.seedance2JimengModelVersion, selectedVideoPromptAreaId, setError, setState]);
+  }, [displayedVideoPromptAreas, fal.falVideoModelId, fal.isSeedance2VideoModel, fal.isSeedance25VideoModel, fal.seedance25AspectRatio, fal.seedance25Duration, fal.seedance25GenerateAudio, fal.seedance25Resolution, fal.seedance25Variant, fal.seedance2JimengModelVersion, selectedVideoPromptAreaId, setError, setState]);
 
   const handleEmbeddedPromptBarUpdate = useCallback((barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => {
     setLiveVideoPromptBars(displayedVideoPromptBars.map(bar => (
@@ -1330,7 +1355,8 @@ export default function App() {
   }, [appMode, handleModeChange, isAnnotateModeDisabled]);
 
   const isSeedance2ReferenceMode = fal.isSeedance2VideoModel && fal.seedance2Variant === 'reference'; // Seedance reference mode labels the merged selected and tagged refs.
-  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isMiniMaxH3ReferenceMode;
+  const isSeedance25ReferenceMode = fal.isSeedance25VideoModel && fal.seedance25Variant === 'reference';
+  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode;
   const {
     referenceImageIds: effectiveSeedanceReferenceImageIds,
     referenceVideoIds: effectiveSeedanceReferenceVideoIds,
@@ -1478,8 +1504,7 @@ export default function App() {
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
     isKlingO3VideoModel: fal.isKlingO3VideoModel,
     isKlingO3EditMode: fal.isKlingO3EditMode,
-    isSeedance2ReferenceMode,
-    isMiniMaxH3ReferenceMode,
+    isMultimodalReferenceMode,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isWan27ImageModel: fal.isWan27ImageModel,
     referenceOrderLabels: klingReferenceOrderLabels,
@@ -1538,6 +1563,7 @@ export default function App() {
       isSeedance15VideoModel: modelId === SEEDANCE_15_VIDEO_MODEL_ID,
       isSeedance2VideoModel: modelId === SEEDANCE_2_VIDEO_MODEL_ID || modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID || modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
       isFalSeedance2VideoModel: modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      isSeedance25VideoModel: modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID,
       isJimengSeedance2VideoModel: modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
       falVideoDuration: options.videoDuration ?? fal.falVideoDuration,
       klingVariant: options.klingVariant ?? fal.klingVariant,
@@ -1602,6 +1628,14 @@ export default function App() {
       seedance2Duration: bar.seedance2Duration ?? '5',
       seedance2GenerateAudio: bar.seedance2GenerateAudio,
       seedance2CameraFixed: bar.seedance2CameraFixed,
+      seedance25Variant: options.seedance25Variant ?? 'reference',
+      seedance25AspectRatio: options.seedance25AspectRatio ?? 'adaptive',
+      seedance25Resolution: options.seedance25Resolution ?? '720p',
+      seedance25Duration: options.seedance25Duration ?? 'auto',
+      seedance25GenerateAudio: options.seedance25GenerateAudio ?? true,
+      seedance25UsesSourceAspectRatio: modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID
+        && (options.seedance25Variant ?? 'reference') === 'smart'
+        && Boolean(barMembership?.primaryImageId),
       flux2MaxImageSize: fal.flux2MaxImageSize,
       wan27ImageAspectRatio: fal.wan27ImageAspectRatio,
       wan27ImageMaxImages: fal.wan27ImageMaxImages,
@@ -1699,6 +1733,11 @@ export default function App() {
       onSeedance2DurationChange: value => updateLegacyAndFal({ seedance2Duration: value as CanvasVideoPromptBar['seedance2Duration'] }, 'seedance2Duration', value),
       onSeedance2GenerateAudioChange: value => updateLegacyAndFal({ seedance2GenerateAudio: value }, 'seedance2GenerateAudio', value),
       onSeedance2CameraFixedChange: value => handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({ ...currentBar, seedance2CameraFixed: value })),
+      onSeedance25VariantChange: value => updateFalOption('seedance25Variant', value),
+      onSeedance25AspectRatioChange: value => updateFalOption('seedance25AspectRatio', value),
+      onSeedance25ResolutionChange: value => updateFalOption('seedance25Resolution', value),
+      onSeedance25DurationChange: value => updateFalOption('seedance25Duration', value),
+      onSeedance25GenerateAudioChange: value => updateFalOption('seedance25GenerateAudio', value),
       onFlux2MaxImageSizeChange: () => {},
       onWan27ImageAspectRatioChange: () => {},
       onWan27ImageMaxImagesChange: () => {},
@@ -1754,6 +1793,9 @@ export default function App() {
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
     seedance2Variant: fal.seedance2Variant,
     seedance2ReferenceAssetCount,
+    isSeedance25VideoModel: fal.isSeedance25VideoModel,
+    seedance25Variant: fal.seedance25Variant,
+    seedance25ReferenceAssetCount: isSeedance25ReferenceMode ? seedance2ReferenceAssetCount : 0,
     wan27VideoVariant: fal.wan27VideoVariant,
     wan27ReferenceAssetCount: isWan27ReferenceMode ? referenceImageIds.length + referenceVideoIds.length : 0,
     veo31Variant: fal.veo31Variant,
@@ -1792,6 +1834,7 @@ export default function App() {
     isSeedance15VideoModel: fal.isSeedance15VideoModel,
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
     isFalSeedance2VideoModel: fal.isFalSeedance2VideoModel,
+    isSeedance25VideoModel: fal.isSeedance25VideoModel,
     isJimengSeedance2VideoModel: fal.isJimengSeedance2VideoModel,
     falVideoDuration: fal.falVideoDuration,
     klingVariant: fal.klingVariant,
@@ -1854,6 +1897,12 @@ export default function App() {
     seedance2Duration: fal.seedance2Duration,
     seedance2GenerateAudio: fal.seedance2GenerateAudio,
     seedance2CameraFixed: fal.seedance2CameraFixed,
+    seedance25Variant: fal.seedance25Variant,
+    seedance25AspectRatio: fal.seedance25AspectRatio,
+    seedance25Resolution: fal.seedance25Resolution,
+    seedance25Duration: fal.seedance25Duration,
+    seedance25GenerateAudio: fal.seedance25GenerateAudio,
+    seedance25UsesSourceAspectRatio: fal.seedance25Variant === 'smart' && Boolean(activePrimaryImage),
     flux2MaxImageSize: fal.flux2MaxImageSize,
     isWan27ImageModel: fal.isWan27ImageModel,
     wan27ImageAspectRatio: fal.wan27ImageAspectRatio,
@@ -1932,6 +1981,11 @@ export default function App() {
     onSeedance2DurationChange: fal.handleSeedance2DurationChange,
     onSeedance2GenerateAudioChange: fal.handleSeedance2GenerateAudioChange,
     onSeedance2CameraFixedChange: fal.handleSeedance2CameraFixedChange,
+    onSeedance25VariantChange: fal.handleSeedance25VariantChange,
+    onSeedance25AspectRatioChange: fal.handleSeedance25AspectRatioChange,
+    onSeedance25ResolutionChange: fal.handleSeedance25ResolutionChange,
+    onSeedance25DurationChange: fal.handleSeedance25DurationChange,
+    onSeedance25GenerateAudioChange: fal.handleSeedance25GenerateAudioChange,
     onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
     onWan27ImageAspectRatioChange: fal.handleWan27ImageAspectRatioChange,
     onWan27ImageMaxImagesChange: fal.handleWan27ImageMaxImagesChange,
@@ -2415,6 +2469,10 @@ export default function App() {
                 : activePrimaryImage
                   ? 'MiniMax H3 Standard: describe the motion, or shift-click another still image to set the end frame... (Cmd/Ctrl + Enter to generate)'
                   : 'MiniMax H3 Standard: describe the video, or select an image for image-to-video... (Cmd/Ctrl + Enter to generate)')
+              : fal.isSeedance25VideoModel
+              ? (fal.seedance25Variant === 'reference'
+                ? `Seedance 2.5 Reference: select or shift-click up to ${SEEDANCE25_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE25_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE25_REFERENCE_AUDIO_LIMIT} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... (Cmd/Ctrl + Enter to generate)`
+                : 'Seedance 2.5 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... (Cmd/Ctrl + Enter to generate)')
               : fal.isSeedance2VideoModel
               ? (fal.isJimengSeedance2VideoModel
                 ? (fal.seedance2Variant === 'reference'

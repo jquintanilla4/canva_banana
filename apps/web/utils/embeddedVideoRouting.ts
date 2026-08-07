@@ -1,5 +1,7 @@
 import type { CanvasVideoPromptBar, GenerationInputs, GenerationProviderId } from '../types';
 import {
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
 } from '../services/modelConfig';
@@ -37,6 +39,20 @@ export const getEmbeddedBarFalOptions = (bar: CanvasVideoPromptBar): EmbeddedBar
 
 export const isJimengEmbeddedVideoModel = (modelId: string): boolean =>
   modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID; // Shared guard for setup checks and routing.
+
+export const isEmbeddedSeedanceReferenceMode = (
+  bar: CanvasVideoPromptBar,
+  modelId: string,
+): boolean => {
+  if (modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
+    return (bar.falOptions?.seedance25Variant ?? 'reference') === 'reference';
+  }
+  return (
+    modelId === SEEDANCE_2_VIDEO_MODEL_ID
+    || modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID
+    || modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
+  ) && bar.seedance2Variant === 'reference';
+}; // Each Seedance family reads its own variant state when gating empty embedded submits.
 
 export const getEmbeddedVideoProvider = (modelId: string): GenerationProviderId => (
   modelId === SEEDANCE_2_VIDEO_MODEL_ID

@@ -71,6 +71,11 @@ import {
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
   isSeedance2VideoModel as isSeedance2VideoModelId,
+  isFalSeedance25VideoModel,
+  isSeedance25AspectRatioSelectionValue,
+  isSeedance25DurationSelectionValue,
+  isSeedance25ResolutionSelectionValue,
+  isSeedance25Variant,
   isJimengSeedance2VideoModel,
   isVolcengineSeedance2VideoModel,
   isRecraftV4ProImageSizeSelectionValue,
@@ -156,6 +161,10 @@ import type {
   WanCreativity,
   WanTargetResolution,
   JimengSeedance2ModelVersionSelectionValue,
+  Seedance25AspectRatioSelectionValue,
+  Seedance25DurationSelectionValue,
+  Seedance25ResolutionSelectionValue,
+  Seedance25Variant,
 } from '../services/modelConfig';
 
 type UseFalSettingsArgs = {
@@ -179,6 +188,7 @@ type FalDerivedState = {
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
+  isSeedance25VideoModel: boolean;
   isVolcengineSeedance2VideoModel: boolean;
   isJimengSeedance2VideoModel: boolean;
   isVeo31VideoModel: boolean;
@@ -255,6 +265,11 @@ type FalHandlers = {
   handleSeedance2DurationChange: (value: string) => void;
   handleSeedance2GenerateAudioChange: (value: boolean) => void;
   handleSeedance2CameraFixedChange: (value: boolean) => void;
+  handleSeedance25VariantChange: (value: string) => void;
+  handleSeedance25AspectRatioChange: (value: string) => void;
+  handleSeedance25ResolutionChange: (value: string) => void;
+  handleSeedance25DurationChange: (value: string) => void;
+  handleSeedance25GenerateAudioChange: (value: boolean) => void;
   handleFlux2MaxImageSizeChange: (value: string) => void;
   handleWan27ImageAspectRatioChange: (value: string) => void;
   handleWan27ImageMaxImagesChange: (value: string) => void;
@@ -340,6 +355,11 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   seedance2Duration: Seedance2DurationSelectionValue;
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
+  seedance25Variant: Seedance25Variant;
+  seedance25AspectRatio: Seedance25AspectRatioSelectionValue;
+  seedance25Resolution: Seedance25ResolutionSelectionValue;
+  seedance25Duration: Seedance25DurationSelectionValue;
+  seedance25GenerateAudio: boolean;
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
   wan27ImageAspectRatio: Wan27ImageAspectRatioSelectionValue;
   wan27ImageMaxImages: Wan27ImageMaxImagesSelectionValue;
@@ -419,6 +439,11 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setSeedance2Duration: Dispatch<SetStateAction<Seedance2DurationSelectionValue>>;
   setSeedance2GenerateAudio: Dispatch<SetStateAction<boolean>>;
   setSeedance2CameraFixed: Dispatch<SetStateAction<boolean>>;
+  setSeedance25Variant: Dispatch<SetStateAction<Seedance25Variant>>;
+  setSeedance25AspectRatio: Dispatch<SetStateAction<Seedance25AspectRatioSelectionValue>>;
+  setSeedance25Resolution: Dispatch<SetStateAction<Seedance25ResolutionSelectionValue>>;
+  setSeedance25Duration: Dispatch<SetStateAction<Seedance25DurationSelectionValue>>;
+  setSeedance25GenerateAudio: Dispatch<SetStateAction<boolean>>;
   setFlux2MaxImageSize: Dispatch<SetStateAction<Flux2MaxImageSizeSelectionValue>>;
   setWan27ImageAspectRatio: Dispatch<SetStateAction<Wan27ImageAspectRatioSelectionValue>>;
   setWan27ImageMaxImages: Dispatch<SetStateAction<Wan27ImageMaxImagesSelectionValue>>;
@@ -504,6 +529,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [seedance2Duration, setSeedance2Duration] = useState<Seedance2DurationSelectionValue>('5');
   const [seedance2GenerateAudio, setSeedance2GenerateAudio] = useState<boolean>(false);
   const [seedance2CameraFixed, setSeedance2CameraFixed] = useState<boolean>(false);
+  const [seedance25Variant, setSeedance25Variant] = useState<Seedance25Variant>('reference');
+  const [seedance25AspectRatio, setSeedance25AspectRatio] = useState<Seedance25AspectRatioSelectionValue>('adaptive');
+  const [seedance25Resolution, setSeedance25Resolution] = useState<Seedance25ResolutionSelectionValue>('720p');
+  const [seedance25Duration, setSeedance25Duration] = useState<Seedance25DurationSelectionValue>('auto');
+  const [seedance25GenerateAudio, setSeedance25GenerateAudio] = useState<boolean>(true);
   const [flux2MaxImageSize, setFlux2MaxImageSize] = useState<Flux2MaxImageSizeSelectionValue>('landscape_4_3');
   const [wan27ImageAspectRatio, setWan27ImageAspectRatio] = useState<Wan27ImageAspectRatioSelectionValue>('landscape_16_9');
   const [wan27ImageMaxImages, setWan27ImageMaxImages] = useState<Wan27ImageMaxImagesSelectionValue>('1');
@@ -541,6 +571,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
   const isSeedance2VideoModel = isVideoMode && isSeedance2VideoModelId(falVideoModelId);
   const isFalSeedance2VideoModel = isVideoMode && falVideoModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+  const isSeedance25VideoModel = isVideoMode && isFalSeedance25VideoModel(falVideoModelId);
   const isVolcengineSeedance2VideoModelSelection = isVideoMode && isVolcengineSeedance2VideoModel(falVideoModelId);
   const isJimengSeedance2VideoModelSelection = isVideoMode && isJimengSeedance2VideoModel(falVideoModelId);
   const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
@@ -1078,6 +1109,34 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance2CameraFixed(Boolean(value));
   }, []);
 
+  const handleSeedance25VariantChange = useCallback((value: string) => {
+    if (isSeedance25Variant(value)) {
+      setSeedance25Variant(value);
+    }
+  }, []);
+
+  const handleSeedance25AspectRatioChange = useCallback((value: string) => {
+    if (isSeedance25AspectRatioSelectionValue(value)) {
+      setSeedance25AspectRatio(value);
+    }
+  }, []);
+
+  const handleSeedance25ResolutionChange = useCallback((value: string) => {
+    if (isSeedance25ResolutionSelectionValue(value)) {
+      setSeedance25Resolution(value);
+    }
+  }, []);
+
+  const handleSeedance25DurationChange = useCallback((value: string) => {
+    if (isSeedance25DurationSelectionValue(value)) {
+      setSeedance25Duration(value);
+    }
+  }, []);
+
+  const handleSeedance25GenerateAudioChange = useCallback((value: boolean) => {
+    setSeedance25GenerateAudio(Boolean(value));
+  }, []);
+
   const handleFlux2MaxImageSizeChange = useCallback((value: string) => {
     if (isFlux2MaxImageSizeSelectionValue(value)) {
       setFlux2MaxImageSize(value);
@@ -1305,6 +1364,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       seedance2Duration: setSeedance2Duration,
       seedance2GenerateAudio: setSeedance2GenerateAudio,
       seedance2CameraFixed: setSeedance2CameraFixed,
+      seedance25Variant: setSeedance25Variant,
+      seedance25AspectRatio: setSeedance25AspectRatio,
+      seedance25Resolution: setSeedance25Resolution,
+      seedance25Duration: setSeedance25Duration,
+      seedance25GenerateAudio: setSeedance25GenerateAudio,
       recraftImageSize: setRecraftImageSize,
       recraftBackgroundColor: value => setRecraftBackgroundColor({ ...value }),
       recraftColors: value => setRecraftColors(value.map(color => ({ ...color }))),
@@ -1381,6 +1445,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance25Variant,
+    seedance25AspectRatio,
+    seedance25Resolution,
+    seedance25Duration,
+    seedance25GenerateAudio,
     flux2MaxImageSize,
     wan27ImageAspectRatio,
     wan27ImageMaxImages,
@@ -1417,6 +1486,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
+    isSeedance25VideoModel,
     isVolcengineSeedance2VideoModel: isVolcengineSeedance2VideoModelSelection,
     isJimengSeedance2VideoModel: isJimengSeedance2VideoModelSelection,
     isUpscaleModel,
@@ -1485,6 +1555,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSeedance2DurationChange,
     handleSeedance2GenerateAudioChange,
     handleSeedance2CameraFixedChange,
+    handleSeedance25VariantChange,
+    handleSeedance25AspectRatioChange,
+    handleSeedance25ResolutionChange,
+    handleSeedance25DurationChange,
+    handleSeedance25GenerateAudioChange,
     handleFlux2MaxImageSizeChange,
     handleWan27ImageAspectRatioChange,
     handleWan27ImageMaxImagesChange,
@@ -1566,6 +1641,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance2Duration,
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
+    setSeedance25Variant,
+    setSeedance25AspectRatio,
+    setSeedance25Resolution,
+    setSeedance25Duration,
+    setSeedance25GenerateAudio,
     setFlux2MaxImageSize,
     setWan27ImageAspectRatio,
     setWan27ImageMaxImages,

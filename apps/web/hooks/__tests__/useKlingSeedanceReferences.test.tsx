@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { useKlingPromptMentions } from '../useKlingPromptMentions';
 import { useKlingReferenceHelpers } from '../useKlingReferenceHelpers';
 
-describe('Seedance 2 reference labels', () => {
+describe('multimodal reference labels', () => {
   it('labels seedance references with image, video, and audio tokens', () => {
     const { result } = renderHook(() => useKlingReferenceHelpers({
       labelReferences: true,
@@ -56,11 +56,11 @@ describe('Seedance 2 reference labels', () => {
     });
   });
 
-  it('surfaces seedance reference labels in prompt mention suggestions', () => {
+  it('surfaces Seedance 2 and 2.5 reference labels in prompt mention suggestions', () => {
     const { result } = renderHook(() => useKlingPromptMentions({
       isKlingO3VideoModel: false,
       isKlingO3EditMode: false,
-      isSeedance2ReferenceMode: true,
+      isMultimodalReferenceMode: true,
       referenceOrderLabels: {
         'image-1': '@Image1',
         'video-1': '@Video1',
@@ -80,7 +80,7 @@ describe('Seedance 2 reference labels', () => {
     const { result } = renderHook(() => useKlingPromptMentions({
       isKlingO3VideoModel: false,
       isKlingO3EditMode: false,
-      isMiniMaxH3ReferenceMode: true,
+      isMultimodalReferenceMode: true,
       referenceOrderLabels: {
         'image-1': '@Image1',
         'video-1': '@Video1',

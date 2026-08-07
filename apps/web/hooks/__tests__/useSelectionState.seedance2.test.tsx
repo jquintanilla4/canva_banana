@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useSelectionState } from '../useSelectionState';
-import { SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, FAL_SEEDANCE_25_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage } from '../../types';
 import type { UseFalSettingsResult } from '../useFalSettings';
 
@@ -206,5 +206,152 @@ describe('useSelectionState (seedance 2 reference)', () => {
 
     expect(result.current.selectedImageIds).toEqual(['image-2', 'image-1', 'image-3']);
     expect(result.current.seedanceReferenceOrderIds).toEqual(['image-2', 'image-1', 'image-3']);
+  });
+
+  it('uses the separate 30 image, 10 video, and 10 audio limits for Seedance 2.5', () => {
+    const stills = Array.from({ length: 31 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const videos = Array.from({ length: 11 }, (_, index) => buildCanvasMedia(`video-${index + 1}`, 'video'));
+    const audios = Array.from({ length: 11 }, (_, index) => buildCanvasMedia(`audio-${index + 1}`, 'audio'));
+    const assets = [...stills, ...videos, ...audios];
+    const fal = {
+      ...createFalStub(),
+      falModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+      falVideoModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+      isSeedance2VideoModel: false,
+      isSeedance25VideoModel: true,
+      seedance25Variant: 'reference' as const,
+    };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: assets,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => {
+      stills.forEach(image => result.current.handleImageSelection(image.id, { reference: true }));
+      videos.forEach(video => result.current.handleImageSelection(video.id, { reference: true }));
+      audios.forEach(audio => result.current.handleImageSelection(audio.id, { reference: true }));
+    });
+
+    expect(result.current.referenceImageIds).toHaveLength(30);
+    expect(result.current.referenceVideoIds).toHaveLength(10);
+    expect(result.current.referenceAudioIds).toHaveLength(10);
+    expect(onError).toHaveBeenCalledWith('Seedance 2.5 reference supports up to 30 images.');
+    expect(onError).toHaveBeenCalledWith('Seedance 2.5 reference supports up to 10 videos.');
+    expect(onError).toHaveBeenCalledWith('Seedance 2.5 reference supports up to 10 audio tracks.');
+  });
+
+  it('counts the selected image inside the Seedance 2.5 image and total reference limits', () => {
+    const stills = Array.from({ length: 31 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const fal = {
+      ...createFalStub(),
+      falModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+      falVideoModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+      isSeedance2VideoModel: false,
+      isSeedance25VideoModel: true,
+      seedance25Variant: 'reference' as const,
+    };
+    const onError = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: stills,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => result.current.handleImageSelection(stills[0].id));
+    stills.slice(1).forEach(image => {
+      act(() => result.current.handleImageSelection(image.id, { reference: true }));
+    });
+
+    expect(result.current.selectedImageIds).toEqual([stills[0].id]);
+    expect(result.current.referenceImageIds).toHaveLength(29);
+    expect(new Set([...result.current.selectedImageIds, ...result.current.referenceImageIds])).toHaveLength(30);
+    expect(onError).toHaveBeenCalledWith('Seedance 2.5 reference supports up to 30 images.');
+  });
+
+  it('clears tagged references in Seedance 2.5 Smart mode and reports a zero limit', () => {
+    const stills = Array.from({ length: 2 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const fal = {
+      ...createFalStub(),
+      falModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+      falVideoModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+      isSeedance2VideoModel: false,
+      isSeedance25VideoModel: true,
+      seedance25Variant: 'smart' as const,
+    };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: stills,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => result.current.handleImageSelection(stills[0].id, { reference: true }));
+
+    expect(result.current.referenceImageIds).toHaveLength(0); // Smart runs drop references at submit, so tags clear up front.
+    expect(onReferenceLimit).toHaveBeenCalledWith(0);
+  });
+
+  it('keeps one starting image when Seedance 2.5 switches from Reference to Smart', () => {
+    const stills = Array.from({ length: 3 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const referenceFal = {
+      ...createFalStub(),
+      falModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+      falVideoModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+      isSeedance2VideoModel: false,
+      isSeedance25VideoModel: true,
+      seedance25Variant: 'reference' as 'reference' | 'smart',
+    };
+    const onReferenceLimit = vi.fn();
+    const { result, rerender } = renderHook(({ fal }) => useSelectionState({
+      images: stills,
+      apiProvider: 'fal',
+      fal,
+      onError: vi.fn(),
+      onReferenceLimit,
+    }), { initialProps: { fal: referenceFal } });
+
+    act(() => {
+      stills.forEach(image => result.current.handleImageSelection(image.id, { multi: true }));
+    });
+    expect(result.current.selectedImageIds).toEqual(stills.map(image => image.id));
+
+    rerender({ fal: { ...referenceFal, seedance25Variant: 'smart' as const } });
+
+    expect(result.current.selectedImageIds).toEqual([stills[0].id]);
+    expect(onReferenceLimit).toHaveBeenCalledWith(0);
+  });
+
+  it('clears tagged references in Seedance 2 (FAL) Smart mode and reports a zero limit', () => {
+    const stills = Array.from({ length: 2 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const fal = {
+      ...createFalStub(),
+      falModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      falVideoModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      seedance2Variant: 'smart' as const,
+    };
+    const onError = vi.fn();
+    const onReferenceLimit = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: stills,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit,
+    }));
+
+    act(() => result.current.handleImageSelection(stills[0].id, { reference: true }));
+
+    expect(result.current.referenceImageIds).toHaveLength(0); // FAL Smart runs drop references at submit, so tags clear up front.
+    expect(onReferenceLimit).toHaveBeenCalledWith(0);
   });
 });

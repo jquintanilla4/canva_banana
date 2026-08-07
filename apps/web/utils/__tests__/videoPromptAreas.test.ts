@@ -112,6 +112,25 @@ describe('video prompt area helpers', () => {
     expect(reference.maxAudios).toBe(3);
   });
 
+  it('gives embedded Seedance 2.5 Smart and Reference their separate capabilities', () => {
+    const smart = getVideoPromptAreaCapabilityProfile('bytedance/seedance-2.5', undefined, {
+      seedance25Variant: 'smart',
+    });
+    const reference = getVideoPromptAreaCapabilityProfile('bytedance/seedance-2.5', undefined, {
+      seedance25Variant: 'reference',
+    });
+
+    expect(smart.supportsTextOnly).toBe(true);
+    expect(smart.defaultImageRole).toBe('primary');
+    expect(smart.shiftImageRole).toBe('tail');
+    expect(smart.supportedMediaTypes).toEqual(['image']);
+    expect(reference.defaultImageRole).toBe('reference');
+    expect(reference.supportedMediaTypes).toEqual(['image', 'video', 'audio']);
+    expect(reference.maxImages).toBe(30);
+    expect(reference.maxVideos).toBe(10);
+    expect(reference.maxAudios).toBe(10);
+  });
+
   it('re-appends media when it leaves an area and enters again', () => {
     const area: CanvasVideoPromptArea = {
       id: 'area-1',

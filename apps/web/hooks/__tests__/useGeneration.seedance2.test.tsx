@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
@@ -206,6 +207,36 @@ const buildCanvasMedia = (
   };
 }; // Minimal media keeps Seedance validation tests easy to reason about.
 
+const buildLazySnapshotVideoFile = (): File & { slice: ReturnType<typeof vi.fn> } => {
+  const payload = new TextEncoder().encode('lazy-video');
+  const slice = vi.fn((start: number, end: number) => ({
+    arrayBuffer: async () => payload.slice(start, end).buffer,
+  }));
+  return {
+    size: payload.byteLength,
+    type: 'video/mp4',
+    name: 'lazy-reference.mp4',
+    lastModified: 1,
+    webkitRelativePath: '',
+    slice,
+  } as unknown as File & { slice: ReturnType<typeof vi.fn> };
+}; // Mirrors a desktop-restored snapshot file without loading its bytes.
+
+const buildLazySnapshotAudioFile = (): File & { slice: ReturnType<typeof vi.fn> } => {
+  const payload = new TextEncoder().encode('lazy-audio');
+  const slice = vi.fn((start: number, end: number) => ({
+    arrayBuffer: async () => payload.slice(start, end).buffer,
+  }));
+  return {
+    size: payload.byteLength,
+    type: 'audio/wav',
+    name: 'lazy-reference.wav',
+    lastModified: 1,
+    webkitRelativePath: '',
+    slice,
+  } as unknown as File & { slice: ReturnType<typeof vi.fn> };
+}; // Mirrors snapshot-backed audio so preparation can stay inside the upload pool.
+
 describe('useGeneration (seedance 2)', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -368,6 +399,74 @@ describe('useGeneration (seedance 2)', () => {
         seedance2GenerateAudio: false,
       }),
     );
+  });
+
+  it('routes Seedance 2.5 Smart runs with queue and retry metadata', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = FAL_SEEDANCE_25_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = false;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isSeedance25VideoModel = true;
+    fal.seedance25Variant = 'smart';
+    fal.seedance25AspectRatio = '21:9';
+    fal.seedance25Resolution = '480p';
+    fal.seedance25Duration = '30';
+    fal.seedance25GenerateAudio = false;
+    let queuedJobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      queuedJobs = typeof value === 'function' ? value(queuedJobs) : value;
+    });
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A continuous thirty-second tracking shot',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs,
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'A continuous thirty-second tracking shot',
+      null,
+      expect.objectContaining({
+        modelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+        seedance25Variant: 'smart',
+        seedance25AspectRatio: '21:9',
+        seedance25Resolution: '480p',
+        seedance25Duration: '30',
+        seedance25GenerateAudio: false,
+      }),
+    );
+    expect(queuedJobs[0]).toEqual(expect.objectContaining({
+      modelLabel: 'Seedance 2.5 (FAL) Smart',
+      retryInputs: expect.objectContaining({
+        modelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+        falOptions: expect.objectContaining({
+          seedance25Variant: 'smart',
+          seedance25AspectRatio: '21:9',
+          seedance25Resolution: '480p',
+          seedance25Duration: '30',
+          seedance25GenerateAudio: false,
+        }),
+      }),
+    }));
   });
 
   it('routes MiniMax H3 Standard text generation with variant metadata and queue labeling', async () => {
@@ -1851,6 +1950,154 @@ describe('useGeneration (seedance 2)', () => {
 
     expect(setError).toHaveBeenCalledWith('Seedance 2 reference audio clips must total 15 seconds or less.');
     expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['videos', 'video' as const, [20, 11], 'Seedance 2.5 reference videos must total 30.2 seconds or less.'],
+    ['audio clips', 'audio' as const, [18, 13], 'Seedance 2.5 reference audio clips must total 30.2 seconds or less.'],
+  ])('enforces the separate Seedance 2.5 combined %s duration limit', async (_label, mediaType, durations, expectedError) => {
+    const fal = createFalStub();
+    fal.falVideoModelId = FAL_SEEDANCE_25_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = false;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isSeedance25VideoModel = true;
+    fal.seedance25Variant = 'reference';
+    fal.seedance25AspectRatio = 'adaptive';
+    fal.seedance25Resolution = '720p';
+    fal.seedance25Duration = 'auto';
+    fal.seedance25GenerateAudio = true;
+    const visual = buildCanvasMedia('image-1', 'image');
+    const first = buildCanvasMedia(`${mediaType}-1`, mediaType, durations[0]);
+    const second = buildCanvasMedia(`${mediaType}-2`, mediaType, durations[1]);
+    if (mediaType === 'video') {
+      first.naturalHeight = 320;
+      second.naturalHeight = 320;
+    } // Seedance 2.5 requires both video dimensions to be at least 300 pixels.
+    const setError = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Reference duration test',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        referenceImageIds: mediaType === 'audio' ? [visual.id] : [],
+        referenceVideoIds: mediaType === 'video' ? [first.id, second.id] : [],
+        referenceAudioIds: mediaType === 'audio' ? [first.id, second.id] : [],
+      }),
+      images: [visual, first, second],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(setError).toHaveBeenCalledWith(expectedError);
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+  });
+
+  it('keeps Seedance 2.5 snapshot videos range-backed until the Fal upload pool', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = FAL_SEEDANCE_25_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = false;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isSeedance25VideoModel = true;
+    fal.seedance25Variant = 'reference';
+    const referenceVideo = buildCanvasMedia('video-1', 'video', 5);
+    referenceVideo.naturalHeight = 320;
+    const lazyFile = buildLazySnapshotVideoFile();
+    referenceVideo.file = lazyFile;
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Use the reference video',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({ referenceVideoIds: [referenceVideo.id] }),
+      images: [referenceVideo],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(lazyFile.slice).toHaveBeenCalledTimes(1);
+    expect(lazyFile.slice).toHaveBeenCalledWith(0, 8); // Frame-rate probing reads a bounded header without materializing the video.
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'Use the reference video',
+      null,
+      expect.objectContaining({ referenceVideos: [lazyFile] }),
+    );
+  });
+
+  it('keeps Seedance 2.5 snapshot audio range-backed until the Fal upload pool', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = FAL_SEEDANCE_25_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = false;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.isSeedance25VideoModel = true;
+    fal.seedance25Variant = 'reference';
+    const visual = buildCanvasMedia('image-1', 'image');
+    const referenceAudio = buildCanvasMedia('audio-1', 'audio', 5);
+    const lazyFile = buildLazySnapshotAudioFile();
+    referenceAudio.file = lazyFile;
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Use the reference audio',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        referenceImageIds: [visual.id],
+        referenceAudioIds: [referenceAudio.id],
+      }),
+      images: [visual, referenceAudio],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(lazyFile.slice).not.toHaveBeenCalled();
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      'Use the reference audio',
+      null,
+      expect.objectContaining({ referenceAudios: [lazyFile] }),
+    );
   });
 
   it('normalizes manually typed Seedance image mentions before submit', async () => {

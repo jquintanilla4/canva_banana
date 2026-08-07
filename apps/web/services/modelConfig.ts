@@ -73,6 +73,10 @@ export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0' as const; 
 export const FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/text-to-video' as const; // Fal t2v endpoint.
 export const FAL_SEEDANCE_2_IMAGE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/image-to-video' as const; // Fal i2v endpoint.
 export const FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/reference-to-video' as const; // Fal reference endpoint.
+export const FAL_SEEDANCE_25_VIDEO_MODEL_ID = 'bytedance/seedance-2.5' as const; // Selector id for the Fal Seedance 2.5 family.
+export const FAL_SEEDANCE_25_TEXT_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/text-to-video' as const; // Fal 2.5 text endpoint.
+export const FAL_SEEDANCE_25_IMAGE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/image-to-video' as const; // Fal 2.5 image endpoint.
+export const FAL_SEEDANCE_25_REFERENCE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/reference-to-video' as const; // Fal 2.5 reference endpoint.
 export const JIMENG_SEEDANCE_2_VIDEO_MODEL_ID = 'jimeng-cli/seedance-2' as const; // Local Dreamina CLI Seedance 2 selector.
 export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as const;
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
@@ -93,6 +97,7 @@ export type KlingV3BooleanSelectionValue = 'true' | 'false';
 export type KlingV3ControlOrientation = 'image' | 'video';
 export type Veo31Variant = 'i2v-fflf' | 'extend';
 export type Seedance2Variant = 'smart' | 'reference';
+export type Seedance25Variant = 'smart' | 'reference';
 export type MiniMaxH3Variant = 'standard' | 'reference';
 export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
 export type KlingV3ControlSoundSelectionValue = 'true' | 'false';
@@ -153,6 +158,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
   { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (VE)' }, // VE-backed Seedance 2 selector label.
   { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' }, // Fal-backed Seedance 2.
+  { value: FAL_SEEDANCE_25_VIDEO_MODEL_ID, label: 'Seedance 2.5 (FAL)' }, // Fal-backed Seedance 2.5.
   { value: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (JM CLI)' }, // Jimeng CLI-backed Seedance 2.
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync 3 Lipsync' },
   { value: VEO_31_IMAGE_TO_VIDEO_MODEL_ID, label: 'Veo 3.1' },
@@ -231,6 +237,9 @@ export type Seedance2AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1'
 export type Seedance2ResolutionSelectionValue = '480p' | '720p' | '1080p';
 export type Seedance2DurationSelectionValue = '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
 export type Seedance2BooleanSelectionValue = 'true' | 'false';
+export type Seedance25AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
+export type Seedance25ResolutionSelectionValue = '480p' | '720p';
+export type Seedance25DurationSelectionValue = 'auto' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
 export type JimengSeedance2ModelVersionSelectionValue = JimengSeedance2ModelVersion;
 export type MiniMaxH3AspectRatioSelectionValue = Seedance2AspectRatioSelectionValue;
 export type MiniMaxH3DurationSelectionValue = Exclude<Seedance2DurationSelectionValue, '4'>;
@@ -246,6 +255,34 @@ export const SEEDANCE2_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant;
   { value: 'smart', label: 'Smart' },
   { value: 'reference', label: 'Reference' },
 ] as const;
+
+export const SEEDANCE25_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance25Variant; label: string }> = [
+  { value: 'smart', label: 'Smart' },
+  { value: 'reference', label: 'Reference' },
+] as const;
+
+export const SEEDANCE25_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Seedance25AspectRatioSelectionValue; label: string }> = [
+  { value: 'adaptive', label: 'Adaptive' },
+  { value: '21:9', label: '21:9' },
+  { value: '16:9', label: '16:9' },
+  { value: '4:3', label: '4:3' },
+  { value: '1:1', label: '1:1' },
+  { value: '3:4', label: '3:4' },
+  { value: '9:16', label: '9:16' },
+] as const;
+
+export const SEEDANCE25_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Seedance25ResolutionSelectionValue; label: string }> = [
+  { value: '480p', label: '480p' },
+  { value: '720p', label: '720p' },
+] as const;
+
+export const SEEDANCE25_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance25DurationSelectionValue; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  ...Array.from({ length: 27 }, (_, index) => {
+    const value = String(index + 4) as Exclude<Seedance25DurationSelectionValue, 'auto'>;
+    return { value, label: `${value}s` };
+  }),
+];
 
 export const MINIMAX_H3_VARIANT_OPTIONS: ReadonlyArray<{ value: MiniMaxH3Variant; label: string }> = [
   { value: 'standard', label: 'Standard' },
@@ -690,6 +727,9 @@ export const isVolcengineSeedance2VideoModel = (modelId: string | undefined): bo
 export const isFalSeedance2VideoModel = (modelId: string | undefined): boolean =>
   modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID; // Fal selector guard.
 
+export const isFalSeedance25VideoModel = (modelId: string | undefined): boolean =>
+  modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID; // Fal Seedance 2.5 selector guard.
+
 export const isJimengSeedance2VideoModel = (modelId: string | undefined): boolean =>
   modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID; // Jimeng CLI selector guard.
 
@@ -698,6 +738,18 @@ export const isSeedance2VideoModel = (modelId: string | undefined): boolean =>
 
 export const isSeedance2Variant = (value: unknown): value is Seedance2Variant =>
   value === 'smart' || value === 'reference';
+
+export const isSeedance25Variant = (value: unknown): value is Seedance25Variant =>
+  value === 'smart' || value === 'reference';
+
+export const isSeedance25AspectRatioSelectionValue = (value: unknown): value is Seedance25AspectRatioSelectionValue =>
+  value === 'adaptive' || value === '21:9' || value === '16:9' || value === '4:3' || value === '1:1' || value === '3:4' || value === '9:16';
+
+export const isSeedance25ResolutionSelectionValue = (value: unknown): value is Seedance25ResolutionSelectionValue =>
+  value === '480p' || value === '720p';
+
+export const isSeedance25DurationSelectionValue = (value: unknown): value is Seedance25DurationSelectionValue =>
+  value === 'auto' || (typeof value === 'string' && /^([4-9]|[12][0-9]|30)$/.test(value));
 
 export const isSeedance2AspectRatioSelectionValue = (value: unknown): value is Seedance2AspectRatioSelectionValue =>
   value === '21:9' || value === '16:9' || value === '4:3' || value === '1:1' || value === '3:4' || value === '9:16' || value === 'adaptive';
@@ -1270,6 +1322,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Seedance 2 reference mode supports up to 9 image refs.
   [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Fal Seedance 2 reference mode supports up to 9 image refs.
+  [FAL_SEEDANCE_25_VIDEO_MODEL_ID]: 30, // Seedance 2.5 Reference supports up to 30 image refs.
   [JIMENG_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Jimeng Seedance Reference supports up to 9 image refs.
   [KLING_V3_VIDEO_MODEL_ID]: 0,
   [SCAIL_VIDEO_MODEL_ID]: 0,

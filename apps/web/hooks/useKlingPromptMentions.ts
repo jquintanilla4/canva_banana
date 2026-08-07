@@ -4,8 +4,7 @@ import type { CanvasMediaType } from '../types';
 type UseKlingPromptMentionsArgs = {
   isKlingO3VideoModel: boolean;
   isKlingO3EditMode: boolean;
-  isSeedance2ReferenceMode?: boolean; // Reuses the Kling mention UX for Seedance reference prompts.
-  isMiniMaxH3ReferenceMode?: boolean; // H3 shares the multimodal mention UX.
+  isMultimodalReferenceMode: boolean; // Seedance and H3 share one image/video/audio mention UX.
   isFlux2MaxModel?: boolean;
   isWan27ImageModel?: boolean;
   referenceOrderLabels: Record<string, string> | null;
@@ -23,8 +22,7 @@ type UseKlingPromptMentionsResult = {
 export const useKlingPromptMentions = ({
   isKlingO3VideoModel,
   isKlingO3EditMode,
-  isSeedance2ReferenceMode = false,
-  isMiniMaxH3ReferenceMode = false,
+  isMultimodalReferenceMode,
   isFlux2MaxModel = false,
   isWan27ImageModel = false,
   referenceOrderLabels,
@@ -35,7 +33,7 @@ export const useKlingPromptMentions = ({
 }: UseKlingPromptMentionsArgs): UseKlingPromptMentionsResult => {
   const isKlingO3VideoInputMode = isKlingO3EditMode; // Only Kling O3 edit uses a source video mention path.
   return useMemo(() => {
-    if (!isKlingO3VideoModel && !isSeedance2ReferenceMode && !isMiniMaxH3ReferenceMode && !isFlux2MaxModel && !isWan27ImageModel) {
+    if (!isKlingO3VideoModel && !isMultimodalReferenceMode && !isFlux2MaxModel && !isWan27ImageModel) {
       return { klingPromptMentions: [], klingReferenceCount: 0 };
     }
 
@@ -78,8 +76,7 @@ export const useKlingPromptMentions = ({
     primarySelectionMediaType,
     isKlingO3VideoModel,
     isKlingO3VideoInputMode,
-    isSeedance2ReferenceMode,
-    isMiniMaxH3ReferenceMode,
+    isMultimodalReferenceMode,
     isFlux2MaxModel,
     isWan27ImageModel,
     referenceImageIds.length,
