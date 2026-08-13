@@ -6,11 +6,13 @@ type Seedance2RequestKeyArgs = {
   prompt: string;
   variant: Seedance2Variant;
   jimengModelVersion?: string; // Jimeng CLI channel changes backend behavior.
+  jimengSessionId?: number; // Jimeng sessions route requests through different accounts.
   aspectRatio: string;
   resolution: string;
   duration: string;
   generateAudio: boolean;
   cameraFixed: boolean;
+  outputFormat?: string; // Seedance 2.5 container choice separates repeat keys.
   primaryImageId: string | null;
   videoLastFrameImageId: string | null;
   referenceImageIds: string[];
@@ -55,11 +57,13 @@ export const buildSeedance2RequestKey = ({
   prompt,
   variant,
   jimengModelVersion,
+  jimengSessionId,
   aspectRatio,
   resolution,
   duration,
   generateAudio,
   cameraFixed,
+  outputFormat,
   primaryImageId,
   videoLastFrameImageId,
   referenceImageIds,
@@ -72,11 +76,13 @@ export const buildSeedance2RequestKey = ({
   prompt: prompt.trim(),
   variant,
   jimengModelVersion: jimengModelVersion ?? null,
+  jimengSessionId: jimengSessionId ?? null,
   aspectRatio,
   resolution,
   duration,
   generateAudio,
   cameraFixed,
+  outputFormat: outputFormat ?? null, // Older 2.0 calls never set a container choice.
   primaryAsset: buildCanvasAssetToken(primaryImageId, images),
   lastFrameAsset: buildCanvasAssetToken(videoLastFrameImageId, images),
   referenceImageAssets: buildCanvasAssetTokenList(referenceImageIds, images),

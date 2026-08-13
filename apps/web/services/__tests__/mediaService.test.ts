@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLazyVideoFromUrl, ensureVideoMetadataLoaded, getVideoObjectUrl, loadMediaFromBlob, loadMediaFromUrl, prepareVideoForPlayback } from '../mediaService';
+import { createLazyVideoFromUrl, ensureVideoMetadataLoaded, getVideoFileExtension, getVideoObjectUrl, loadMediaFromBlob, loadMediaFromUrl, prepareVideoForPlayback } from '../mediaService';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -12,6 +12,18 @@ const stubObjectUrls = () => {
   vi.stubGlobal('URL', Object.assign(Object.create(URL), { createObjectURL, revokeObjectURL }));
   return { createObjectURL, revokeObjectURL };
 }; // jsdom does not implement object URLs.
+
+describe('getVideoFileExtension', () => {
+  it('maps the QuickTime MIME subtype to the standard MOV extension', () => {
+    expect(getVideoFileExtension('video/quicktime')).toBe('mov');
+    expect(getVideoFileExtension('video/quicktime; codecs=hvc1')).toBe('mov');
+  });
+
+  it('keeps ordinary video subtypes and falls back safely', () => {
+    expect(getVideoFileExtension('video/mp4')).toBe('mp4');
+    expect(getVideoFileExtension('application/octet-stream')).toBe('mp4');
+  });
+});
 
 describe('loadMediaFromUrl', () => {
   it('loads images with crossOrigin so protocol-served media does not taint canvases', async () => {

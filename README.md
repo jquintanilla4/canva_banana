@@ -81,7 +81,7 @@ Different features use different AI providers. You only need credentials for the
 | Optional prompt chat | `OPENROUTER_API_KEY` |
 | HeyGen prompt timing assistance | `MOONSHOT_API_KEY` |
 | Direct Volcengine Seedance 2 | `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` |
-| Seedance 2 through Jimeng | Complete the Jimeng CLI setup shown inside the app |
+| Seedance 2, Seedance 2.5, and Multi-frame through Jimeng | Complete the Jimeng CLI setup shown inside the app; CLI 1.4.15+ is required |
 
 In the desktop app, open Settings and enter the credentials there. For browser development, create a file named `.env.local` in the project folder and add each credential on its own line:
 
@@ -183,7 +183,7 @@ Make sure the Python dependencies have been installed:
 npm -w @canva-banana/python-backend run sync
 ```
 
-Then confirm that the local backends are running. Jimeng also requires the one-time setup shown in the app.
+Then confirm that the local backends are running. Jimeng also requires the one-time setup shown in the app. Its Login action now uses OAuth Device Flow: open the displayed authorization page, enter the short code, and choose **Check Login**. If video generation returns `AigcComplianceConfirmationRequired`, complete one generation with that model on the Dreamina website and retry.
 
 ## Developer and Maintainer Reference
 

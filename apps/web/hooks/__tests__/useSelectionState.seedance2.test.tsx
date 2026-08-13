@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useSelectionState } from '../useSelectionState';
-import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, FAL_SEEDANCE_25_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, FAL_SEEDANCE_25_VIDEO_MODEL_ID, JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage } from '../../types';
 import type { UseFalSettingsResult } from '../useFalSettings';
 
@@ -24,6 +24,7 @@ type TestFalSettings = Pick<
   | 'isSeedance15VideoModel'
   | 'isSeedance2VideoModel'
   | 'seedance2Variant'
+  | 'seedance2VolcengineModel'
   | 'isVeo31VideoModel'
   | 'veo31Variant'
 >;
@@ -63,6 +64,7 @@ const createFalStub = (): TestFalSettings => ({
   isSeedance15VideoModel: false,
   isSeedance2VideoModel: true,
   seedance2Variant: 'reference',
+  seedance2VolcengineModel: 'standard',
   isVeo31VideoModel: false,
   veo31Variant: 'i2v-fflf',
 });
@@ -353,5 +355,167 @@ describe('useSelectionState (seedance 2 reference)', () => {
 
     expect(result.current.referenceImageIds).toHaveLength(0); // FAL Smart runs drop references at submit, so tags clear up front.
     expect(onReferenceLimit).toHaveBeenCalledWith(0);
+  });
+
+  it('keeps the multimodal reference caps in Volcengine Edit mode', () => {
+    const stills = Array.from({ length: 2 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const videos = Array.from({ length: 4 }, (_, index) => buildCanvasMedia(`video-${index + 1}`, 'video'));
+    const audios = Array.from({ length: 2 }, (_, index) => buildCanvasMedia(`audio-${index + 1}`, 'audio'));
+    const assets = [...stills, ...videos, ...audios]; // Hoisted so the pruning effect sees a stable array identity.
+    const fal = { ...createFalStub(), seedance2Variant: 'edit' as const };
+    const onError = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: assets,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      stills.forEach(image => result.current.handleImageSelection(image.id, { reference: true }));
+      videos.forEach(video => result.current.handleImageSelection(video.id, { reference: true }));
+      audios.forEach(audio => result.current.handleImageSelection(audio.id, { reference: true }));
+    });
+
+    expect(result.current.referenceImageIds).toHaveLength(2);
+    expect(result.current.referenceVideoIds).toHaveLength(3); // The 4th video trips the shared 3-video cap.
+    expect(result.current.referenceAudioIds).toHaveLength(2);
+    expect(onError).toHaveBeenCalledWith('Seedance 2 reference supports up to 3 videos.');
+  });
+
+  it.each([
+    FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+    JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  ])('preserves references while stale Volcengine Edit state normalizes on %s', falVideoModelId => {
+    const video = buildCanvasMedia('video-1', 'video');
+    const assets = [video];
+    const fal = { ...createFalStub(), falModelId: falVideoModelId, falVideoModelId, seedance2Variant: 'edit' as const };
+    const { result } = renderHook(() => useSelectionState({
+      images: assets,
+      apiProvider: 'fal',
+      fal,
+      onError: vi.fn(),
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => result.current.handleImageSelection(video.id, { reference: true }));
+
+    expect(result.current.referenceVideoIds).toEqual([video.id]);
+  });
+
+  it('accepts up to 3 videos but rejects images and audio in Volcengine Extend mode', () => {
+    const videos = Array.from({ length: 4 }, (_, index) => buildCanvasMedia(`video-${index + 1}`, 'video'));
+    const image = buildCanvasMedia('image-1', 'image');
+    const audio = buildCanvasMedia('audio-1', 'audio');
+    const assets = [...videos, image, audio]; // Hoisted so the pruning effect sees a stable array identity.
+    const fal = { ...createFalStub(), seedance2Variant: 'extend' as const };
+    const onError = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: assets,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      videos.forEach(video => result.current.handleImageSelection(video.id, { reference: true }));
+    });
+
+    expect(result.current.referenceVideoIds).toHaveLength(3);
+    expect(onError).toHaveBeenCalledWith('Seedance 2 reference supports up to 3 videos.');
+
+    act(() => {
+      result.current.handleImageSelection(image.id, { reference: true });
+      result.current.handleImageSelection(audio.id, { reference: true });
+    });
+
+    expect(result.current.referenceImageIds).toHaveLength(0);
+    expect(result.current.referenceAudioIds).toHaveLength(0);
+    expect(onError).toHaveBeenCalledWith('Seedance 2 Extend supports video clips only.');
+  });
+
+  it('reports the total cap when a model switch prunes excess Extend videos', () => {
+    const videos = Array.from({ length: 4 }, (_, index) => buildCanvasMedia(`video-${index + 1}`, 'video'));
+    let fal = createFalStub();
+    fal.seedance2Variant = 'extend';
+    fal.seedance2VolcengineModel = 'seedance25';
+    const onError = vi.fn();
+    const { result, rerender } = renderHook(() => useSelectionState({
+      images: videos,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      videos.forEach(video => result.current.handleImageSelection(video.id, { reference: true }));
+    });
+    expect(result.current.referenceVideoIds).toHaveLength(4);
+
+    onError.mockClear();
+    fal = { ...fal, seedance2VolcengineModel: 'standard' };
+    rerender();
+
+    expect(result.current.referenceVideoIds).toHaveLength(3);
+    expect(onError).toHaveBeenCalledWith('Seedance 2 reference supports up to 3 total files.');
+  });
+
+  it('allows up to 30 image references for the Volcengine Seedance 2.5 sub-model', () => {
+    const images = Array.from({ length: 31 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
+    const fal = { ...createFalStub(), seedance2VolcengineModel: 'seedance25' as const };
+    const onError = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      images.slice(0, 30).forEach(image => {
+        result.current.handleImageSelection(image.id, { reference: true });
+      });
+    });
+
+    expect(result.current.referenceImageIds).toHaveLength(30);
+
+    act(() => {
+      result.current.handleImageSelection(images[30].id, { reference: true });
+    });
+
+    expect(result.current.referenceImageIds).toHaveLength(30);
+    expect(onError).toHaveBeenCalledWith('Seedance 2.5 reference supports up to 30 images.');
+  });
+
+  it('allows up to 10 video references for the Volcengine Seedance 2.5 sub-model', () => {
+    const videos = Array.from({ length: 11 }, (_, index) => buildCanvasMedia(`video-${index + 1}`, 'video'));
+    const fal = { ...createFalStub(), seedance2VolcengineModel: 'seedance25' as const };
+    const onError = vi.fn();
+    const { result } = renderHook(() => useSelectionState({
+      images: videos,
+      apiProvider: 'fal',
+      fal,
+      onError,
+      onReferenceLimit: vi.fn(),
+    }));
+
+    act(() => {
+      videos.slice(0, 10).forEach(video => {
+        result.current.handleImageSelection(video.id, { reference: true });
+      });
+    });
+
+    expect(result.current.referenceVideoIds).toHaveLength(10);
+
+    act(() => {
+      result.current.handleImageSelection(videos[10].id, { reference: true });
+    });
+
+    expect(result.current.referenceVideoIds).toHaveLength(10);
+    expect(onError).toHaveBeenCalledWith('Seedance 2.5 reference supports up to 10 videos.');
   });
 });

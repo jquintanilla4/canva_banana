@@ -15,7 +15,7 @@ from starlette.websockets import WebSocketDisconnect
 PYTHON_APP_ROOT = Path(__file__).resolve().parents[2]  # Reach apps/python-backend from backend/tests.
 sys.path.insert(0, str(PYTHON_APP_ROOT / "backend" / "src"))  # Import the backend package without installing it.
 
-from uvpython_service.main import _open_pinned_remote_asset, app
+from uvpython_service.main import _open_pinned_remote_asset, _read_uploads, app
 from uvpython_service.models import JobState
 from uvpython_service.store import JobStore
 
@@ -84,6 +84,51 @@ class FakePinnedConnection:
 
     def close(self) -> None:
         pass  # The success path keeps ownership with the streaming response.
+
+
+
+class FakeUpload:
+    def __init__(self, file_name: str, content: bytes) -> None:
+        self.filename = file_name
+        self.content_type = "image/png"
+        self._content = content
+        self._offset = 0
+        self.closed = False
+
+    async def seek(self, offset: int) -> None:
+        self._offset = offset
+
+    async def read(self, size: int) -> bytes:
+        chunk = self._content[self._offset:self._offset + size]
+        self._offset += len(chunk)
+        return chunk
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class UploadStagingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_read_uploads_cleans_staged_items_when_a_later_upload_fails(self) -> None:
+        first_upload = FakeUpload("first.png", b"first")
+        second_upload = FakeUpload("second.png", b"second")
+        staged_paths: list[Path] = []
+
+        def capture_then_fail(path: Path) -> float:
+            staged_paths.append(path)
+            if len(staged_paths) == 2:
+                raise ValueError("invalid second upload")
+            return 5.0
+
+        with patch("uvpython_service.main.probe_media_duration_seconds", side_effect=capture_then_fail):
+            with self.assertRaisesRegex(ValueError, "invalid second upload"):
+                await _read_uploads(
+                    [first_upload, second_upload],  # type: ignore[list-item]
+                    should_probe_duration=True,
+                    media_label="reference video",
+                )
+
+        self.assertEqual(len(staged_paths), 2)
+        self.assertTrue(all(not path.exists() for path in staged_paths))
 
 
 class MainApiTests(unittest.TestCase):
@@ -222,6 +267,115 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.json()["provider"], "volcengine")
         create_seedance_job.assert_called_once()
 
+    def test_volcengine_job_submission_accepts_mini_model_and_4k_resolution(self) -> None:
+        client = TestClient(app, client=LOCAL_TEST_CLIENT)
+        job = build_job_state(status="IN_QUEUE", output_url=None, last_frame_url=None)
+
+        with patch("uvpython_service.main.create_job", return_value=job) as create_seedance_job:
+            for model_id, resolution in (
+                ("doubao-seedance-2-0-mini-260615", "720p"),
+                ("doubao-seedance-2-0-260128", "4k"),
+            ):
+                response = client.post(
+                    "/api/volcengine/jobs",
+                    data={
+                        "prompt": "make a video",
+                        "model_id": model_id,
+                        "variant": "smart",
+                        "ratio": "16:9",
+                        "duration": "5",
+                        "resolution": resolution,
+                        "generate_audio": "false",
+                        "camera_fixed": "false",
+                    },
+                    headers={
+                        "Origin": "http://localhost:5173",
+                        "X-Canva-Banana-Local-Action": "volcengine-submit",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(create_seedance_job.call_count, 2)  # Both model/resolution pairs pass the submit whitelist.
+
+    def test_volcengine_job_submission_accepts_seedance25_output_format_and_auto_duration(self) -> None:
+        client = TestClient(app, client=LOCAL_TEST_CLIENT)
+        job = build_job_state(status="IN_QUEUE", output_url=None, last_frame_url=None)
+
+        with patch("uvpython_service.main.create_job", return_value=job) as create_seedance_job:
+            response = client.post(
+                "/api/volcengine/jobs",
+                data={
+                    "prompt": "make a video",
+                    "model_id": "doubao-seedance-2-5-260628",
+                    "variant": "smart",
+                    "ratio": "adaptive",
+                    "duration": "-1",
+                    "resolution": "720p",
+                    "output_format": "mov",
+                    "generate_audio": "false",
+                },
+                headers={
+                    "Origin": "http://localhost:5173",
+                    "X-Canva-Banana-Local-Action": "volcengine-submit",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        create_seedance_job.assert_called_once()
+        payload = create_seedance_job.call_args.args[0]
+        self.assertEqual(payload.duration, -1)  # -1 means the model auto-selects the duration.
+        self.assertEqual(payload.output_format, "mov")
+
+    def test_volcengine_job_submission_rejects_unknown_output_format(self) -> None:
+        client = TestClient(app, client=LOCAL_TEST_CLIENT)
+
+        with patch("uvpython_service.main.create_job") as create_seedance_job:
+            response = client.post(
+                "/api/volcengine/jobs",
+                data={
+                    "prompt": "make a video",
+                    "model_id": "doubao-seedance-2-5-260628",
+                    "variant": "smart",
+                    "ratio": "adaptive",
+                    "duration": "-1",
+                    "output_format": "webm",
+                },
+                headers={
+                    "Origin": "http://localhost:5173",
+                    "X-Canva-Banana-Local-Action": "volcengine-submit",
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        create_seedance_job.assert_not_called()
+
+    def test_volcengine_job_submission_accepts_edit_and_extend_variants(self) -> None:
+        client = TestClient(app, client=LOCAL_TEST_CLIENT)
+        job = build_job_state(status="IN_QUEUE", output_url=None, last_frame_url=None)
+
+        with patch("uvpython_service.main.create_job", return_value=job) as create_seedance_job:
+            for variant in ("edit", "extend"):
+                response = client.post(
+                    "/api/volcengine/jobs",
+                    data={
+                        "prompt": "make a video",
+                        "model_id": "doubao-seedance-2-0-260128",
+                        "variant": variant,
+                        "ratio": "16:9",
+                        "duration": "5",
+                        "resolution": "720p",
+                        "generate_audio": "false",
+                        "camera_fixed": "false",
+                    },
+                    headers={
+                        "Origin": "http://localhost:5173",
+                        "X-Canva-Banana-Local-Action": "volcengine-submit",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(create_seedance_job.call_count, 2)  # Both variants pass the submit whitelist.
+
     def test_volcengine_job_submission_rejects_packaged_desktop_null_origin_without_token(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
 
@@ -275,6 +429,7 @@ class MainApiTests(unittest.TestCase):
             "bytesFreed": 1024,
             "workDir": "/tmp/jimeng",
             "errors": [],
+            "invalidatedJobIds": ["completed-job"],
         }
 
         with patch("uvpython_service.main.clear_jimeng_cache", return_value=cleanup_result):
@@ -529,7 +684,7 @@ class MainApiTests(unittest.TestCase):
 
         with patch("uvpython_service.main.start_jimeng_login") as start_login:
             response = client.post(
-                "/api/jimeng/setup/login?debug=true",
+                "/api/jimeng/setup/login",
                 headers={
                     "Origin": "https://example.com",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -538,6 +693,23 @@ class MainApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         start_login.assert_not_called()
+
+    def test_jimeng_setup_login_check_forwards_opaque_session(self) -> None:
+        client = TestClient(app, client=LOCAL_TEST_CLIENT)
+        result = {"status": "ready", "ready": True, "message": "Jimeng login completed"}
+
+        with patch("uvpython_service.main.check_jimeng_login", return_value=result) as check_login:
+            response = client.post(
+                "/api/jimeng/setup/login/check?login_session_id=opaque-session&poll=5",
+                headers={
+                    "Origin": "http://localhost:5173",
+                    "X-Canva-Banana-Local-Action": "jimeng-setup",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), result)
+        check_login.assert_called_once_with("opaque-session", poll_seconds=5)
 
     def test_jimeng_job_submission_rejects_missing_local_action_header(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
@@ -601,6 +773,31 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["provider"], "jimeng")
         create_job.assert_called_once()
+
+    def test_jimeng_job_submission_rejects_unknown_model_version_instead_of_falling_back(self) -> None:
+        client = TestClient(app, client=LOCAL_TEST_CLIENT)
+
+        with patch("uvpython_service.main.create_jimeng_job") as create_job:
+            response = client.post(
+                "/api/jimeng/jobs",
+                data={
+                    "prompt": "make a video",
+                    "model_id": "jimeng-cli/seedance-2",
+                    "variant": "smart",
+                    "model_version": "legacy-model",
+                    "ratio": "16:9",
+                    "duration": "5",
+                    "resolution": "720p",
+                },
+                headers={
+                    "Origin": "http://localhost:5173",
+                    "X-Canva-Banana-Local-Action": "jimeng-setup",
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unsupported Jimeng model_version", response.json()["detail"])
+        create_job.assert_not_called()
 
     def test_jimeng_job_submission_rejects_unprobeable_reference_video(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)

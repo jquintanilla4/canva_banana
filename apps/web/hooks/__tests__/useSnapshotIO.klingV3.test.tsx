@@ -40,6 +40,9 @@ const buildMeta = (): SnapshotMetaState => ({
   klingV3Shot1Duration: '4',
   klingV3Shot2Duration: '6',
   seedance2JimengModelVersion: 'seedance2.0_vip',
+  jimengMultiframeDuration: '8',
+  jimengMultiframeResolution: '1080p',
+  jimengSessionId: 23,
   selectedImageIds: [],
   referenceImageIds: [],
 });
@@ -245,6 +248,7 @@ const installBrowserSnapshotWorkingStorage = (options: { beforeWrite?: () => Pro
 
 const renderEmptySnapshotIO = (autosaveEnabled: boolean) => {
   const setError = vi.fn();
+  const setJimengSessionId = vi.fn();
   const selectionSetters = {
     setSelectedImageIds: vi.fn(),
     setSelectedNoteIds: vi.fn(),
@@ -275,7 +279,7 @@ const renderEmptySnapshotIO = (autosaveEnabled: boolean) => {
       setToastMessage: vi.fn(),
       setIsFileMenuOpen: vi.fn(),
     },
-    fal: {} as unknown as UseFalSettingsResult,
+    fal: { setJimengSessionId } as unknown as UseFalSettingsResult,
     selection: {
       selectedImageIds: [],
       referenceImageIds: [],
@@ -297,7 +301,7 @@ const renderEmptySnapshotIO = (autosaveEnabled: boolean) => {
     availableProviders: ['google', 'fal'],
     autosaveEnabled: enabled,
   }), { initialProps: { enabled: autosaveEnabled } });
-  return { ...rendered, setError }; // Expose persistent import feedback for read-only regression checks.
+  return { ...rendered, setError, setJimengSessionId }; // Expose import feedback and document-scoped session restoration.
 };
 
 afterEach(() => {
@@ -336,12 +340,13 @@ describe('useSnapshotIO (Kling v3)', () => {
         closeSnapshotRead: vi.fn(async () => ({ closed: true })),
       },
     };
-    const { result } = renderEmptySnapshotIO(true);
+    const { result, setJimengSessionId } = renderEmptySnapshotIO(true);
 
     await act(async () => {
       await result.current.importSnapshotWithPicker(vi.fn());
     });
     expect(beginAutosaveSnapshot).not.toHaveBeenCalled();
+    expect(setJimengSessionId).toHaveBeenCalledWith(0);
 
     act(() => {
       result.current.autosaveSnapshot();
@@ -662,6 +667,10 @@ describe('useSnapshotIO (Kling v3)', () => {
       setKlingV3Shot1Duration: vi.fn(),
       setKlingV3Shot2Duration: vi.fn(),
       handleSeedance2JimengModelVersionChange: vi.fn(),
+      handleSeedance2VolcengineModelChange: vi.fn(),
+      setJimengMultiframeDuration: vi.fn(),
+      setJimengMultiframeResolution: vi.fn(),
+      setJimengSessionId: vi.fn(),
     };
     const selectionSetters = {
       setSelectedImageIds: vi.fn(),
@@ -746,6 +755,28 @@ describe('useSnapshotIO (Kling v3)', () => {
     expect(falSetters.setKlingV3Shot1Duration).toHaveBeenCalledWith('4');
     expect(falSetters.setKlingV3Shot2Duration).toHaveBeenCalledWith('6');
     expect(falSetters.handleSeedance2JimengModelVersionChange).toHaveBeenCalledWith('seedance2.0_vip');
+    expect(falSetters.handleSeedance2VolcengineModelChange).toHaveBeenCalledWith('standard');
+    expect(falSetters.setJimengMultiframeDuration).toHaveBeenCalledWith('8');
+    expect(falSetters.setJimengMultiframeResolution).toHaveBeenCalledWith('1080p');
+    expect(falSetters.setJimengSessionId).toHaveBeenCalledWith(23);
+
+    falSetters.setJimengSessionId.mockClear();
+    const legacyMeta = buildMeta();
+    delete legacyMeta.jimengSessionId;
+    const legacyFile = {
+      text: async () => JSON.stringify({
+        version: 1,
+        createdAt: '2026-04-21T00:00:00.000Z',
+        state: { images: [], notes: [], paths: [], meta: legacyMeta },
+      }),
+      slice: () => ({ arrayBuffer: async () => new ArrayBuffer(0) }),
+    } as unknown as File;
+
+    await act(async () => {
+      await result.current.importSnapshotFromFile(legacyFile);
+    });
+
+    expect(falSetters.setJimengSessionId).toHaveBeenCalledWith(0);
   });
 
   it('closes a retained empty desktop binary source immediately after import', async () => {
@@ -798,7 +829,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setToastMessage: vi.fn(),
         setIsFileMenuOpen: vi.fn(),
       },
-      fal: {} as unknown as UseFalSettingsResult,
+      fal: { setJimengSessionId: vi.fn() } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
         referenceImageIds: [],
@@ -879,7 +910,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setToastMessage: vi.fn(),
         setIsFileMenuOpen: vi.fn(),
       },
-      fal: {} as unknown as UseFalSettingsResult,
+      fal: { setJimengSessionId: vi.fn() } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
         referenceImageIds: [],
@@ -987,7 +1018,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setToastMessage,
         setIsFileMenuOpen: vi.fn(),
       },
-      fal: {} as unknown as UseFalSettingsResult,
+      fal: { setJimengSessionId: vi.fn() } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
         referenceImageIds: [],
@@ -1138,7 +1169,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setToastMessage: vi.fn(),
         setIsFileMenuOpen: vi.fn(),
       },
-      fal: {} as unknown as UseFalSettingsResult,
+      fal: { setJimengSessionId: vi.fn() } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
         referenceImageIds: [],
@@ -1767,6 +1798,9 @@ describe('useSnapshotIO (Kling v3)', () => {
       klingV3MultiPrompt: '',
       klingV3Shot1Duration: '5',
       klingV3Shot2Duration: '5',
+      jimengMultiframeDuration: '8',
+      jimengMultiframeResolution: '1080p',
+      jimengSessionId: 23,
     } as unknown as UseFalSettingsResult;
     const resetHistory = vi.fn();
     const providerAvailability = { google: true, fal: true };
@@ -1804,5 +1838,8 @@ describe('useSnapshotIO (Kling v3)', () => {
     const exportedFile = fileFromChunks(exportedChunks);
     const parsed = await parseBinarySnapshotFile(exportedFile);
     expect(parsed.manifest.state.meta?.seedanceReferenceOrderIds).toEqual(['reference-b', 'reference-a']);
+    expect(parsed.manifest.state.meta?.jimengMultiframeDuration).toBe('8');
+    expect(parsed.manifest.state.meta?.jimengMultiframeResolution).toBe('1080p');
+    expect(parsed.manifest.state.meta?.jimengSessionId).toBe(23);
   });
 });

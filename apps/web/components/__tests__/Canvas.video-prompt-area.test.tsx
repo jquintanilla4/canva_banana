@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type ComponentProps, useState } from 'react';
 import { Canvas } from '../Canvas';
 import { buildSeedance2PromptBarControls } from '../../services/promptBarConfig';
-import { Tool, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
+import { Tool, type CanvasImage, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
 import { CANVAS_INTERACTION_BOUNDARY_ATTRIBUTE } from '../../utils/canvasInteractionBoundary';
 import { EMBEDDED_VIDEO_PROMPT_BAR_SCREEN_BOTTOM_PADDING } from '../../utils/videoPromptAreas';
 
@@ -83,6 +83,27 @@ const buildCanvasProps = (overrides: Partial<ComponentProps<typeof Canvas>> = {}
   onCommit: vi.fn(),
   ...overrides,
 });
+
+const buildCanvasMedia = (id: string, mediaType: 'image' | 'video'): CanvasImage => {
+  const element = mediaType === 'image' ? document.createElement('img') : document.createElement('video');
+  if (element instanceof HTMLVideoElement) {
+    element.play = vi.fn().mockResolvedValue(undefined);
+    element.pause = vi.fn();
+  }
+  return {
+    id,
+    element,
+    mediaType,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    rotation: 0,
+    naturalWidth: 100,
+    naturalHeight: 100,
+    file: new File([mediaType], `${id}.${mediaType === 'image' ? 'png' : 'mp4'}`, { type: `${mediaType}/${mediaType === 'image' ? 'png' : 'mp4'}` }),
+  };
+};
 
 describe('Canvas video prompt area tool', () => {
   beforeAll(() => {
@@ -338,6 +359,7 @@ describe('Canvas video prompt area tool', () => {
       prompt: 'A neon city timelapse',
       negativePrompt: '',
       seedance2Variant: 'reference',
+      seedance2VolcengineModel: 'standard',
       seedance2AspectRatio: '16:9',
       seedance2Resolution: '720p',
       seedance2Duration: '5',
@@ -402,6 +424,7 @@ describe('Canvas video prompt area tool', () => {
       prompt: 'Legacy animation prompt',
       negativePrompt: '',
       seedance2Variant: 'reference',
+      seedance2VolcengineModel: 'standard',
       seedance2AspectRatio: '16:9',
       seedance2Resolution: '720p',
       seedance2Duration: '5',
@@ -470,6 +493,7 @@ describe('Canvas video prompt area tool', () => {
       prompt: 'Legacy Hailuo prompt',
       negativePrompt: '',
       seedance2Variant: 'reference',
+      seedance2VolcengineModel: 'standard',
       seedance2AspectRatio: '16:9',
       seedance2Resolution: '720p',
       seedance2Duration: '5',
@@ -533,6 +557,7 @@ describe('Canvas video prompt area tool', () => {
       prompt: 'A guided motion shot',
       negativePrompt: '',
       seedance2Variant: 'reference',
+      seedance2VolcengineModel: 'standard',
       seedance2AspectRatio: '16:9',
       seedance2Resolution: '720p',
       seedance2Duration: '5',
@@ -1027,6 +1052,7 @@ describe('Canvas video prompt area tool', () => {
           prompt: '',
           negativePrompt: '',
           seedance2Variant: 'reference',
+          seedance2VolcengineModel: 'standard',
           seedance2AspectRatio: '16:9',
           seedance2Resolution: '720p',
           seedance2Duration: '5',
@@ -1166,6 +1192,7 @@ describe('Canvas video prompt area tool', () => {
         prompt: '',
         negativePrompt: '',
         seedance2Variant: 'reference',
+        seedance2VolcengineModel: 'standard',
         seedance2AspectRatio: '16:9',
         seedance2Resolution: '720p',
         seedance2Duration: '5',
@@ -1286,6 +1313,7 @@ describe('Canvas video prompt area tool', () => {
       prompt: '',
       negativePrompt: '',
       seedance2Variant: 'reference',
+      seedance2VolcengineModel: 'standard',
       seedance2AspectRatio: '16:9',
       seedance2Resolution: '720p',
       seedance2Duration: '5',
@@ -1333,9 +1361,10 @@ describe('Canvas video prompt area tool', () => {
         prompt: '',
         negativePrompt: '',
         seedance2Variant: 'reference',
+        seedance2VolcengineModel: 'standard',
         seedance2AspectRatio: '16:9',
         seedance2Resolution: '720p',
-        seedance2Duration: '5',
+        seedance2Duration: 'auto',
         seedance2GenerateAudio: false,
         seedance2CameraFixed: false,
         x: 180,
@@ -1497,7 +1526,13 @@ describe('Canvas video prompt area tool', () => {
     expect(screen.getByTestId('seedance2-camera-state').textContent).toBe('true');
   });
 
-  it('normalizes hidden Jimeng-incompatible Seedance 2 values when switching embedded models', () => {
+  it.each([
+    ['jimeng-cli/seedance-2', 'Seedance 2 (JM CLI)', '480p', '16:9', '720p'],
+    ['jimeng-cli/seedance-2', 'Seedance 2 (JM CLI)', '1080p', '16:9', '720p'],
+    ['jimeng-cli/seedance-2', 'Seedance 2 (JM CLI)', '4k', '16:9', '720p'],
+    ['bytedance/seedance-2.0', 'Seedance 2 (FAL)', '1080p', 'adaptive', '1080p'],
+    ['bytedance/seedance-2.0', 'Seedance 2 (FAL)', '4k', 'adaptive', '1080p'],
+  ] as const)('normalizes hidden provider-incompatible values when switching embedded models to %s', (targetModelId, targetLabel, initialResolution, expectedAspectRatio, expectedResolution) => {
     const Harness = () => {
       const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
         id: 'bar-1',
@@ -1505,17 +1540,20 @@ describe('Canvas video prompt area tool', () => {
         prompt: 'Area prompt',
         negativePrompt: '',
         modelId: 'volcengine/seedance-2',
-        seedance2Variant: 'reference',
+        seedance2Variant: 'extend',
         seedance2JimengModelVersion: 'seedance2.0fast',
+        seedance2VolcengineModel: 'standard',
         seedance2AspectRatio: 'adaptive',
-        seedance2Resolution: '1080p',
-        seedance2Duration: '5',
+        seedance2Resolution: initialResolution,
+        seedance2Duration: 'auto',
         seedance2GenerateAudio: false,
         seedance2CameraFixed: false,
         falOptions: {
+          seedance2Variant: 'extend',
           seedance2JimengModelVersion: 'seedance2.0fast',
           seedance2AspectRatio: 'adaptive',
-          seedance2Resolution: '1080p',
+          seedance2Resolution: initialResolution,
+          seedance2Duration: 'auto',
         },
         x: 180,
         y: 600,
@@ -1558,8 +1596,8 @@ describe('Canvas video prompt area tool', () => {
               onVideoPromptBarUpdate: handleVideoPromptBarUpdate,
               buildVideoPromptBarControls: () => [],
               embeddedVideoPromptBarModelOptions: [
-                { value: 'volcengine/seedance-2', label: 'Seedance 2 (VE)' },
-                { value: 'jimeng-cli/seedance-2', label: 'Seedance 2 (JM CLI)' },
+                { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
+                { value: targetModelId, label: targetLabel },
               ],
             })}
           />
@@ -1570,14 +1608,152 @@ describe('Canvas video prompt area tool', () => {
     render(<Harness />);
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Select video model' }));
-    fireEvent.click(screen.getByRole('option', { name: 'Seedance 2 (JM CLI)' }));
+    fireEvent.click(screen.getByRole('option', { name: targetLabel }));
 
     const state = JSON.parse(screen.getByTestId('bar-state').textContent ?? '{}') as CanvasVideoPromptBar;
-    expect(state.modelId).toBe('jimeng-cli/seedance-2');
-    expect(state.seedance2AspectRatio).toBe('16:9');
-    expect(state.seedance2Resolution).toBe('720p');
-    expect(state.falOptions?.seedance2AspectRatio).toBe('16:9');
-    expect(state.falOptions?.seedance2Resolution).toBe('720p');
+    expect(state.modelId).toBe(targetModelId);
+    expect(state.seedance2Variant).toBe('reference');
+    expect(state.seedance2AspectRatio).toBe(expectedAspectRatio);
+    expect(state.seedance2Resolution).toBe(expectedResolution);
+    expect(state.seedance2Duration).toBe('5');
+    expect(state.falOptions?.seedance2AspectRatio).toBe(expectedAspectRatio);
+    expect(state.falOptions?.seedance2Variant).toBe('reference');
+    expect(state.falOptions?.seedance2Resolution).toBe(expectedResolution);
+    expect(state.falOptions?.seedance2Duration).toBe('5');
+  });
+
+  it('initializes embedded Jimeng Multi-frame options when switching models', () => {
+    const Harness = () => {
+      const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        prompt: 'Area prompt',
+        negativePrompt: '',
+        modelId: 'volcengine/seedance-2',
+        seedance2Variant: 'reference',
+        seedance2VolcengineModel: 'standard',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }]);
+      const handleVideoPromptBarUpdate = (barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => {
+        setBars(currentBars => currentBars.map(bar => (bar.id === barId ? updater(bar) : bar)));
+      };
+
+      return (
+        <>
+          <output data-testid="bar-state">{JSON.stringify(bars[0])}</output>
+          <Canvas {...buildCanvasProps({
+            videoPromptAreas: [{
+              id: 'area-1',
+              sequence: 1,
+              label: 'Video prompt area 01',
+              x: 40,
+              y: 60,
+              width: 900,
+              height: 520,
+              promptBarId: 'bar-1',
+              orderedMediaIds: [],
+            }],
+            videoPromptBars: bars,
+            onVideoPromptBarsChange: setBars,
+            onVideoPromptBarUpdate: handleVideoPromptBarUpdate,
+            buildVideoPromptBarControls: () => [],
+            embeddedVideoPromptBarModelOptions: [
+              { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
+              { value: 'jimeng-cli/multiframe', label: 'Jimeng Multi-frame' },
+            ],
+          })} />
+        </>
+      );
+    };
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Select video model' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Jimeng Multi-frame' }));
+
+    const state = JSON.parse(screen.getByTestId('bar-state').textContent ?? '{}') as CanvasVideoPromptBar;
+    expect(state.modelId).toBe('jimeng-cli/multiframe');
+    expect(state.falOptions?.multiframeDuration).toBe('3');
+    expect(state.falOptions?.multiframeResolution).toBe('720p');
+  });
+
+  it('normalizes embedded Seedance 2.5 settings when switching from FAL to Jimeng', () => {
+    const Harness = () => {
+      const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        prompt: 'Area prompt',
+        negativePrompt: '',
+        modelId: 'bytedance/seedance-2.5',
+        falOptions: {
+          seedance25Variant: 'reference',
+          seedance25AspectRatio: 'adaptive',
+          seedance25Resolution: '720p',
+          seedance25Duration: 'auto',
+          seedance25GenerateAudio: true,
+        },
+        seedance2Variant: 'reference',
+        seedance2VolcengineModel: 'standard',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }]);
+      const handleVideoPromptBarUpdate = (barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => {
+        setBars(currentBars => currentBars.map(bar => (bar.id === barId ? updater(bar) : bar)));
+      };
+
+      return (
+        <>
+          <output data-testid="bar-state">{JSON.stringify(bars[0])}</output>
+          <Canvas {...buildCanvasProps({
+            videoPromptAreas: [{
+              id: 'area-1',
+              sequence: 1,
+              label: 'Video prompt area 01',
+              x: 40,
+              y: 60,
+              width: 900,
+              height: 520,
+              promptBarId: 'bar-1',
+              orderedMediaIds: [],
+            }],
+            videoPromptBars: bars,
+            onVideoPromptBarsChange: setBars,
+            onVideoPromptBarUpdate: handleVideoPromptBarUpdate,
+            buildVideoPromptBarControls: () => [],
+            embeddedVideoPromptBarModelOptions: [
+              { value: 'bytedance/seedance-2.5', label: 'Seedance 2.5 (FAL)' },
+              { value: 'jimeng-cli/seedance-2.5', label: 'Seedance 2.5 (JM CLI)' },
+            ],
+          })} />
+        </>
+      );
+    };
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Select video model' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Seedance 2.5 (JM CLI)' }));
+
+    const state = JSON.parse(screen.getByTestId('bar-state').textContent ?? '{}') as CanvasVideoPromptBar;
+    expect(state.modelId).toBe('jimeng-cli/seedance-2.5');
+    expect(state.falOptions?.seedance25AspectRatio).toBe('16:9');
+    expect(state.falOptions?.seedance25Duration).toBe('5');
+    expect(state.falOptions?.seedance25GenerateAudio).toBe(false);
   });
 
   it('uses each Seedance family variant when gating empty embedded submits', () => {
@@ -1614,6 +1790,7 @@ describe('Canvas video prompt area tool', () => {
           prompt: 'Area prompt',
           negativePrompt: '',
           seedance2Variant,
+          seedance2VolcengineModel: 'standard',
           ...(seedance25Variant ? { falOptions: { seedance25Variant } } : {}),
           seedance2AspectRatio: '16:9',
           seedance2Resolution: '720p',
@@ -1732,6 +1909,279 @@ describe('Canvas video prompt area tool', () => {
     expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
   });
 
+  it.each([
+    [0, true],
+    [1, true],
+    [2, false],
+    [20, false],
+    [21, true],
+  ])('gates embedded Jimeng Multi-frame submit with %i staged still images', (imageCount, submitDisabled) => {
+    const orderedImageIds = Array.from({ length: imageCount }, (_, index) => `image-${index + 1}`);
+    const acceptedImageIds = orderedImageIds.slice(0, 20);
+
+    render(<Canvas {...buildCanvasProps({
+      images: orderedImageIds.map(id => buildCanvasMedia(id, 'image')),
+      videoPromptAreas: [{
+        id: 'area-1',
+        sequence: 1,
+        label: 'Video prompt area 01',
+        x: 40,
+        y: 60,
+        width: 900,
+        height: 520,
+        promptBarId: 'bar-1',
+        orderedMediaIds: orderedImageIds,
+      }],
+      videoPromptBars: [{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        modelId: 'jimeng-cli/multiframe',
+        prompt: imageCount > 2
+          ? Array.from({ length: imageCount - 1 }, (_, index) => `Transition ${index + 1}`).join(' || ')
+          : 'Move through the story',
+        negativePrompt: '',
+        seedance2Variant: 'smart',
+        seedance2VolcengineModel: 'standard',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }],
+      videoPromptAreaMemberships: {
+        'area-1': {
+          orderedMediaIds: orderedImageIds,
+          acceptedImageIds,
+          acceptedVideoIds: [],
+          acceptedAudioIds: [],
+          elementImageIds: [],
+          ignoredMediaIds: orderedImageIds.slice(20),
+          orderLabels: Object.fromEntries(acceptedImageIds.map((id, index) => [id, `@Image${index + 1}`])),
+        },
+      },
+      embeddedVideoPromptBarModelOptions: [{ value: 'jimeng-cli/multiframe', label: 'Jimeng Multi-frame' }],
+    })} />);
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(submitDisabled);
+    expect(Boolean(screen.queryByText('Jimeng Multi-frame requires between 2 and 20 selected still images.'))).toBe(submitDisabled);
+  });
+
+  it('rejects unsupported media staged with embedded Jimeng Multi-frame images', () => {
+    const acceptedImageIds = ['image-1', 'image-2'];
+
+    render(<Canvas {...buildCanvasProps({
+      images: [
+        ...acceptedImageIds.map(id => buildCanvasMedia(id, 'image')),
+        buildCanvasMedia('video-1', 'video'),
+      ],
+      videoPromptAreas: [{
+        id: 'area-1',
+        sequence: 1,
+        label: 'Video prompt area 01',
+        x: 40,
+        y: 60,
+        width: 900,
+        height: 520,
+        promptBarId: 'bar-1',
+        orderedMediaIds: [...acceptedImageIds, 'video-1'],
+      }],
+      videoPromptBars: [{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        modelId: 'jimeng-cli/multiframe',
+        prompt: 'Move through the story',
+        negativePrompt: '',
+        seedance2Variant: 'smart',
+        seedance2VolcengineModel: 'standard',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }],
+      videoPromptAreaMemberships: {
+        'area-1': {
+          orderedMediaIds: [...acceptedImageIds, 'video-1'],
+          acceptedImageIds,
+          acceptedVideoIds: [],
+          acceptedAudioIds: [],
+          elementImageIds: [],
+          ignoredMediaIds: ['video-1'],
+          orderLabels: {},
+        },
+      },
+      embeddedVideoPromptBarModelOptions: [{ value: 'jimeng-cli/multiframe', label: 'Jimeng Multi-frame' }],
+    })} />);
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Jimeng Multi-frame only accepts still images.')).toBeTruthy();
+  });
+
+  it('requires one embedded Jimeng Multi-frame prompt per transition', () => {
+    const acceptedImageIds = ['image-1', 'image-2', 'image-3'];
+    const buildProps = (prompt: string) => buildCanvasProps({
+      images: acceptedImageIds.map(id => buildCanvasMedia(id, 'image')),
+      videoPromptAreas: [{
+        id: 'area-1',
+        sequence: 1,
+        label: 'Video prompt area 01',
+        x: 40,
+        y: 60,
+        width: 900,
+        height: 520,
+        promptBarId: 'bar-1',
+        orderedMediaIds: acceptedImageIds,
+      }],
+      videoPromptBars: [{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        modelId: 'jimeng-cli/multiframe',
+        prompt,
+        negativePrompt: '',
+        seedance2Variant: 'smart',
+        seedance2VolcengineModel: 'standard',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }],
+      videoPromptAreaMemberships: {
+        'area-1': {
+          orderedMediaIds: acceptedImageIds,
+          acceptedImageIds,
+          acceptedVideoIds: [],
+          acceptedAudioIds: [],
+          elementImageIds: [],
+          ignoredMediaIds: [],
+          orderLabels: {},
+        },
+      },
+      embeddedVideoPromptBarModelOptions: [{ value: 'jimeng-cli/multiframe', label: 'Jimeng Multi-frame' }],
+    });
+    const { rerender } = render(<Canvas {...buildProps('Only one transition')} />);
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Jimeng Multi-frame requires 2 transition prompts separated by ||.')).toBeTruthy();
+
+    rerender(<Canvas {...buildProps('First transition || Second transition')} />);
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(false);
+    expect(screen.queryByText('Jimeng Multi-frame requires 2 transition prompts separated by ||.')).toBeNull();
+  });
+
+  it('requires an accepted video for embedded Volcengine Edit', () => {
+    const buildProps = (acceptedVideoIds: string[]) => buildCanvasProps({
+      videoPromptAreas: [{
+        id: 'area-1',
+        sequence: 1,
+        label: 'Video prompt area 01',
+        x: 40,
+        y: 60,
+        width: 900,
+        height: 520,
+        promptBarId: 'bar-1',
+        orderedMediaIds: ['image-1', ...acceptedVideoIds],
+      }],
+      videoPromptBars: [{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        modelId: 'volcengine/seedance-2',
+        prompt: 'Edit the source video',
+        negativePrompt: '',
+        seedance2Variant: 'edit',
+        seedance2VolcengineModel: 'standard',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }],
+      videoPromptAreaMemberships: {
+        'area-1': {
+          orderedMediaIds: ['image-1', ...acceptedVideoIds],
+          acceptedImageIds: ['image-1'],
+          acceptedVideoIds,
+          acceptedAudioIds: [],
+          elementImageIds: [],
+          ignoredMediaIds: [],
+          orderLabels: {},
+        },
+      },
+    });
+    const { rerender } = render(<Canvas {...buildProps([])} />);
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
+
+    rerender(<Canvas {...buildProps(['video-1'])} />);
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('keeps embedded Volcengine Extend disabled when the area contains only ignored media', () => {
+    render(<Canvas {...buildCanvasProps({
+      images: [buildCanvasMedia('image-1', 'image')],
+      videoPromptAreas: [{
+        id: 'area-1',
+        sequence: 1,
+        label: 'Video prompt area 01',
+        x: 40,
+        y: 60,
+        width: 900,
+        height: 520,
+        promptBarId: 'bar-1',
+        orderedMediaIds: ['image-1'],
+      }],
+      videoPromptBars: [{
+        id: 'bar-1',
+        assignedAreaId: 'area-1',
+        modelId: 'volcengine/seedance-2',
+        prompt: 'Extend the video',
+        negativePrompt: '',
+        seedance2Variant: 'extend',
+        seedance2VolcengineModel: 'standard',
+        seedance2AspectRatio: '16:9',
+        seedance2Resolution: '720p',
+        seedance2Duration: '5',
+        seedance2GenerateAudio: false,
+        seedance2CameraFixed: false,
+        x: 180,
+        y: 600,
+        width: 920,
+        height: 190,
+      }],
+      videoPromptAreaMemberships: {
+        'area-1': {
+          orderedMediaIds: ['image-1'],
+          acceptedImageIds: [],
+          acceptedVideoIds: [],
+          acceptedAudioIds: [],
+          elementImageIds: [],
+          ignoredMediaIds: ['image-1'],
+          orderLabels: {},
+        },
+      },
+    })} />);
+
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
+  });
+
   it('keeps the full shell at the legacy readable width in narrow areas', () => {
     const { container } = render(
       <Canvas
@@ -1757,6 +2207,7 @@ describe('Canvas video prompt area tool', () => {
           prompt: '',
           negativePrompt: '',
           seedance2Variant: 'reference',
+          seedance2VolcengineModel: 'standard',
           seedance2AspectRatio: '16:9',
           seedance2Resolution: '720p',
           seedance2Duration: '5',
@@ -1887,6 +2338,7 @@ describe('Canvas video prompt area tool', () => {
           prompt: '',
           negativePrompt: '',
           seedance2Variant: 'reference',
+          seedance2VolcengineModel: 'standard',
           seedance2AspectRatio: '16:9',
           seedance2Resolution: '720p',
           seedance2Duration: '5',

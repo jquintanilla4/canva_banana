@@ -1,9 +1,17 @@
-import type { Seedance2Variant } from '../types';
+import type { Seedance2OutputFormat, Seedance2Variant, Seedance2VolcengineDuration, Seedance2VolcengineModel } from '../types';
+import { convertReferencePromptMentionsToVolcengineTokens } from '../utils/seedancePromptMentions';
 import { addDebugLog } from './debugLog';
 import { getPythonBackendAuthHeadersForUrl } from './pythonBackendAuth';
 import { getRuntimeConfig } from './runtimeConfig';
 
 export type VolcengineQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'; // Match the existing queue panel states.
+
+export const SEEDANCE2_VOLCENGINE_MODEL_IDS: Record<Seedance2VolcengineModel, string> = {
+  standard: 'doubao-seedance-2-0-260128',
+  fast: 'doubao-seedance-2-0-fast-260128',
+  mini: 'doubao-seedance-2-0-mini-260615',
+  seedance25: 'doubao-seedance-2-5-260628',
+}; // Single source of truth mapping the UI picker to Ark model ids.
 
 export type VolcengineQueueUpdate = {
   status: VolcengineQueueStatus;
@@ -18,10 +26,11 @@ type GenerateSeedanceVideoOptions = {
   modelId: string;
   variant: Seedance2Variant;
   aspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
-  duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
-  resolution: '480p' | '720p' | '1080p';
+  duration: Seedance2VolcengineDuration; // 'auto' maps to the backend's -1 sentinel.
+  resolution: '480p' | '720p' | '1080p' | '4k';
   generateAudio: boolean;
   cameraFixed: boolean;
+  outputFormat?: Seedance2OutputFormat; // Seedance 2.5 only; 2.0 models omit the field.
   primaryImageFile?: File | null;
   lastFrameImageFile?: File | null;
   referenceImageFiles?: File[];
@@ -364,14 +373,21 @@ export const generateSeedanceVideo = async (
   options: GenerateSeedanceVideoOptions,
 ): Promise<{ videoUrl: string; providerVideoUrl?: string; requestId?: string; lastFrameUrl?: string; providerLastFrameUrl?: string }> => {
   const formData = new FormData();
-  formData.set('prompt', prompt);
+  const isSeedance25Model = options.modelId === SEEDANCE2_VOLCENGINE_MODEL_IDS.seedance25;
+  const requestPrompt = options.variant === 'smart' ? prompt : convertReferencePromptMentionsToVolcengineTokens(prompt); // Ark mandates 视频1/图片1/音频1 tokens for multimodal prompts.
+  formData.set('prompt', requestPrompt);
   formData.set('model_id', options.modelId);
   formData.set('variant', options.variant);
   formData.set('ratio', options.aspectRatio);
-  formData.set('duration', options.duration);
+  formData.set('duration', options.duration === 'auto' ? '-1' : options.duration); // Seedance 2.5 Auto duration maps to -1.
   formData.set('resolution', options.resolution);
   formData.set('generate_audio', String(options.generateAudio));
-  formData.set('camera_fixed', String(options.cameraFixed));
+  if (!isSeedance25Model) {
+    formData.set('camera_fixed', String(options.cameraFixed)); // Seedance 2.5 does not support camera_fixed.
+  }
+  if (options.outputFormat) {
+    formData.set('output_format', options.outputFormat); // Seedance 2.5 container selection; defaults to mp4 backend-side.
+  }
 
   if (options.primaryImageFile) {
     formData.append('primary_image', options.primaryImageFile); // Smart i2v primary frame.

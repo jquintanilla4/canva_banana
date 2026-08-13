@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+/.jimeng-work/
 backend/.venv
 backend/.jimeng-work/
 backend/.pytest_cache
@@ -83,3 +84,4 @@ AGENTS.md
 
 # Agent tooling lockfiles
 skills-lock.json
+/.pi/

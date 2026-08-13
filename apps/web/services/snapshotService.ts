@@ -21,6 +21,8 @@ import {
   isFalResolutionSelectionValue,
   isFlux2MaxImageSizeSelectionValue,
   isGenerationProvider,
+  isJimengMultiframeDurationSelectionValue,
+  isJimengMultiframeResolutionSelectionValue,
   isJimengSeedance2ModelVersion,
   isGptImage2QualitySelectionValue,
   isGrokImagineVideoAspectRatioSelectionValue,
@@ -44,8 +46,11 @@ import {
   isSeedance15ResolutionSelectionValue,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
+  isSeedance2OutputFormatSelectionValue,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isSeedance2VolcengineDurationSelectionValue,
+  isSeedance2VolcengineModel,
   isSeedance25AspectRatioSelectionValue,
   isSeedance25DurationSelectionValue,
   isSeedance25ResolutionSelectionValue,
@@ -173,16 +178,21 @@ export type SnapshotManifestV2 = {
         wan27VideoPromptExpansion?: boolean;
         wan27VideoVariant?: string;
         seedance2Variant?: string;
+        seedance2VolcengineModel?: string;
         seedance2AspectRatio?: string;
         seedance2Resolution?: string;
         seedance2Duration?: string;
         seedance2GenerateAudio?: boolean;
         seedance2CameraFixed?: boolean;
+        seedance2OutputFormat?: string;
         seedance25Variant?: string;
         seedance25AspectRatio?: string;
         seedance25Resolution?: string;
         seedance25Duration?: string;
         seedance25GenerateAudio?: boolean;
+        jimengMultiframeDuration?: string;
+        jimengMultiframeResolution?: string;
+        jimengSessionId?: number;
         klingV3Duration?: string;
         klingV3GenerateAudio?: boolean;
         klingV3CfgScale?: string;
@@ -347,16 +357,21 @@ export type SnapshotMetaState = {
   wan27VideoAudioSetting?: string;
   seedance2Variant?: string;
   seedance2JimengModelVersion?: string;
+  seedance2VolcengineModel?: string;
   seedance2AspectRatio?: string;
   seedance2Resolution?: string;
   seedance2Duration?: string;
   seedance2GenerateAudio?: boolean;
   seedance2CameraFixed?: boolean;
+  seedance2OutputFormat?: string;
   seedance25Variant?: string;
   seedance25AspectRatio?: string;
   seedance25Resolution?: string;
   seedance25Duration?: string;
   seedance25GenerateAudio?: boolean;
+  jimengMultiframeDuration?: string;
+  jimengMultiframeResolution?: string;
+  jimengSessionId?: number;
   klingV3Duration?: string;
   klingV3GenerateAudio?: boolean;
   klingV3CfgScale?: string;
@@ -1552,7 +1567,15 @@ export const restoreSnapshotFromFile = async (
     const seedance2AspectRatioRaw = isSeedance2AspectRatioSelectionValue(bar?.seedance2AspectRatio) ? bar.seedance2AspectRatio : '16:9';
     const seedance2ResolutionRaw = isSeedance2ResolutionSelectionValue(bar?.seedance2Resolution) ? bar.seedance2Resolution : '720p';
     const seedance2AspectRatio = isJimengBar && seedance2AspectRatioRaw === 'adaptive' ? '16:9' : seedance2AspectRatioRaw; // Jimeng snapshots cannot restore adaptive.
-    const seedance2Resolution = isJimengBar && seedance2ResolutionRaw === '1080p' && seedance2JimengModelVersion !== 'seedance2.0_vip' ? '720p' : seedance2ResolutionRaw; // Only VIP restores 1080p.
+    const seedance2Resolution = isJimengBar && (seedance2ResolutionRaw === '1080p' || seedance2ResolutionRaw === '4k') && seedance2JimengModelVersion !== 'seedance2.0_vip' ? '720p' : seedance2ResolutionRaw; // Only VIP restores 1080p/4K.
+    const seedance2VolcengineModel = isSeedance2VolcengineModel(bar?.seedance2VolcengineModel) ? bar.seedance2VolcengineModel : 'standard';
+    const seedance2DurationWide = isSeedance2VolcengineDurationSelectionValue(bar?.seedance2Duration) ? bar.seedance2Duration : '5';
+    const isVolcengineBar = modelId === SEEDANCE_2_VIDEO_MODEL_ID;
+    const seedance2Duration = seedance2VolcengineModel === 'seedance25'
+      || isSeedance2DurationSelectionValue(seedance2DurationWide)
+      || (isVolcengineBar && seedance2DurationWide === 'auto')
+      ? seedance2DurationWide
+      : '5'; // Direct Volcengine bars keep Auto; only 2.5 keeps explicit 16-30s durations.
     return {
       id: typeof bar?.id === 'string' && bar.id.length > 0 ? bar.id : crypto.randomUUID(),
       assignedAreaId: typeof bar?.assignedAreaId === 'string' ? bar.assignedAreaId : null,
@@ -1571,13 +1594,15 @@ export const restoreSnapshotFromFile = async (
       klingV3MultiPromptEnabled: Boolean(bar?.klingV3MultiPromptEnabled),
       klingV3Shot1Duration: isKlingV3ShotDurationSelectionValue(bar?.klingV3Shot1Duration) ? bar.klingV3Shot1Duration : '5',
       klingV3Shot2Duration: isKlingV3ShotDurationSelectionValue(bar?.klingV3Shot2Duration) ? bar.klingV3Shot2Duration : '5',
-      seedance2Variant: bar?.seedance2Variant === 'smart' ? 'smart' : 'reference',
+      seedance2Variant: isSeedance2Variant(bar?.seedance2Variant) ? bar.seedance2Variant : 'reference',
       seedance2JimengModelVersion,
+      seedance2VolcengineModel,
       seedance2AspectRatio,
       seedance2Resolution,
-      seedance2Duration: isSeedance2DurationSelectionValue(bar?.seedance2Duration) ? bar.seedance2Duration : '5',
+      seedance2Duration,
       seedance2GenerateAudio: Boolean(bar?.seedance2GenerateAudio),
       seedance2CameraFixed: Boolean(bar?.seedance2CameraFixed),
+      seedance2OutputFormat: isSeedance2OutputFormatSelectionValue(bar?.seedance2OutputFormat) ? bar.seedance2OutputFormat : 'mp4',
     };
   });
 
@@ -2075,13 +2100,16 @@ export const normalizeSnapshotImageMetadata = (
       if (isSeedance2Variant((typed as { seedance2Variant?: unknown }).seedance2Variant)) {
         normalizedOptions.seedance2Variant = typed.seedance2Variant;
       }
+      if (isSeedance2VolcengineModel((typed as { seedance2VolcengineModel?: unknown }).seedance2VolcengineModel)) {
+        normalizedOptions.seedance2VolcengineModel = typed.seedance2VolcengineModel;
+      }
       if (isSeedance2AspectRatioSelectionValue((typed as { seedance2AspectRatio?: unknown }).seedance2AspectRatio)) {
         normalizedOptions.seedance2AspectRatio = typed.seedance2AspectRatio;
       }
       if (isSeedance2ResolutionSelectionValue((typed as { seedance2Resolution?: unknown }).seedance2Resolution)) {
         normalizedOptions.seedance2Resolution = typed.seedance2Resolution;
       }
-      if (isSeedance2DurationSelectionValue((typed as { seedance2Duration?: unknown }).seedance2Duration)) {
+      if (isSeedance2VolcengineDurationSelectionValue((typed as { seedance2Duration?: unknown }).seedance2Duration)) {
         normalizedOptions.seedance2Duration = typed.seedance2Duration;
       }
       const seedance2GenerateAudioValue = (typed as { seedance2GenerateAudio?: unknown }).seedance2GenerateAudio;
@@ -2091,6 +2119,21 @@ export const normalizeSnapshotImageMetadata = (
       const seedance2CameraFixedValue = (typed as { seedance2CameraFixed?: unknown }).seedance2CameraFixed;
       if (typeof seedance2CameraFixedValue === 'boolean') {
         normalizedOptions.seedance2CameraFixed = seedance2CameraFixedValue;
+      }
+      if (isSeedance2OutputFormatSelectionValue((typed as { seedance2OutputFormat?: unknown }).seedance2OutputFormat)) {
+        normalizedOptions.seedance2OutputFormat = typed.seedance2OutputFormat;
+      }
+      if (normalizedOptions.seedance2VolcengineModel !== 'seedance25') {
+        delete normalizedOptions.seedance2OutputFormat; // 2.0 sub-models never carry a container choice.
+        if (normalizedOptions.seedance2Duration !== undefined
+          && normalizedOptions.seedance2Duration !== 'auto'
+          && !isSeedance2DurationSelectionValue(normalizedOptions.seedance2Duration)) {
+          normalizedOptions.seedance2Duration = '5'; // 2.0 reruns keep Auto but drop explicit 16-30s durations.
+        }
+      }
+      if ((normalizedOptions.seedance2VolcengineModel === 'fast' || normalizedOptions.seedance2VolcengineModel === 'mini' || normalizedOptions.seedance2VolcengineModel === 'seedance25')
+        && (normalizedOptions.seedance2Resolution === '1080p' || normalizedOptions.seedance2Resolution === '4k')) {
+        normalizedOptions.seedance2Resolution = '720p'; // Fast/Mini/2.5 reruns cap at 720p.
       }
       volcengineOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
     }
@@ -2123,11 +2166,40 @@ export const normalizeSnapshotImageMetadata = (
       if (typeof seedance2CameraFixedValue === 'boolean') {
         normalizedOptions.seedance2CameraFixed = seedance2CameraFixedValue;
       }
+      if (isSeedance25Variant((typed as { seedance25Variant?: unknown }).seedance25Variant)) {
+        normalizedOptions.seedance25Variant = typed.seedance25Variant;
+      }
+      if (isSeedance25AspectRatioSelectionValue((typed as { seedance25AspectRatio?: unknown }).seedance25AspectRatio)) {
+        normalizedOptions.seedance25AspectRatio = typed.seedance25AspectRatio;
+      }
+      if (isSeedance25ResolutionSelectionValue((typed as { seedance25Resolution?: unknown }).seedance25Resolution)) {
+        normalizedOptions.seedance25Resolution = typed.seedance25Resolution;
+      }
+      if (isSeedance25DurationSelectionValue((typed as { seedance25Duration?: unknown }).seedance25Duration)) {
+        normalizedOptions.seedance25Duration = typed.seedance25Duration;
+      }
+      const seedance25GenerateAudioValue = (typed as { seedance25GenerateAudio?: unknown }).seedance25GenerateAudio;
+      if (typeof seedance25GenerateAudioValue === 'boolean') {
+        normalizedOptions.seedance25GenerateAudio = seedance25GenerateAudioValue;
+      }
+      if (isJimengMultiframeDurationSelectionValue((typed as { multiframeDuration?: unknown }).multiframeDuration)) {
+        normalizedOptions.multiframeDuration = typed.multiframeDuration;
+      }
+      if (isJimengMultiframeResolutionSelectionValue((typed as { multiframeResolution?: unknown }).multiframeResolution)) {
+        normalizedOptions.multiframeResolution = typed.multiframeResolution;
+      }
+      const sessionIdValue = (typed as { sessionId?: unknown }).sessionId;
+      if (typeof sessionIdValue === 'number' && Number.isInteger(sessionIdValue) && sessionIdValue >= 0) {
+        normalizedOptions.sessionId = sessionIdValue;
+      }
       if (normalizedOptions.seedance2AspectRatio === 'adaptive') {
         normalizedOptions.seedance2AspectRatio = '16:9'; // Jimeng reruns cannot submit adaptive.
       }
-      if (normalizedOptions.seedance2Resolution === '1080p' && normalizedOptions.seedance2JimengModelVersion !== 'seedance2.0_vip') {
-        normalizedOptions.seedance2Resolution = '720p'; // Only VIP reruns can keep 1080p.
+      if (normalizedOptions.seedance2Resolution === '480p') {
+        normalizedOptions.seedance2Resolution = '720p'; // Jimeng 2.0 channels reject 480p (2.5 uses seedance25Resolution); floor legacy reruns at 720p.
+      }
+      if ((normalizedOptions.seedance2Resolution === '1080p' || normalizedOptions.seedance2Resolution === '4k') && normalizedOptions.seedance2JimengModelVersion !== 'seedance2.0_vip') {
+        normalizedOptions.seedance2Resolution = '720p'; // Only VIP reruns can keep 1080p/4K.
       }
       jimengOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
     }

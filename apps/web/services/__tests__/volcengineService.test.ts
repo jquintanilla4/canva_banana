@@ -224,6 +224,51 @@ describe('volcengineService', () => {
     }));
   });
 
+  it('converts @-mentions to the Ark-mandated Chinese tokens for multimodal variants', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        status: 'COMPLETED',
+        outputUrl: 'https://example.com/output.mp4',
+      })));
+
+    await generateSeedanceVideo('Swap the product in @Video1 for @Image2, keep @Audio1.', createOptions({ variant: 'edit' }));
+
+    const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(submitBody.get('prompt')).toBe('Swap the product in 视频1 for 图片2, keep 音频1.');
+  });
+
+  it('leaves mention-like email addresses and longer handles unchanged', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        status: 'COMPLETED',
+        outputUrl: 'https://example.com/output.mp4',
+      })));
+
+    await generateSeedanceVideo(
+      'Email foo@video1.com, keep @Image1st unchanged, and use @Video1.',
+      createOptions({ variant: 'edit' }),
+    );
+
+    const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(submitBody.get('prompt')).toBe('Email foo@video1.com, keep @Image1st unchanged, and use 视频1.');
+  });
+
+  it('leaves smart-mode prompts untouched', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        status: 'COMPLETED',
+        outputUrl: 'https://example.com/output.mp4',
+      })));
+
+    await generateSeedanceVideo('Mention @Video1 freely in smart mode.', createOptions());
+
+    const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(submitBody.get('prompt')).toBe('Mention @Video1 freely in smart mode.'); // Smart prompts carry no reference tokens, so no conversion runs.
+  });
+
   it('streams queue updates over WebSocket and resolves on a terminal completed payload', async () => {
     const queueUpdates: VolcengineQueueUpdate[] = [];
     global.fetch = vi.fn()
@@ -387,5 +432,78 @@ describe('volcengineService', () => {
       lastFrameUrl: `${DEFAULT_BASE_URL}/api/volcengine/jobs/job-1/last-frame`,
       providerLastFrameUrl: 'https://example.com/last-frame.png',
     });
+  });
+
+  it('sends the Seedance 2.5 contract: -1 for Auto duration, output_format, and no camera_fixed', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        modelId: 'doubao-seedance-2-5-260628',
+        status: 'COMPLETED',
+        outputUrl: 'https://example.com/output.mov',
+      })));
+
+    await generateSeedanceVideo('test prompt', createOptions({
+      modelId: 'doubao-seedance-2-5-260628',
+      duration: 'auto',
+      outputFormat: 'mov',
+      cameraFixed: true, // 2.5 must drop the flag even when callers still pass it.
+    }));
+
+    const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(submitBody.get('model_id')).toBe('doubao-seedance-2-5-260628');
+    expect(submitBody.get('duration')).toBe('-1'); // Auto maps to the backend's -1 sentinel.
+    expect(submitBody.get('output_format')).toBe('mov');
+    expect(submitBody.get('camera_fixed')).toBeNull(); // Seedance 2.5 does not support camera_fixed.
+  });
+
+  it('maps Seedance 2.0 Auto duration to the backend sentinel', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({ status: 'COMPLETED', outputUrl: 'https://example.com/output.mp4' })));
+
+    await generateSeedanceVideo('test prompt', createOptions({ duration: 'auto' }));
+
+    const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(submitBody.get('model_id')).toBe('doubao-seedance-2-0-260128');
+    expect(submitBody.get('duration')).toBe('-1'); // Every direct Volcengine sub-model uses the same Auto sentinel.
+  });
+
+  it('sends an explicit Seedance 2.5 duration without mapping', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        modelId: 'doubao-seedance-2-5-260628',
+        status: 'COMPLETED',
+        outputUrl: 'https://example.com/output.mp4',
+      })));
+
+    await generateSeedanceVideo('test prompt', createOptions({
+      modelId: 'doubao-seedance-2-5-260628',
+      duration: '30',
+      outputFormat: 'mp4',
+    }));
+
+    const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(submitBody.get('duration')).toBe('30');
+    expect(submitBody.get('output_format')).toBe('mp4');
+    expect(submitBody.get('camera_fixed')).toBeNull();
+  });
+
+  it('keeps the Seedance 2.0 contract unchanged', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        status: 'COMPLETED',
+        outputUrl: 'https://example.com/output.mp4',
+      })));
+
+    await generateSeedanceVideo('test prompt', createOptions({ cameraFixed: true }));
+
+    const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(submitBody.get('model_id')).toBe('doubao-seedance-2-0-260128');
+    expect(submitBody.get('duration')).toBe('5');
+    expect(submitBody.get('camera_fixed')).toBe('true');
+    expect(submitBody.get('output_format')).toBeNull(); // 2.0 models never send a container choice.
   });
 });

@@ -17,6 +17,9 @@ import {
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
+  JIMENG_MULTIFRAME_MAX_IMAGES,
+  JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
@@ -29,12 +32,14 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   getMaxReferenceImages,
+  getProviderSafeSeedance2Variant,
   isKlingO3VideoModelId,
 } from '../services/modelConfig';
 import {
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
+  getSeedance2VolcengineReferenceLimits,
 } from './seedanceReferences';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
@@ -70,6 +75,17 @@ export const SEEDANCE_2_VIDEO_PROMPT_PROFILE: VideoModelCapabilityProfile = {
   maxAudios: SEEDANCE_REFERENCE_AUDIO_LIMIT,
   maxElements: 0,
 };
+
+export const SEEDANCE_2_EXTEND_VIDEO_PROMPT_PROFILE: VideoModelCapabilityProfile = {
+  ...SEEDANCE_2_VIDEO_PROMPT_PROFILE,
+  id: 'seedance-2-extend',
+  defaultImageRole: null,
+  defaultAudioRole: null,
+  shiftImageRole: null,
+  supportedMediaTypes: ['video'],
+  maxImages: 0,
+  maxAudios: 0,
+}; // Extend chains video clips (3 on 2.0, 10 on 2.5 via the caller override) and ignores image/audio drops.
 
 export const SEEDANCE_25_VIDEO_PROMPT_PROFILE: VideoModelCapabilityProfile = {
   ...SEEDANCE_2_VIDEO_PROMPT_PROFILE,
@@ -112,13 +128,26 @@ export const getVideoPromptAreaCapabilityProfile = (
   const resolvedModelId = getEmbeddedVideoPromptBarModelId(modelId);
 
   if (resolvedModelId === SEEDANCE_2_VIDEO_MODEL_ID || resolvedModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID) {
-    if (variant === 'smart') {
+    const safeVariant = variant ? getProviderSafeSeedance2Variant(resolvedModelId, variant) : variant; // Bars can carry a stale Edit/Extend pick from Volcengine.
+    const isVolcengineSeedance25 = resolvedModelId === SEEDANCE_2_VIDEO_MODEL_ID && falOptions?.seedance2VolcengineModel === 'seedance25';
+    const referenceProfile = isVolcengineSeedance25 ? SEEDANCE_25_VIDEO_PROMPT_PROFILE : SEEDANCE_2_VIDEO_PROMPT_PROFILE;
+    if (safeVariant === 'smart') {
       return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: resolvedModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID });
     }
-    return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId };
+    if (safeVariant === 'edit') {
+      return { ...referenceProfile, id: resolvedModelId }; // Edit accepts the selected sub-model's multimodal reference envelope.
+    }
+    if (safeVariant === 'extend') {
+      return {
+        ...SEEDANCE_2_EXTEND_VIDEO_PROMPT_PROFILE,
+        id: resolvedModelId,
+        maxVideos: getSeedance2VolcengineReferenceLimits(falOptions?.seedance2VolcengineModel).videos, // Extend follows the selected Volcengine sub-model's video cap.
+      };
+    }
+    return { ...referenceProfile, id: resolvedModelId };
   }
 
-  if (resolvedModelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
+  if (resolvedModelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID || resolvedModelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID) {
     if (falOptions?.seedance25Variant === 'smart') {
       return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: true });
     }
@@ -134,9 +163,18 @@ export const getVideoPromptAreaCapabilityProfile = (
 
   if (resolvedModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {
     if (variant === 'smart') {
-      return imageOnlyProfile(resolvedModelId, { supportsTextOnly: true });
+      return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: true });
     }
     return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId }; // CLI multimodal2video exposes all-around references.
+  }
+
+  if (resolvedModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID) {
+    return imageOnlyProfile(resolvedModelId, {
+      defaultImageRole: 'reference',
+      shiftImageRole: 'reference',
+      maxImages: JIMENG_MULTIFRAME_MAX_IMAGES,
+      supportsTextOnly: false,
+    });
   }
 
   if (isKlingO3VideoModelId(resolvedModelId)) {

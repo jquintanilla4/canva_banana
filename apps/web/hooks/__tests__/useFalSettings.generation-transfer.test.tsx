@@ -152,6 +152,7 @@ describe('useFalSettings generation transfer', () => {
           seedance2Duration: '8',
           seedance2GenerateAudio: false,
           seedance2CameraFixed: false,
+          sessionId: 17,
         },
       }))).toBe(true);
     });
@@ -162,6 +163,26 @@ describe('useFalSettings generation transfer', () => {
     expect(result.current.seedance2AspectRatio).toBe('9:16');
     expect(result.current.seedance2Resolution).toBe('1080p');
     expect(result.current.seedance2Duration).toBe('8');
+    expect(result.current.jimengSessionId).toBe(17);
+  });
+
+  it('resets legacy Jimeng metadata without a session to session zero', () => {
+    const { result } = renderHook(() => useFalSettings({ apiProvider: 'fal' }));
+
+    act(() => result.current.setJimengSessionId(17));
+    act(() => {
+      expect(result.current.applyGenerationSettings(buildGeneration({
+        kind: 'video',
+        provider: 'jimeng',
+        modelId: undefined,
+        modelMode: 'video',
+        jimengOptions: {
+          seedance2Variant: 'smart',
+        },
+      }))).toBe(true);
+    });
+
+    expect(result.current.jimengSessionId).toBe(0);
   });
 
   it('rejects unavailable models without changing the current selection', () => {

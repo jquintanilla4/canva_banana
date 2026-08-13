@@ -4,7 +4,7 @@ vi.mock('../debugLog', () => ({
   addDebugLog: vi.fn(),
 }));
 
-import { clearJimengCache, generateJimengSeedanceVideo, getJimengSetupStatus, installJimengCli, startJimengLogin, type JimengQueueUpdate } from '../jimengService';
+import { checkJimengLogin, clearJimengCache, generateJimengSeedanceVideo, getJimengSetupStatus, installJimengCli, startJimengLogin, type JimengQueueUpdate } from '../jimengService';
 
 type GenerateJimengSeedanceVideoOptions = Parameters<typeof generateJimengSeedanceVideo>[1]; // Reuse the runtime signature in tests.
 
@@ -151,12 +151,13 @@ describe('jimengService', () => {
 
     await expect(request).resolves.toEqual({
       videoUrl: `${DEFAULT_BASE_URL}/api/jimeng/jobs/job-1/output`,
+      providerJobId: 'job-1',
       providerVideoUrl: undefined,
       requestId: undefined,
     });
     expect(queueUpdates).toEqual([
-      expect.objectContaining({ status: 'IN_QUEUE', logs: [] }),
-      expect.objectContaining({ status: 'COMPLETED', outputUrl: `${DEFAULT_BASE_URL}/api/jimeng/jobs/job-1/output` }),
+      expect.objectContaining({ providerJobId: 'job-1', status: 'IN_QUEUE', logs: [] }),
+      expect.objectContaining({ providerJobId: 'job-1', status: 'COMPLETED', outputUrl: `${DEFAULT_BASE_URL}/api/jimeng/jobs/job-1/output` }),
     ]);
   });
 
@@ -179,6 +180,7 @@ describe('jimengService', () => {
 
     await expect(generateJimengSeedanceVideo('test prompt', createOptions())).resolves.toEqual({
       videoUrl: 'https://example.com/output.mp4',
+      providerJobId: 'job-1',
       providerVideoUrl: undefined,
       requestId: undefined,
     });
@@ -235,15 +237,91 @@ describe('jimengService', () => {
     });
   });
 
+  it('keeps an authenticated but outdated CLI blocked', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(createJsonResponse({
+      status: 'update_required',
+      ready: false,
+      cliAvailable: true,
+      authenticated: true,
+      cliVersion: '1.4.14',
+      message: 'Jimeng CLI 1.4.14 is outdated.',
+    }));
+
+    await expect(getJimengSetupStatus()).resolves.toEqual(expect.objectContaining({
+      status: 'update_required',
+      ready: false,
+      cliAvailable: true,
+      authenticated: true,
+      cliVersion: '1.4.14',
+    }));
+  });
+
   it('runs install and login setup actions', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(createJsonResponse({ status: 'ok', message: 'installed' }))
-      .mockResolvedValueOnce(createJsonResponse({ status: 'started', message: 'login started', pid: 123, debug: true, authUrl: 'https://example.com/login' }));
+      .mockResolvedValueOnce(createJsonResponse({ status: 'authorization_required', message: 'login started', loginSessionId: 'session-1', verificationUri: 'https://example.com/login', userCode: 'ABCD' }))
+      .mockResolvedValueOnce(createJsonResponse({ status: 'ready', ready: true, message: 'logged in' }));
 
     await expect(installJimengCli()).resolves.toEqual({ status: 'ok', message: 'installed' });
-    await expect(startJimengLogin(true)).resolves.toEqual({ status: 'started', message: 'login started', pid: 123, debug: true, authUrl: 'https://example.com/login' });
+    await expect(startJimengLogin()).resolves.toEqual({ status: 'authorization_required', message: 'login started', loginSessionId: 'session-1', verificationUri: 'https://example.com/login', userCode: 'ABCD' });
+    await expect(checkJimengLogin('session-1', 5)).resolves.toEqual({ status: 'ready', ready: true, message: 'logged in' });
     expect(global.fetch).toHaveBeenNthCalledWith(1, `${DEFAULT_BASE_URL}/api/jimeng/setup/install`, SETUP_ACTION_INIT);
-    expect(global.fetch).toHaveBeenNthCalledWith(2, `${DEFAULT_BASE_URL}/api/jimeng/setup/login?debug=true`, SETUP_ACTION_INIT);
+    expect(global.fetch).toHaveBeenNthCalledWith(2, `${DEFAULT_BASE_URL}/api/jimeng/setup/login`, SETUP_ACTION_INIT);
+    expect(global.fetch).toHaveBeenNthCalledWith(3, `${DEFAULT_BASE_URL}/api/jimeng/setup/login/check?login_session_id=session-1&poll=5`, SETUP_ACTION_INIT);
+  });
+
+  it('sends Seedance 2.5 session and audio-only reference fields', async () => {
+    const audioFile = new File(['audio'], 'reference.mp3', { type: 'audio/mpeg' });
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createJsonResponse({ status: 'ready', ready: true, cliAvailable: true, authenticated: true }))
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        modelId: 'jimeng-cli/seedance-2.5',
+        status: 'COMPLETED',
+        outputUrl: 'https://example.com/output.mp4',
+      })));
+
+    await generateJimengSeedanceVideo('', createOptions({
+      modelId: 'jimeng-cli/seedance-2.5',
+      variant: 'reference',
+      modelVersion: 'seedance2.5',
+      duration: '30',
+      resolution: '480p',
+      session: 42,
+      referenceAudioFiles: [audioFile],
+    }));
+
+    const requestBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(requestBody.get('model_id')).toBe('jimeng-cli/seedance-2.5');
+    expect(requestBody.get('model_version')).toBe('seedance2.5');
+    expect(requestBody.get('session')).toBe('42');
+    expect(requestBody.getAll('reference_audios')).toEqual([audioFile]);
+  });
+
+  it('sends Multi-frame images and transition fields', async () => {
+    const first = new File(['one'], 'one.png', { type: 'image/png' });
+    const second = new File(['two'], 'two.png', { type: 'image/png' });
+    const third = new File(['three'], 'three.png', { type: 'image/png' });
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createJsonResponse({ status: 'ready', ready: true, cliAvailable: true, authenticated: true }))
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        modelId: 'jimeng-cli/multiframe',
+        status: 'COMPLETED',
+        outputUrl: 'https://example.com/output.mp4',
+      })));
+
+    await generateJimengSeedanceVideo('day to night || night to sunrise', createOptions({
+      modelId: 'jimeng-cli/multiframe',
+      mode: 'multiframe',
+      multiframeImageFiles: [first, second, third],
+      transitionPrompts: ['day to night', 'night to sunrise'],
+      transitionDurations: [3, 4],
+    }));
+
+    const requestBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(requestBody.get('mode')).toBe('multiframe');
+    expect(requestBody.getAll('multiframe_images')).toEqual([first, second, third]);
+    expect(requestBody.getAll('transition_prompts')).toEqual(['day to night', 'night to sunrise']);
+    expect(requestBody.getAll('transition_durations')).toEqual(['3', '4']);
   });
 
   it('clears the Jimeng local cache through the backend', async () => {
@@ -253,6 +331,7 @@ describe('jimengService', () => {
       bytesFreed: 4096,
       workDir: '/tmp/jimeng',
       errors: [],
+      invalidatedJobIds: ['completed-job'],
     }));
 
     await expect(clearJimengCache()).resolves.toEqual({
@@ -261,6 +340,7 @@ describe('jimengService', () => {
       bytesFreed: 4096,
       workDir: '/tmp/jimeng',
       errors: [],
+      invalidatedJobIds: ['completed-job'],
     });
     expect(global.fetch).toHaveBeenCalledWith(`${DEFAULT_BASE_URL}/api/jimeng/cache`, CACHE_CLEAR_INIT);
   });

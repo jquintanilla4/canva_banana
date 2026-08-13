@@ -11,6 +11,11 @@ import {
   KLING_V3_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
+  isValidJimengMultiframeImageCount,
+  JIMENG_MULTIFRAME_MAX_IMAGES,
+  JIMENG_MULTIFRAME_MIN_IMAGES,
+  JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
@@ -65,9 +70,16 @@ import {
   normalizeRecraftRgbColor,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
+  isSeedance2OutputFormatSelectionValue,
+  isSeedance2VolcengineDurationSelectionValue,
+  isJimengMultiframeDurationSelectionValue,
+  isJimengMultiframeResolutionSelectionValue,
   isJimengSeedance2ModelVersion,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
+  isSeedance2VolcengineModel,
+  getProviderSafeSeedance2Variant,
+  getVolcengineSafeSeedance2Settings,
   isSeedance25AspectRatioSelectionValue,
   isSeedance25DurationSelectionValue,
   isSeedance25ResolutionSelectionValue,
@@ -84,6 +96,8 @@ import {
   isMiniMaxH3AspectRatioSelectionValue,
   isMiniMaxH3DurationSelectionValue,
   isMiniMaxH3Variant,
+  normalizeJimengSeedance25AspectRatio,
+  normalizeJimengSeedance25Duration,
   getSeedreamTextToImageModelId,
   isFalImageModelId,
   isFalModelMode,
@@ -126,6 +140,8 @@ import {
   type MiniMaxH3AspectRatioSelectionValue,
   type MiniMaxH3DurationSelectionValue,
   type MiniMaxH3Variant,
+  type Seedance2DurationSelectionValue,
+  type Seedance2VolcengineDurationSelectionValue,
   type WanTargetResolution,
 } from '../services/modelConfig';
 import type { UseFalSettingsResult } from './useFalSettings';
@@ -161,20 +177,23 @@ import type {
   FalVideoDuration,
   FalQueueJob,
   Seedance2Variant,
+  Seedance2VolcengineModel,
 } from '../types';
 import { Tool } from '../types';
 import { getImageBounds, isOverlapping } from '../utils/canvasGeometry';
-import { getNaturalSize, isVideoFileType, loadMediaFromBlob, rasterizeImages } from '../services/mediaService';
+import { getNaturalSize, getVideoFileExtension, isVideoFileType, loadMediaFromBlob, rasterizeImages } from '../services/mediaService';
 import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
-import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/volcengineService';
+import { generateSeedanceVideo, SEEDANCE2_VOLCENGINE_MODEL_IDS, type VolcengineQueueUpdate } from '../services/volcengineService';
 import { generateJimengSeedanceVideo, type JimengQueueUpdate } from '../services/jimengService';
 import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
 import { normalizeKrea2StyleStrength } from '../utils/krea2StyleStrength';
 import {
   buildEffectiveSeedanceReferenceIds,
+  getSeedance2VolcengineReferenceLimits,
+  SEEDANCE25_EDIT_VIDEO_MIN_DURATION_SECONDS,
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
   SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS,
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
@@ -187,12 +206,18 @@ import {
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
   SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS,
+  JIMENG_SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS,
+  JIMENG_SEEDANCE25_REFERENCE_MEDIA_MAX_DURATION_SECONDS,
+  JIMENG_SEEDANCE25_REFERENCE_MEDIA_MIN_DURATION_SECONDS,
+  JIMENG_SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
   SEEDANCE25_REFERENCE_IMAGE_LIMIT,
+  SEEDANCE25_REFERENCE_IMAGE_MAX_BYTES,
   SEEDANCE25_REFERENCE_MEDIA_MAX_DURATION_SECONDS,
   SEEDANCE25_REFERENCE_MEDIA_MIN_DURATION_SECONDS,
   SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT,
   SEEDANCE25_REFERENCE_VIDEO_LIMIT,
   SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
+  getSeedance25AudioReferenceFileError,
   getSeedance25VideoReferenceFileError,
 } from '../utils/seedance25References';
 import { getCanvasMediaDurationSeconds, resolveCanvasMediaDurationSeconds, resolveOptionalCanvasMediaDurationSeconds } from '../utils/canvasMediaDuration';
@@ -201,6 +226,7 @@ import {
   getSeedanceReferencePromptMentionError,
   normalizeSeedanceReferencePromptMentions,
 } from '../utils/seedancePromptMentions';
+import { hasValidJimengMultiframePrompt, parseJimengMultiframeTransitionPrompts } from '../utils/jimengMultiframe';
 import type { AppState } from './useCanvasHistory';
 
 type UseGenerationArgs = {
@@ -393,6 +419,7 @@ const applyVolcengineQueueUpdateToJob = (
   update: VolcengineQueueUpdate | JimengQueueUpdate,
 ): FalQueueJob => ({
   ...job,
+  providerJobId: 'providerJobId' in update ? update.providerJobId : job.providerJobId,
   status: update.status,
   requestId: update.requestId || job.requestId,
   logs: mergeQueueLogMessages(job.logs, update.logs),
@@ -418,10 +445,17 @@ const applyFalPhaseUpdateToJob = (
 }; // Apply service-level phase changes to the queue row.
 
 const buildSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant): string =>
-  `${baseLabel} ${variant === 'reference' ? 'Reference' : 'Smart'}`; // Surface the active variant in the queue.
+  `${baseLabel} ${variant === 'reference' ? 'Reference' : variant === 'edit' ? 'Edit' : variant === 'extend' ? 'Extend' : 'Smart'}`; // Surface the active variant in the queue.
+
+const VOLCENGINE_SEEDANCE2_MODEL_LABELS: Record<Seedance2VolcengineModel, string> = {
+  standard: 'Seedance 2.0 (VE)',
+  fast: 'Seedance 2.0 Fast (VE)',
+  mini: 'Seedance 2.0 Mini (VE)',
+  seedance25: 'Seedance 2.5 (VE)',
+}; // Keep queue and generated-media metadata aligned with the selected Ark sub-model.
 
 const buildJimengSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant, modelVersion: string): string => {
-  const channelLabel = modelVersion === 'seedance2.0_vip' ? 'VIP' : modelVersion === 'seedance2.0fast_vip' ? 'VIP Fast' : modelVersion === 'seedance2.0' ? 'Standard' : 'Standard Fast';
+  const channelLabel = modelVersion === 'seedance2.0_vip' ? 'VIP' : modelVersion === 'seedance2.0fast_vip' ? 'VIP Fast' : modelVersion === 'seedance2.0mini' ? 'Mini' : modelVersion === 'seedance2.0' ? 'Standard' : 'Standard Fast';
   return `${buildSeedance2ModelLabel(baseLabel, variant)} ${channelLabel}`;
 }; // Surface the active Jimeng CLI channel in the queue.
 
@@ -548,16 +582,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance15Audio,
     seedance2Variant,
     seedance2JimengModelVersion,
+    seedance2VolcengineModel,
     seedance2AspectRatio,
     seedance2Resolution,
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance2OutputFormat,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
     seedance25Duration,
     seedance25GenerateAudio,
+    jimengMultiframeDuration,
+    jimengMultiframeResolution,
+    jimengSessionId,
     isSeedance15VideoModel,
     flux2MaxImageSize,
     isFlux2MaxModel,
@@ -630,9 +669,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const overrideModelId = normalizeFalModelId(rawOverrideModelId); // Accept legacy saved model ids.
     const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode : falModelMode;
     const falImageModelIdForRun = isFalImageModelId(overrideModelId) ? overrideModelId : falImageModelId;
+    const isJimengOverrideModelId = overrideModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
+      || overrideModelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID
+      || overrideModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID;
     const providerForcedVideoModelId = falModelModeForRun === 'video' && requestedProviderForRun !== 'google'
       ? requestedProviderForRun === 'jimeng'
-        ? JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
+        ? isJimengOverrideModelId ? null : JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
         : requestedProviderForRun === 'volcengine' ? SEEDANCE_2_VIDEO_MODEL_ID : null
       : null; // Saved local-backend reruns may carry provider metadata without a model id.
     const falVideoModelIdForRun = providerForcedVideoModelId ?? (isFalVideoModelId(overrideModelId) ? overrideModelId : falVideoModelId);
@@ -824,49 +866,72 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const volcengineOptionsOverride = generationOverride?.volcengineOptions ?? {};
     const jimengOptionsOverride = generationOverride?.jimengOptions ?? {};
     const seedanceOptionsOverride = { ...falOptionsOverride, ...volcengineOptionsOverride, ...jimengOptionsOverride }; // Embedded bars store backend-specific Seedance settings in provider bags.
-    const seedance2VariantForRun = isSeedance2Variant(seedanceOptionsOverride.seedance2Variant)
+    const jimengSessionIdForRun = typeof jimengOptionsOverride.sessionId === 'number' && Number.isInteger(jimengOptionsOverride.sessionId) && jimengOptionsOverride.sessionId >= 0
+      ? jimengOptionsOverride.sessionId
+      : generationOverride && (generationOverride.provider === 'jimeng' || generationOverride.jimengOptions)
+        ? 0
+        : jimengSessionId; // Legacy persisted Jimeng requests predate sessions and therefore used session zero.
+    const rawSeedance2VariantForRun = isSeedance2Variant(seedanceOptionsOverride.seedance2Variant)
       ? seedanceOptionsOverride.seedance2Variant
       : seedance2Variant;
+    const seedance2VariantForRun = getProviderSafeSeedance2Variant(falVideoModelIdForRun, rawSeedance2VariantForRun); // Submission is the final guard against stale cross-provider metadata.
     const seedance2JimengModelVersionForRun = isJimengSeedance2ModelVersion(seedanceOptionsOverride.seedance2JimengModelVersion)
       ? seedanceOptionsOverride.seedance2JimengModelVersion
       : generationOverride?.provider === 'jimeng' || generationOverride?.jimengOptions
         ? JIMENG_DEFAULT_SEEDANCE2_MODEL_VERSION
       : seedance2JimengModelVersion;
+    const seedance2VolcengineModelForRun = isSeedance2VolcengineModel(seedanceOptionsOverride.seedance2VolcengineModel)
+      ? seedanceOptionsOverride.seedance2VolcengineModel
+      : generationOverride?.provider === 'volcengine' || generationOverride?.volcengineOptions
+        ? 'standard'
+        : seedance2VolcengineModel; // Legacy Volcengine generations predate sub-model selection and used Standard.
     const seedance2AspectRatioForRun = isSeedance2AspectRatioSelectionValue(seedanceOptionsOverride.seedance2AspectRatio)
       ? seedanceOptionsOverride.seedance2AspectRatio
       : seedance2AspectRatio;
     const seedance2ResolutionForRun = isSeedance2ResolutionSelectionValue(seedanceOptionsOverride.seedance2Resolution)
       ? seedanceOptionsOverride.seedance2Resolution
       : seedance2Resolution;
-    const seedance2DurationForRun = isSeedance2DurationSelectionValue(seedanceOptionsOverride.seedance2Duration)
+    const seedance2DurationWideForRun: Seedance2VolcengineDurationSelectionValue = isSeedance2VolcengineDurationSelectionValue(seedanceOptionsOverride.seedance2Duration)
       ? seedanceOptionsOverride.seedance2Duration
-      : seedance2Duration;
+      : seedance2Duration; // Saved Seedance 2.5 runs may carry Auto or up to 30 seconds.
+    const seedance2DurationForRun: Seedance2DurationSelectionValue = isSeedance2DurationSelectionValue(seedance2DurationWideForRun)
+      ? seedance2DurationWideForRun
+      : '5'; // Every 2.0 model stays within its 4-15 second envelope.
     const seedance2GenerateAudioForRun = typeof seedanceOptionsOverride.seedance2GenerateAudio === 'boolean'
       ? seedanceOptionsOverride.seedance2GenerateAudio
       : seedance2GenerateAudio;
     const seedance2CameraFixedForRun = typeof seedanceOptionsOverride.seedance2CameraFixed === 'boolean'
       ? seedanceOptionsOverride.seedance2CameraFixed
       : seedance2CameraFixed;
-    const seedance25VariantForRun = isSeedance25Variant(falOptionsOverride.seedance25Variant)
-      ? falOptionsOverride.seedance25Variant
+    const seedance2OutputFormatForRun = isSeedance2OutputFormatSelectionValue(seedanceOptionsOverride.seedance2OutputFormat)
+      ? seedanceOptionsOverride.seedance2OutputFormat
+      : seedance2OutputFormat; // Only Volcengine Seedance 2.5 sends the container choice.
+    const seedance25VariantForRun = isSeedance25Variant(seedanceOptionsOverride.seedance25Variant)
+      ? seedanceOptionsOverride.seedance25Variant
       : seedance25Variant;
-    const seedance25AspectRatioForRun = isSeedance25AspectRatioSelectionValue(falOptionsOverride.seedance25AspectRatio)
-      ? falOptionsOverride.seedance25AspectRatio
+    const seedance25AspectRatioForRun = isSeedance25AspectRatioSelectionValue(seedanceOptionsOverride.seedance25AspectRatio)
+      ? seedanceOptionsOverride.seedance25AspectRatio
       : seedance25AspectRatio;
-    const seedance25ResolutionForRun = isSeedance25ResolutionSelectionValue(falOptionsOverride.seedance25Resolution)
-      ? falOptionsOverride.seedance25Resolution
+    const seedance25ResolutionForRun = isSeedance25ResolutionSelectionValue(seedanceOptionsOverride.seedance25Resolution)
+      ? seedanceOptionsOverride.seedance25Resolution
       : seedance25Resolution;
-    const seedance25DurationForRun = isSeedance25DurationSelectionValue(falOptionsOverride.seedance25Duration)
-      ? falOptionsOverride.seedance25Duration
+    const seedance25DurationForRun = isSeedance25DurationSelectionValue(seedanceOptionsOverride.seedance25Duration)
+      ? seedanceOptionsOverride.seedance25Duration
       : seedance25Duration;
-    const seedance25GenerateAudioForRun = typeof falOptionsOverride.seedance25GenerateAudio === 'boolean'
-      ? falOptionsOverride.seedance25GenerateAudio
+    const seedance25GenerateAudioForRun = typeof seedanceOptionsOverride.seedance25GenerateAudio === 'boolean'
+      ? seedanceOptionsOverride.seedance25GenerateAudio
       : seedance25GenerateAudio;
+    const jimengMultiframeDurationForRun = isJimengMultiframeDurationSelectionValue(seedanceOptionsOverride.multiframeDuration)
+      ? seedanceOptionsOverride.multiframeDuration
+      : jimengMultiframeDuration;
+    const jimengMultiframeResolutionForRun = isJimengMultiframeResolutionSelectionValue(seedanceOptionsOverride.multiframeResolution)
+      ? seedanceOptionsOverride.multiframeResolution
+      : jimengMultiframeResolution;
     const shouldMergeSeedanceReferenceIdsForRun = apiProviderForRun === 'fal'
       && falModelModeForRun === 'video'
       && (
-        ((falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === FAL_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) && seedance2VariantForRun === 'reference')
-        || (falVideoModelIdForRun === FAL_SEEDANCE_25_VIDEO_MODEL_ID && seedance25VariantForRun === 'reference')
+        ((falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === FAL_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) && seedance2VariantForRun !== 'smart')
+        || ((falVideoModelIdForRun === FAL_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID) && seedance25VariantForRun === 'reference')
         || (falVideoModelIdForRun === MINIMAX_H3_VIDEO_MODEL_ID && miniMaxH3VariantForRun === 'reference')
       )
       && !generationOverride; // Multimodal reference models merge selected media into ordered labels.
@@ -916,7 +981,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         : klingO3KeepAudio;
     const generationProviderForRun: GenerationProviderId = apiProviderForRun === 'google'
       ? 'google'
-      : falModelModeForRun === 'video' && falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
+      : falModelModeForRun === 'video' && (falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_MULTIFRAME_VIDEO_MODEL_ID)
         ? 'jimeng'
         : falModelModeForRun === 'video' && falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID
         ? 'volcengine'
@@ -982,9 +1047,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isFalSeedance25VideoModelForRun = isVideoMode && falVideoModelIdForRun === FAL_SEEDANCE_25_VIDEO_MODEL_ID;
     const isMiniMaxH3VideoModelForRun = isVideoMode && falVideoModelIdForRun === MINIMAX_H3_VIDEO_MODEL_ID;
     const isJimengSeedance2VideoModelForRun = isVideoMode && falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
+    const isJimengSeedance25VideoModelForRun = isVideoMode && falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID;
+    const isJimengMultiframeVideoModelForRun = isVideoMode && falVideoModelIdForRun === JIMENG_MULTIFRAME_VIDEO_MODEL_ID;
     const isAnySeedance2VideoModelForRun = isVideoMode && (falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID || isFalSeedance2VideoModelForRun || isJimengSeedance2VideoModelForRun);
     const isSeedance2ReferenceModeForRun = isAnySeedance2VideoModelForRun && seedance2VariantForRun === 'reference';
-    const isSeedance25ReferenceModeForRun = isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'reference';
+    const isSeedance25ReferenceModeForRun = (isFalSeedance25VideoModelForRun || isJimengSeedance25VideoModelForRun) && seedance25VariantForRun === 'reference';
     const isMiniMaxH3ReferenceModeForRun = isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'reference';
     const isMultimodalReferenceModeForRun = isSeedance2ReferenceModeForRun || isSeedance25ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun;
     const shouldPersistReferenceInputsForRun = !isMiniMaxH3VideoModelForRun || isMiniMaxH3ReferenceModeForRun; // H3 Standard ignores references retained from Reference mode.
@@ -1001,7 +1068,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun && Boolean(activePrimary)));
     const isKlingV3ControlPromptOptional = usingFal && isVideoMode && isKlingV3ControlVideoModel; // Kling Control v3 prompt is optional.
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
-    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional));
+    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional))
+      && !(usingJimeng && isMultimodalReferenceModeForRun); // Dreamina multimodal prompts are optional.
     const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isMiniMaxH3VideoModelForRun && !isAnySeedance2VideoModelForRun && !isFalSeedance25VideoModelForRun && !isWan27VideoModelForRun && !isKlingO3VideoInputMode && !isFalVideoInputMode
       && !(isGrokImagineVideoModel && isGrokImagineVideoEditMode);
     const generationKind: GenerationKind = overrideKind
@@ -1096,7 +1164,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     ? `${baseModelLabel} ${wan27VideoVariantForRun === 'reference' ? 'Reference' : wan27VideoVariantForRun === 'edit' ? 'Edit' : 'Smart'}`
                   : isFalSeedance2VideoModelForRun || isJimengSeedance2VideoModelForRun
                     ? buildSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun)
-                  : isFalSeedance25VideoModelForRun
+                  : isFalSeedance25VideoModelForRun || isJimengSeedance25VideoModelForRun
                     ? buildSeedance2ModelLabel(baseModelLabel, seedance25VariantForRun)
                   : isMiniMaxH3VideoModelForRun
                     ? `${baseModelLabel} ${miniMaxH3VariantForRun === 'reference' ? 'Reference' : 'Standard'}`
@@ -1133,35 +1201,104 @@ export const useGeneration = (args: UseGenerationArgs) => {
       };
 
       if (usingVolcengine || usingJimeng) {
-        const backendJobId = retryJobId ?? crypto.randomUUID();
+        const queueJobId = retryJobId ?? crypto.randomUUID();
         const localBackendProvider: Extract<GenerationProviderId, 'volcengine' | 'jimeng'> = usingJimeng ? 'jimeng' : 'volcengine';
+        const isJimeng25 = usingJimeng && isJimengSeedance25VideoModelForRun;
+        const isJimengMulti = usingJimeng && isJimengMultiframeVideoModelForRun;
+        const isVolcengineSeedance25 = usingVolcengine && seedance2VolcengineModelForRun === 'seedance25';
+        const safeVolcengineSettings = getVolcengineSafeSeedance2Settings(seedance2VolcengineModelForRun, {
+          seedance2Variant: seedance2VariantForRun,
+          seedance2AspectRatio: seedance2AspectRatioForRun,
+          seedance2Resolution: seedance2ResolutionForRun,
+          seedance2Duration: seedance2DurationWideForRun,
+          seedance2CameraFixed: seedance2CameraFixedForRun,
+        }, Boolean(activePrimary)); // Retry, embedded, and live first-frame requests share the same final provider clamps.
+        const seedance2VolcengineDurationForRun = safeVolcengineSettings.seedance2Duration;
+        const jimengSeedance25AspectRatioForRun = normalizeJimengSeedance25AspectRatio(seedance25AspectRatioForRun); // Persist provider-valid values for retries and snapshots.
+        const jimengSeedance25DurationForRun = normalizeJimengSeedance25Duration(seedance25DurationForRun); // Legacy metadata must resolve to an explicit CLI duration.
+        const localVariant = isJimengMulti ? 'smart' : isJimeng25 ? seedance25VariantForRun : usingJimeng ? seedance2VariantForRun : safeVolcengineSettings.seedance2Variant;
+        const localAspectRatio = isJimengMulti ? '16:9' : isJimeng25 ? jimengSeedance25AspectRatioForRun : usingJimeng ? seedance2AspectRatioForRun : safeVolcengineSettings.seedance2AspectRatio;
+        const localResolution = isJimengMulti ? jimengMultiframeResolutionForRun : isJimeng25 ? seedance25ResolutionForRun : usingJimeng ? seedance2ResolutionForRun : safeVolcengineSettings.seedance2Resolution;
+        const localDuration = isJimengMulti ? jimengMultiframeDurationForRun : isJimeng25 ? jimengSeedance25DurationForRun : seedance2DurationForRun;
+        const localModelVersion = isJimeng25 ? 'seedance2.5' : seedance2JimengModelVersionForRun;
         const jobModelLabel = usingJimeng
-          ? buildJimengSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun, seedance2JimengModelVersionForRun)
-          : buildSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun);
+          ? isJimengMulti
+            ? baseModelLabel
+            : isJimeng25
+            ? buildSeedance2ModelLabel(baseModelLabel, seedance25VariantForRun)
+            : buildJimengSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun, seedance2JimengModelVersionForRun)
+          : buildSeedance2ModelLabel(VOLCENGINE_SEEDANCE2_MODEL_LABELS[seedance2VolcengineModelForRun], seedance2VariantForRun); // Queue labels name the exact sub-model, not the picker entry.
         const primarySelection = primaryImageIdForRun ? images.find(img => img.id === primaryImageIdForRun) ?? null : null;
-        const isSeedance2ReferenceMode = seedance2VariantForRun === 'reference';
-        const referenceAssetCount = referenceImageIdsForRun.length + referenceVideoIdsForRun.length + referenceAudioIdsForRun.length;
-        const seedancePromptForRun = isSeedance2ReferenceMode
+        const isSeedance2ReferenceMode = localVariant === 'reference';
+        const isSeedance2EditMode = !usingJimeng && localVariant === 'edit';
+        const isSeedance2ExtendMode = !usingJimeng && localVariant === 'extend';
+        const isSeedance2MultimodalMode = isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode; // Edit/Extend submit through the reference media path.
+        const multiframeImageIds = isJimengMulti
+          ? (generationOverride ? referenceImageIdsForRun : selectedImageIds)
+          : [];
+        const localReferenceImageIds = isSeedance2MultimodalMode ? referenceImageIdsForRun : [];
+        const localReferenceVideoIds = isSeedance2MultimodalMode ? referenceVideoIdsForRun : [];
+        const localReferenceAudioIds = isSeedance2MultimodalMode ? referenceAudioIdsForRun : []; // Smart and Multi-frame must not inherit stale tagged references.
+        const usesSmartPrimaryImage = !isJimengMulti && localVariant === 'smart' && Boolean(activePrimary);
+        const usesJimengReferencePrimaryImage = usingJimeng
+          && localVariant === 'reference'
+          && Boolean(activePrimary)
+          && !localReferenceImageIds.includes(activePrimary.id);
+        const localReferenceImageCount = localReferenceImageIds.length + Number(usesJimengReferencePrimaryImage);
+        const referenceAssetCount = localReferenceImageCount + localReferenceVideoIds.length + localReferenceAudioIds.length;
+        const submittedPrimaryImageId = usesSmartPrimaryImage || usesJimengReferencePrimaryImage ? primaryImageIdForRun : null;
+        const submittedLastFrameImageId = !isJimengMulti && localVariant === 'smart' ? videoLastFrameImageIdForRun : null;
+        const multiframeCanvasItems = multiframeImageIds
+          .map(id => images.find(image => image.id === id))
+          .filter(isImageCanvasMedia);
+        const multiframeTransitionPrompts = isJimengMulti && multiframeCanvasItems.length > 2
+          ? parseJimengMultiframeTransitionPrompts(trimmedPrompt)
+          : [];
+        const seedancePromptForRun = isSeedance2MultimodalMode
           ? normalizeSeedanceReferencePromptMentions(trimmedPrompt)
           : trimmedPrompt;
 
-        if (usingJimeng && videoLastFrameImageIdForRun) {
-          setError('Seedance 2 (JM CLI) does not support ending frames yet.');
-          return;
+        if (isJimengMulti) {
+          if (multiframeCanvasItems.length !== multiframeImageIds.length || !isValidJimengMultiframeImageCount(multiframeCanvasItems.length)) {
+            setError(`Jimeng Multi-frame requires selecting between ${JIMENG_MULTIFRAME_MIN_IMAGES} and ${JIMENG_MULTIFRAME_MAX_IMAGES} still images.`);
+            return;
+          }
+          if (!hasValidJimengMultiframePrompt(trimmedPrompt, multiframeCanvasItems.length)) {
+            setError(`Jimeng Multi-frame needs ${multiframeCanvasItems.length - 1} transition prompts separated with ||.`);
+            return;
+          }
         }
-        if (usingJimeng && seedance2AspectRatioForRun === 'adaptive') {
+
+        if (usingJimeng && localAspectRatio === 'adaptive') {
           setError('Seedance 2 (JM CLI) does not support adaptive aspect ratio yet.');
           return;
         }
-        if (usingJimeng && seedance2ResolutionForRun === '1080p' && seedance2JimengModelVersionForRun !== 'seedance2.0_vip') {
-          setError('Seedance 2 (JM CLI) 1080p requires the VIP channel, not Standard or VIP Fast.');
+        if (usingJimeng && !isJimeng25 && !isJimengMulti && localResolution === '480p') {
+          setError('Seedance 2 (JM CLI) supports 720p, plus 1080p and 4K on the VIP channel.');
           return;
         }
-        if (!isSeedance2ReferenceMode && primarySelection && primarySelection.mediaType !== 'image') {
+        if (usingJimeng && !isJimeng25 && !isJimengMulti && (localResolution === '1080p' || localResolution === '4k') && seedance2JimengModelVersionForRun !== 'seedance2.0_vip') {
+          setError(`Seedance 2 (JM CLI) ${localResolution} requires the VIP channel.`);
+          return;
+        }
+        if (isVolcengineSeedance25 && (localResolution === '1080p' || localResolution === '4k')) {
+          setError('Seedance 2.5 supports 480p and 720p only.');
+          return;
+        }
+        const seedance25RequiresAdaptiveRatio = isSeedance2EditMode || isSeedance2ExtendMode || (localVariant === 'smart' && Boolean(activePrimary));
+        if (isVolcengineSeedance25 && seedance25RequiresAdaptiveRatio && localAspectRatio !== 'adaptive') {
+          setError('Seedance 2.5 first-frame, Edit, and Extend tasks require the Adaptive aspect ratio.');
+          return;
+        }
+        if (isVolcengineSeedance25 && localVariant === 'edit' && seedance2VolcengineDurationForRun !== 'auto') {
+          setError('Seedance 2.5 Edit requires the Auto duration.');
+          return;
+        }
+        if (!isJimengMulti && !isSeedance2MultimodalMode && primarySelection && primarySelection.mediaType !== 'image') {
           setError('Seedance 2 Smart uses a still image as the first frame. Select an image or clear the selection.');
           return;
         }
-        if (!isSeedance2ReferenceMode && videoLastFrameImageIdForRun && !activePrimary) {
+        if (!isJimengMulti && !isSeedance2MultimodalMode && videoLastFrameImageIdForRun && !activePrimary) {
           setError('Seedance 2 first/last-frame mode requires a starting still image.');
           return;
         }
@@ -1169,32 +1306,80 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2 Reference requires at least one tagged reference asset.');
           return;
         }
-        if (usingJimeng && isSeedance2ReferenceMode && referenceAudioIdsForRun.length > 0 && referenceImageIdsForRun.length + referenceVideoIdsForRun.length === 0) {
+        if ((isSeedance2EditMode || isSeedance2ExtendMode) && localReferenceVideoIds.length === 0) {
+          setError(`Seedance 2 ${isSeedance2EditMode ? 'Edit' : 'Extend'} requires at least one video clip.`);
+          return;
+        }
+        if (isSeedance2ExtendMode && (localReferenceImageIds.length > 0 || localReferenceAudioIds.length > 0)) {
+          setError('Seedance 2 Extend accepts video clips only.');
+          return;
+        }
+        if (usingJimeng && !isJimeng25 && isSeedance2ReferenceMode && localReferenceAudioIds.length > 0 && localReferenceImageCount + localReferenceVideoIds.length === 0) {
           setToastMessage(JIMENG_AUDIO_ONLY_REFERENCE_HINT);
           setTimeout(() => setToastMessage(null), 4000);
           return;
         }
-        if (isSeedance2ReferenceMode) {
+        if (isSeedance2MultimodalMode) {
           const promptMentionError = getSeedanceReferencePromptMentionError(seedancePromptForRun, {
-            imageCount: referenceImageIdsForRun.length,
-            videoCount: referenceVideoIdsForRun.length,
-            audioCount: referenceAudioIdsForRun.length,
+            imageCount: localReferenceImageCount,
+            videoCount: localReferenceVideoIds.length,
+            audioCount: localReferenceAudioIds.length,
           });
           if (promptMentionError) {
             setError(promptMentionError);
             return;
           }
         }
-        if (
-          referenceImageIdsForRun.length > SEEDANCE_REFERENCE_IMAGE_LIMIT
-          || referenceVideoIdsForRun.length > SEEDANCE_REFERENCE_VIDEO_LIMIT
-          || referenceAudioIdsForRun.length > SEEDANCE_REFERENCE_AUDIO_LIMIT
-        ) {
-          setError(`Seedance 2 Reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips.`);
+        const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance25 ? 'seedance25' : 'standard'); // Volcengine 2.5 raises every reference cap.
+        const seedance25FamilyLabel = isJimeng25 || isVolcengineSeedance25 ? 'Seedance 2.5' : 'Seedance 2';
+        const localReferenceImageLimit = isJimeng25 ? SEEDANCE25_REFERENCE_IMAGE_LIMIT : volcengineReferenceLimits.images;
+        const localReferenceVideoLimit = isJimeng25 ? SEEDANCE25_REFERENCE_VIDEO_LIMIT : volcengineReferenceLimits.videos;
+        const localReferenceAudioLimit = isJimeng25 ? SEEDANCE25_REFERENCE_AUDIO_LIMIT : volcengineReferenceLimits.audios;
+        if (!isJimengMulti && (
+          localReferenceImageCount > localReferenceImageLimit
+          || localReferenceVideoIds.length > localReferenceVideoLimit
+          || localReferenceAudioIds.length > localReferenceAudioLimit
+        )) {
+          setError(`${seedance25FamilyLabel} Reference supports up to ${localReferenceImageLimit} images, ${localReferenceVideoLimit} videos, and ${localReferenceAudioLimit} audio clips.`);
+          return;
+        }
+        const localReferenceTotalLimit = isJimeng25 ? SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT : volcengineReferenceLimits.total;
+        if (!isJimengMulti && referenceAssetCount > localReferenceTotalLimit) {
+          setError(`${seedance25FamilyLabel} Reference supports up to ${localReferenceTotalLimit} total inputs.`);
           return;
         }
         const localSeedance2GenerateAudioForRun = usingJimeng ? false : seedance2GenerateAudioForRun; // Jimeng hides and ignores audio generation.
-        const localSeedance2CameraFixedForRun = usingJimeng ? false : seedance2CameraFixedForRun; // Jimeng hides and ignores fixed camera.
+        const localSeedance2CameraFixedForRun = usingJimeng ? false : safeVolcengineSettings.seedance2CameraFixed; // Jimeng hides and ignores fixed camera; Volcengine 2.5 clears it.
+        const localProviderOptionsForRun: Pick<GenerationInputs, 'jimengOptions' | 'volcengineOptions'> = usingJimeng ? { jimengOptions: isJimengMulti ? {
+          multiframeDuration: jimengMultiframeDurationForRun,
+          multiframeResolution: jimengMultiframeResolutionForRun,
+          sessionId: jimengSessionIdForRun,
+        } : isJimeng25 ? {
+          seedance25Variant: seedance25VariantForRun,
+          seedance25AspectRatio: jimengSeedance25AspectRatioForRun,
+          seedance25Resolution: seedance25ResolutionForRun,
+          seedance25Duration: jimengSeedance25DurationForRun,
+          seedance25GenerateAudio: false,
+          sessionId: jimengSessionIdForRun,
+        } : {
+          seedance2Variant: seedance2VariantForRun,
+          seedance2JimengModelVersion: seedance2JimengModelVersionForRun,
+          seedance2AspectRatio: seedance2AspectRatioForRun,
+          seedance2Resolution: seedance2ResolutionForRun,
+          seedance2Duration: seedance2DurationForRun,
+          seedance2GenerateAudio: localSeedance2GenerateAudioForRun,
+          seedance2CameraFixed: localSeedance2CameraFixedForRun,
+          sessionId: jimengSessionIdForRun,
+        } } : { volcengineOptions: {
+          seedance2Variant: safeVolcengineSettings.seedance2Variant,
+          seedance2VolcengineModel: seedance2VolcengineModelForRun,
+          seedance2AspectRatio: safeVolcengineSettings.seedance2AspectRatio,
+          seedance2Resolution: safeVolcengineSettings.seedance2Resolution,
+          seedance2Duration: seedance2VolcengineDurationForRun,
+          seedance2GenerateAudio: seedance2GenerateAudioForRun,
+          seedance2CameraFixed: safeVolcengineSettings.seedance2CameraFixed,
+          ...(isVolcengineSeedance25 ? { seedance2OutputFormat: seedance2OutputFormatForRun } : {}), // 2.0 sub-models never persist the container choice.
+        } }; // One source of truth shared by queue-retry inputs and saved-video metadata.
         const localSeedanceRetryInputs: GenerationInputs = {
           kind: 'video',
           prompt: seedancePromptForRun,
@@ -1202,81 +1387,74 @@ export const useGeneration = (args: UseGenerationArgs) => {
           modelId: falModelIdForRun,
           modelLabel: jobModelLabel,
           modelMode: falModelModeForRun,
-          ...(primaryImageIdForRun ? { primaryImageId: primaryImageIdForRun } : {}),
-          ...(referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
-          ...(referenceVideoIdsForRun.length ? { referenceVideoIds: referenceVideoIdsForRun } : {}),
-          ...(referenceAudioIdsForRun.length ? { referenceAudioIds: referenceAudioIdsForRun } : {}),
-          ...(activePrimary?.metadata?.generation?.originalSourceImageId
+          ...(submittedPrimaryImageId ? { primaryImageId: submittedPrimaryImageId } : {}),
+          ...((isJimengMulti ? multiframeImageIds : localReferenceImageIds).length ? { referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds } : {}),
+          ...(localReferenceVideoIds.length ? { referenceVideoIds: localReferenceVideoIds } : {}),
+          ...(localReferenceAudioIds.length ? { referenceAudioIds: localReferenceAudioIds } : {}),
+          ...(submittedPrimaryImageId && activePrimary?.metadata?.generation?.originalSourceImageId
             ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
-            : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
-          videoLastFrameImageId: videoLastFrameImageIdForRun,
-          ...(usingJimeng ? { jimengOptions: {
-            seedance2Variant: seedance2VariantForRun,
-            seedance2JimengModelVersion: seedance2JimengModelVersionForRun,
-            seedance2AspectRatio: seedance2AspectRatioForRun,
-            seedance2Resolution: seedance2ResolutionForRun,
-            seedance2Duration: seedance2DurationForRun,
-            seedance2GenerateAudio: localSeedance2GenerateAudioForRun,
-            seedance2CameraFixed: localSeedance2CameraFixedForRun,
-          } } : { volcengineOptions: {
-            seedance2Variant: seedance2VariantForRun,
-            seedance2AspectRatio: seedance2AspectRatioForRun,
-            seedance2Resolution: seedance2ResolutionForRun,
-            seedance2Duration: seedance2DurationForRun,
-            seedance2GenerateAudio: seedance2GenerateAudioForRun,
-            seedance2CameraFixed: seedance2CameraFixedForRun,
-          } }),
+            : submittedPrimaryImageId ? { originalSourceImageId: submittedPrimaryImageId } : {}),
+          ...(submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
+          ...localProviderOptionsForRun,
         }; // Queue retry uses the same request metadata as saved videos.
 
-        const tailFrame = videoLastFrameImageIdForRun
-          ? images.find(img => img.id === videoLastFrameImageIdForRun) ?? null
+        const tailFrame = submittedLastFrameImageId
+          ? images.find(img => img.id === submittedLastFrameImageId) ?? null
           : null;
         if (tailFrame && !isImageCanvasMedia(tailFrame)) {
           setError('Select a still image on the canvas to use as the ending frame.');
           return;
         }
 
-        const referenceImageCanvasItems = referenceImageIdsForRun
+        const referenceImageCanvasItems = localReferenceImageIds
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia);
-        if (referenceImageCanvasItems.length !== referenceImageIdsForRun.length) {
+        if (referenceImageCanvasItems.length !== localReferenceImageIds.length) {
           setError('Seedance 2 image references must be still images.');
           return;
         }
 
-        const referenceVideoCanvasItems = referenceVideoIdsForRun
+        const referenceVideoCanvasItems = localReferenceVideoIds
           .map(id => images.find(img => img.id === id))
           .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'video'));
-        if (referenceVideoCanvasItems.length !== referenceVideoIdsForRun.length) {
+        if (referenceVideoCanvasItems.length !== localReferenceVideoIds.length) {
           setError('Seedance 2 video references must be videos on the canvas.');
           return;
         }
+        const localReferenceMinDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_MEDIA_MIN_DURATION_SECONDS : volcengineReferenceLimits.clipMinDurationSeconds;
+        const localReferenceVideoMinDuration = isVolcengineSeedance25 && isSeedance2EditMode
+          ? SEEDANCE25_EDIT_VIDEO_MIN_DURATION_SECONDS
+          : localReferenceMinDuration; // Edit has a stricter source-video floor than ordinary 2.5 references.
+        const localReferenceMaxDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_MEDIA_MAX_DURATION_SECONDS : volcengineReferenceLimits.clipMaxDurationSeconds;
+        const localReferenceVideoTotalDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS : volcengineReferenceLimits.videoTotalDurationSeconds;
+        const localReferenceAudioTotalDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS : volcengineReferenceLimits.audioTotalDurationSeconds;
+        const localReferenceDurationTolerance = usingJimeng ? 0.05 : 0; // Match the backend's allowance for media-probe rounding.
         const referenceVideoDurations = await Promise.all(referenceVideoCanvasItems.map(resolveCanvasMediaDurationSeconds)); // Legacy snapshots load only selected video metadata.
-        if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS || durationSeconds > SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)) {
-          setError(`Seedance 2 reference videos must each be between ${SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS} and ${SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS} seconds.`);
+        if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < localReferenceVideoMinDuration - localReferenceDurationTolerance || durationSeconds > localReferenceMaxDuration + localReferenceDurationTolerance)) {
+          setError(`${seedance25FamilyLabel} reference videos must each be between ${localReferenceVideoMinDuration} and ${localReferenceMaxDuration} seconds.`);
           return;
         }
         const totalReferenceVideoDurationSeconds = referenceVideoDurations.reduce((totalDurationSeconds, durationSeconds) => totalDurationSeconds + (durationSeconds ?? 0), 0);
-        if (totalReferenceVideoDurationSeconds > SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS) {
-          setError(`Seedance 2 reference videos must total ${SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS} seconds or less.`);
+        if (totalReferenceVideoDurationSeconds > localReferenceVideoTotalDuration + localReferenceDurationTolerance) {
+          setError(`${seedance25FamilyLabel} reference videos must total ${localReferenceVideoTotalDuration} seconds or less.`);
           return;
         }
 
-        const referenceAudioCanvasItems = referenceAudioIdsForRun
+        const referenceAudioCanvasItems = localReferenceAudioIds
           .map(id => images.find(img => img.id === id))
           .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'audio'));
-        if (referenceAudioCanvasItems.length !== referenceAudioIdsForRun.length) {
+        if (referenceAudioCanvasItems.length !== localReferenceAudioIds.length) {
           setError('Seedance 2 audio references must be audio clips on the canvas.');
           return;
         }
         const referenceAudioDurations = referenceAudioCanvasItems.map(getCanvasMediaDurationSeconds); // Seedance validates reference audio duration per clip and in total.
-        if (referenceAudioDurations.some(durationSeconds => durationSeconds === null || durationSeconds < SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS || durationSeconds > SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)) {
-          setError(`Seedance 2 reference audio clips must each be between ${SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS} and ${SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS} seconds.`);
+        if (referenceAudioDurations.some(durationSeconds => durationSeconds === null || durationSeconds < localReferenceMinDuration - localReferenceDurationTolerance || durationSeconds > localReferenceMaxDuration + localReferenceDurationTolerance)) {
+          setError(`${seedance25FamilyLabel} reference audio clips must each be between ${localReferenceMinDuration} and ${localReferenceMaxDuration} seconds.`);
           return;
         }
         const totalReferenceAudioDurationSeconds = referenceAudioDurations.reduce((totalDurationSeconds, durationSeconds) => totalDurationSeconds + (durationSeconds ?? 0), 0);
-        if (totalReferenceAudioDurationSeconds > SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS) {
-          setError(`Seedance 2 reference audio clips must total ${SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS} seconds or less.`);
+        if (totalReferenceAudioDurationSeconds > localReferenceAudioTotalDuration + localReferenceDurationTolerance) {
+          setError(`${seedance25FamilyLabel} reference audio clips must total ${localReferenceAudioTotalDuration} seconds or less.`);
           return;
         }
 
@@ -1284,18 +1462,20 @@ export const useGeneration = (args: UseGenerationArgs) => {
           provider: generationProviderForRun,
           modelId: falModelIdForRun,
           prompt: seedancePromptForRun,
-          variant: seedance2VariantForRun,
-          jimengModelVersion: usingJimeng ? seedance2JimengModelVersionForRun : undefined,
-          aspectRatio: seedance2AspectRatioForRun,
-          resolution: seedance2ResolutionForRun,
-          duration: seedance2DurationForRun,
+          variant: localVariant,
+          jimengModelVersion: isJimengMulti ? undefined : usingJimeng ? localModelVersion : seedance2VolcengineModelForRun, // Multi-frame has no channel; other sub-models remain distinct.
+          jimengSessionId: usingJimeng ? jimengSessionIdForRun : undefined,
+          aspectRatio: localAspectRatio,
+          resolution: localResolution,
+          duration: usingJimeng ? localDuration : seedance2VolcengineDurationForRun,
           generateAudio: localSeedance2GenerateAudioForRun,
           cameraFixed: localSeedance2CameraFixedForRun,
-          primaryImageId: primaryImageIdForRun,
-          videoLastFrameImageId: videoLastFrameImageIdForRun,
-          referenceImageIds: referenceImageIdsForRun,
-          referenceVideoIds: referenceVideoIdsForRun,
-          referenceAudioIds: referenceAudioIdsForRun,
+          outputFormat: isVolcengineSeedance25 ? seedance2OutputFormatForRun : undefined,
+          primaryImageId: submittedPrimaryImageId,
+          videoLastFrameImageId: submittedLastFrameImageId,
+          referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds,
+          referenceVideoIds: localReferenceVideoIds,
+          referenceAudioIds: localReferenceAudioIds,
           images,
         });
 
@@ -1309,7 +1489,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             return;
           }
           const newJob: FalQueueJob = {
-            id: backendJobId,
+            id: queueJobId,
             prompt: seedancePromptForRun,
             modelId: falModelIdForRun,
             modelLabel: jobModelLabel,
@@ -1326,25 +1506,23 @@ export const useGeneration = (args: UseGenerationArgs) => {
             source: localBackendProvider,
             title: jobModelLabel,
             message: 'Preparing request',
-            data: { jobId: backendJobId, kind: 'video', variant: seedance2VariantForRun },
+            data: { jobId: queueJobId, kind: 'video', variant: localVariant },
           });
           jobQueued = true;
         };
 
         try {
-          const firstFrameImageFile = activePrimary
+          const firstFrameImageFile = activePrimary && (usesSmartPrimaryImage || usesJimengReferencePrimaryImage)
             ? await buildStillImageFile(activePrimary, `seedance2-first-frame-${Date.now()}`)
             : undefined;
           const tailFrameImage = tailFrame && isImageCanvasMedia(tailFrame) ? tailFrame : null;
-          const lastFrameImageFile = tailFrameImage && seedance2VariantForRun === 'smart'
+          const lastFrameImageFile = tailFrameImage && localVariant === 'smart' && !isJimengMulti
             ? await buildStillImageFile(tailFrameImage, `seedance2-last-frame-${Date.now()}`)
             : undefined;
-          enqueueLocalSeedanceJob();
-          setError(null);
 
-          const referenceImageFiles = await Promise.all(
+          const referenceImageFiles = isJimengMulti ? [] : await Promise.all(
             referenceImageCanvasItems.map((img, index) => buildStillImageFile(img, `seedance2-reference-image-${index + 1}-${Date.now()}`)),
-          );
+          ); // Multi-frame images use their dedicated form field and must not be uploaded twice.
           const referenceVideoFiles = await Promise.all(referenceVideoCanvasItems.map(async (img, index) => {
             const realFile = await ensureRealSnapshotFile(img.file);
             return new File([realFile], img.file.name || `seedance2-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
@@ -1357,38 +1535,75 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }
             return new File([realFile], img.file.name || `seedance2-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
           }));
-          const jimengPrimaryImageFile = seedance2VariantForRun === 'reference' && activePrimary && referenceImageIdsForRun.includes(activePrimary.id)
+          const multiframeImageFiles = await Promise.all(
+            multiframeCanvasItems.map((image, index) => buildStillImageFile(image, `jimeng-multiframe-${index + 1}-${Date.now()}`)),
+          );
+          if (isVolcengineSeedance25) {
+            if (referenceImageFiles.some(file => file.size > SEEDANCE25_REFERENCE_IMAGE_MAX_BYTES)) {
+              setError('Seedance 2.5 reference images must be 30 MB or smaller.');
+              return;
+            }
+            const referenceVideoFileErrors = await Promise.all(referenceVideoFiles.map(async (file, index) => {
+              const item = referenceVideoCanvasItems[index];
+              const hasReliableDimensions = Boolean(item && Number.isFinite(item.naturalWidth) && Number.isFinite(item.naturalHeight) && item.naturalWidth > 0 && item.naturalHeight > 0);
+              return getSeedance25VideoReferenceFileError(
+                file,
+                hasReliableDimensions ? item?.naturalWidth : undefined,
+                hasReliableDimensions ? item?.naturalHeight : undefined,
+                await readIsoBmffVideoFrameRate(file),
+              );
+            }));
+            const referenceFileError = referenceVideoFileErrors.find(Boolean)
+              ?? referenceAudioFiles.map(getSeedance25AudioReferenceFileError).find(Boolean);
+            if (referenceFileError) {
+              setError(referenceFileError);
+              return;
+            }
+          }
+          enqueueLocalSeedanceJob();
+          setError(null);
+
+          const jimengPrimaryImageFile = localVariant === 'reference' && activePrimary && localReferenceImageIds.includes(activePrimary.id)
             ? undefined
             : firstFrameImageFile; // Avoid sending the same Jimeng reference image twice.
 
           const videoResult = usingJimeng
             ? await generateJimengSeedanceVideo(seedancePromptForRun, {
-              modelId: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
-              variant: seedance2VariantForRun,
-              modelVersion: seedance2JimengModelVersionForRun,
-              aspectRatio: seedance2AspectRatioForRun,
-              duration: seedance2DurationForRun,
-              resolution: seedance2ResolutionForRun,
+              modelId: falVideoModelIdForRun,
+              variant: localVariant,
+              modelVersion: localModelVersion,
+              aspectRatio: localAspectRatio === 'adaptive' ? '16:9' : localAspectRatio,
+              duration: localDuration,
+              resolution: localResolution,
               generateAudio: localSeedance2GenerateAudioForRun,
               cameraFixed: localSeedance2CameraFixedForRun,
+              session: jimengSessionIdForRun,
+              ...(isJimengMulti ? {
+                mode: 'multiframe' as const,
+                multiframeImageFiles,
+                transitionPrompts: multiframeTransitionPrompts,
+                transitionDurations: multiframeTransitionPrompts.map(() => Number(jimengMultiframeDurationForRun)),
+              } : {}),
               ...(jimengPrimaryImageFile ? { primaryImageFile: jimengPrimaryImageFile } : {}),
+              ...(lastFrameImageFile ? { lastFrameImageFile } : {}),
               ...(referenceImageFiles.length ? { referenceImageFiles } : {}),
               ...(referenceVideoFiles.length ? { referenceVideoFiles } : {}),
               ...(referenceAudioFiles.length ? { referenceAudioFiles } : {}),
               onQueueUpdate: (update: JimengQueueUpdate) => {
                 setFalJobs(prev => prev.map(job => (
-                  job.id === backendJobId ? applyVolcengineQueueUpdateToJob(job, update) : job
+                  job.id === queueJobId ? applyVolcengineQueueUpdateToJob(job, update) : job
                 )));
               },
             })
             : await generateSeedanceVideo(seedancePromptForRun, {
-              modelId: 'doubao-seedance-2-0-260128',
-              variant: seedance2VariantForRun,
-              aspectRatio: seedance2AspectRatioForRun,
-              duration: seedance2DurationForRun,
-              resolution: seedance2ResolutionForRun,
+              modelId: SEEDANCE2_VOLCENGINE_MODEL_IDS[seedance2VolcengineModelForRun],
+              variant: safeVolcengineSettings.seedance2Variant,
+              aspectRatio: safeVolcengineSettings.seedance2AspectRatio,
+              duration: seedance2VolcengineDurationForRun,
+              resolution: safeVolcengineSettings.seedance2Resolution,
               generateAudio: localSeedance2GenerateAudioForRun,
-              cameraFixed: localSeedance2CameraFixedForRun,
+              cameraFixed: safeVolcengineSettings.seedance2CameraFixed,
+              ...(isVolcengineSeedance25 ? { outputFormat: seedance2OutputFormatForRun } : {}), // Only Seedance 2.5 sends a container choice.
               ...(firstFrameImageFile ? { primaryImageFile: firstFrameImageFile } : {}),
               ...(lastFrameImageFile ? { lastFrameImageFile } : {}),
               ...(referenceImageFiles.length ? { referenceImageFiles } : {}),
@@ -1396,15 +1611,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(referenceAudioFiles.length ? { referenceAudioFiles } : {}),
               onQueueUpdate: (update: VolcengineQueueUpdate) => {
                 setFalJobs(prev => prev.map(job => (
-                  job.id === backendJobId ? applyVolcengineQueueUpdateToJob(job, update) : job
+                  job.id === queueJobId ? applyVolcengineQueueUpdateToJob(job, update) : job
                 )));
               },
             });
 
           setFalJobs(prev => prev.map(job => (
-            job.id === backendJobId
+            job.id === queueJobId
               ? {
                 ...job,
+                ...('providerJobId' in videoResult ? { providerJobId: videoResult.providerJobId } : {}),
                 status: 'COMPLETED',
                 requestId: videoResult.requestId || job.requestId,
                 description: 'Video ready',
@@ -1419,12 +1635,17 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const debugContext: GeneratedMediaDebugContext = {
               source: localBackendProvider,
               modelLabel: jobModelLabel,
-              jobId: backendJobId,
+              jobId: queueJobId,
               requestId: videoResult.requestId,
             };
             logGeneratedVideoDownloaded(debugContext, videoBlob);
-            const fileType = videoBlob.type || 'video/mp4';
-            const extension = fileType.split('/')[1]?.split(';')[0] || 'mp4';
+            const hasVideoFileType = videoBlob.type.trim().toLowerCase().startsWith('video/');
+            const extension = hasVideoFileType
+              ? getVideoFileExtension(videoBlob.type)
+              : isVolcengineSeedance25 ? seedance2OutputFormatForRun : 'mp4';
+            const fileType = hasVideoFileType
+              ? videoBlob.type
+              : extension === 'mov' ? 'video/quicktime' : 'video/mp4';
             const videoFileName = `generated_seedance2_video.${extension}`;
             const videoElement = await loadMediaFromBlob(videoBlob, 'video') as HTMLVideoElement;
             videoElement.pause();
@@ -1447,6 +1668,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const displayWidth = naturalWidth || 1;
             const displayHeight = naturalHeight || 1;
             const anchorForPlacement = activePrimary
+              ?? multiframeCanvasItems[0]
               ?? referenceImageCanvasItems[0]
               ?? referenceVideoCanvasItems[0]
               ?? referenceAudioCanvasItems[0]
@@ -1494,30 +1716,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   modelLabel: jobModelLabel,
                   modelMode: falModelModeForRun,
                   url: videoResult.videoUrl,
-                  ...(primaryImageIdForRun ? { primaryImageId: primaryImageIdForRun } : {}),
-                  ...(referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
-                  ...(referenceVideoIdsForRun.length ? { referenceVideoIds: referenceVideoIdsForRun } : {}),
-                  ...(referenceAudioIdsForRun.length ? { referenceAudioIds: referenceAudioIdsForRun } : {}),
-                  ...(activePrimary?.metadata?.generation?.originalSourceImageId
+                  ...(submittedPrimaryImageId ? { primaryImageId: submittedPrimaryImageId } : {}),
+                  ...((isJimengMulti ? multiframeImageIds : localReferenceImageIds).length ? { referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds } : {}),
+                  ...(localReferenceVideoIds.length ? { referenceVideoIds: localReferenceVideoIds } : {}),
+                  ...(localReferenceAudioIds.length ? { referenceAudioIds: localReferenceAudioIds } : {}),
+                  ...(submittedPrimaryImageId && activePrimary?.metadata?.generation?.originalSourceImageId
                     ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
-                    : primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
-                  ...(lastFrameImageFile && videoLastFrameImageIdForRun ? { videoLastFrameImageId: videoLastFrameImageIdForRun } : {}),
-                  ...(usingJimeng ? { jimengOptions: {
-                    seedance2Variant: seedance2VariantForRun,
-                    seedance2JimengModelVersion: seedance2JimengModelVersionForRun,
-                    seedance2AspectRatio: seedance2AspectRatioForRun,
-                    seedance2Resolution: seedance2ResolutionForRun,
-                    seedance2Duration: seedance2DurationForRun,
-                    seedance2GenerateAudio: localSeedance2GenerateAudioForRun,
-                    seedance2CameraFixed: localSeedance2CameraFixedForRun,
-                  } } : { volcengineOptions: {
-                    seedance2Variant: seedance2VariantForRun,
-                    seedance2AspectRatio: seedance2AspectRatioForRun,
-                    seedance2Resolution: seedance2ResolutionForRun,
-                    seedance2Duration: seedance2DurationForRun,
-                    seedance2GenerateAudio: seedance2GenerateAudioForRun,
-                    seedance2CameraFixed: seedance2CameraFixedForRun,
-                  } }),
+                    : submittedPrimaryImageId ? { originalSourceImageId: submittedPrimaryImageId } : {}),
+                  ...(lastFrameImageFile && submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
+                  ...localProviderOptionsForRun,
                 },
               },
             };
@@ -1538,7 +1745,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           const message = err instanceof Error ? err.message : 'An unknown error occurred.';
           if (jobQueued) {
             setFalJobs(prev => prev.map(job => (
-              job.id === backendJobId
+              job.id === queueJobId
                 ? {
                   ...job,
                   status: 'FAILED',
@@ -1564,6 +1771,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
       let heygenTimingResolvedForRequest = heygenTimingResolvedOverride
         || heygenStartTimeOverride !== undefined
         || heygenEndTimeOverride !== undefined; // Legacy retries with saved bounds are already finalized.
+      const falSeedance2ResolutionForRun = seedance2ResolutionForRun === '4k'
+        ? '1080p'
+        : seedance2ResolutionForRun; // Normalize once so request keys, retries, metadata, and provider args agree.
       // Single source of truth for the per-model video options replayed on retry and saved in
       // generation metadata. Keep in sync with the request args passed to generateFalImageToVideo.
       const buildVideoFalOptionsForRun = (): GenerationFalOptions => ({
@@ -1651,7 +1861,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ...(isFalSeedance2VideoModelForRun ? {
           seedance2Variant: seedance2VariantForRun,
           seedance2AspectRatio: seedance2AspectRatioForRun,
-          seedance2Resolution: seedance2ResolutionForRun,
+          seedance2Resolution: falSeedance2ResolutionForRun,
           seedance2Duration: seedance2DurationForRun,
           seedance2GenerateAudio: seedance2GenerateAudioForRun,
         } : {}),
@@ -1981,7 +2191,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               prompt: seedancePromptForRun,
               variant: seedance2VariantForRun,
               aspectRatio: seedance2AspectRatioForRun,
-              resolution: seedance2ResolutionForRun,
+              resolution: falSeedance2ResolutionForRun,
               duration: seedance2DurationForRun,
               generateAudio: seedance2GenerateAudioForRun,
               cameraFixed: false,
@@ -2375,9 +2585,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(videoTailImageElement ? { tailImage: videoTailImageElement } : {}),
           } : {}),
           ...(isFalSeedance2VideoModelForRun ? {
-            seedance2Variant: seedance2VariantForRun,
+            seedance2Variant: seedance2VariantForRun === 'reference' ? 'reference' : 'smart', // FAL only supports Smart/Reference; Volcengine-only Edit/Extend never route here.
             seedance2AspectRatio: seedance2AspectRatioForRun,
-            seedance2Resolution: seedance2ResolutionForRun,
+            seedance2Resolution: falSeedance2ResolutionForRun,
             seedance2Duration: seedance2DurationForRun,
             seedance2GenerateAudio: seedance2GenerateAudioForRun,
             ...(isSeedance2ReferenceModeForRun ? {
@@ -2441,7 +2651,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           };
           logGeneratedVideoDownloaded(debugContext, videoBlob);
           const fileType = videoBlob.type || 'video/mp4';
-          const extension = fileType.split('/')[1]?.split(';')[0] || 'mp4';
+          const extension = getVideoFileExtension(fileType);
           const videoFileName = `generated_video.${extension}`;
           const videoElement = await loadMediaFromBlob(videoBlob, 'video') as HTMLVideoElement;
           videoElement.pause();
@@ -3253,16 +3463,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance15Audio,
     seedance2Variant,
     seedance2JimengModelVersion,
+    seedance2VolcengineModel,
     seedance2AspectRatio,
     seedance2Resolution,
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance2OutputFormat,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
     seedance25Duration,
     seedance25GenerateAudio,
+    jimengMultiframeDuration,
+    jimengMultiframeResolution,
+    jimengSessionId,
     isSeedance15VideoModel,
     wan27ImageAspectRatio,
     wan27ImageMaxImages,

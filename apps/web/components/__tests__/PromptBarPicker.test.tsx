@@ -830,7 +830,7 @@ describe('PromptBarPicker', () => {
         id="test-picker"
         ariaLabel="Test picker"
         options={[
-          { value: 've', label: 'Seedance 2 (VE)' },
+          { value: 've', label: 'Seedance 2++ (VE)' },
           { value: 'fal', label: 'Seedance 2 (FAL)' },
           { value: 'jimeng', label: 'Seedance 2 (JM CLI)' },
         ]}

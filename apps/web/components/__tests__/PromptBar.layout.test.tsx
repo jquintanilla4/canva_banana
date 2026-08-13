@@ -472,6 +472,15 @@ describe('PromptBar layout', () => {
     expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'Prompt input' })); // A stale token must never steal focus on a later model change.
   });
 
+  it('shows the reason a generation submit is disabled', () => {
+    const reason = 'Jimeng Multi-frame only accepts still images.';
+    renderPromptBar({ submitDisabled: true, submitDisabledReason: reason });
+
+    const message = screen.getByText(reason);
+    const generateButton = screen.getByRole('button', { name: 'Generate' });
+    expect(generateButton.getAttribute('aria-describedby')?.split(/\s+/)).toContain(message.id);
+  });
+
   it('renders HeyGen boolean controls with option tooltips', () => {
     renderHeygenPromptBar();
 

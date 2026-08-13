@@ -101,6 +101,7 @@ const mockState = vi.hoisted(() => {
     negativePrompt: '',
     modelId: undefined as string | undefined,
     seedance2Variant: 'reference',
+    seedance2VolcengineModel: 'standard',
     seedance2JimengModelVersion: 'seedance2.0fast',
     seedance2AspectRatio: '16:9',
     seedance2Resolution: '720p',
@@ -291,6 +292,7 @@ const mockState = vi.hoisted(() => {
     activeSnapshotFileName: null as string | null,
     onGenerationPlaced: null as ((payload: GenerationPlacedPayload) => void) | null,
     selectedImageIds: [] as string[],
+    activePrimaryImage: null as CanvasImage | null,
     setSelectedImageIds,
     setReferenceImageIds,
     setReferenceVideoIds,
@@ -344,7 +346,7 @@ vi.mock('../components/Toolbar', () => ({
 }));
 
 vi.mock('../components/PromptBar', () => ({
-  PromptBar: (props: { prompt: string; onSubmit: () => void; onModelModeChange: (mode: 'image' | 'video') => void; submitDisabled?: boolean; leadingAccessory?: ReactNode; focusRequestToken?: number }) => {
+  PromptBar: (props: { prompt: string; onSubmit: () => void; onModelModeChange: (mode: 'image' | 'video') => void; promptPlaceholder?: string; submitDisabled?: boolean; leadingAccessory?: ReactNode; focusRequestToken?: number }) => {
     mockState.lastPromptBarProps = props;
     return (
       <div>
@@ -446,10 +448,10 @@ vi.mock('../hooks/useSelectionState', () => ({
     videoLastFrameImageId: null,
     sourceVideoId: null,
     sourceAudioId: null,
-    primaryImageId: null,
-    primarySelectionMediaType: null,
-    activePrimaryImage: null,
-    hasSingleImageSelected: false,
+    primaryImageId: mockState.activePrimaryImage?.id ?? null,
+    primarySelectionMediaType: mockState.activePrimaryImage?.mediaType ?? null,
+    activePrimaryImage: mockState.activePrimaryImage,
+    hasSingleImageSelected: mockState.selectedImageIds.length === 1,
     setSelectedImageIds: mockState.setSelectedImageIds,
     setReferenceImageIds: mockState.setReferenceImageIds,
     setReferenceVideoIds: mockState.setReferenceVideoIds,
@@ -613,7 +615,7 @@ vi.mock('../services/debugLog', () => ({
 }));
 
 vi.mock('../services/jimengService', () => ({
-  clearJimengCache: vi.fn(async () => ({ status: 'ok', deletedFiles: 0, bytesFreed: 0, errors: [] })),
+  clearJimengCache: vi.fn(async () => ({ status: 'ok', deletedFiles: 0, bytesFreed: 0, workDir: '/tmp/jimeng', errors: [], invalidatedJobIds: [] })),
   getJimengSetupStatus: vi.fn(async () => ({
     ready: false,
     backendReachable: true,
@@ -636,6 +638,7 @@ afterEach(() => {
   mockState.handleGenerate.mockClear();
   mockState.onGenerationPlaced = null;
   mockState.selectedImageIds = [];
+  mockState.activePrimaryImage = null;
   mockState.setSelectedImageIds.mockClear();
   mockState.importSnapshotWithPicker.mockReset();
   mockState.importSnapshotWithPicker.mockImplementation((callback: () => void) => callback()); // Default tests use the hidden-input fallback path.
@@ -678,9 +681,16 @@ afterEach(() => {
     isFalSeedance2VideoModel: false,
     isVolcengineSeedance2VideoModel: true,
     isJimengSeedance2VideoModel: false,
+    isSeedance25VideoModel: false,
     isWan27VideoModel: false,
     wan27VideoVariant: 'smart',
+    seedance2VolcengineModel: 'standard',
     seedance2JimengModelVersion: 'seedance2.0fast',
+    seedance25Variant: 'reference',
+    seedance25AspectRatio: 'adaptive',
+    seedance25Resolution: '720p',
+    seedance25Duration: 'auto',
+    seedance25GenerateAudio: true,
   });
   mockState.falState.handleModelModeChange.mockClear();
   mockState.falState.applyGenerationSettings.mockReset();
@@ -1073,6 +1083,15 @@ describe('App video prompt area gating', () => {
     expect(screen.getByRole('button', { name: 'Create video prompt bar' })).toBeTruthy();
   });
 
+  it('shows the larger Seedance 2.5 reference limits for the Volcengine 2.5 sub-model', () => {
+    mockState.falState.seedance2VolcengineModel = 'seedance25';
+
+    render(<App />);
+
+    expect(mockState.lastPromptBarProps?.promptPlaceholder).toContain('Seedance 2.5 Reference');
+    expect(mockState.lastPromptBarProps?.promptPlaceholder).toContain('up to 30 images, 10 videos, and 10 audio clips');
+  });
+
   it('disables tail-frame selection for Wan 2.7 Reference mode', () => {
     Object.assign(mockState.falState, {
       falModelId: 'fal-ai/wan/v2.7',
@@ -1430,7 +1449,7 @@ describe('App video prompt area gating', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
 
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual(expect.arrayContaining([
-      { value: 'volcengine/seedance-2', label: 'Seedance 2 (VE)' },
+      { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
       { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
       { value: 'fal-ai/kling-video/v3/pro', label: 'Kling 3.0 Pro' },
       { value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine' },
@@ -1483,6 +1502,100 @@ describe('App video prompt area gating', () => {
         }),
       }),
     ]);
+  });
+
+  it('updates an embedded Jimeng channel and its 4K fallback atomically', () => {
+    const jimengBar = {
+      ...mockState.baseVideoPromptBar,
+      modelId: 'jimeng-cli/seedance-2',
+      seedance2JimengModelVersion: 'seedance2.0_vip' as const,
+      seedance2Resolution: '4k' as const,
+      falOptions: {
+        seedance2JimengModelVersion: 'seedance2.0_vip' as const,
+        seedance2Resolution: '4k' as const,
+      },
+    };
+    mockState.videoPromptBars = [jimengBar];
+    mockState.displayedVideoPromptBars = [jimengBar];
+
+    render(<App />);
+
+    const buildControls = mockState.lastCanvasProps?.buildVideoPromptBarControls as
+      | ((bar: typeof jimengBar) => Array<{ id: string; onChange?: (value: string) => void }>)
+      | undefined;
+    const controls = buildControls?.(jimengBar) ?? [];
+    const channelControl = controls.find(control => control.id.endsWith('seedance2-jimeng-channel-select'));
+    channelControl?.onChange?.('seedance2.0fast');
+
+    expect(mockState.setLiveVideoPromptBars).toHaveBeenCalledTimes(1);
+    expect(mockState.setLiveVideoPromptBars).toHaveBeenCalledWith([
+      expect.objectContaining({
+        seedance2JimengModelVersion: 'seedance2.0fast',
+        seedance2Resolution: '720p',
+        falOptions: expect.objectContaining({
+          seedance2JimengModelVersion: 'seedance2.0fast',
+          seedance2Resolution: '720p',
+        }),
+      }),
+    ]);
+  });
+
+  it('shows source aspect ratio for Jimeng Seedance 2.5 Smart with a first frame', () => {
+    const firstFrame = buildCanvasMedia('first-frame', 'image');
+    mockState.images = [firstFrame];
+    mockState.displayedImages = [firstFrame];
+    mockState.selectedImageIds = [firstFrame.id];
+    mockState.activePrimaryImage = firstFrame;
+    Object.assign(mockState.falState, {
+      falModelId: 'jimeng-cli/seedance-2.5',
+      falVideoModelId: 'jimeng-cli/seedance-2.5',
+      isSeedance2VideoModel: false,
+      isVolcengineSeedance2VideoModel: false,
+      isJimengSeedance2VideoModel: true,
+      isSeedance25VideoModel: true,
+      seedance25Variant: 'smart',
+      seedance25AspectRatio: '9:16',
+      seedance25Resolution: '720p',
+      seedance25Duration: '5',
+      seedance25GenerateAudio: false,
+    });
+
+    render(<App />);
+
+    const controls = mockState.lastPromptBarProps?.modelControls as
+      | Array<{ id: string; kind: string; options?: Array<{ value: string }>; value?: string }>
+      | undefined;
+    const aspectRatio = controls?.find(control => control.id === 'seedance25-aspect-ratio-select');
+    expect(aspectRatio?.options?.map(option => option.value)).toEqual(['source']);
+    expect(aspectRatio?.value).toBe('source');
+  });
+
+  it('shows source aspect ratio for an embedded Jimeng Seedance 2.5 Smart bar with a first frame', () => {
+    const firstFrame = buildCanvasMedia('embedded-first-frame', 'image');
+    const jimengBar = {
+      ...mockState.baseVideoPromptBar,
+      modelId: 'jimeng-cli/seedance-2.5',
+      falOptions: {
+        seedance25Variant: 'smart' as const,
+        seedance25AspectRatio: '9:16' as const,
+      },
+    };
+    mockState.images = [firstFrame];
+    mockState.displayedImages = [firstFrame];
+    mockState.videoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [firstFrame.id] }];
+    mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea, orderedMediaIds: [firstFrame.id] }];
+    mockState.videoPromptBars = [jimengBar];
+    mockState.displayedVideoPromptBars = [jimengBar];
+
+    render(<App />);
+
+    const buildControls = mockState.lastCanvasProps?.buildVideoPromptBarControls as
+      | ((bar: typeof jimengBar) => Array<{ id: string; options?: Array<{ value: string }>; value?: string }>)
+      | undefined;
+    const controls = buildControls?.(jimengBar) ?? [];
+    const aspectRatio = controls.find(control => control.id.endsWith('seedance25-aspect-ratio-select'));
+    expect(aspectRatio?.options?.map(option => option.value)).toEqual(['source']);
+    expect(aspectRatio?.value).toBe('source');
   });
 
   it('submits Kling v3 embedded prompt bars through smart first and last frame overrides', () => {

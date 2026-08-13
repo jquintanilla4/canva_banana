@@ -128,4 +128,30 @@ describe('buildSeedance2RequestKey', () => {
 
     expect(falKey).not.toBe(volcengineKey);
   });
+
+  it('changes when the Jimeng session changes', () => {
+    const basePayload = {
+      provider: 'jimeng',
+      modelId: 'jimeng/seedance-2',
+      prompt: 'A fox running through snow',
+      variant: 'smart' as const,
+      jimengModelVersion: 'seedance2.0',
+      aspectRatio: '16:9',
+      resolution: '720p',
+      duration: '5',
+      generateAudio: false,
+      cameraFixed: false,
+      primaryImageId: null,
+      videoLastFrameImageId: null,
+      referenceImageIds: [],
+      referenceVideoIds: [],
+      referenceAudioIds: [],
+      images: [],
+    };
+
+    const firstSessionKey = buildSeedance2RequestKey({ ...basePayload, jimengSessionId: 0 });
+    const secondSessionKey = buildSeedance2RequestKey({ ...basePayload, jimengSessionId: 1 });
+
+    expect(secondSessionKey).not.toBe(firstSessionKey);
+  });
 });

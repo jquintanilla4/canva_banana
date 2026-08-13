@@ -8,9 +8,11 @@ type JimengSetupPanelProps = {
   isChecking: boolean;
   isInstalling: boolean;
   isStartingLogin: boolean;
+  sessionId: number;
   onInstall: () => void;
   onLogin: () => void;
-  onDebugLogin: () => void;
+  onCheckLogin: () => void;
+  onSessionIdChange: (sessionId: number) => void;
   onRefresh: () => void;
   onDismiss: () => void;
 };
@@ -23,9 +25,11 @@ export const JimengSetupPanel: React.FC<JimengSetupPanelProps> = ({
   isChecking,
   isInstalling,
   isStartingLogin,
+  sessionId,
   onInstall,
   onLogin,
-  onDebugLogin,
+  onCheckLogin,
+  onSessionIdChange,
   onRefresh,
   onDismiss,
 }) => {
@@ -44,7 +48,7 @@ export const JimengSetupPanel: React.FC<JimengSetupPanelProps> = ({
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">Jimeng Setup</p>
-          <h2 className="mt-1 text-sm font-semibold text-white">Seedance 2 (JM CLI)</h2>
+          <h2 className="mt-1 text-sm font-semibold text-white">Dreamina video CLI</h2>
         </div>
         <button
           type="button"
@@ -54,6 +58,18 @@ export const JimengSetupPanel: React.FC<JimengSetupPanelProps> = ({
           Dismiss
         </button>
       </div>
+
+      <label className="mt-3 block text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+        Dreamina session
+        <input
+          type="number"
+          min={0}
+          step={1}
+          value={sessionId}
+          onChange={event => onSessionIdChange(Math.max(0, Math.trunc(Number(event.target.value) || 0)))}
+          className="mt-1 w-full rounded-md border border-white/10 bg-black/35 px-3 py-2 text-xs font-normal text-gray-100 outline-none focus:border-cyan-300/60"
+        />
+      </label>
 
       <div className="space-y-2 text-xs">
         <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">
@@ -67,7 +83,7 @@ export const JimengSetupPanel: React.FC<JimengSetupPanelProps> = ({
           <span className="text-gray-300">CLI</span>
           <span className="flex items-center gap-2 font-medium text-gray-100">
             <span className={`h-2 w-2 rounded-full shadow ${getStatusDotClass(cliReady)}`} />
-            {cliReady ? 'Installed' : 'Missing'}
+            {cliReady ? `Installed${status?.cliVersion ? ` · ${status.cliVersion}` : ''}` : 'Missing'}
           </span>
         </div>
         <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">
@@ -85,22 +101,23 @@ export const JimengSetupPanel: React.FC<JimengSetupPanelProps> = ({
         </p>
       )}
 
-      {(status?.loginOutput || status?.detail) && (
+      {status?.detail && (
         <pre className="mt-3 max-h-28 overflow-y-auto whitespace-pre-wrap rounded-md border border-white/10 bg-black/35 px-3 py-2 text-[10px] leading-snug text-gray-200">
-          {status.loginOutput || status.detail}
+          {status.detail}
         </pre>
       )}
 
-      {status?.authUrl && (
-        <a
-          href={status.authUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 flex items-center justify-center gap-2 rounded-md border border-emerald-300/30 bg-emerald-300/14 px-3 py-2 text-xs font-semibold text-emerald-100 transition-colors hover:bg-emerald-300/24"
-        >
-          <UploadIcon className="h-3 w-3" />
-          Open Login Page
-        </a>
+      {status?.verificationUri && status.userCode && (
+        <div className="mt-3 rounded-md border border-emerald-300/30 bg-emerald-300/10 p-3 text-xs text-emerald-50">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/75">Authorization code</p>
+          <div className="mt-1 flex items-center gap-2">
+            <code className="flex-1 select-all rounded bg-black/35 px-3 py-2 text-center text-base font-semibold tracking-[0.18em]">{status.userCode}</code>
+            <button type="button" onClick={() => void navigator.clipboard.writeText(status.userCode ?? '')} className="rounded border border-white/15 px-2 py-2 text-[10px] hover:bg-white/10">Copy</button>
+          </div>
+          <a href={status.verificationUri} target="_blank" rel="noreferrer" className="mt-2 flex items-center justify-center gap-2 rounded-md border border-emerald-300/30 bg-emerald-300/14 px-3 py-2 font-semibold hover:bg-emerald-300/24">
+            <UploadIcon className="h-3 w-3" /> Open authorization page
+          </a>
+        </div>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -133,12 +150,12 @@ export const JimengSetupPanel: React.FC<JimengSetupPanelProps> = ({
         </button>
         <button
           type="button"
-          onClick={onDebugLogin}
+          onClick={onCheckLogin}
           disabled={primaryActionDisabled || !cliReady}
           className="flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-gray-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45"
         >
           <ConfirmIcon className="h-3 w-3" />
-          Debug Login
+          Check Login
         </button>
       </div>
     </section>

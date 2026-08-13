@@ -3,8 +3,10 @@ import {
   DEFAULT_MAX_REFERENCE_IMAGES,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   getMaxReferenceImages,
+  getProviderSafeSeedance2Variant,
   KLING_VIDEO_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -14,11 +16,8 @@ import {
 import type { ApiProviderId, CanvasImage } from '../types';
 import type { UseFalSettingsResult } from './useFalSettings';
 import {
+  getSeedance2VolcengineReferenceLimits,
   limitEffectiveSeedanceReferenceIds,
-  SEEDANCE_REFERENCE_AUDIO_LIMIT,
-  SEEDANCE_REFERENCE_IMAGE_LIMIT,
-  SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT,
-  SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from '../utils/seedanceReferences';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
@@ -55,6 +54,7 @@ type SelectionFalSettings = Pick<
   miniMaxH3Variant?: UseFalSettingsResult['miniMaxH3Variant']; // Missing H3 state defaults to Reference elsewhere.
   isSeedance25VideoModel?: UseFalSettingsResult['isSeedance25VideoModel']; // Seedance 2.5 is optional for older test stubs.
   seedance25Variant?: UseFalSettingsResult['seedance25Variant']; // Missing 2.5 state defaults to Reference elsewhere.
+  seedance2VolcengineModel?: UseFalSettingsResult['seedance2VolcengineModel']; // Missing Volcengine sub-model state defaults to the 2.0 limits.
 };
 
 type SelectionOptions = {
@@ -128,6 +128,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     seedance2Variant,
     isSeedance25VideoModel = false,
     seedance25Variant = 'reference',
+    seedance2VolcengineModel = 'standard',
     isVeo31VideoModel,
     veo31Variant,
   } = fal;
@@ -161,10 +162,17 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && !isWan27EditMode;
   const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel || isWan27SmartMode;
   const isKlingV3ControlVideoInputMode = isKlingV3ControlVideoModel;
+  const effectiveSeedance2Variant = getProviderSafeSeedance2Variant(falVideoModelId, seedance2Variant); // Provider transitions remain Reference-capable before settings state normalizes.
   const isSeedance2ReferenceMode = apiProvider === 'fal'
     && falModelMode === 'video'
     && isSeedance2VideoModel
-    && seedance2Variant === 'reference';
+    && effectiveSeedance2Variant === 'reference';
+  const isVolcengineSeedance2Mode = apiProvider === 'fal'
+    && falModelMode === 'video'
+    && isSeedance2VideoModel
+    && falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID; // Edit/Extend only exist on the Volcengine backend.
+  const isSeedance2EditMode = isVolcengineSeedance2Mode && seedance2Variant === 'edit';
+  const isSeedance2ExtendMode = isVolcengineSeedance2Mode && seedance2Variant === 'extend';
   const isSeedance25ReferenceMode = apiProvider === 'fal'
     && falModelMode === 'video'
     && isSeedance25VideoModel
@@ -173,14 +181,19 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isMiniMaxH3VideoModel
     && miniMaxH3Variant === 'reference';
-  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode;
-  const multimodalReferenceLabel = isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode ? 'Seedance 2.5' : 'Seedance 2';
+  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode;
+  const multimodalReferenceLabel = isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && seedance2VolcengineModel === 'seedance25') ? 'Seedance 2.5' : 'Seedance 2';
+  const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2Mode ? seedance2VolcengineModel : 'standard'); // Non-Volcengine Seedance 2 providers share the 2.0 envelope.
   const multimodalReferenceLimits = useMemo(() => isSeedance25ReferenceMode
     ? { images: SEEDANCE25_REFERENCE_IMAGE_LIMIT, videos: SEEDANCE25_REFERENCE_VIDEO_LIMIT, audios: SEEDANCE25_REFERENCE_AUDIO_LIMIT }
-    : { images: SEEDANCE_REFERENCE_IMAGE_LIMIT, videos: SEEDANCE_REFERENCE_VIDEO_LIMIT, audios: SEEDANCE_REFERENCE_AUDIO_LIMIT }, [isSeedance25ReferenceMode]);
+    : isSeedance2ExtendMode
+      ? { images: 0, videos: volcengineReferenceLimits.videos, audios: 0 } // Extend chains video clips only.
+      : { images: volcengineReferenceLimits.images, videos: volcengineReferenceLimits.videos, audios: volcengineReferenceLimits.audios }, [isSeedance25ReferenceMode, isSeedance2ExtendMode, volcengineReferenceLimits]);
   const multimodalReferenceTotalLimit = isSeedance25ReferenceMode
     ? SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT
-    : SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT;
+    : isSeedance2ExtendMode
+      ? volcengineReferenceLimits.videos // Extend caps out at its video clips.
+      : volcengineReferenceLimits.total;
   const isVideoInputMode = isKlingO3VideoInputMode
     || isWanVideoInputMode
     || isAudioInputMode
@@ -407,13 +420,16 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setReferenceImageIds(keepAcceptedIds);
     setReferenceVideoIds(keepAcceptedIds);
     setReferenceAudioIds(keepAcceptedIds);
-    const rejectionMessage = violation === 'total'
-      ? `${multimodalReferenceLabel} reference supports up to ${multimodalReferenceTotalLimit} total files.`
-      : `${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits[violation]} ${violation === 'audios' ? 'audio tracks' : violation}.`;
+    const rejectionMessage = isSeedance2ExtendMode && (violation === 'images' || violation === 'audios')
+      ? 'Seedance 2 Extend supports video clips only.' // Extend trims tagged images/audio with a mode-specific reason.
+      : violation === 'total'
+        ? `${multimodalReferenceLabel} reference supports up to ${multimodalReferenceTotalLimit} total files.`
+        : `${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits[violation]} ${violation === 'audios' ? 'audio tracks' : violation}.`;
     onError(rejectionMessage);
   }, [
     images,
     isMultimodalReferenceMode,
+    isSeedance2ExtendMode,
     multimodalReferenceLabel,
     multimodalReferenceLimits,
     multimodalReferenceTotalLimit,
@@ -484,6 +500,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     const isKlingO3VideoSelection = apiProvider === 'fal'
       && falModelMode === 'video'
       && isKlingO3VideoModelId(falVideoModelId);
+
+    if (reference && isSeedance2ExtendMode && imageId && targetImage?.mediaType !== 'video') {
+      onError('Seedance 2 Extend supports video clips only.');
+      return;
+    }
 
     if (reference && isMultimodalReferenceMode && targetImage?.mediaType === 'video') {
       if (!imageId) {
@@ -835,6 +856,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isAudioInputMode,
     sourceAudioId,
     isMultimodalReferenceMode,
+    isSeedance2ExtendMode,
     multimodalReferenceLabel,
     multimodalReferenceLimits,
     isWan27ReferenceMode,

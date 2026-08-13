@@ -1,4 +1,4 @@
-import { isUnavailableLegacyTransferModelId, normalizeFalModelId } from '../services/modelConfig';
+import { JIMENG_MULTIFRAME_VIDEO_MODEL_ID, isUnavailableLegacyTransferModelId, normalizeFalModelId } from '../services/modelConfig';
 import type { ApiProviderId, CanvasImage, CanvasMediaType, GenerationInputs } from '../types';
 import { resolveGenerationTransferModelId } from './generationTransferSettings';
 
@@ -83,18 +83,19 @@ export const resolveGenerationInputSelection = (
   const videoLastFrameImageId = resolveId(generation.videoLastFrameImageId, 'image');
   const sourceVideoId = resolveId(generation.sourceVideoId, 'video');
   const sourceAudioId = resolveId(generation.sourceAudioId, 'audio');
-  const selectedImageIds = Array.from(new Set([
-    primaryMediaId,
-    sourceVideoId,
-    sourceAudioId,
-  ].filter((id): id is string => Boolean(id)))); // Primary source media remains visibly selected after transfer.
+  const isJimengMultiframe = generation.provider === 'jimeng' && generation.modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID;
+  const selectedImageIds = Array.from(new Set((isJimengMultiframe
+    ? [primaryMediaId, ...referenceImageIds]
+    : [primaryMediaId, sourceVideoId, sourceAudioId]
+  ).filter((id): id is string => Boolean(id)))); // Multi-frame consumes ordered selections; other models retain their visible source roles.
+  const restoredReferenceImageIds = isJimengMultiframe ? [] : referenceImageIds; // Multi-frame images are inputs, not tagged references.
 
   return {
     selectedImageIds,
-    referenceImageIds,
+    referenceImageIds: restoredReferenceImageIds,
     referenceVideoIds,
     referenceAudioIds,
-    seedanceReferenceOrderIds: [...referenceImageIds, ...referenceVideoIds, ...referenceAudioIds], // Metadata preserves per-type order only.
+    seedanceReferenceOrderIds: [...restoredReferenceImageIds, ...referenceVideoIds, ...referenceAudioIds], // Metadata preserves per-type order only.
     elementImageIds,
     videoLastFrameImageId,
     sourceVideoId,

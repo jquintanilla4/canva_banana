@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CanvasImage, CanvasVideoPromptArea } from '../../types';
+import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import {
   buildEmbeddedSeedanceAreaMembership,
   buildVideoPromptAreaMembership,
@@ -129,6 +130,69 @@ describe('video prompt area helpers', () => {
     expect(reference.maxImages).toBe(30);
     expect(reference.maxVideos).toBe(10);
     expect(reference.maxAudios).toBe(10);
+  });
+
+  it('gives Volcengine Seedance 2 Edit multimodal slots and Extend video-only slots', () => {
+    const edit = getVideoPromptAreaCapabilityProfile(SEEDANCE_2_VIDEO_MODEL_ID, 'edit');
+    const extend = getVideoPromptAreaCapabilityProfile(SEEDANCE_2_VIDEO_MODEL_ID, 'extend');
+
+    expect(edit.supportedMediaTypes).toEqual(['image', 'video', 'audio']);
+    expect(edit.maxImages).toBe(9);
+    expect(edit.maxVideos).toBe(3);
+    expect(edit.maxAudios).toBe(3);
+    expect(extend.supportedMediaTypes).toEqual(['video']);
+    expect(extend.maxVideos).toBe(3);
+    expect(extend.maxImages).toBe(0);
+    expect(extend.maxAudios).toBe(0);
+  });
+
+  it('raises the Extend video cap for the Volcengine Seedance 2.5 sub-model', () => {
+    const extend25 = getVideoPromptAreaCapabilityProfile(SEEDANCE_2_VIDEO_MODEL_ID, 'extend', { seedance2VolcengineModel: 'seedance25' });
+
+    expect(extend25.supportedMediaTypes).toEqual(['video']);
+    expect(extend25.maxVideos).toBe(10); // 2.5 chains up to 10 clips.
+  });
+
+  it.each(['reference', 'edit'] as const)('uses the full Volcengine Seedance 2.5 reference envelope for %s areas', variant => {
+    const profile = getVideoPromptAreaCapabilityProfile(SEEDANCE_2_VIDEO_MODEL_ID, variant, { seedance2VolcengineModel: 'seedance25' });
+
+    expect(profile.supportedMediaTypes).toEqual(['image', 'video', 'audio']);
+    expect(profile.maxImages).toBe(30);
+    expect(profile.maxVideos).toBe(10);
+    expect(profile.maxAudios).toBe(10);
+  });
+
+  it('falls back to the Reference profile when a Fal bar carries a stale Extend variant', () => {
+    const profile = getVideoPromptAreaCapabilityProfile(FAL_SEEDANCE_2_VIDEO_MODEL_ID, 'extend');
+
+    expect(profile.supportedMediaTypes).toEqual(['image', 'video', 'audio']); // Fal has no Extend mode; Reference slots apply.
+  });
+
+  it('ignores image and audio drops in Seedance 2 Extend areas', () => {
+    const area: CanvasVideoPromptArea = {
+      id: 'area-1',
+      sequence: 1,
+      label: 'Video prompt area 01',
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 240,
+      orderedMediaIds: ['video-1', 'image-1', 'audio-1'],
+      promptBarId: null,
+    };
+    const images = [
+      buildCanvasMedia('video-1', 'video'),
+      buildCanvasMedia('image-1', 'image'),
+      buildCanvasMedia('audio-1', 'audio'),
+    ];
+    const profile = getVideoPromptAreaCapabilityProfile(SEEDANCE_2_VIDEO_MODEL_ID, 'extend');
+
+    const membership = buildVideoPromptAreaMembership(area, images, profile);
+
+    expect(membership.acceptedVideoIds).toEqual(['video-1']);
+    expect(membership.acceptedImageIds).toEqual([]);
+    expect(membership.acceptedAudioIds).toEqual([]);
+    expect(membership.ignoredMediaIds).toEqual(['image-1', 'audio-1']);
   });
 
   it('re-appends media when it leaves an area and enters again', () => {

@@ -54,6 +54,7 @@ class Settings:
     jimeng_cli_path: str
     jimeng_work_dir: Path
     jimeng_submit_poll_seconds: int
+    jimeng_submit_timeout_seconds: int
     jimeng_result_timeout_seconds: int
     jimeng_query_interval_seconds: int
 
@@ -74,6 +75,7 @@ def get_settings() -> Settings:
         jimeng_cli_path=os.environ.get("JIMENG_CLI_PATH", "").strip(),  # Optional explicit dreamina executable.
         jimeng_work_dir=Path(os.environ.get("JIMENG_WORK_DIR", str(backend_dir / ".jimeng-work"))).expanduser(),  # Staged Jimeng files live outside tracked source.
         jimeng_submit_poll_seconds=max(1, int(os.environ.get("JIMENG_SUBMIT_POLL_SECONDS", "30"))),  # CLI waits this long on initial submit.
+        jimeng_submit_timeout_seconds=max(30, int(os.environ.get("JIMENG_SUBMIT_TIMEOUT_SECONDS", "300"))),  # Base command timeout excludes the size-based upload allowance.
         jimeng_result_timeout_seconds=max(30, int(os.environ.get("JIMENG_RESULT_TIMEOUT_SECONDS", "900"))),  # Backend waits up to 15 minutes by default.
         jimeng_query_interval_seconds=max(1, int(os.environ.get("JIMENG_QUERY_INTERVAL_SECONDS", "10"))),  # Delay between query_result checks.
     )

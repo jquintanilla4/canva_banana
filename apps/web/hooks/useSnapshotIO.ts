@@ -48,9 +48,13 @@ import {
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
+  isJimengMultiframeDurationSelectionValue,
+  isJimengMultiframeResolutionSelectionValue,
   isSeedance2AspectRatioSelectionValue,
-  isSeedance2DurationSelectionValue,
+  isSeedance2OutputFormatSelectionValue,
   isJimengSeedance2ModelVersion,
+  isSeedance2VolcengineDurationSelectionValue,
+  isSeedance2VolcengineModel,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
   isSeedance25AspectRatioSelectionValue,
@@ -327,16 +331,21 @@ export function useSnapshotIO({
     wan27VideoAudioSetting,
     seedance2Variant,
     seedance2JimengModelVersion,
+    seedance2VolcengineModel,
     seedance2AspectRatio,
     seedance2Resolution,
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance2OutputFormat,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
     seedance25Duration,
     seedance25GenerateAudio,
+    jimengMultiframeDuration,
+    jimengMultiframeResolution,
+    jimengSessionId,
     klingV3Duration,
     klingV3GenerateAudio,
     klingV3CfgScale,
@@ -385,16 +394,21 @@ export function useSnapshotIO({
     setWan27VideoAudioSetting,
     setSeedance2Variant,
     handleSeedance2JimengModelVersionChange,
+    handleSeedance2VolcengineModelChange,
     setSeedance2AspectRatio,
     setSeedance2Resolution,
     setSeedance2Duration,
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
+    setSeedance2OutputFormat,
     setSeedance25Variant,
     setSeedance25AspectRatio,
     setSeedance25Resolution,
     setSeedance25Duration,
     setSeedance25GenerateAudio,
+    setJimengMultiframeDuration,
+    setJimengMultiframeResolution,
+    setJimengSessionId,
     setKlingV3Duration,
     setKlingV3GenerateAudio,
     setKlingV3CfgScale,
@@ -476,16 +490,21 @@ export function useSnapshotIO({
       wan27VideoAudioSetting,
       seedance2Variant,
       seedance2JimengModelVersion,
+      seedance2VolcengineModel,
       seedance2AspectRatio,
       seedance2Resolution,
       seedance2Duration,
       seedance2GenerateAudio,
       seedance2CameraFixed,
+      seedance2OutputFormat,
       seedance25Variant,
       seedance25AspectRatio,
       seedance25Resolution,
       seedance25Duration,
       seedance25GenerateAudio,
+      jimengMultiframeDuration,
+      jimengMultiframeResolution,
+      jimengSessionId,
       klingV3Duration,
       klingV3GenerateAudio,
       klingV3CfgScale,
@@ -555,16 +574,21 @@ export function useSnapshotIO({
     wan27VideoAudioSetting,
     seedance2Variant,
     seedance2JimengModelVersion,
+    seedance2VolcengineModel,
     seedance2AspectRatio,
     seedance2Resolution,
     seedance2Duration,
     seedance2GenerateAudio,
     seedance2CameraFixed,
+    seedance2OutputFormat,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
     seedance25Duration,
     seedance25GenerateAudio,
+    jimengMultiframeDuration,
+    jimengMultiframeResolution,
+    jimengSessionId,
     klingV3Duration,
     klingV3GenerateAudio,
     klingV3CfgScale,
@@ -982,6 +1006,11 @@ export function useSnapshotIO({
         ? Math.floor(meta.noteLabelCounter)
         : 1;
       noteLabelCounterRef.current = Math.max(restoredNoteLabelCounter, maxRestoredNoteLabel + 1, 1);
+      setJimengSessionId(
+        typeof meta?.jimengSessionId === 'number' && Number.isInteger(meta.jimengSessionId) && meta.jimengSessionId >= 0
+          ? meta.jimengSessionId
+          : 0,
+      ); // Every imported document owns its Jimeng session; legacy and metadata-free snapshots use zero.
       if (meta) {
         const validAppMode: AppMode =
           meta.appMode === 'CANVAS'
@@ -1145,20 +1174,26 @@ export function useSnapshotIO({
         if (isJimengSeedance2ModelVersion(meta.seedance2JimengModelVersion)) {
           handleSeedance2JimengModelVersionChange(meta.seedance2JimengModelVersion);
         }
+        handleSeedance2VolcengineModelChange(
+          isSeedance2VolcengineModel(meta.seedance2VolcengineModel) ? meta.seedance2VolcengineModel : 'standard',
+        ); // Snapshots created before sub-model persistence used Volcengine Standard.
         if (isSeedance2AspectRatioSelectionValue(meta.seedance2AspectRatio)) {
           setSeedance2AspectRatio(meta.seedance2AspectRatio);
         }
         if (isSeedance2ResolutionSelectionValue(meta.seedance2Resolution)) {
           setSeedance2Resolution(meta.seedance2Resolution);
         }
-        if (isSeedance2DurationSelectionValue(meta.seedance2Duration)) {
-          setSeedance2Duration(meta.seedance2Duration);
+        if (isSeedance2VolcengineDurationSelectionValue(meta.seedance2Duration)) {
+          setSeedance2Duration(meta.seedance2Duration); // 2.5 snapshots may restore Auto or 16-30s; the model-change clamp narrows 2.0 picks.
         }
         if (typeof meta.seedance2GenerateAudio === 'boolean') {
           setSeedance2GenerateAudio(meta.seedance2GenerateAudio);
         }
         if (typeof meta.seedance2CameraFixed === 'boolean') {
           setSeedance2CameraFixed(meta.seedance2CameraFixed);
+        }
+        if (isSeedance2OutputFormatSelectionValue(meta.seedance2OutputFormat)) {
+          setSeedance2OutputFormat(meta.seedance2OutputFormat);
         }
         if (isSeedance25Variant(meta.seedance25Variant)) {
           setSeedance25Variant(meta.seedance25Variant);
@@ -1174,6 +1209,12 @@ export function useSnapshotIO({
         }
         if (typeof meta.seedance25GenerateAudio === 'boolean') {
           setSeedance25GenerateAudio(meta.seedance25GenerateAudio);
+        }
+        if (isJimengMultiframeDurationSelectionValue(meta.jimengMultiframeDuration)) {
+          setJimengMultiframeDuration(meta.jimengMultiframeDuration);
+        }
+        if (isJimengMultiframeResolutionSelectionValue(meta.jimengMultiframeResolution)) {
+          setJimengMultiframeResolution(meta.jimengMultiframeResolution);
         }
         if (isKlingV3DurationSelectionValue(meta.klingV3Duration)) {
           setKlingV3Duration(meta.klingV3Duration);
@@ -1268,6 +1309,7 @@ export function useSnapshotIO({
     retainSnapshotSourceForImport,
     resetHistory,
     handleSeedance2JimengModelVersionChange,
+    handleSeedance2VolcengineModelChange,
     setApiProvider,
     setAppMode,
     setBrushColor,
@@ -1300,11 +1342,15 @@ export function useSnapshotIO({
     setSeedance2Duration,
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
+    setSeedance2OutputFormat,
     setSeedance25Variant,
     setSeedance25AspectRatio,
     setSeedance25Resolution,
     setSeedance25Duration,
     setSeedance25GenerateAudio,
+    setJimengMultiframeDuration,
+    setJimengMultiframeResolution,
+    setJimengSessionId,
     setFalImageModelId,
     setFalImageSizeSelection,
     setFalModelMode,

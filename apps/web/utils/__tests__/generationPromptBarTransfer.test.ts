@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KLING_O3_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { JIMENG_MULTIFRAME_VIDEO_MODEL_ID, KLING_O3_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage, CanvasMediaType, GenerationInputs } from '../../types';
 import { getGenerationTransferBlockReason, resolveGenerationInputSelection } from '../generationPromptBarTransfer';
 
@@ -102,6 +102,21 @@ describe('resolveGenerationInputSelection', () => {
 
     expect(restored.selectedImageIds).toEqual([sourceVideo.id]);
     expect(restored.sourceVideoId).toBe(sourceVideo.id);
+    expect(restored.missingInputCount).toBe(0);
+  });
+
+  it('restores ordered Jimeng Multi-frame inputs as selected images', () => {
+    const frames = [buildMedia('frame-1', 'image'), buildMedia('frame-2', 'image'), buildMedia('frame-3', 'image')];
+
+    const restored = resolveGenerationInputSelection(buildGeneration({
+      provider: 'jimeng',
+      modelId: JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
+      referenceImageIds: frames.map(frame => frame.id),
+    }), frames);
+
+    expect(restored.selectedImageIds).toEqual(frames.map(frame => frame.id));
+    expect(restored.referenceImageIds).toEqual([]);
+    expect(restored.seedanceReferenceOrderIds).toEqual([]);
     expect(restored.missingInputCount).toBe(0);
   });
 });

@@ -2,11 +2,18 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob, prepareVideoForPlayback } from '../services/mediaService';
 import {
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
+  JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
+  getProviderSafeSeedance2Variant,
+  isSeedance2DurationSelectionValue,
+  normalizeJimengSeedance25AspectRatio,
+  normalizeJimengSeedance25Duration,
   isRemovedHailuoModelId,
   isRemovedOneToAllAnimateModelId,
 } from '../services/modelConfig'; // Model ids and retired-model guard.
@@ -28,7 +35,8 @@ import { getImageBounds } from './canvas/geometry';
 import { getCanvasWheelZoomMultiplier } from './canvas/wheelZoom';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { createCanvasRenderCache, drawCanvas, drawDotGridLayer } from './canvas/render/drawCanvas';
-import { isEmbeddedSeedanceReferenceMode } from '../utils/embeddedVideoRouting';
+import { getJimengSafeSeedance2Resolution, isEmbeddedSeedanceEditMode, isEmbeddedSeedanceReferenceMode } from '../utils/embeddedVideoRouting';
+import { getJimengMultiframeDisabledReason } from '../utils/jimengMultiframe';
 import { createImageLodCache, disposeImageLodCache, prewarmImageLodCache, pruneImageLodCache, type ImageLodCache } from './canvas/render/imageLodCache';
 import { drainCanvasPerfStats, isCanvasPerfHudEnabled, recordCanvasDraw } from './canvas/render/perfHud';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
@@ -167,20 +175,62 @@ const normalizeEmbeddedPromptBarForModel = (bar: CanvasVideoPromptBar, modelId: 
       },
     };
   }
-  if (modelId !== JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {
+  if (modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID) {
+    return {
+      ...bar,
+      modelId,
+      falOptions: {
+        ...(bar.falOptions ?? {}),
+        seedance25Variant: bar.falOptions?.seedance25Variant ?? 'reference',
+        seedance25AspectRatio: normalizeJimengSeedance25AspectRatio(bar.falOptions?.seedance25AspectRatio ?? '16:9'),
+        seedance25Resolution: bar.falOptions?.seedance25Resolution ?? '720p',
+        seedance25Duration: normalizeJimengSeedance25Duration(bar.falOptions?.seedance25Duration ?? '5'),
+        seedance25GenerateAudio: false,
+      },
+    };
+  }
+  if (modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID) {
+    return {
+      ...bar,
+      modelId,
+      falOptions: {
+        ...(bar.falOptions ?? {}),
+        multiframeDuration: bar.falOptions?.multiframeDuration ?? '3',
+        multiframeResolution: bar.falOptions?.multiframeResolution ?? '720p',
+      },
+    };
+  }
+  if (modelId !== FAL_SEEDANCE_2_VIDEO_MODEL_ID && modelId !== JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) {
     return { ...bar, modelId };
+  }
+  const seedance2Variant = getProviderSafeSeedance2Variant(modelId, bar.seedance2Variant); // Non-Volcengine providers cannot retain Edit or Extend.
+  const seedance2Duration = isSeedance2DurationSelectionValue(bar.seedance2Duration) ? bar.seedance2Duration : '5';
+  const falSeedance2Resolution = bar.seedance2Resolution === '4k'
+    ? '1080p'
+    : bar.seedance2Resolution; // Store the same resolution FAL will submit and persist.
+  if (modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID) {
+    return {
+      ...bar,
+      modelId,
+      seedance2Variant,
+      seedance2Resolution: falSeedance2Resolution,
+      seedance2Duration,
+      falOptions: bar.falOptions ? { ...bar.falOptions, seedance2Variant, seedance2Resolution: falSeedance2Resolution, seedance2Duration } : bar.falOptions,
+    };
   }
   const modelVersion = bar.seedance2JimengModelVersion ?? bar.falOptions?.seedance2JimengModelVersion ?? 'seedance2.0fast'; // Default JM CLI channel is 720p-only.
   const seedance2AspectRatio = bar.seedance2AspectRatio === 'adaptive' ? '16:9' : bar.seedance2AspectRatio; // Jimeng rejects adaptive AR.
-  const seedance2Resolution = modelVersion === 'seedance2.0_vip' || bar.seedance2Resolution !== '1080p' ? bar.seedance2Resolution : '720p'; // 1080p requires VIP.
+  const seedance2Resolution = getJimengSafeSeedance2Resolution(bar.seedance2Resolution, modelVersion);
   return {
     ...bar,
     modelId,
+    seedance2Variant,
     seedance2JimengModelVersion: modelVersion,
     seedance2AspectRatio,
     seedance2Resolution,
+    seedance2Duration,
     falOptions: bar.falOptions
-      ? { ...bar.falOptions, seedance2JimengModelVersion: modelVersion, seedance2AspectRatio, seedance2Resolution }
+      ? { ...bar.falOptions, seedance2Variant, seedance2JimengModelVersion: modelVersion, seedance2AspectRatio, seedance2Resolution, seedance2Duration }
       : bar.falOptions,
   };
 };
@@ -1654,7 +1704,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         const selectedEmbeddedModelLabel = removedEmbeddedModelOption?.label
           ?? embeddedVideoPromptBarModelOptions.find(option => option.value === selectedEmbeddedModelId)?.label
           ?? 'Seedance 2';
-        const embeddedMediaCount = barMembership
+        const usableEmbeddedMediaCount = barMembership
           ? Number(Boolean(barMembership.primaryImageId))
             + barMembership.acceptedImageIds.length
             + barMembership.acceptedVideoIds.length
@@ -1663,12 +1713,26 @@ export const Canvas: React.FC<CanvasProps> = ({
             + Number(Boolean(barMembership.tailImageId))
             + Number(Boolean(barMembership.sourceVideoId))
             + Number(Boolean(barMembership.sourceAudioId))
-          : 0; // Counts all usable staged media roles.
+          : 0; // Count only media roles accepted by the active model profile.
+        const rawEmbeddedMedia = barMembership
+          ? barMembership.orderedMediaIds
+            .map(mediaId => images.find(image => image.id === mediaId))
+            .filter((media): media is CanvasImage => media !== undefined)
+          : [];
+        const rawEmbeddedMediaCount = rawEmbeddedMedia.length;
+        const rawEmbeddedStillImageCount = rawEmbeddedMedia.filter(media => media.mediaType === 'image').length; // Count overflow images before capability filtering.
         const isKlingV3EmbeddedModel = selectedEmbeddedModelId === KLING_V3_VIDEO_MODEL_ID;
         const showEmbeddedNegativePrompt = isKlingV3EmbeddedModel
           || selectedEmbeddedModelId.includes('/wan/v2.7')
           || selectedEmbeddedModelId.includes('/veo3.1')
           || selectedEmbeddedModelId.includes('/kling-video/v2.5-turbo');
+        const jimengMultiframeDisabledReason = selectedEmbeddedModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID && barMembership
+          ? getJimengMultiframeDisabledReason(
+            bar.prompt,
+            rawEmbeddedMediaCount,
+            rawEmbeddedStillImageCount,
+          )
+          : null;
 
         if (!isAssigned) {
           return (
@@ -1744,18 +1808,20 @@ export const Canvas: React.FC<CanvasProps> = ({
                   onSubmit={() => onVideoPromptBarSubmit(bar.id)}
                   isLoading={isLoading}
                   inputDisabled={false}
-                  submitDisabled={isRemovedEmbeddedModel || !barMembership || (
-                    isEmbeddedSeedanceReferenceMode(bar, selectedEmbeddedModelId)
-                      && embeddedMediaCount === 0
+                  submitDisabled={isRemovedEmbeddedModel || !barMembership || jimengMultiframeDisabledReason !== null || (
+                    isEmbeddedSeedanceEditMode(bar, selectedEmbeddedModelId)
+                      ? barMembership.acceptedVideoIds.length === 0
+                      : isEmbeddedSeedanceReferenceMode(bar, selectedEmbeddedModelId) && usableEmbeddedMediaCount === 0
                   ) || (
                     selectedEmbeddedModelId === MINIMAX_H3_VIDEO_MODEL_ID
                       && (bar.falOptions?.miniMaxH3Variant ?? 'reference') === 'reference'
-                      && embeddedMediaCount === 0
+                      && usableEmbeddedMediaCount === 0
                   ) || (
                     isKlingV3EmbeddedModel
                       && Boolean(bar.klingV3MultiPromptEnabled)
                       && (!bar.prompt.trim() || !bar.klingV3MultiPrompt?.trim())
                   )}
+                  submitDisabledReason={jimengMultiframeDisabledReason}
                   modelOptions={embeddedModelOptionsForBar}
                   selectedModel={selectedEmbeddedModelId}
                   onModelChange={(modelId) => onVideoPromptBarUpdate(bar.id, currentBar => normalizeEmbeddedPromptBarForModel(currentBar, modelId))}

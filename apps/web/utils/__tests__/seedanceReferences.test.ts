@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEffectiveSeedanceReferenceIds, limitEffectiveSeedanceReferenceIds } from '../seedanceReferences';
+import { buildEffectiveSeedanceReferenceIds, getSeedance2VolcengineReferenceLimits, limitEffectiveSeedanceReferenceIds } from '../seedanceReferences';
 import type { CanvasImage } from '../../types';
 
 const makeCanvasItem = (id: string, mediaType: CanvasImage['mediaType']): CanvasImage => ({
@@ -125,5 +125,33 @@ describe('limitEffectiveSeedanceReferenceIds', () => {
 
     expect(result.acceptedReferenceIds).toEqual(firstFiftyIds);
     expect(result.violation).toBe('total');
+  });
+});
+
+describe('getSeedance2VolcengineReferenceLimits', () => {
+  it('keeps the 9/3/3 caps and 2-15s clips for the 2.0 sub-models', () => {
+    for (const model of ['standard', 'fast', 'mini', undefined] as const) {
+      expect(getSeedance2VolcengineReferenceLimits(model)).toMatchObject({
+        images: 9,
+        videos: 3,
+        audios: 3,
+        total: 12,
+        clipMinDurationSeconds: 2,
+        clipMaxDurationSeconds: 15,
+      });
+    }
+  });
+
+  it('raises caps to 30/10/10 with 2-30s clips for Seedance 2.5', () => {
+    expect(getSeedance2VolcengineReferenceLimits('seedance25')).toMatchObject({
+      images: 30,
+      videos: 10,
+      audios: 10,
+      total: 50,
+      clipMinDurationSeconds: 2,
+      clipMaxDurationSeconds: 30,
+      videoTotalDurationSeconds: 30,
+      audioTotalDurationSeconds: 30,
+    });
   });
 });

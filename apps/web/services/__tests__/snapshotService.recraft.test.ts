@@ -1049,6 +1049,40 @@ describe('snapshotService (Jimeng metadata)', () => {
     });
   });
 
+  it('preserves Jimeng Seedance 2.5, Multi-frame, and session options from snapshots', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'jimeng prompt',
+        provider: 'jimeng',
+        modelId: 'jimeng-cli/seedance-2.5',
+        modelMode: 'video',
+        jimengOptions: {
+          seedance25Variant: 'smart',
+          seedance25AspectRatio: '4:3',
+          seedance25Resolution: '480p',
+          seedance25Duration: '24',
+          seedance25GenerateAudio: false,
+          multiframeDuration: '6',
+          multiframeResolution: '1080p',
+          sessionId: 42,
+        },
+      },
+    } as unknown as CanvasImageMetadata);
+
+    expect(metadata?.generation?.jimengOptions).toMatchObject({
+      seedance25Variant: 'smart',
+      seedance25AspectRatio: '4:3',
+      seedance25Resolution: '480p',
+      seedance25Duration: '24',
+      seedance25GenerateAudio: false,
+      multiframeDuration: '6',
+      multiframeResolution: '1080p',
+      sessionId: 42,
+    });
+  });
+
   it('restores embedded Jimeng prompt bar channel values from snapshots', async () => {
     const snapshot = {
       version: 1,
@@ -1088,6 +1122,47 @@ describe('snapshotService (Jimeng metadata)', () => {
     });
 
     expect(restored.videoPromptBars[0]?.seedance2JimengModelVersion).toBe('seedance2.0_vip');
+  });
+
+  it('restores Auto duration on embedded Volcengine Seedance 2.0 bars', async () => {
+    const snapshot = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      state: {
+        images: [],
+        notes: [],
+        paths: [],
+        videoPromptAreas: [],
+        videoPromptBars: [{
+          id: 'bar-volcengine-auto',
+          assignedAreaId: 'area-1',
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 72,
+          prompt: 'volcengine area prompt',
+          modelId: 'volcengine/seedance-2',
+          seedance2Variant: 'smart',
+          seedance2VolcengineModel: 'standard',
+          seedance2AspectRatio: '16:9',
+          seedance2Resolution: '720p',
+          seedance2Duration: 'auto',
+          seedance2GenerateAudio: false,
+          seedance2CameraFixed: false,
+        }],
+      },
+    };
+    const snapshotJson = JSON.stringify(snapshot);
+    const file = new File([snapshotJson], 'canvas.json', { type: 'application/json' }) as File & { text: () => Promise<string> };
+    file.text = () => Promise.resolve(snapshotJson); // Node's test File polyfill does not always include text().
+
+    const restored = await restoreSnapshotFromFile(file, {
+      brushSize: 20,
+      eraserSize: 20,
+      brushColor: '#ff0000',
+    });
+
+    expect(restored.videoPromptBars[0]?.seedance2Duration).toBe('auto');
   });
 
   it('preserves removed Hailuo ids on restored embedded prompt bars', async () => {
@@ -1279,6 +1354,49 @@ describe('snapshotService (Jimeng metadata)', () => {
 
     expect(metadata?.generation?.jimengOptions?.seedance2AspectRatio).toBe('16:9');
     expect(metadata?.generation?.jimengOptions?.seedance2Resolution).toBe('720p');
+  });
+
+  it('floors legacy Jimeng 480p rerun metadata to 720p', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'legacy 480p jimeng prompt',
+        provider: 'jimeng',
+        modelId: 'jimeng-cli/seedance-2',
+        modelMode: 'video',
+        jimengOptions: {
+          seedance2Variant: 'smart',
+          seedance2JimengModelVersion: 'seedance2.0fast',
+          seedance2AspectRatio: '16:9',
+          seedance2Resolution: '480p', // legacy 2.0-era metadata could carry 480p
+          seedance2Duration: '5',
+        },
+      },
+    } as unknown as CanvasImageMetadata);
+
+    expect(metadata?.generation?.jimengOptions?.seedance2Resolution).toBe('720p');
+  });
+
+  it('preserves Jimeng Seedance 2.5 480p rerun metadata', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'jimeng 2.5 480p prompt',
+        provider: 'jimeng',
+        modelId: 'jimeng-cli/seedance-2.5',
+        modelMode: 'video',
+        jimengOptions: {
+          seedance25Variant: 'smart',
+          seedance25AspectRatio: '16:9',
+          seedance25Resolution: '480p', // the CLI accepts 480p only on seedance2.5
+          seedance25Duration: '12',
+        },
+      },
+    } as unknown as CanvasImageMetadata);
+
+    expect(metadata?.generation?.jimengOptions?.seedance25Resolution).toBe('480p');
   });
 });
 

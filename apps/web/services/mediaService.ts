@@ -8,6 +8,12 @@ export const isVideoFileType = (fileType: string): boolean =>
 export const isAudioFileType = (fileType: string): boolean =>
   typeof fileType === 'string' && /audio\//.test(fileType);
 
+export const getVideoFileExtension = (fileType: string): string => {
+  const normalizedFileType = fileType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  if (normalizedFileType === 'video/quicktime') return 'mov'; // QuickTime is the registered MIME subtype for MOV files.
+  return normalizedFileType.startsWith('video/') ? normalizedFileType.slice('video/'.length) || 'mp4' : 'mp4';
+};
+
 export const getMediaTypeFromFileType = (fileType: string): CanvasMediaType =>
   isVideoFileType(fileType) ? 'video' : isAudioFileType(fileType) ? 'audio' : 'image';
 

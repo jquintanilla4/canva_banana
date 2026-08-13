@@ -12,6 +12,8 @@ import {
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+  JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_EDIT_MODEL_ID,
@@ -120,16 +122,20 @@ export const getGenerationTransferOptionDefaults = (
   if (modelId === SEEDANCE_15_VIDEO_MODEL_ID) {
     return { seedance15AspectRatio: '16:9', seedance15Resolution: '720p', seedance15Duration: '5', seedance15CameraFixed: false, seedance15Audio: false }; // Seedance 1.5 defaults.
   }
-  if (modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
+  if (modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID || modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID) {
+    const isJimeng = modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID;
     return {
       seedance25Variant: 'reference',
-      seedance25AspectRatio: 'adaptive',
+      seedance25AspectRatio: isJimeng ? '16:9' : 'adaptive',
       seedance25Resolution: '720p',
-      seedance25Duration: 'auto',
-      seedance25GenerateAudio: true,
-    }; // Seedance 2.5 follows the provider defaults.
+      seedance25Duration: isJimeng ? '5' : 'auto',
+      seedance25GenerateAudio: !isJimeng,
+      ...(isJimeng ? { sessionId: 0 } : {}),
+    }; // Seedance 2.5 defaults follow the selected provider's supported controls.
   }
+  if (modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID) return { multiframeDuration: '3', multiframeResolution: '720p', sessionId: 0 }; // Legacy Jimeng metadata used the default session.
   if (isSeedance2VideoModelId(modelId)) {
+    const isVolcengine = modelId === SEEDANCE_2_VIDEO_MODEL_ID;
     return {
       seedance2Variant: 'reference',
       seedance2JimengModelVersion: 'seedance2.0fast',
@@ -138,7 +144,9 @@ export const getGenerationTransferOptionDefaults = (
       seedance2Duration: '5',
       seedance2GenerateAudio: false,
       seedance2CameraFixed: false,
-    }; // Shared Seedance 2 defaults.
+      ...(isVolcengine ? { seedance2VolcengineModel: 'standard', seedance2OutputFormat: 'mp4' } : {}),
+      ...(modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID ? { sessionId: 0 } : {}),
+    }; // Provider-owned defaults must not overwrite hidden settings for another provider.
   }
 
   const imageDefaults: GenerationTransferOptions = isFalImageModelId(modelId) ? { numImages: 1 } : {}; // Image runs default to one output.
@@ -191,7 +199,9 @@ export const resolveGenerationTransferOptions = (
 /** Selector model id for providers whose metadata still records their own endpoint. */
 export const resolveGenerationTransferModelId = (generation: GenerationInputs): string | undefined =>
   generation.provider === 'jimeng'
-    ? JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
+    ? generation.modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || generation.modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+      ? generation.modelId
+      : JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
     : generation.provider === 'volcengine'
       ? SEEDANCE_2_VIDEO_MODEL_ID
       : generation.modelId; // Local providers use their selector model even in older metadata.

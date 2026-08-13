@@ -195,6 +195,7 @@ interface PromptBarProps {
   isLoading: boolean;
   inputDisabled: boolean;
   submitDisabled: boolean;
+  submitDisabledReason?: string | null;
   modelOptions: ReadonlyArray<ModelOption>;
   selectedModel: string;
   onModelChange: (modelId: string) => void;
@@ -238,6 +239,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   isLoading,
   inputDisabled,
   submitDisabled,
+  submitDisabledReason,
   modelOptions,
   selectedModel,
   onModelChange,
@@ -284,6 +286,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const controlsStripRef = useRef<HTMLDivElement>(null);
   const promptBarOuterRef = useRef<HTMLElement | null>(null);
   const klingSuggestionListId = React.useId();
+  const submitDisabledReasonId = React.useId();
   const klingSuggestionListRef = useRef<HTMLDivElement>(null);
   const klingSuggestionOptionRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const [showKlingSuggestions, setShowKlingSuggestions] = React.useState(false);
@@ -744,6 +747,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               aria-controls={klingSuggestionsOpen ? klingSuggestionListId : undefined}
               aria-activedescendant={activeKlingSuggestionId}
             />
+            {submitDisabledReason && (
+              <p id={submitDisabledReasonId} className="px-[0.79rem] pb-1 text-xs text-amber-300">
+                {submitDisabledReason}
+              </p>
+            )}
             {klingSuggestionsOpen && createPortal(
               <div
                 {...CANVAS_INTERACTION_BOUNDARY_PROPS}
@@ -920,6 +928,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             <button
               type="button"
               aria-label="Generate"
+              aria-describedby={submitDisabledReason ? submitDisabledReasonId : undefined}
               onClick={onSubmit}
               disabled={isLoading || submitDisabled}
               className={`shrink-0 text-white font-semibold rounded-full transition-all duration-300 ease-out disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center ${isMiniMode ? 'h-[2.28rem] w-[2.28rem]' : 'h-[2.64rem] w-[2.64rem]'} ${submitButtonAccentClassName}`}

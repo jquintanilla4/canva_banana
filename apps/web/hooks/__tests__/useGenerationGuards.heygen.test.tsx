@@ -31,6 +31,8 @@ const buildGuardArgs = (overrides: Partial<Parameters<typeof useGenerationGuards
   activePrimaryImage: null,
   primarySelectionMediaType: 'video',
   hasSelectedStillImage: false,
+  selectedMediaCount: 0,
+  selectedStillImageCount: 0,
   ...overrides,
 });
 

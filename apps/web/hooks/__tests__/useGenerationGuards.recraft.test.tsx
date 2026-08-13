@@ -33,6 +33,8 @@ describe('useGenerationGuards (Recraft v4 Pro)', () => {
       activePrimaryImage: { id: 'selected-image' },
       primarySelectionMediaType: 'image',
       hasSelectedStillImage: true,
+      selectedMediaCount: 1,
+      selectedStillImageCount: 1,
     }));
 
     expect(result.current.isTextToImage).toBe(true);
@@ -68,6 +70,8 @@ describe('useGenerationGuards (Recraft v4 Pro)', () => {
       activePrimaryImage: { id: 'selected-image' },
       primarySelectionMediaType: 'image',
       hasSelectedStillImage: true,
+      selectedMediaCount: 1,
+      selectedStillImageCount: 1,
     }));
 
     expect(result.current.isTextToImage).toBe(false);
@@ -105,6 +109,8 @@ describe('useGenerationGuards (Recraft v4 Pro)', () => {
       activePrimaryImage: { id: 'style-reference' },
       primarySelectionMediaType: 'image',
       hasSelectedStillImage: true,
+      selectedMediaCount: 1,
+      selectedStillImageCount: 1,
     }));
 
     expect(result.current.isTextToImage).toBe(true);

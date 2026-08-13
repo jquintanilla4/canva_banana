@@ -21,6 +21,7 @@ const buildKlingV3PromptBar = (): CanvasVideoPromptBar => ({
   klingV3Shot1Duration: '5',
   klingV3Shot2Duration: '5',
   seedance2Variant: 'reference',
+  seedance2VolcengineModel: 'standard',
   seedance2AspectRatio: '16:9',
   seedance2Resolution: '720p',
   seedance2Duration: '5',

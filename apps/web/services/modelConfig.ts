@@ -10,6 +10,7 @@ import type {
   GenerationProviderId,
   GenerationKind,
   JimengSeedance2ModelVersion,
+  Seedance2VolcengineModel,
 } from '../types';
 import { getRuntimeConfig } from './runtimeConfig';
 
@@ -78,6 +79,8 @@ export const FAL_SEEDANCE_25_TEXT_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/te
 export const FAL_SEEDANCE_25_IMAGE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/image-to-video' as const; // Fal 2.5 image endpoint.
 export const FAL_SEEDANCE_25_REFERENCE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/reference-to-video' as const; // Fal 2.5 reference endpoint.
 export const JIMENG_SEEDANCE_2_VIDEO_MODEL_ID = 'jimeng-cli/seedance-2' as const; // Local Dreamina CLI Seedance 2 selector.
+export const JIMENG_SEEDANCE_25_VIDEO_MODEL_ID = 'jimeng-cli/seedance-2.5' as const; // Local Dreamina CLI Seedance 2.5 selector.
+export const JIMENG_MULTIFRAME_VIDEO_MODEL_ID = 'jimeng-cli/multiframe' as const; // Fixed-model intelligent multi-frame selector.
 export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as const;
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video' as const;
@@ -96,7 +99,7 @@ export type KlingV3CfgScaleSelectionValue = '0' | '0.25' | '0.5' | '0.75' | '1';
 export type KlingV3BooleanSelectionValue = 'true' | 'false';
 export type KlingV3ControlOrientation = 'image' | 'video';
 export type Veo31Variant = 'i2v-fflf' | 'extend';
-export type Seedance2Variant = 'smart' | 'reference';
+export type Seedance2Variant = 'smart' | 'reference' | 'edit' | 'extend'; // Edit/Extend are Volcengine-only; FAL and Jimeng pickers hide them.
 export type Seedance25Variant = 'smart' | 'reference';
 export type MiniMaxH3Variant = 'standard' | 'reference';
 export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
@@ -156,10 +159,12 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: MINIMAX_H3_VIDEO_MODEL_ID, label: 'MiniMax H3' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
-  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (VE)' }, // VE-backed Seedance 2 selector label.
+  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2++ (VE)' }, // VE-backed Seedance 2 selector label.
   { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' }, // Fal-backed Seedance 2.
   { value: FAL_SEEDANCE_25_VIDEO_MODEL_ID, label: 'Seedance 2.5 (FAL)' }, // Fal-backed Seedance 2.5.
   { value: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (JM CLI)' }, // Jimeng CLI-backed Seedance 2.
+  { value: JIMENG_SEEDANCE_25_VIDEO_MODEL_ID, label: 'Seedance 2.5 (JM CLI)' }, // Jimeng CLI-backed Seedance 2.5.
+  { value: JIMENG_MULTIFRAME_VIDEO_MODEL_ID, label: 'Jimeng Multi-frame' }, // Multi-image story transitions.
   { value: SYNC_LIPSYNC_MODEL_ID, label: 'Sync 3 Lipsync' },
   { value: VEO_31_IMAGE_TO_VIDEO_MODEL_ID, label: 'Veo 3.1' },
   { value: WAN_27_VIDEO_MODEL_ID, label: 'Wan 2.7' },
@@ -234,15 +239,32 @@ export const KLING_V3_CONTROL_ORIENTATION_OPTIONS: ReadonlyArray<{ value: KlingV
 ] as const;
 
 export type Seedance2AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
-export type Seedance2ResolutionSelectionValue = '480p' | '720p' | '1080p';
+export type Seedance2ResolutionSelectionValue = '480p' | '720p' | '1080p' | '4k';
 export type Seedance2DurationSelectionValue = '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+export type JimengMultiframeDurationSelectionValue = '2' | '3' | '4' | '5' | '6' | '7' | '8';
+export type JimengMultiframeResolutionSelectionValue = '720p' | '1080p';
 export type Seedance2BooleanSelectionValue = 'true' | 'false';
 export type Seedance25AspectRatioSelectionValue = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
 export type Seedance25ResolutionSelectionValue = '480p' | '720p';
 export type Seedance25DurationSelectionValue = 'auto' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
 export type JimengSeedance2ModelVersionSelectionValue = JimengSeedance2ModelVersion;
+export type Seedance2VolcengineModelSelectionValue = Seedance2VolcengineModel;
+export type Seedance2VolcengineDurationSelectionValue = Seedance25DurationSelectionValue; // 2.0 sub-models clamp to 4-15s; Seedance 2.5 adds Auto and 16-30s.
+export type Seedance2OutputFormatSelectionValue = 'mp4' | 'mov'; // Seedance 2.5 output container selection.
 export type MiniMaxH3AspectRatioSelectionValue = Seedance2AspectRatioSelectionValue;
 export type MiniMaxH3DurationSelectionValue = Exclude<Seedance2DurationSelectionValue, '4'>;
+
+export const normalizeJimengSeedance25AspectRatio = (
+  aspectRatio: Seedance25AspectRatioSelectionValue,
+): Exclude<Seedance25AspectRatioSelectionValue, 'adaptive'> => (
+  aspectRatio === 'adaptive' ? '16:9' : aspectRatio
+); // Dreamina requires an explicit ratio for text and reference requests.
+
+export const normalizeJimengSeedance25Duration = (
+  duration: Seedance25DurationSelectionValue,
+): Exclude<Seedance25DurationSelectionValue, 'auto'> => (
+  duration === 'auto' ? '5' : duration
+); // Dreamina requires an explicit 4-30 second duration.
 
 export const normalizeMiniMaxH3AspectRatioForVariant = (
   variant: MiniMaxH3Variant,
@@ -251,10 +273,16 @@ export const normalizeMiniMaxH3AspectRatioForVariant = (
   variant === 'standard' && aspectRatio === 'adaptive' ? '16:9' : aspectRatio
 ); // Standard mode cannot send the Reference-only Adaptive value.
 
-export const SEEDANCE2_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant; label: string }> = [
+export const SEEDANCE2_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant; label: string; tooltip?: string }> = [
   { value: 'smart', label: 'Smart' },
   { value: 'reference', label: 'Reference' },
 ] as const;
+
+export const SEEDANCE2_VOLCENGINE_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant; label: string; tooltip?: string }> = [
+  ...SEEDANCE2_VARIANT_OPTIONS,
+  { value: 'edit', label: 'Edit', tooltip: 'Modify an existing video with text instructions and optional image/audio references.' },
+  { value: 'extend', label: 'Extend', tooltip: 'Continue a video or chain up to 3 clips on Seedance 2.0 or 10 clips on Seedance 2.5.' },
+] as const; // Edit/Extend use the reference-style request shape, so only Volcengine exposes them.
 
 export const SEEDANCE25_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance25Variant; label: string }> = [
   { value: 'smart', label: 'Smart' },
@@ -326,7 +354,8 @@ export const SEEDANCE2_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Seedance2Asp
 export const SEEDANCE2_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Seedance2ResolutionSelectionValue; label: string; disabled?: boolean }> = [
   { value: '480p', label: '480p' },
   { value: '720p', label: '720p' },
-  { value: '1080p', label: '1080p (TBR)', disabled: true }, // Keep this visible while blocking selection until docs catch up.
+  { value: '1080p', label: '1080p' },
+  { value: '4k', label: '4K' }, // Per-model availability is applied by the prompt-bar control builders.
 ] as const;
 
 export const SEEDANCE2_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance2DurationSelectionValue; label: string }> = [
@@ -344,6 +373,25 @@ export const SEEDANCE2_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance2Duratio
   { value: '15', label: '15s' },
 ] as const;
 
+export const JIMENG_MULTIFRAME_DURATION_OPTIONS: ReadonlyArray<{ value: JimengMultiframeDurationSelectionValue; label: string }> = [
+  { value: '2', label: '2s' },
+  { value: '3', label: '3s' },
+  { value: '4', label: '4s' },
+  { value: '5', label: '5s' },
+  { value: '6', label: '6s' },
+  { value: '7', label: '7s' },
+  { value: '8', label: '8s' },
+] as const;
+
+export const JIMENG_MULTIFRAME_MIN_IMAGES = 2;
+export const JIMENG_MULTIFRAME_MAX_IMAGES = 20;
+
+export const isValidJimengMultiframeImageCount = (count: number): boolean => (
+  Number.isInteger(count)
+  && count >= JIMENG_MULTIFRAME_MIN_IMAGES
+  && count <= JIMENG_MULTIFRAME_MAX_IMAGES
+);
+
 export const SEEDANCE2_AUDIO_OPTIONS: ReadonlyArray<{ value: Seedance2BooleanSelectionValue; label: string }> = [
   { value: 'false', label: 'Off' },
   { value: 'true', label: 'On' },
@@ -354,12 +402,100 @@ export const SEEDANCE2_CAMERA_FIXED_OPTIONS: ReadonlyArray<{ value: Seedance2Boo
   { value: 'true', label: 'Fixed' },
 ] as const;
 
-export const JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS: ReadonlyArray<{ value: JimengSeedance2ModelVersionSelectionValue; label: string; supports1080p: boolean; tooltip: string }> = [
-  { value: 'seedance2.0fast', label: 'Standard Fast', supports1080p: false, tooltip: 'Default non-VIP Seedance 2.0 fast channel; 720p only.' },
-  { value: 'seedance2.0', label: 'Standard', supports1080p: false, tooltip: 'Non-VIP Seedance 2.0 channel; 720p only.' },
-  { value: 'seedance2.0_vip', label: 'VIP', supports1080p: true, tooltip: 'VIP Seedance 2.0 channel; supports 720p and 1080p.' },
-  { value: 'seedance2.0fast_vip', label: 'VIP Fast', supports1080p: false, tooltip: 'VIP accelerated Seedance 2.0 fast channel; 720p only.' },
+export const JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS: ReadonlyArray<{ value: JimengSeedance2ModelVersionSelectionValue; label: string; supports1080p: boolean; supports4k: boolean; tooltip: string }> = [
+  { value: 'seedance2.0fast', label: 'Standard Fast', supports1080p: false, supports4k: false, tooltip: 'Default non-VIP Seedance 2.0 fast channel; 720p only.' },
+  { value: 'seedance2.0', label: 'Standard', supports1080p: false, supports4k: false, tooltip: 'Non-VIP Seedance 2.0 channel; 720p only.' },
+  { value: 'seedance2.0_vip', label: 'VIP', supports1080p: true, supports4k: true, tooltip: 'VIP Seedance 2.0 channel; supports 720p, 1080p, and 4K.' },
+  { value: 'seedance2.0fast_vip', label: 'VIP Fast', supports1080p: false, supports4k: false, tooltip: 'VIP accelerated Seedance 2.0 fast channel; 720p only.' },
+  { value: 'seedance2.0mini', label: 'Mini', supports1080p: false, supports4k: false, tooltip: 'Seedance 2.0 Mini channel; 720p only.' },
 ] as const;
+
+export const SEEDANCE2_VOLCENGINE_MODEL_OPTIONS: ReadonlyArray<{ value: Seedance2VolcengineModelSelectionValue; label: string; supports1080p: boolean; supports4k: boolean; tooltip: string }> = [
+  { value: 'standard', label: 'Seedance 2.0', supports1080p: true, supports4k: true, tooltip: 'Volcengine Seedance 2.0; supports 480p, 720p, 1080p, and 4K.' },
+  { value: 'fast', label: 'Seedance 2.0 Fast', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.0 Fast; 480p and 720p only.' },
+  { value: 'mini', label: 'Seedance 2.0 Mini', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.0 Mini; 480p and 720p only.' },
+  { value: 'seedance25', label: 'SD 2.5', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.5; 480p and 720p only, up to 30s or Auto duration, and up to 30 reference images.' },
+] as const;
+
+export type Seedance2VolcengineModelCapabilities = {
+  maxDurationSeconds: number; // Longest explicit clip length the sub-model accepts.
+  supportsAutoDuration: boolean; // Volcengine can let the provider pick the clip length.
+  referenceLimits: { images: number; videos: number; audios: number }; // Per-modality reference caps.
+  supportsOutputFormat: boolean; // Only Seedance 2.5 exposes the mp4/mov picker.
+  requiresAdaptiveRatioForVariants: boolean; // Seedance 2.5 Edit/Extend variants must run at Adaptive ratio.
+};
+
+const SEEDANCE2_VOLCENGINE_20_CAPABILITIES: Seedance2VolcengineModelCapabilities = {
+  maxDurationSeconds: 15,
+  supportsAutoDuration: true,
+  referenceLimits: { images: 9, videos: 3, audios: 3 },
+  supportsOutputFormat: false,
+  requiresAdaptiveRatioForVariants: false,
+}; // All Seedance 2.0 sub-models share the same capability envelope.
+
+export const SEEDANCE2_VOLCENGINE_MODEL_CAPABILITIES: Record<Seedance2VolcengineModelSelectionValue, Seedance2VolcengineModelCapabilities> = {
+  standard: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
+  fast: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
+  mini: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
+  seedance25: {
+    maxDurationSeconds: 30,
+    supportsAutoDuration: true,
+    referenceLimits: { images: 30, videos: 10, audios: 10 },
+    supportsOutputFormat: true,
+    requiresAdaptiveRatioForVariants: true,
+  },
+};
+
+export const getSeedance2VolcengineModelCapabilities = (
+  model: Seedance2VolcengineModelSelectionValue | undefined,
+): Seedance2VolcengineModelCapabilities => SEEDANCE2_VOLCENGINE_MODEL_CAPABILITIES[model ?? 'standard'] ?? SEEDANCE2_VOLCENGINE_20_CAPABILITIES; // Unknown legacy values fall back to the 2.0 envelope.
+
+export type VolcengineSafeSeedance2Settings = {
+  seedance2Variant: Seedance2Variant;
+  seedance2AspectRatio: Seedance2AspectRatioSelectionValue;
+  seedance2Resolution: Seedance2ResolutionSelectionValue;
+  seedance2Duration: Seedance2VolcengineDurationSelectionValue;
+  seedance2CameraFixed: boolean;
+};
+
+export const getVolcengineSafeSeedance2Settings = (
+  model: Seedance2VolcengineModelSelectionValue,
+  current: VolcengineSafeSeedance2Settings,
+  hasFirstFrame = false,
+): VolcengineSafeSeedance2Settings => ({
+  seedance2Variant: current.seedance2Variant,
+  seedance2AspectRatio:
+    model === 'seedance25' && (
+      current.seedance2Variant === 'edit'
+      || current.seedance2Variant === 'extend'
+      || (current.seedance2Variant === 'smart' && hasFirstFrame)
+    )
+      ? 'adaptive'
+      : current.seedance2AspectRatio, // Seedance 2.5 keeps the source ratio for first-frame, Edit, and Extend tasks.
+  seedance2Resolution:
+    model !== 'standard' && (current.seedance2Resolution === '1080p' || current.seedance2Resolution === '4k')
+      ? '720p'
+      : current.seedance2Resolution, // Fast/Mini/2.5 cap at 720p; standard keeps 4K.
+  seedance2Duration:
+    model === 'seedance25'
+      ? current.seedance2Variant === 'edit' ? 'auto' : current.seedance2Duration // Edit requires Auto; other 2.5 variants keep explicit 4-30s values.
+      : current.seedance2Duration !== 'auto' && Number(current.seedance2Duration) > 15
+        ? '15'
+        : current.seedance2Duration, // 2.0 sub-models accept Auto or an explicit 4-15s duration.
+  seedance2CameraFixed: model === 'seedance25' ? false : current.seedance2CameraFixed, // 2.5 drops the fixed-camera toggle.
+}); // Single clamp used by both the global settings hook and embedded prompt bars.
+
+export const SEEDANCE2_OUTPUT_FORMAT_OPTIONS: ReadonlyArray<{ value: Seedance2OutputFormatSelectionValue; label: string }> = [
+  { value: 'mp4', label: 'MP4' },
+  { value: 'mov', label: 'MOV' },
+] as const;
+
+export const SEEDANCE2_VOLCENGINE_25_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance2VolcengineDurationSelectionValue; label: string }> = SEEDANCE25_DURATION_OPTIONS; // Auto plus 4-30s matches the Fal 2.5 duration grid.
+
+export const SEEDANCE2_VOLCENGINE_20_DURATION_OPTIONS: ReadonlyArray<{ value: Seedance2VolcengineDurationSelectionValue; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  ...SEEDANCE2_DURATION_OPTIONS,
+]; // Volcengine 2.0 supports Auto plus explicit 4-15s durations.
 
 export const KLING_V3_CONTROL_SOUND_OPTIONS: ReadonlyArray<{ value: KlingV3ControlSoundSelectionValue; label: string }> = [
   { value: 'true', label: 'True' },
@@ -730,6 +866,12 @@ export const isFalSeedance2VideoModel = (modelId: string | undefined): boolean =
 export const isFalSeedance25VideoModel = (modelId: string | undefined): boolean =>
   modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID; // Fal Seedance 2.5 selector guard.
 
+export const isJimengSeedance25VideoModel = (modelId: string | undefined): boolean =>
+  modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID; // Jimeng CLI Seedance 2.5 selector guard.
+
+export const isJimengMultiframeVideoModel = (modelId: string | undefined): boolean =>
+  modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID; // Jimeng intelligent multi-frame selector guard.
+
 export const isJimengSeedance2VideoModel = (modelId: string | undefined): boolean =>
   modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID; // Jimeng CLI selector guard.
 
@@ -737,7 +879,14 @@ export const isSeedance2VideoModel = (modelId: string | undefined): boolean =>
   isVolcengineSeedance2VideoModel(modelId) || isFalSeedance2VideoModel(modelId) || isJimengSeedance2VideoModel(modelId); // Shared Seedance 2 UI guard.
 
 export const isSeedance2Variant = (value: unknown): value is Seedance2Variant =>
-  value === 'smart' || value === 'reference';
+  value === 'smart' || value === 'reference' || value === 'edit' || value === 'extend';
+
+export const getProviderSafeSeedance2Variant = (
+  modelId: string | undefined,
+  variant: Seedance2Variant,
+): Seedance2Variant => (
+  !isVolcengineSeedance2VideoModel(modelId) && (variant === 'edit' || variant === 'extend') ? 'reference' : variant
+); // Edit/Extend only exist on the Volcengine backend; other providers fall back to Reference.
 
 export const isSeedance25Variant = (value: unknown): value is Seedance25Variant =>
   value === 'smart' || value === 'reference';
@@ -755,10 +904,16 @@ export const isSeedance2AspectRatioSelectionValue = (value: unknown): value is S
   value === '21:9' || value === '16:9' || value === '4:3' || value === '1:1' || value === '3:4' || value === '9:16' || value === 'adaptive';
 
 export const isSeedance2ResolutionSelectionValue = (value: unknown): value is Seedance2ResolutionSelectionValue =>
-  value === '480p' || value === '720p' || value === '1080p';
+  value === '480p' || value === '720p' || value === '1080p' || value === '4k';
 
 export const isSeedance2DurationSelectionValue = (value: unknown): value is Seedance2DurationSelectionValue =>
   value === '4' || value === '5' || value === '6' || value === '7' || value === '8' || value === '9' || value === '10' || value === '11' || value === '12' || value === '13' || value === '14' || value === '15';
+
+export const isJimengMultiframeDurationSelectionValue = (value: unknown): value is JimengMultiframeDurationSelectionValue =>
+  value === '2' || value === '3' || value === '4' || value === '5' || value === '6' || value === '7' || value === '8';
+
+export const isJimengMultiframeResolutionSelectionValue = (value: unknown): value is JimengMultiframeResolutionSelectionValue =>
+  value === '720p' || value === '1080p';
 
 export const isMiniMaxH3VideoModel = (modelId: string | undefined): boolean =>
   modelId === MINIMAX_H3_VIDEO_MODEL_ID;
@@ -773,7 +928,16 @@ export const isMiniMaxH3DurationSelectionValue = (value: unknown): value is Mini
   value !== '4' && isSeedance2DurationSelectionValue(value);
 
 export const isJimengSeedance2ModelVersion = (value: unknown): value is JimengSeedance2ModelVersionSelectionValue =>
-  value === 'seedance2.0fast' || value === 'seedance2.0' || value === 'seedance2.0_vip' || value === 'seedance2.0fast_vip';
+  value === 'seedance2.0fast' || value === 'seedance2.0' || value === 'seedance2.0_vip' || value === 'seedance2.0fast_vip' || value === 'seedance2.0mini';
+
+export const isSeedance2VolcengineModel = (value: unknown): value is Seedance2VolcengineModelSelectionValue =>
+  value === 'standard' || value === 'fast' || value === 'mini' || value === 'seedance25';
+
+export const isSeedance2VolcengineDurationSelectionValue = (value: unknown): value is Seedance2VolcengineDurationSelectionValue =>
+  isSeedance25DurationSelectionValue(value); // The Volcengine picker spans Auto plus 4-30s; 2.0 sub-models narrow it at submit.
+
+export const isSeedance2OutputFormatSelectionValue = (value: unknown): value is Seedance2OutputFormatSelectionValue =>
+  value === 'mp4' || value === 'mov';
 
 // Flux2 Max image size options
 export type Flux2MaxImageSizeSelectionValue = Flux2MaxImageSizeOption;
@@ -1324,6 +1488,8 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Fal Seedance 2 reference mode supports up to 9 image refs.
   [FAL_SEEDANCE_25_VIDEO_MODEL_ID]: 30, // Seedance 2.5 Reference supports up to 30 image refs.
   [JIMENG_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Jimeng Seedance Reference supports up to 9 image refs.
+  [JIMENG_SEEDANCE_25_VIDEO_MODEL_ID]: 30, // Jimeng Seedance 2.5 supports up to 30 image refs.
+  [JIMENG_MULTIFRAME_VIDEO_MODEL_ID]: JIMENG_MULTIFRAME_MAX_IMAGES, // Jimeng Multi-frame accepts ordered still images only.
   [KLING_V3_VIDEO_MODEL_ID]: 0,
   [SCAIL_VIDEO_MODEL_ID]: 0,
 };

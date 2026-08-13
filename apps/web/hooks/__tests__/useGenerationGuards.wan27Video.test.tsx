@@ -33,6 +33,8 @@ const renderWan27Guard = (overrides: Partial<Parameters<typeof useGenerationGuar
   activePrimaryImage: null,
   primarySelectionMediaType: null,
   hasSelectedStillImage: false,
+  selectedMediaCount: 0,
+  selectedStillImageCount: 0,
   ...overrides,
 }));
 

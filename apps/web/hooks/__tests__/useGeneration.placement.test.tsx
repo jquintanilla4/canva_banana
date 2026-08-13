@@ -183,6 +183,7 @@ const createFalStub = (overrides: Partial<UseFalSettingsResult> = {}): UseFalSet
   seedance15Audio: false,
   seedance2Variant: 'smart',
   seedance2JimengModelVersion: 'seedance2.0fast',
+  seedance2VolcengineModel: 'standard',
   seedance2AspectRatio: '16:9',
   seedance2Resolution: '720p',
   seedance2Duration: '5',
@@ -391,7 +392,7 @@ describe('useGeneration placement notifications', () => {
     expect(onGenerationPlaced).toHaveBeenCalledWith({
       mediaIds: [placedVideoId],
       mediaType: 'video',
-      modelLabel: 'Seedance 2 (VE) Smart',
+      modelLabel: 'Seedance 2.0 (VE) Smart',
     });
     expectPlacementCleanupLeftToApp(selection, setTool);
     expect(onGenerationComplete).toHaveBeenCalledTimes(1);

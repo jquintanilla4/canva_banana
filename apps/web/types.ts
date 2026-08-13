@@ -96,13 +96,16 @@ export type Flux2MaxImageSizeOption = Extract<FalImageSizePreset, 'landscape_4_3
 export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
-export type Seedance2Variant = 'smart' | 'reference';
+export type Seedance2Variant = 'smart' | 'reference' | 'edit' | 'extend'; // Edit/Extend are Volcengine-only; FAL and Jimeng pickers hide them.
 export type Seedance25Variant = 'smart' | 'reference';
 export type Seedance25AspectRatio = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
 export type Seedance25Resolution = '480p' | '720p';
 export type Seedance25Duration = 'auto' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
 export type MiniMaxH3Variant = 'standard' | 'reference';
-export type JimengSeedance2ModelVersion = 'seedance2.0fast' | 'seedance2.0' | 'seedance2.0_vip' | 'seedance2.0fast_vip';
+export type JimengSeedance2ModelVersion = 'seedance2.0fast' | 'seedance2.0' | 'seedance2.0_vip' | 'seedance2.0fast_vip' | 'seedance2.0mini';
+export type Seedance2VolcengineModel = 'standard' | 'fast' | 'mini' | 'seedance25'; // Volcengine Seedance 2 model picker value; seedance25 is the 2.5 sub-model.
+export type Seedance2VolcengineDuration = Seedance25Duration; // 2.0 sub-models clamp to 4-15s; Seedance 2.5 adds Auto and 16-30s.
+export type Seedance2OutputFormat = 'mp4' | 'mov'; // Seedance 2.5 output container selection.
 export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
 export type RecraftRgbColor = { r: number; g: number; b: number };
 
@@ -180,15 +183,19 @@ export type GenerationFalOptions = Partial<{
   seedance15Audio: boolean;
   seedance2Variant: Seedance2Variant;
   seedance2AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
-  seedance2Resolution: '480p' | '720p' | '1080p';
-  seedance2Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  seedance2Resolution: '480p' | '720p' | '1080p' | '4k';
+  seedance2Duration: Seedance2VolcengineDuration;
   seedance2GenerateAudio: boolean;
   seedance2JimengModelVersion: JimengSeedance2ModelVersion;
+  seedance2VolcengineModel: Seedance2VolcengineModel; // Volcengine-only picker value; embedded bars mirror it into falOptions.
+  seedance2OutputFormat: Seedance2OutputFormat; // Volcengine Seedance 2.5 only; ignored by 2.0 sub-models.
   seedance25Variant: Seedance25Variant;
   seedance25AspectRatio: Seedance25AspectRatio;
   seedance25Resolution: Seedance25Resolution;
   seedance25Duration: Seedance25Duration;
   seedance25GenerateAudio: boolean;
+  multiframeDuration: '2' | '3' | '4' | '5' | '6' | '7' | '8';
+  multiframeResolution: '720p' | '1080p';
   recraftImageSize: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
@@ -198,16 +205,26 @@ export type GenerationFalOptions = Partial<{
 
 export type GenerationVolcengineOptions = Partial<{
   seedance2Variant: Seedance2Variant;
+  seedance2VolcengineModel: Seedance2VolcengineModel;
   seedance2AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
-  seedance2Resolution: '480p' | '720p' | '1080p';
-  seedance2Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  seedance2Resolution: '480p' | '720p' | '1080p' | '4k';
+  seedance2Duration: Seedance2VolcengineDuration;
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
+  seedance2OutputFormat: Seedance2OutputFormat; // Seedance 2.5 only; omitted for 2.0 sub-models.
 }>;
 
 export type GenerationJimengOptions = GenerationVolcengineOptions & Partial<{
   seedance2JimengModelVersion: JimengSeedance2ModelVersion;
-}>; // Jimeng reuses Seedance 2 controls plus the CLI model_version channel.
+  seedance25Variant: Seedance25Variant;
+  seedance25AspectRatio: Seedance25AspectRatio;
+  seedance25Resolution: Seedance25Resolution;
+  seedance25Duration: Seedance25Duration;
+  seedance25GenerateAudio: boolean;
+  multiframeDuration: '2' | '3' | '4' | '5' | '6' | '7' | '8';
+  multiframeResolution: '720p' | '1080p';
+  sessionId: number;
+}>; // Jimeng adds the CLI model_version channel, Seedance 2.5, multi-frame, and session id options to the Seedance 2 controls.
 
 export interface GenerationInputs {
   kind: GenerationKind;
@@ -314,11 +331,13 @@ export interface CanvasVideoPromptBar extends CanvasRect {
   klingV3Shot2Duration?: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   seedance2Variant: Seedance2Variant;
   seedance2JimengModelVersion?: JimengSeedance2ModelVersion;
+  seedance2VolcengineModel: Seedance2VolcengineModel;
   seedance2AspectRatio: GenerationVolcengineOptions['seedance2AspectRatio'];
   seedance2Resolution: GenerationVolcengineOptions['seedance2Resolution'];
   seedance2Duration: GenerationVolcengineOptions['seedance2Duration'];
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
+  seedance2OutputFormat?: Seedance2OutputFormat; // Seedance 2.5 embedded bars keep their container choice.
 }
 
 export interface VideoPromptAreaMembership {
@@ -355,6 +374,7 @@ export type FalJobPhase = 'uploading' | 'submitting' | 'queued' | 'processing' |
 
 export interface FalQueueJob {
   id: string;
+  providerJobId?: string; // Backend/provider identity can differ from the local queue row ID.
   prompt: string;
   modelId: string;
   modelLabel: string;

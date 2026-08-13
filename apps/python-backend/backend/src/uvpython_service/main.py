@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 from uvpython_service.config import get_settings
-from uvpython_service.jimeng_worker import JIMENG_MODEL_ID, check_jimeng_health, clear_jimeng_cache, create_jimeng_job, get_jimeng_setup_status, install_or_update_jimeng_cli, jimeng_job_store, serialize_jimeng_job, start_jimeng_login
+from uvpython_service.jimeng_worker import JIMENG_MODEL_ID, check_jimeng_health, check_jimeng_login, clear_jimeng_cache, create_jimeng_job, get_jimeng_setup_status, install_or_update_jimeng_cli, jimeng_job_store, serialize_jimeng_job, start_jimeng_login
 from uvpython_service.media import get_ffprobe_status, probe_media_duration_seconds
 from uvpython_service.models import JobState
 from uvpython_service.models import DEFAULT_MODEL_ID, MediaInput, SeedanceJobPayload
@@ -221,11 +221,15 @@ async def _read_uploads(
     media_label: str = "upload",
 ) -> list[MediaInput]:
     media_items: list[MediaInput] = []
-    for upload in uploads or []:
-        media = await _read_upload(upload, should_probe_duration=should_probe_duration, media_label=media_label)
-        if media is not None:
-            media_items.append(media)
-    return media_items  # Keep staged uploads explicit so failures can clean them up deterministically.
+    try:
+        for upload in uploads or []:
+            media = await _read_upload(upload, should_probe_duration=should_probe_duration, media_label=media_label)
+            if media is not None:
+                media_items.append(media)
+        return media_items
+    except Exception:
+        _cleanup_media_items(media_items)
+        raise  # The caller cannot clean items that were staged before this batch failed.
 
 
 def _cleanup_media_items(media_items: list[MediaInput]) -> None:
@@ -440,10 +444,21 @@ def install_jimeng_cli_endpoint(request: FastAPIRequest) -> dict[str, object]:
 
 
 @app.post("/api/jimeng/setup/login")
-def start_jimeng_login_endpoint(request: FastAPIRequest, debug: bool = False) -> dict[str, object]:
+def start_jimeng_login_endpoint(request: FastAPIRequest) -> dict[str, object]:
     _require_trusted_setup_request(request)
     try:
-        return start_jimeng_login(debug=debug)
+        return start_jimeng_login()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/jimeng/setup/login/check")
+def check_jimeng_login_endpoint(request: FastAPIRequest, login_session_id: str, poll: int = 30) -> dict[str, object]:
+    _require_trusted_setup_request(request)
+    try:
+        return check_jimeng_login(login_session_id, poll_seconds=poll)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -466,6 +481,7 @@ async def submit_seedance_job(
     ratio: str = Form("16:9"),
     duration: int = Form(5),
     resolution: str | None = Form(None),
+    output_format: str | None = Form(None),
     generate_audio: bool = Form(False),
     camera_fixed: bool = Form(False),
     primary_image: UploadFile | None = File(None),
@@ -478,6 +494,8 @@ async def submit_seedance_job(
     payload: SeedanceJobPayload | None = None
     staged_media: list[MediaInput] = []
     try:
+        if output_format is not None and output_format not in {"mp4", "mov"}:
+            raise ValueError(f"Unsupported output_format: {output_format}")  # Seedance 2.5 only accepts mp4 or mov.
         primary_image_media = await _read_upload(primary_image)
         if primary_image_media is not None:
             staged_media.append(primary_image_media)
@@ -498,10 +516,11 @@ async def submit_seedance_job(
         payload = SeedanceJobPayload(
             prompt=prompt,
             model_id=model_id,
-            variant=variant if variant in {"smart", "reference"} else "smart",
+            variant=variant if variant in {"smart", "reference", "edit", "extend"} else "smart",
             ratio=ratio if ratio in {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "adaptive"} else "16:9",
             duration=duration,
-            resolution=resolution if resolution in {"480p", "720p", "1080p"} else None,
+            resolution=resolution if resolution in {"480p", "720p", "1080p", "4k"} else None,
+            output_format=output_format,  # type: ignore[arg-type]  # Validated against the mp4/mov whitelist above.
             generate_audio=generate_audio,
             camera_fixed=camera_fixed,
             primary_image=primary_image_media,
@@ -530,13 +549,15 @@ async def submit_seedance_job(
 @app.post("/api/jimeng/jobs")
 async def submit_jimeng_job(
     request: FastAPIRequest,
-    prompt: str = Form(...),
+    prompt: str = Form(""),
     model_id: str = Form(JIMENG_MODEL_ID),
     variant: str = Form("smart"),
     model_version: str = Form("seedance2.0fast"),
+    mode: str = Form("auto"),
+    session: int = Form(0),
     ratio: str = Form("16:9"),
     duration: int = Form(5),
-    resolution: str | None = Form(None),
+    resolution: str = Form("720p"),
     generate_audio: bool = Form(False),
     camera_fixed: bool = Form(False),
     primary_image: UploadFile | None = File(None),
@@ -544,6 +565,9 @@ async def submit_jimeng_job(
     reference_images: list[UploadFile] | None = File(None),
     reference_videos: list[UploadFile] | None = File(None),
     reference_audios: list[UploadFile] | None = File(None),
+    multiframe_images: list[UploadFile] | None = File(None),
+    transition_prompts: list[str] | None = Form(None),
+    transition_durations: list[float] | None = Form(None),
 ) -> dict[str, object]:
     _require_trusted_setup_request(request)
     payload: SeedanceJobPayload | None = None
@@ -566,14 +590,30 @@ async def submit_jimeng_job(
         reference_audio_media = await _read_uploads(reference_audios, should_probe_duration=True, media_label="reference audio")
         staged_media.extend(reference_audio_media)
 
+        multiframe_image_media = await _read_uploads(multiframe_images)
+        staged_media.extend(multiframe_image_media)
+
+        if variant not in {"smart", "reference"}:
+            raise ValueError(f"Unsupported Jimeng variant: {variant}")
+        if mode not in {"auto", "multiframe"}:
+            raise ValueError(f"Unsupported Jimeng mode: {mode}")
+        if ratio not in {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16"}:
+            raise ValueError(f"Unsupported Jimeng ratio: {ratio}")
+        if resolution not in {"480p", "720p", "1080p", "4k"}:
+            raise ValueError(f"Unsupported Jimeng video_resolution: {resolution}")
+        if model_version not in {"seedance2.0fast", "seedance2.0", "seedance2.0_vip", "seedance2.0fast_vip", "seedance2.0mini", "seedance2.5"}:
+            raise ValueError(f"Unsupported Jimeng model_version: {model_version}")
+
         payload = SeedanceJobPayload(
             prompt=prompt,
             model_id=model_id,
-            variant=variant if variant in {"smart", "reference"} else "smart",
-            ratio=ratio if ratio in {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "adaptive"} else "16:9",
+            variant=variant,
+            ratio=ratio,
             duration=duration,
-            resolution=resolution if resolution in {"480p", "720p", "1080p"} else None,
-            jimeng_model_version=model_version if model_version in {"seedance2.0fast", "seedance2.0", "seedance2.0_vip", "seedance2.0fast_vip"} else "seedance2.0fast",
+            resolution=resolution,
+            jimeng_model_version=model_version,
+            jimeng_mode=mode,
+            session_id=session,
             generate_audio=generate_audio,
             camera_fixed=camera_fixed,
             primary_image=primary_image_media,
@@ -581,6 +621,9 @@ async def submit_jimeng_job(
             reference_images=reference_image_media,
             reference_videos=reference_video_media,
             reference_audios=reference_audio_media,
+            multiframe_images=multiframe_image_media,
+            transition_prompts=list(transition_prompts or []),
+            transition_durations=list(transition_durations or []),
         )
         job = create_jimeng_job(payload)
         payload = None  # The Jimeng worker now owns the staged upload lifecycle.

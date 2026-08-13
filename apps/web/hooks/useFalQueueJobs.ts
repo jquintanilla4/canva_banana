@@ -8,6 +8,7 @@ type UseFalQueueJobsResult = {
   falJobs: FalQueueJob[];
   setFalJobs: Dispatch<SetStateAction<FalQueueJob[]>>;
   dismissFalJob: (jobId: string) => void;
+  invalidateJobOutputs: (providerJobIds: string[]) => void;
 };
 
 export function useFalQueueJobs(): UseFalQueueJobsResult {
@@ -21,6 +22,26 @@ export function useFalQueueJobs(): UseFalQueueJobsResult {
       autoDismissTimeouts.current.delete(jobId);
     }
     setFalJobs(prev => prev.filter(job => job.id !== jobId));
+  }, []);
+
+  const invalidateJobOutputs = useCallback((providerJobIds: string[]) => {
+    if (providerJobIds.length === 0) {
+      return;
+    }
+    const invalidatedIds = new Set(providerJobIds);
+    setFalJobs(previous => {
+      let changed = false;
+      const next = previous.map(job => {
+        if (!job.providerJobId || !invalidatedIds.has(job.providerJobId) || !job.outputUrl) {
+          return job;
+        }
+        const nextJob = { ...job };
+        delete nextJob.outputUrl;
+        changed = true;
+        return nextJob;
+      });
+      return changed ? next : previous;
+    });
   }, []);
 
   useEffect(() => {
@@ -58,5 +79,5 @@ export function useFalQueueJobs(): UseFalQueueJobsResult {
     };
   }, []);
 
-  return { falJobs, setFalJobs, dismissFalJob };
+  return { falJobs, setFalJobs, dismissFalJob, invalidateJobOutputs };
 }

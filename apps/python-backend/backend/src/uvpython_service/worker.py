@@ -13,8 +13,10 @@ from uvpython_service.media import media_to_data_url, upload_video_to_tos
 from uvpython_service.models import (
     MediaInput,
     MODEL_LABELS,
+    MODEL_RESOLUTIONS,
     JobState,
     SeedanceJobPayload,
+    is_seedance25,
 )
 from uvpython_service.store import job_store
 
@@ -26,6 +28,13 @@ SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS = 15.0  # Each reference clip must
 SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS = 15.0  # Reference videos must stay within 15 seconds combined.
 SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS = 15.0  # Reference audios must stay within 15 seconds combined.
 SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS = 0.05  # Small tolerance avoids rejecting files due to container rounding noise.
+SEEDANCE25_REFERENCE_IMAGE_LIMIT = 30  # Seedance 2.5 docs allow up to 30 image refs.
+SEEDANCE25_REFERENCE_VIDEO_LIMIT = 10  # Seedance 2.5 docs allow up to 10 video refs.
+SEEDANCE25_REFERENCE_AUDIO_LIMIT = 10  # Seedance 2.5 docs allow up to 10 audio refs.
+SEEDANCE25_EDIT_VIDEO_MIN_DURATION_SECONDS = 4.0  # Seedance 2.5 Edit source videos start at 4 seconds.
+SEEDANCE25_REFERENCE_MEDIA_MAX_DURATION_SECONDS = 30.0  # Each Seedance 2.5 reference clip must be at most 30 seconds long.
+SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS = 30.0  # Seedance 2.5 reference videos must stay within 30 seconds combined.
+SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS = 30.0  # Seedance 2.5 reference audios must stay within 30 seconds combined.
 
 
 def _now_ms() -> int:
@@ -44,20 +53,24 @@ def _validate_reference_media_durations(
     media_items: list[MediaInput],
     *,
     media_kind: Literal["video", "audio"],
+    min_clip_duration_seconds: float = SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS,
+    max_clip_duration_seconds: float = SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS,
+    total_duration_limit_seconds: float | None = None,
 ) -> None:
     if not media_items:
         return
     if _uses_duration_validation_fallback(media_items):
         return  # The frontend already validates canvas media durations before upload when ffprobe is unavailable.
 
-    total_duration_limit_seconds = (
-        SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS
-        if media_kind == "video"
-        else SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS
-    )  # Seedance uses different combined caps for videos and audios.
+    if total_duration_limit_seconds is None:
+        total_duration_limit_seconds = (
+            SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS
+            if media_kind == "video"
+            else SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS
+        )  # Seedance uses different combined caps for videos and audios.
     total_duration_seconds = 0.0
-    min_duration_seconds = SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS - SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS
-    max_duration_seconds = SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS + SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS
+    min_duration_seconds = min_clip_duration_seconds - SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS
+    max_duration_seconds = max_clip_duration_seconds + SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS
     total_duration_limit_with_tolerance = total_duration_limit_seconds + SEEDANCE_REFERENCE_DURATION_TOLERANCE_SECONDS
     per_clip_label = "videos" if media_kind == "video" else "audio clips"
     singular_label = "video" if media_kind == "video" else "audio clip"
@@ -69,7 +82,7 @@ def _validate_reference_media_durations(
         if duration_seconds < min_duration_seconds or duration_seconds > max_duration_seconds:
             raise ValueError(
                 f"Seedance 2 reference {per_clip_label} must each be between "
-                f"{int(SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS)} and {int(SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS)} seconds"
+                f"{int(min_clip_duration_seconds)} and {int(max_clip_duration_seconds)} seconds"
             )
         total_duration_seconds += duration_seconds
 
@@ -135,26 +148,79 @@ def _build_content(job_id: str, payload: SeedanceJobPayload, settings: Settings)
 def _validate_payload(payload: SeedanceJobPayload) -> None:
     if payload.model_id not in MODEL_LABELS:
         raise ValueError(f"Unsupported Seedance model: {payload.model_id}")  # Keep backend model choices explicit.
+    allowed_resolutions = MODEL_RESOLUTIONS.get(payload.model_id, frozenset())
+    if payload.resolution is not None and payload.resolution not in allowed_resolutions:
+        raise ValueError(f"Resolution {payload.resolution} is not supported by {MODEL_LABELS[payload.model_id]}")  # Only Seedance 2 accepts 1080p/4k.
     if not payload.prompt.strip():
         raise ValueError("Prompt is required")  # Every Ark request still needs text.
-    if payload.duration < 4 or payload.duration > 15:
-        raise ValueError("Duration must be between 4 and 15 seconds")  # Match Seedance limits from the source repo.
+    if is_seedance25(payload.model_id):
+        if payload.duration != -1 and (payload.duration < 4 or payload.duration > 30):
+            raise ValueError("Duration must be between 4 and 30 seconds, or -1 for model auto-select")  # Seedance 2.5 duration rules.
+    else:
+        if payload.duration != -1 and (payload.duration < 4 or payload.duration > 15):
+            raise ValueError("Duration must be between 4 and 15 seconds, or -1 for model auto-select")  # Seedance 2.0 series also supports Auto.
+        if payload.output_format is not None:
+            raise ValueError("output_format is only supported by Seedance 2.5")
+
+    requires_adaptive_ratio = payload.variant in {"edit", "extend"} or (payload.variant == "smart" and payload.primary_image)
+    if is_seedance25(payload.model_id) and requires_adaptive_ratio and payload.ratio != "adaptive":
+        raise ValueError("Seedance 2.5 requires an adaptive ratio for first-frame, edit, and extend tasks")
+    if is_seedance25(payload.model_id) and payload.variant == "edit" and payload.duration != -1:
+        raise ValueError("Seedance 2.5 edit tasks require duration -1 (model auto-select)")
 
     if payload.variant == "smart":
         if payload.last_frame_image and not payload.primary_image:
             raise ValueError("Last-frame mode requires a first-frame image")
         return
+    if payload.variant in {"edit", "extend"} and (payload.primary_image or payload.last_frame_image):
+        raise ValueError("Edit and Extend modes do not accept first-frame or last-frame images")
 
-    if len(payload.reference_images) > SEEDANCE_REFERENCE_IMAGE_LIMIT:
-        raise ValueError(f"Seedance 2 reference supports up to {SEEDANCE_REFERENCE_IMAGE_LIMIT} images")
-    if len(payload.reference_videos) > SEEDANCE_REFERENCE_VIDEO_LIMIT:
-        raise ValueError(f"Seedance 2 reference supports up to {SEEDANCE_REFERENCE_VIDEO_LIMIT} videos")
-    if len(payload.reference_audios) > SEEDANCE_REFERENCE_AUDIO_LIMIT:
-        raise ValueError(f"Seedance 2 reference supports up to {SEEDANCE_REFERENCE_AUDIO_LIMIT} audio tracks")
-    if not payload.reference_images and not payload.reference_videos and not payload.reference_audios:
-        raise ValueError("Reference mode requires at least one reference asset")
-    _validate_reference_media_durations(payload.reference_videos, media_kind="video")
-    _validate_reference_media_durations(payload.reference_audios, media_kind="audio")
+
+    # Caps and duration probing are shared by reference/edit/extend since Ark treats them identically.
+    if is_seedance25(payload.model_id):
+        image_limit = SEEDANCE25_REFERENCE_IMAGE_LIMIT
+        video_limit = SEEDANCE25_REFERENCE_VIDEO_LIMIT
+        audio_limit = SEEDANCE25_REFERENCE_AUDIO_LIMIT
+    else:
+        image_limit = SEEDANCE_REFERENCE_IMAGE_LIMIT
+        video_limit = SEEDANCE_REFERENCE_VIDEO_LIMIT
+        audio_limit = SEEDANCE_REFERENCE_AUDIO_LIMIT
+    if len(payload.reference_images) > image_limit:
+        raise ValueError(f"Seedance 2 reference supports up to {image_limit} images")
+    if len(payload.reference_videos) > video_limit:
+        raise ValueError(f"Seedance 2 reference supports up to {video_limit} videos")
+    if len(payload.reference_audios) > audio_limit:
+        raise ValueError(f"Seedance 2 reference supports up to {audio_limit} audio tracks")
+
+    if payload.variant == "reference":
+        if not payload.reference_images and not payload.reference_videos and not payload.reference_audios:
+            raise ValueError("Reference mode requires at least one reference asset")
+    elif payload.variant == "edit":
+        if not payload.reference_videos:
+            raise ValueError("Edit mode requires a video to edit")
+    else:  # Extend concatenates videos, so other reference media types are not allowed.
+        if not payload.reference_videos:
+            raise ValueError("Extend mode requires at least one reference video")
+        if payload.reference_images or payload.reference_audios:
+            raise ValueError("Extend mode only accepts reference videos")
+
+    if is_seedance25(payload.model_id):
+        _validate_reference_media_durations(
+            payload.reference_videos,
+            media_kind="video",
+            min_clip_duration_seconds=SEEDANCE25_EDIT_VIDEO_MIN_DURATION_SECONDS if payload.variant == "edit" else SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS,
+            max_clip_duration_seconds=SEEDANCE25_REFERENCE_MEDIA_MAX_DURATION_SECONDS,
+            total_duration_limit_seconds=SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
+        )
+        _validate_reference_media_durations(
+            payload.reference_audios,
+            media_kind="audio",
+            max_clip_duration_seconds=SEEDANCE25_REFERENCE_MEDIA_MAX_DURATION_SECONDS,
+            total_duration_limit_seconds=SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS,
+        )
+    else:
+        _validate_reference_media_durations(payload.reference_videos, media_kind="video")
+        _validate_reference_media_durations(payload.reference_audios, media_kind="audio")
 
 
 def _create_remote_task(client: Ark, payload: SeedanceJobPayload, content: list[dict[str, object]]) -> object:
@@ -165,8 +231,17 @@ def _create_remote_task(client: Ark, payload: SeedanceJobPayload, content: list[
         "duration": payload.duration,
         "watermark": False,
         "generate_audio": payload.generate_audio,
-        "camera_fixed": payload.camera_fixed,
     }
+    extra_body: dict[str, object] = {}  # The locked Ark SDK exposes provider fields through extra_body.
+    if is_seedance25(payload.model_id):
+        if payload.output_format is not None:
+            extra_body["output_format"] = payload.output_format
+    else:
+        request_payload["camera_fixed"] = payload.camera_fixed  # camera_fixed is not documented for Seedance 2.5.
+    if is_seedance25(payload.model_id) and payload.variant in {"edit", "extend"}:
+        extra_body["omni_reference_task_type"] = payload.variant  # Seedance 2.5 uses the hint to validate task-specific limits synchronously.
+    if extra_body:
+        request_payload["extra_body"] = extra_body
     if payload.resolution is not None:
         request_payload["resolution"] = payload.resolution
     return client.content_generation.tasks.create(**request_payload)

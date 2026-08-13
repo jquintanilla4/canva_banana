@@ -1,13 +1,17 @@
 import { useMemo } from 'react';
-import { Tool } from '../types';
+import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
 import {
   getFalModelLabel,
   getFalNumImageMaxForModel,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   INFINITALK_VIDEO_MODEL_ID,
+  JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   isRecraftV4ProModel,
   SCAIL_VIDEO_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -15,10 +19,12 @@ import {
   type FalModelId,
 } from '../services/modelConfig';
 import {
+  getSeedance2VolcengineReferenceLimits,
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from '../utils/seedanceReferences';
+import { getJimengMultiframeDisabledReason } from '../utils/jimengMultiframe';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
   SEEDANCE25_REFERENCE_IMAGE_LIMIT,
@@ -50,8 +56,10 @@ type Args = {
   miniMaxH3Variant?: 'standard' | 'reference';
   miniMaxH3ReferenceAssetCount?: number;
   isSeedance2VideoModel: boolean;
-  seedance2Variant: 'smart' | 'reference';
+  seedance2Variant: Seedance2Variant;
   seedance2ReferenceAssetCount: number;
+  seedance2ReferenceVideoCount?: number;
+  seedance2VolcengineModel?: Seedance2VolcengineModel; // Missing sub-model state defaults to the 2.0 copy.
   isSeedance25VideoModel?: boolean;
   seedance25Variant?: 'smart' | 'reference';
   seedance25ReferenceAssetCount?: number;
@@ -63,10 +71,13 @@ type Args = {
   activePrimaryImage: unknown;
   primarySelectionMediaType: 'image' | 'video' | 'audio' | null;
   hasSelectedStillImage: boolean;
+  selectedMediaCount: number;
+  selectedStillImageCount: number;
 };
 
 export type GenerationGuardsResult = {
   submitDisabled: boolean;
+  submitDisabledReason: string | null;
   promptPlaceholderText: string;
   disablePromptInput: boolean;
   shouldValidateFalOptions: boolean;
@@ -102,6 +113,8 @@ export function useGenerationGuards({
   isSeedance2VideoModel,
   seedance2Variant,
   seedance2ReferenceAssetCount,
+  seedance2ReferenceVideoCount = 0,
+  seedance2VolcengineModel = 'standard',
   isSeedance25VideoModel = false,
   seedance25Variant = 'reference',
   seedance25ReferenceAssetCount = 0,
@@ -113,6 +126,8 @@ export function useGenerationGuards({
   activePrimaryImage,
   primarySelectionMediaType,
   hasSelectedStillImage,
+  selectedMediaCount,
+  selectedStillImageCount,
 }: Args): GenerationGuardsResult {
   const isKlingO3VideoInputMode = isKlingO3EditMode;
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
@@ -123,11 +138,23 @@ export function useGenerationGuards({
   const isInfinitalkVideoModel = isVideoMode && falModelId === INFINITALK_VIDEO_MODEL_ID;
   const isWan27VideoModel = isVideoMode && falModelId === WAN_27_VIDEO_MODEL_ID;
   const isKlingV3SmartVideoModel = isVideoMode && (isKlingV3VideoModel || falModelId === KLING_V3_VIDEO_MODEL_ID);
+  const isJimengMultiframeVideoModel = isVideoMode && falModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID;
   const isWan27ReferenceMode = isWan27VideoModel && wan27VideoVariant === 'reference';
   const isWan27EditMode = isWan27VideoModel && wan27VideoVariant === 'edit';
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
   const isSeedance2ReferenceMode = isSeedance2VideoModel && seedance2Variant === 'reference';
+  const isVolcengineSeedance2VideoModel = isSeedance2VideoModel && falModelId === SEEDANCE_2_VIDEO_MODEL_ID; // Edit/Extend only exist on the Volcengine backend.
+  const isSeedance2EditMode = isVolcengineSeedance2VideoModel && seedance2Variant === 'edit';
+  const isSeedance2ExtendMode = isVolcengineSeedance2VideoModel && seedance2Variant === 'extend';
+  const isVolcengineSeedance25Model = isVolcengineSeedance2VideoModel && seedance2VolcengineModel === 'seedance25';
+  const seedance2VolcengineLabel = isVolcengineSeedance25Model ? 'Seedance 2.5' : 'Seedance 2';
+  const seedance2VolcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance25Model ? 'seedance25' : 'standard'); // Placeholder copy follows the selected sub-model's caps.
   const isSeedance25ReferenceMode = isSeedance25VideoModel && seedance25Variant === 'reference';
+  const isJimengReferenceMode = (
+    falModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID && isSeedance2ReferenceMode
+  ) || (
+    falModelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID && isSeedance25ReferenceMode
+  ); // Dreamina multimodal prompts are optional for both supported Seedance families.
   const isMiniMaxH3ReferenceMode = isMiniMaxH3VideoModel && miniMaxH3Variant === 'reference';
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
@@ -143,6 +170,8 @@ export function useGenerationGuards({
     && isVideoMode
     && isSeedance2VideoModel
     && !isSeedance2ReferenceMode
+    && !isSeedance2EditMode
+    && !isSeedance2ExtendMode
     && primarySelectionMediaType !== null
     && !hasPrimaryImage;
   const hasSeedance25SmartUnsupportedSelection = apiProvider === 'fal'
@@ -193,10 +222,13 @@ export function useGenerationGuards({
       falNumImages < 1 ||
       falNumImages > falNumImageMax;
     const hasWan27ReferenceAssets = wan27ReferenceAssetCount > 0;
+    const jimengMultiframeDisabledReason = usingFal && isJimengMultiframeVideoModel
+      ? getJimengMultiframeDisabledReason(prompt, selectedMediaCount, selectedStillImageCount)
+      : null;
     const isWanPromptOptional = usingFal && (isWanVideoInputMode || (isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode && hasPrimaryImage));
     const isKlingV3ControlPromptOptional = usingFal && isKlingV3ControlVideoModel; // Kling Control v3 prompt is optional.
     const isLipsyncPromptOptional = usingFal && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
-    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional));
+    const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional || isJimengReferenceMode));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
     const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isSeedance2VideoModel && !isSeedance25VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
@@ -213,8 +245,11 @@ export function useGenerationGuards({
       (shouldValidateFalOptions && isNumImagesInvalid) ||
       (usingFal && isMiniMaxH3ReferenceMode && miniMaxH3ReferenceAssetCount === 0) ||
       (usingFal && isSeedance2ReferenceMode && seedance2ReferenceAssetCount === 0) ||
+      (usingFal && isSeedance2EditMode && seedance2ReferenceVideoCount === 0) ||
+      (usingFal && isSeedance2ExtendMode && seedance2ReferenceVideoCount === 0) ||
       (usingFal && isSeedance25ReferenceMode && seedance25ReferenceAssetCount === 0) ||
       (usingFal && isWan27ReferenceMode && !hasWan27ReferenceAssets) ||
+      jimengMultiframeDisabledReason !== null ||
       hasSeedance2SmartUnsupportedSelection ||
       hasSeedance25SmartUnsupportedSelection ||
       hasMiniMaxH3StandardUnsupportedSelection ||
@@ -245,13 +280,23 @@ export function useGenerationGuards({
             : 'Describe the video, or select an image for image-to-video...';
         }
         if (isSeedance2VideoModel) {
+          if (isSeedance2EditMode) {
+            return seedance2ReferenceVideoCount > 0
+              ? 'Describe how to edit @Video1, optionally referencing @Image1 or @Audio1 clips as replacement material...'
+              : `${seedance2VolcengineLabel} Edit: select a video to edit (@Video1), optionally tag image or audio references, then describe the changes...`;
+          }
+          if (isSeedance2ExtendMode) {
+            return seedance2ReferenceVideoCount > 0
+              ? 'Describe how the clips connect, e.g. "@Video1 followed by @Video2", or extend @Video1 forward or backward...'
+              : `${seedance2VolcengineLabel} Extend: select up to ${seedance2VolcengineReferenceLimits.videos} video clips (@Video1, @Video2, ...), then describe how to chain or extend them...`;
+          }
           if (isSeedance2ReferenceMode) {
             return seedance2ReferenceAssetCount > 0
-              ? `Seedance 2 Reference: select or shift-click up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips as @Image1, @Video1, or @Audio1, then describe the scene you want...`
-              : 'Seedance 2 Reference: select canvas media to label @Image1, @Video1, or @Audio1 references, then describe the scene...';
+              ? `${seedance2VolcengineLabel} Reference: select or shift-click up to ${seedance2VolcengineReferenceLimits.images} images, ${seedance2VolcengineReferenceLimits.videos} videos, and ${seedance2VolcengineReferenceLimits.audios} audio clips as @Image1, @Video1, or @Audio1, then describe the scene you want...`
+              : `${seedance2VolcengineLabel} Reference: select canvas media to label @Image1, @Video1, or @Audio1 references, then describe the scene...`;
           }
           if (hasSeedance2SmartUnsupportedSelection) {
-            return 'Seedance 2 Smart uses a still image as the first frame. Clear the current video or audio selection to run text-to-video...';
+            return `${seedance2VolcengineLabel} Smart uses a still image as the first frame. Clear the current video or audio selection to run text-to-video...`;
           }
           if (hasPrimaryImage) {
             return 'Describe the motion or scene you want this image to turn into, or shift-click another still image to set the end frame...';
@@ -386,6 +431,7 @@ export function useGenerationGuards({
 
     return {
       submitDisabled,
+      submitDisabledReason: jimengMultiframeDisabledReason,
       promptPlaceholderText,
       disablePromptInput,
       shouldValidateFalOptions,
@@ -411,6 +457,8 @@ export function useGenerationGuards({
     isGrokImagineVideoModel,
     isHeygenV3LipsyncVideoModel,
     isGptImage2Model,
+    isJimengMultiframeVideoModel,
+    isJimengReferenceMode,
     isKrea2LargeModel,
     isNanoBananaModel,
     isKlingV3ControlVideoModel,
@@ -422,6 +470,8 @@ export function useGenerationGuards({
     isMiniMaxH3VideoModel,
     isMiniMaxH3ReferenceMode,
     isSeedance2VideoModel,
+    isSeedance2EditMode,
+    isSeedance2ExtendMode,
     isSeedance25VideoModel,
     isSeedance25ReferenceMode,
     isWanAnimateVideoModel,
@@ -436,10 +486,15 @@ export function useGenerationGuards({
     isUpscaleModel,
     isVideoMode,
     prompt,
+    selectedMediaCount,
+    selectedStillImageCount,
     miniMaxH3ReferenceAssetCount,
     miniMaxH3Variant,
     seedance2ReferenceAssetCount,
+    seedance2ReferenceVideoCount,
     seedance2Variant,
+    seedance2VolcengineLabel,
+    seedance2VolcengineReferenceLimits,
     seedance25ReferenceAssetCount,
     seedance25Variant,
     wan27ReferenceAssetCount,

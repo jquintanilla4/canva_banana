@@ -65,4 +65,62 @@ describe('snapshotService (Seedance 2.5)', () => {
     expect(metadata?.generation?.falOptions?.seedance25Duration).toBeUndefined();
     expect(metadata?.generation?.falOptions?.seedance25GenerateAudio).toBeUndefined();
   });
+
+  it('preserves Volcengine Seedance 2.5 replay settings', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'A 30 second flythrough',
+        provider: 'volcengine',
+        modelId: 'volcengine/seedance-2',
+        modelLabel: 'Seedance 2.5 (VE) Smart',
+        modelMode: 'video',
+        volcengineOptions: {
+          seedance2Variant: 'smart',
+          seedance2VolcengineModel: 'seedance25',
+          seedance2AspectRatio: 'adaptive',
+          seedance2Resolution: '720p',
+          seedance2Duration: 'auto',
+          seedance2GenerateAudio: true,
+          seedance2CameraFixed: false,
+          seedance2OutputFormat: 'mov',
+        },
+      },
+    });
+
+    expect(metadata?.generation?.volcengineOptions).toMatchObject({
+      seedance2VolcengineModel: 'seedance25',
+      seedance2AspectRatio: 'adaptive',
+      seedance2Duration: 'auto',
+      seedance2OutputFormat: 'mov',
+    });
+  });
+
+  it('keeps Auto but drops other 2.5-only replay values for a 2.0 pick', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'Legacy 2.0 rerun',
+        provider: 'volcengine',
+        modelId: 'volcengine/seedance-2',
+        modelMode: 'video',
+        volcengineOptions: {
+          seedance2Variant: 'smart',
+          seedance2VolcengineModel: 'fast',
+          seedance2Resolution: '4k',
+          seedance2Duration: 'auto',
+          seedance2OutputFormat: 'mov',
+        },
+      },
+    });
+
+    expect(metadata?.generation?.volcengineOptions).toMatchObject({
+      seedance2VolcengineModel: 'fast',
+      seedance2Resolution: '720p', // Fast caps at 720p.
+      seedance2Duration: 'auto', // Volcengine 2.0 reruns preserve provider-selected duration.
+    });
+    expect(metadata?.generation?.volcengineOptions?.seedance2OutputFormat).toBeUndefined();
+  });
 });

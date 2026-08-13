@@ -6,6 +6,7 @@ import { getRuntimeConfig } from './runtimeConfig';
 export type JimengQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'; // Match the shared generation queue states.
 
 export type JimengQueueUpdate = {
+  providerJobId: string;
   status: JimengQueueStatus;
   requestId?: string;
   logs?: string[];
@@ -21,19 +22,26 @@ export type JimengSetupStatus = {
   cliAvailable?: boolean;
   authenticated?: boolean;
   executable?: string;
+  cliVersion?: string;
   message?: string;
   detail?: string;
-  authUrl?: string;
-  loginOutput?: string;
+  loginSessionId?: string;
+  verificationUri?: string;
+  userCode?: string;
+};
+
+export type JimengLoginCheckResult = Omit<JimengSetupStatus, 'backendReachable'> & {
+  status: string;
+  message: string;
 };
 
 export type JimengSetupActionResult = {
   status: string;
   message: string;
   output?: string;
-  pid?: number;
-  debug?: boolean;
-  authUrl?: string;
+  loginSessionId?: string;
+  verificationUri?: string;
+  userCode?: string;
 };
 
 export type JimengCacheClearResult = {
@@ -42,21 +50,28 @@ export type JimengCacheClearResult = {
   bytesFreed: number;
   workDir: string;
   errors: string[];
+  invalidatedJobIds: string[];
 };
 
 type GenerateJimengSeedanceVideoOptions = {
   modelId: string;
   variant: Seedance2Variant;
-  modelVersion: JimengSeedance2ModelVersion;
+  modelVersion: JimengSeedance2ModelVersion | 'seedance2.5';
   aspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
-  duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
-  resolution: '480p' | '720p' | '1080p';
+  duration: '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
+  resolution: '480p' | '720p' | '1080p' | '4k';
+  session?: number;
   generateAudio: boolean;
   cameraFixed: boolean;
+  mode?: 'auto' | 'multiframe';
   primaryImageFile?: File | null;
+  lastFrameImageFile?: File | null;
   referenceImageFiles?: File[];
   referenceVideoFiles?: File[];
   referenceAudioFiles?: File[];
+  multiframeImageFiles?: File[];
+  transitionPrompts?: string[];
+  transitionDurations?: number[];
   onQueueUpdate?: (update: JimengQueueUpdate) => void;
 };
 
@@ -127,6 +142,7 @@ const normalizeJobAssetUrls = (job: JimengJobResponse, baseUrl: string): JimengJ
 }); // Keep consumers on absolute URLs after backend proxy rewrites.
 
 const mapJobToQueueUpdate = (job: JimengJobResponse): JimengQueueUpdate => ({
+  providerJobId: job.id,
   status: job.status,
   requestId: job.requestId,
   logs: job.logs,
@@ -239,10 +255,11 @@ export const getJimengSetupStatus = async (): Promise<JimengSetupStatus> => {
     cliAvailable?: boolean;
     authenticated?: boolean;
     executable?: string;
+    cliVersion?: string;
     message?: string;
     detail?: string;
   };
-  const ready = payload.ready === true || Boolean(payload.cliAvailable && payload.authenticated);
+  const ready = typeof payload.ready === 'boolean' ? payload.ready : Boolean(payload.cliAvailable && payload.authenticated);
   return {
     status: payload.status,
     ready,
@@ -250,6 +267,7 @@ export const getJimengSetupStatus = async (): Promise<JimengSetupStatus> => {
     cliAvailable: payload.cliAvailable,
     authenticated: payload.authenticated,
     executable: payload.executable,
+    cliVersion: payload.cliVersion,
     message: payload.message || (ready ? 'Jimeng CLI is ready' : undefined),
     detail: payload.detail,
   }; // Setup status separates install availability from login readiness.
@@ -268,8 +286,11 @@ const runJimengSetupAction = async (path: string): Promise<JimengSetupActionResu
 export const installJimengCli = async (): Promise<JimengSetupActionResult> =>
   runJimengSetupAction('/api/jimeng/setup/install'); // User-triggered install/update action.
 
-export const startJimengLogin = async (debug = false): Promise<JimengSetupActionResult> =>
-  runJimengSetupAction(`/api/jimeng/setup/login${debug ? '?debug=true' : ''}`); // Launch browser auth from the backend host.
+export const startJimengLogin = async (): Promise<JimengSetupActionResult> =>
+  runJimengSetupAction('/api/jimeng/setup/login'); // Start OAuth Device Flow without exposing the device code.
+
+export const checkJimengLogin = async (loginSessionId: string, poll = 30): Promise<JimengLoginCheckResult> =>
+  runJimengSetupAction(`/api/jimeng/setup/login/check?login_session_id=${encodeURIComponent(loginSessionId)}&poll=${poll}`) as Promise<JimengLoginCheckResult>; // Poll the backend-owned device code.
 
 export const clearJimengCache = async (): Promise<JimengCacheClearResult> => {
   const baseUrl = getJimengApiBaseUrl();
@@ -411,7 +432,7 @@ const reconnectToJimengJob = async (
 export const generateJimengSeedanceVideo = async (
   prompt: string,
   options: GenerateJimengSeedanceVideoOptions,
-): Promise<{ videoUrl: string; providerVideoUrl?: string; requestId?: string }> => {
+): Promise<{ videoUrl: string; providerJobId: string; providerVideoUrl?: string; requestId?: string }> => {
   const formData = new FormData();
   formData.set('prompt', prompt);
   formData.set('model_id', options.modelId);
@@ -420,15 +441,23 @@ export const generateJimengSeedanceVideo = async (
   formData.set('ratio', options.aspectRatio);
   formData.set('duration', options.duration);
   formData.set('resolution', options.resolution);
+  formData.set('session', String(options.session ?? 0));
   formData.set('generate_audio', String(options.generateAudio));
   formData.set('camera_fixed', String(options.cameraFixed));
+  formData.set('mode', options.mode ?? 'auto');
 
   if (options.primaryImageFile) {
     formData.append('primary_image', options.primaryImageFile); // Optional first frame for image2video.
   }
+  if (options.lastFrameImageFile) {
+    formData.append('last_frame_image', options.lastFrameImageFile); // Smart first/last-frame requests map to frames2video.
+  }
   options.referenceImageFiles?.forEach(file => formData.append('reference_images', file)); // Reference mode maps to multimodal2video.
   options.referenceVideoFiles?.forEach(file => formData.append('reference_videos', file)); // Reference videos are uploaded by the backend CLI.
   options.referenceAudioFiles?.forEach(file => formData.append('reference_audios', file)); // Audio refs are accepted by multimodal2video.
+  options.multiframeImageFiles?.forEach(file => formData.append('multiframe_images', file));
+  options.transitionPrompts?.forEach(promptValue => formData.append('transition_prompts', promptValue));
+  options.transitionDurations?.forEach(durationValue => formData.append('transition_durations', String(durationValue)));
 
   const baseUrl = getJimengApiBaseUrl();
   const setupStatus = await getJimengSetupStatus();
@@ -516,6 +545,7 @@ export const generateJimengSeedanceVideo = async (
 
   return {
     videoUrl: job.outputUrl,
+    providerJobId: job.id,
     providerVideoUrl: job.providerOutputUrl || undefined,
     requestId: job.requestId,
   };
