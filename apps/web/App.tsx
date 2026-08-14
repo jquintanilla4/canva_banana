@@ -10,13 +10,9 @@ import {
   Tool,
   AppMode,
   ApiProviderId,
-  type CanvasNote,
   type CanvasImage,
-  type Point,
-  type CanvasVideoPromptArea,
   type CanvasVideoPromptBar,
   type GenerationPlacedPayload,
-  type VideoPromptAreaMembership,
 } from './types';
 import { FalQueuePanel } from './components/FalQueuePanel';
 import { DebugLogPanel } from './components/DebugLogPanel';
@@ -32,10 +28,7 @@ import {
   isNanoBananaEditModelId,
   FLUX_3_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
-  SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
-  JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
-  FAL_VIDEO_MODEL_OPTIONS,
   WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
   KREA_2_MAX_STYLE_REFERENCES,
@@ -46,10 +39,7 @@ import {
   getPromptBarModelOptions,
 } from './services/promptBarConfig';
 import { getModelUiCapabilities } from './services/modelCapabilities';
-import {
-  buildEmbeddedPromptBarControlsInput,
-  buildFooterPromptBarControlsInput,
-} from './services/promptBarSettingsView';
+import { buildFooterPromptBarControlsInput } from './services/promptBarSettingsView';
 import { useBlindTestMode } from './hooks/useBlindTestMode';
 import { isOverlapping } from './utils/canvasGeometry';
 import { FileMenu } from './components/FileMenu';
@@ -87,21 +77,17 @@ import { useCanvasStressHarness } from './hooks/useCanvasStressHarness';
 import { useBackupsManager } from './hooks/useBackupsManager';
 import { useDesktopIntegration } from './hooks/useDesktopIntegration';
 import { useZoomControls } from './hooks/useZoomControls';
+import { useVideoPromptBars } from './hooks/useVideoPromptBars';
 import { writeClipboardText } from './services/clipboardService';
 import type { FalModelMode } from './services/modelConfig';
 import { buildEffectiveSeedanceReferenceIds } from './utils/seedanceReferences';
 import {
   buildEmbeddedVideoGenerationOverrides,
-  buildVideoPromptAreaMembership,
   getEmbeddedVideoPromptBarModelId,
-  getVideoPromptAreaCapabilityProfile,
-  isUsableVideoPromptAreaModel,
-  getAreaPromptBarRect,
 } from './utils/videoPromptAreas';
 import { buildEmbeddedFlux3PromptState } from './utils/embeddedFlux3';
 import {
   buildEmbeddedVideoGenerationProviderInput,
-  getEmbeddedBarFalOptions,
   isJimengEmbeddedVideoModel,
 } from './utils/embeddedVideoRouting';
 import { markCanvasMediaStoppedByIds, stopCanvasMediaPlaybackByIds } from './utils/canvasMediaPlayback';
@@ -177,7 +163,6 @@ export default function App() {
   const [brushColor, setBrushColor] = useState('#ff0000');
   const [prompt, setPrompt] = useState('');
   const [activeEmbeddedPromptBarId, setActiveEmbeddedPromptBarId] = useState<string | null>(null);
-  const [selectedVideoPromptAreaId, setSelectedVideoPromptAreaId] = useState<string | null>(null);
   const [cameraSettings, setCameraSettings] = useState<CameraSettingsSelection>(
     () => cloneCameraSelection(EMPTY_CAMERA_SELECTION),
   );
@@ -270,6 +255,39 @@ export default function App() {
     onCacheCleared: invalidateJobOutputs,
     setError,
     setToastMessage,
+  });
+
+  // On-canvas video prompt areas/bars: selection, creation, memberships, and the
+  // embedded control builder.
+  const {
+    selectedVideoPromptAreaId,
+    setSelectedVideoPromptAreaId,
+    handleVideoPromptAreasChange,
+    handleVideoPromptBarsChange,
+    handleCreateVideoPromptBar,
+    handleEmbeddedPromptBarUpdate,
+    handleVideoPromptAreaBorderColorChange,
+    videoPromptAreaProfiles,
+    videoPromptAreaMemberships,
+    videoPromptAreaLabelMap,
+    ignoredVideoPromptMediaIds,
+    acceptedVideoPromptImageIds,
+    acceptedVideoPromptVideoIds,
+    acceptedVideoPromptAudioIds,
+    acceptedVideoPromptElementIds,
+    embeddedVideoPromptBarModelOptions,
+    getEmbeddedVideoPromptBarSubmitError,
+    buildEmbeddedVideoPromptBarControls,
+  } = useVideoPromptBars({
+    displayedImages,
+    displayedVideoPromptAreas,
+    displayedVideoPromptBars,
+    setLiveVideoPromptAreas,
+    setLiveVideoPromptBars,
+    setState,
+    setError,
+    fal,
+    isLoading,
   });
 
   const {
@@ -488,88 +506,6 @@ export default function App() {
     requestZoomToSelection,
     handleToggleZoomLevelBadge,
   } = useZoomControls({ hasSelection: selectedImageIds.length > 0 });
-
-  const handleVideoPromptAreasChange = useCallback((nextAreas: CanvasVideoPromptArea[]) => {
-    setLiveVideoPromptAreas(nextAreas);
-  }, [setLiveVideoPromptAreas]);
-
-  const handleVideoPromptBarsChange = useCallback((nextBars: CanvasVideoPromptBar[]) => {
-    setLiveVideoPromptBars(nextBars);
-  }, [setLiveVideoPromptBars]);
-
-  const handleCreateVideoPromptBar = useCallback(() => {
-    if (displayedVideoPromptAreas.length === 0) {
-      return;
-    }
-    const selectedArea = selectedVideoPromptAreaId
-      ? displayedVideoPromptAreas.find(area => area.id === selectedVideoPromptAreaId) ?? null
-      : null;
-    const targetArea = selectedArea && !selectedArea.promptBarId
-      ? selectedArea
-      : [...displayedVideoPromptAreas].reverse().find(area => !area.promptBarId) ?? null;
-    if (!targetArea) {
-      setError('Each video prompt area already has a prompt bar.');
-      return;
-    }
-    const snappedRect = getAreaPromptBarRect(targetArea);
-    const newBar: CanvasVideoPromptBar = {
-      id: crypto.randomUUID(),
-      assignedAreaId: targetArea.id,
-      prompt: '',
-      negativePrompt: '',
-      modelId: fal.isSeedance2VideoModel || fal.isSeedance25VideoModel || fal.falVideoModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID ? fal.falVideoModelId : SEEDANCE_2_VIDEO_MODEL_ID,
-      ...(fal.falVideoModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID ? { falOptions: {
-        multiframeDuration: fal.jimengMultiframeDuration,
-        multiframeResolution: fal.jimengMultiframeResolution,
-      } } : fal.isSeedance25VideoModel ? { falOptions: {
-        seedance25Variant: fal.seedance25Variant,
-        seedance25AspectRatio: fal.seedance25AspectRatio,
-        seedance25Resolution: fal.seedance25Resolution,
-        seedance25Duration: fal.seedance25Duration,
-        seedance25GenerateAudio: fal.seedance25GenerateAudio,
-      } } : {}),
-      seedance2Variant: 'reference',
-      seedance2JimengModelVersion: fal.seedance2JimengModelVersion,
-      seedance2VolcengineModel: fal.seedance2VolcengineModel,
-      seedance2AspectRatio: '16:9',
-      seedance2Resolution: '720p',
-      seedance2Duration: '5',
-      seedance2GenerateAudio: false,
-      seedance2CameraFixed: false,
-      seedance2OutputFormat: fal.seedance2OutputFormat,
-      klingV3MultiPrompt: '',
-      klingV3Duration: '5',
-      klingV3GenerateAudio: true,
-      klingV3CfgScale: '0.5',
-      klingV3MultiPromptEnabled: false,
-      klingV3Shot1Duration: '5',
-      klingV3Shot2Duration: '5',
-      ...snappedRect,
-    };
-    setState(prevState => ({
-      ...prevState,
-      videoPromptAreas: prevState.videoPromptAreas.map(area => (
-        area.id === targetArea.id ? { ...area, promptBarId: newBar.id } : area
-      )),
-      videoPromptBars: [...prevState.videoPromptBars, newBar],
-    }));
-  }, [displayedVideoPromptAreas, fal.falVideoModelId, fal.isSeedance2VideoModel, fal.isSeedance25VideoModel, fal.jimengMultiframeDuration, fal.jimengMultiframeResolution, fal.seedance25AspectRatio, fal.seedance25Duration, fal.seedance25GenerateAudio, fal.seedance25Resolution, fal.seedance25Variant, fal.seedance2JimengModelVersion, fal.seedance2OutputFormat, fal.seedance2VolcengineModel, selectedVideoPromptAreaId, setError, setState]);
-
-  const handleEmbeddedPromptBarUpdate = useCallback((barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => {
-    setLiveVideoPromptBars(displayedVideoPromptBars.map(bar => (
-      bar.id === barId ? updater(bar) : bar
-    )));
-  }, [displayedVideoPromptBars, setLiveVideoPromptBars]);
-
-  useEffect(() => {
-    if (!selectedVideoPromptAreaId) {
-      return;
-    }
-    const hasSelectedArea = displayedVideoPromptAreas.some(area => area.id === selectedVideoPromptAreaId);
-    if (!hasSelectedArea) {
-      setSelectedVideoPromptAreaId(null);
-    }
-  }, [displayedVideoPromptAreas, selectedVideoPromptAreaId]);
 
   const selectedStillImageCount = useMemo(
     () => selectedImageIds.filter(id => images.find(img => img.id === id)?.mediaType === 'image').length,
@@ -1078,17 +1014,6 @@ export default function App() {
     }
   }, [falJobs, handleGenerate, jimengSetup, setToastMessage]);
 
-  const handleVideoPromptAreaBorderColorChange = useCallback((areaId: string, color: string) => {
-    setState(prevState => {
-      const areaIndex = prevState.videoPromptAreas.findIndex(area => area.id === areaId);
-      if (areaIndex === -1) {
-        return prevState;
-      }
-      const nextAreas = [...prevState.videoPromptAreas];
-      nextAreas[areaIndex] = { ...nextAreas[areaIndex], borderColor: color };
-      return { ...prevState, videoPromptAreas: nextAreas };
-    });
-  }, [setState]);
 
   const selectedImageIndex = primaryImageId ? images.findIndex(img => img.id === primaryImageId) : -1;
   const isImageOverlapping = primaryImageId && selectedImageIndex !== -1 ? images.some(other => other.id !== primaryImageId && isOverlapping(images[selectedImageIndex], other)) : false;
@@ -1158,57 +1083,6 @@ export default function App() {
     includeTailFrame: isFlux3FflfMode,
     tailImageId: videoLastFrameImageId,
   });
-  const videoPromptAreaBarById = useMemo(() => (
-    displayedVideoPromptBars.reduce<Record<string, CanvasVideoPromptBar>>((acc, bar) => {
-      if (bar.assignedAreaId) {
-        acc[bar.assignedAreaId] = bar;
-      }
-      return acc;
-    }, {})
-  ), [displayedVideoPromptBars]);
-  const videoPromptAreaProfiles = useMemo(() => (
-    displayedVideoPromptAreas.reduce<Record<string, ReturnType<typeof getVideoPromptAreaCapabilityProfile>>>((acc, area) => {
-      const bar = videoPromptAreaBarById[area.id];
-      acc[area.id] = getVideoPromptAreaCapabilityProfile(bar?.modelId, bar?.seedance2Variant, bar ? getEmbeddedBarFalOptions(bar) : undefined);
-      return acc;
-    }, {})
-  ), [displayedVideoPromptAreas, videoPromptAreaBarById]);
-  const videoPromptAreaMemberships = useMemo(() => (
-    displayedVideoPromptAreas.reduce<Record<string, VideoPromptAreaMembership>>((acc, area) => {
-      acc[area.id] = buildVideoPromptAreaMembership(area, displayedImages, videoPromptAreaProfiles[area.id]);
-      return acc;
-    }, {})
-  ), [displayedImages, displayedVideoPromptAreas, videoPromptAreaProfiles]);
-  const videoPromptAreaMembershipList = useMemo(() => (
-    Object.values(videoPromptAreaMemberships) as VideoPromptAreaMembership[]
-  ), [videoPromptAreaMemberships]);
-  const videoPromptAreaLabelMap = useMemo(() => (
-    videoPromptAreaMembershipList.reduce<Record<string, string>>((acc, membership) => {
-      Object.entries(membership.orderLabels).forEach(([mediaId, label]) => {
-        acc[mediaId] = label;
-      });
-      return acc;
-    }, {})
-  ), [videoPromptAreaMembershipList]);
-  const ignoredVideoPromptMediaIds = useMemo(() => (
-    videoPromptAreaMembershipList.flatMap(membership => membership.ignoredMediaIds)
-  ), [videoPromptAreaMembershipList]);
-  const acceptedVideoPromptImageIds = useMemo(() => (
-    videoPromptAreaMembershipList.flatMap(membership => [
-      ...(membership.primaryImageId ? [membership.primaryImageId] : []),
-      ...membership.acceptedImageIds,
-      ...(membership.tailImageId ? [membership.tailImageId] : []),
-    ])
-  ), [videoPromptAreaMembershipList]);
-  const acceptedVideoPromptVideoIds = useMemo(() => (
-    videoPromptAreaMembershipList.flatMap(membership => membership.acceptedVideoIds)
-  ), [videoPromptAreaMembershipList]);
-  const acceptedVideoPromptAudioIds = useMemo(() => (
-    videoPromptAreaMembershipList.flatMap(membership => membership.acceptedAudioIds)
-  ), [videoPromptAreaMembershipList]);
-  const acceptedVideoPromptElementIds = useMemo(() => (
-    videoPromptAreaMembershipList.flatMap(membership => membership.elementImageIds)
-  ), [videoPromptAreaMembershipList]);
   // Stable identity matters: this feeds Canvas's draw callback, and a fresh array every
   // App render would force a full canvas repaint on unrelated state changes.
   const canvasElementImageIds = useMemo(() => (
@@ -1304,27 +1178,6 @@ export default function App() {
     hasSingleImageSelected,
     primarySelectionMediaType,
   });
-  const embeddedVideoPromptBarModelOptions = useMemo(() => (
-    FAL_VIDEO_MODEL_OPTIONS
-      .filter(option => isUsableVideoPromptAreaModel(option.value))
-      .map(option => ({ value: option.value, label: option.label }))
-  ), []);
-  const getEmbeddedVideoPromptBarSubmitError = useCallback((bar: CanvasVideoPromptBar): string | null => {
-    if (getEmbeddedVideoPromptBarModelId(bar.modelId) !== FLUX_3_VIDEO_MODEL_ID) {
-      return null;
-    }
-    const membership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined;
-    return buildEmbeddedFlux3PromptState(bar, membership).runPlan.error;
-  }, [videoPromptAreaMemberships]);
-  const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => (
-    buildPromptBarModelControls(buildEmbeddedPromptBarControlsInput({
-      bar,
-      barMembership: bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined,
-      fal,
-      updateBar: handleEmbeddedPromptBarUpdate,
-      isLoading,
-    })) ?? []
-  ), [fal, handleEmbeddedPromptBarUpdate, isLoading, videoPromptAreaMemberships]);
 
   // Validation layer for prompt submission that enforces provider/model-specific rules.
   const {
