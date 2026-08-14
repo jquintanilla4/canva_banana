@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo, useSyncExtern
 import { type ValueStore } from './utils/valueStore';
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
-import { Canvas, type PanToAnchorRequest } from './components/Canvas';
+import { Canvas } from './components/Canvas';
 import { MIN_STROKE_SIZE, MAX_STROKE_SIZE, KEYBOARD_STROKE_STEP } from './components/canvas/constants';
 import { RecordingOverlay } from './components/RecordingOverlay';
 import { BackupsModal } from './components/BackupsModal';
@@ -25,7 +25,7 @@ import { JimengSetupPanel } from './components/JimengSetupPanel';
 import { DesktopSettingsModal } from './components/DesktopSettingsModal';
 import { DesktopAppIconModal } from './components/DesktopAppIconModal';
 import { PromptChatPanel } from './components/PromptChatPanel';
-import { NotesPanel, type NotesPanelFocusRequest } from './components/NotesPanel';
+import { NotesPanel } from './components/NotesPanel';
 import {
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
@@ -70,7 +70,7 @@ import {
   buildPromptBarModelControls,
   getPromptBarModelOptions,
 } from './services/promptBarConfig';
-import { applyBlindTestMode, applyOpenSourceAliasMode, type BlindTestMapping } from './services/blindTestService';
+import { useBlindTestMode } from './hooks/useBlindTestMode';
 import { isOverlapping } from './utils/canvasGeometry';
 import { FileMenu } from './components/FileMenu';
 import { ViewToolbar } from './components/ViewToolbar';
@@ -87,8 +87,8 @@ import { useFalSettings } from './hooks/useFalSettings';
 import { useSnapshotIO } from './hooks/useSnapshotIO';
 import { useCanvasMediaActions } from './hooks/useCanvasMediaActions';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { useAudioRecording } from './hooks/useAudioRecording';
-import { convertAudioBlobToWav, generateWaveformImage, loadAudioFromBlob } from './services/audioService';
+import { useAudioRecordingToCanvas } from './hooks/useAudioRecordingToCanvas';
+import { useNotesPanel } from './hooks/useNotesPanel';
 import { useGenerationGuards } from './hooks/useGenerationGuards';
 import { useImageResize } from './hooks/useImageResize';
 import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
@@ -249,11 +249,20 @@ export default function App() {
       path.tool === Tool.ANNOTATE &&
       path.points.length > 0
   );
-  // Notes side panel state: open/close, focus-a-note requests, canvas pan-to-pin requests, and the pin label counter.
-  const [isNotesPanelOpen, setIsNotesPanelOpen] = useState(false);
-  const [notesPanelFocusRequest, setNotesPanelFocusRequest] = useState<NotesPanelFocusRequest | null>(null);
-  const [panToAnchorRequest, setPanToAnchorRequest] = useState<PanToAnchorRequest | null>(null);
-  const noteLabelCounterRef = useRef(1); // Monotonic — labels are never reused after deletion.
+  // Notes side panel: open/close, focus requests, pan-to-pin requests, note CRUD.
+  const {
+    isNotesPanelOpen,
+    notesPanelFocusRequest,
+    panToAnchorRequest,
+    noteLabelCounterRef,
+    handleNoteTextChange,
+    focusNoteInPanel,
+    createNote,
+    handleAddPanelNote,
+    handleDeleteNote,
+    handleJumpToAnchor,
+    toggleNotesPanel,
+  } = useNotesPanel({ displayedNotes, setLiveNotes, handleCommit });
 
   // State to track if the app is currently performing a loading operation
   const [isLoading, setIsLoading] = useState(false);
@@ -296,15 +305,6 @@ export default function App() {
     setToastMessage,
   });
 
-  // Audio recording state
-  const {
-    isRecording,
-    recordingDuration,
-    startRecording,
-    stopRecording,
-    error: recordingError,
-  } = useAudioRecording();
-
   const {
     videoNegativePrompt,
     setVideoNegativePrompt,
@@ -320,28 +320,13 @@ export default function App() {
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
 
   // Blind test mode: anonymizes model names in dropdowns with random codenames
-  const [blindTestEnabled, setBlindTestEnabled] = useState(false);
-  const [openSourceAliasEnabled, setOpenSourceAliasEnabled] = useState(false);
-  const blindTestMappingRef = useRef<BlindTestMapping>(new Map());
-  const handleBlindTestClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    if (event.altKey) {
-      setOpenSourceAliasEnabled(prev => {
-        const next = !prev;
-        if (next) {
-          setBlindTestEnabled(false);
-        }
-        return next;
-      });
-      return;
-    }
-    setBlindTestEnabled(prev => {
-      const next = !prev;
-      if (next) {
-        setOpenSourceAliasEnabled(false);
-      }
-      return next;
-    });
-  }, []);
+  const {
+    blindTestEnabled,
+    openSourceAliasEnabled,
+    handleBlindTestClick,
+    mapModelOptions,
+    blindTestMapping,
+  } = useBlindTestMode();
 
   // App-owned blocking overlays (file menu, backups, desktop settings, app icon, debug log).
   const {
@@ -827,81 +812,19 @@ export default function App() {
     })); // Repair the active history snapshot without creating an undo step.
   }, [replaceState, setLiveImages]);
 
-  // Handle audio recording toggle
-  const handleRecordToggle = useCallback(async () => {
-    if (isRecording) {
-      const audioBlob = await stopRecording();
-      if (audioBlob) {
-        try {
-          const wavBlob = await convertAudioBlobToWav(audioBlob);
-          // Generate waveform from the recording
-          const displayWidth = 400;
-          const displayHeight = 80;
-          const audioElement = await loadAudioFromBlob(wavBlob);
-          const { dataUrl: waveformImageData, duration } = await generateWaveformImage(
-            wavBlob,
-            displayWidth,
-            displayHeight
-          );
-
-          // Create waveform image element
-          const waveformImg = new Image();
-          await new Promise<void>((resolve, reject) => {
-            waveformImg.onload = () => resolve();
-            waveformImg.onerror = () => reject(new Error('Failed to load waveform image'));
-            waveformImg.src = waveformImageData;
-          });
-
-          // Create the audio file
-          const file = new File([wavBlob], `recording-${Date.now()}.wav`, { type: wavBlob.type });
-
-          // Add to canvas at center
-          const newCanvasAudio = {
-            id: crypto.randomUUID(),
-            element: waveformImg,
-            mediaType: 'audio' as const,
-            x: (window.innerWidth / 2) - (displayWidth / 2),
-            y: (window.innerHeight / 2) - (displayHeight / 2),
-            width: displayWidth,
-            height: displayHeight,
-            rotation: 0,
-            naturalWidth: displayWidth,
-            naturalHeight: displayHeight,
-            file,
-            isPlaying: false,
-            hasAudio: true,
-            audioElement,
-            waveformImageData,
-            audioDuration: duration,
-            currentPlaybackTime: 0,
-            metadata: { source: 'imported' as const },
-          };
-
-          setState(prevState => ({
-            ...prevState,
-            images: [...prevState.images, newCanvasAudio],
-          }));
-          setSelectedImageIds([newCanvasAudio.id]);
-          setReferenceImageIds([]);
-          setTool(Tool.SELECTION);
-          setToastMessage('Recording saved');
-          setTimeout(() => setToastMessage(null), 2000);
-        } catch (err) {
-          console.error('Failed to process recording:', err);
-          setError('Failed to process recording.');
-        }
-      }
-    } else {
-      await startRecording();
-    }
-  }, [isRecording, stopRecording, startRecording, setState, setTool]);
-
-  // Propagate recording errors to main error state
-  useEffect(() => {
-    if (recordingError) {
-      setError(recordingError);
-    }
-  }, [recordingError]);
+  // Voice recording -> waveform card on the canvas.
+  const {
+    isRecording,
+    recordingDuration,
+    handleRecordToggle,
+  } = useAudioRecordingToCanvas({
+    setState,
+    setSelectedImageIds,
+    setReferenceImageIds,
+    setTool,
+    setToastMessage,
+    setError,
+  });
 
   // Allow stacking order tweaks without re-rendering everything else.
   const handleImageOrderChange = useCallback((imageId: string, direction: 'up' | 'down') => {
@@ -1218,53 +1141,6 @@ export default function App() {
       retryingFalJobIdsRef.current.delete(jobId);
     }
   }, [falJobs, handleGenerate, jimengSetup, setToastMessage]);
-
-  const handleNoteTextChange = useCallback((noteId: string, text: string) => {
-    const targetNotes = displayedNotes;
-    const noteIndex = targetNotes.findIndex(n => n.id === noteId);
-    if (noteIndex === -1) return;
-
-    const newNotes = [...targetNotes];
-    newNotes[noteIndex] = { ...newNotes[noteIndex], text };
-    setLiveNotes(newNotes);
-  }, [displayedNotes, setLiveNotes]);
-
-  const focusNoteInPanel = useCallback((noteId: string) => {
-    setIsNotesPanelOpen(true);
-    setNotesPanelFocusRequest(prev => ({ noteId, token: (prev?.token ?? 0) + 1 }));
-  }, []);
-
-  // Creates a note and opens it in the panel. With an anchor (NOTE-tool canvas click) it
-  // becomes a numbered pin; without one ("+" in the panel) it lives only in the panel.
-  // Both mutations commit on top of displayedNotes so un-blurred textarea edits staged in
-  // liveNotes land in the same history entry instead of overwriting the mutation later.
-  const createNote = useCallback((anchor?: Point) => {
-    const newNote: CanvasNote = {
-      id: crypto.randomUUID(),
-      text: '',
-      ...(anchor ? { label: noteLabelCounterRef.current++, anchor: { ...anchor } } : {}),
-    };
-    handleCommit({ notes: [...displayedNotes, newNote] });
-    focusNoteInPanel(newNote.id);
-  }, [displayedNotes, focusNoteInPanel, handleCommit]);
-
-  const handleAddPanelNote = useCallback(() => {
-    createNote();
-  }, [createNote]);
-
-  const handleDeleteNote = useCallback((noteId: string) => {
-    // Undoable; removes the canvas pin along with the note.
-    handleCommit({ notes: displayedNotes.filter(note => note.id !== noteId) });
-  }, [displayedNotes, handleCommit]);
-
-  // Clicking a note's pin badge in the panel pans the canvas to its anchor.
-  const handleJumpToAnchor = useCallback((anchor: Point) => {
-    setPanToAnchorRequest(prev => ({ x: anchor.x, y: anchor.y, token: (prev?.token ?? 0) + 1 }));
-  }, []);
-
-  const toggleNotesPanel = useCallback(() => {
-    setIsNotesPanelOpen(prev => !prev);
-  }, []);
 
   const handleVideoPromptAreaBorderColorChange = useCallback((areaId: string, color: string) => {
     setState(prevState => {
@@ -2107,12 +1983,7 @@ export default function App() {
     shouldValidateFalOptions,
     isNumImagesInvalid,
   });
-  const rawModelOptions = getPromptBarModelOptions(fal.falModelMode);
-  const promptBarModelOptions = applyBlindTestMode(
-    applyOpenSourceAliasMode(rawModelOptions, openSourceAliasEnabled),
-    blindTestMappingRef.current,
-    blindTestEnabled,
-  );
+  const promptBarModelOptions = mapModelOptions(getPromptBarModelOptions(fal.falModelMode));
   const providerLabels = useMemo<Record<ApiProviderId, string>>(() => ({
     google: PROVIDER_LABELS.google,
     fal: fal.isJimengSeedance2VideoModel
@@ -2416,7 +2287,7 @@ export default function App() {
         onRetry={handleRetryFalJob}
         blindTestEnabled={blindTestEnabled}
         openSourceAliasEnabled={openSourceAliasEnabled}
-        blindTestMapping={blindTestMappingRef.current}
+        blindTestMapping={blindTestMapping}
       />
 
       {jimengSetup.shouldShowPanel && (
