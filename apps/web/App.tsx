@@ -97,15 +97,14 @@ import { useKlingPromptMentions } from './hooks/useKlingPromptMentions';
 import { useFlux3PromptState } from './hooks/useFlux3PromptState';
 import { useVideoNegativePrompt } from './hooks/useVideoNegativePrompt';
 import { useFalQueueJobs } from './hooks/useFalQueueJobs';
-import { useDebugLogState } from './hooks/useDebugLogState';
+import { useBlockingOverlays } from './hooks/useBlockingOverlays';
 import { useJimengSetup } from './hooks/useJimengSetup';
 import { useGenerationCanvasNotifications, type GenerationCanvasNotification } from './hooks/useGenerationCanvasNotifications';
 import { useGenerationPromptBarTransfer } from './hooks/useGenerationPromptBarTransfer';
 import { useFileNameVisibility } from './hooks/useFileNameVisibility';
 import { useTrackpadMode } from './hooks/useTrackpadMode';
 import { useCanvasStressHarness } from './hooks/useCanvasStressHarness';
-import { getBackupSession, listBackupSessions, type BackupSessionSummary } from './services/backupService';
-import { createDesktopSnapshotSource } from './services/desktopSnapshotSource';
+import { useBackupsManager } from './hooks/useBackupsManager';
 import { writeClipboardText } from './services/clipboardService';
 import type { FalModelMode } from './services/modelConfig';
 import {
@@ -352,11 +351,28 @@ export default function App() {
     });
   }, []);
 
-  // State for toggling the file menu and debug log panels
-  const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
-  const [isDesktopSettingsOpen, setIsDesktopSettingsOpen] = useState(false);
-  const [isDesktopAppIconOpen, setIsDesktopAppIconOpen] = useState(false);
-  const [desktopSettingsMode, setDesktopSettingsMode] = useState<'onboarding' | 'manage'>('manage'); // Auto-open hides advanced setup fields.
+  // App-owned blocking overlays (file menu, backups, desktop settings, app icon, debug log).
+  const {
+    isFileMenuOpen,
+    closeFileMenu,
+    toggleFileMenu,
+    setIsFileMenuOpen,
+    isBackupsOpen,
+    setIsBackupsOpen,
+    isDesktopSettingsOpen,
+    setIsDesktopSettingsOpen,
+    isDesktopAppIconOpen,
+    setIsDesktopAppIconOpen,
+    desktopSettingsMode,
+    setDesktopSettingsMode,
+    openAppOwnedBlockingOverlay,
+    hasBlockingOverlay,
+    isDebugLogOpen,
+    debugLogEntries,
+    openDebugLogPanel,
+    closeDebugLogPanel,
+    copyLastEntry,
+  } = useBlockingOverlays();
   const [desktopSettingsStatus, setDesktopSettingsStatus] = useState<DesktopSettingsStatus | null>(null);
   const hasDesktopSettingsBridge = typeof window !== 'undefined' && Boolean(window.canvaBananaDesktop?.getSettingsStatus);
   const hasDesktopAppIconBridge = typeof window !== 'undefined' && Boolean(window.canvaBananaDesktop?.appIcon?.getState);
@@ -364,36 +380,6 @@ export default function App() {
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   // Increment after each successful generation to trigger autosave.
   const [generationTick, setGenerationTick] = useState(0);
-  const [isBackupsOpen, setIsBackupsOpen] = useState(false);
-  const [backupSessions, setBackupSessions] = useState<BackupSessionSummary[]>([]);
-  const [isBackupsLoading, setIsBackupsLoading] = useState(false);
-  const closeAppOwnedBlockingOverlays = useCallback(() => {
-    setIsFileMenuOpen(false);
-    setIsBackupsOpen(false);
-    setIsDesktopSettingsOpen(false);
-    setIsDesktopAppIconOpen(false);
-  }, []); // Keep native menu modal switches single-dialog.
-  const {
-    isDebugLogOpen,
-    debugLogEntries,
-    openDebugLogPanel,
-    closeDebugLogPanel,
-    copyLastEntry,
-  } = useDebugLogState({
-    onOpen: closeAppOwnedBlockingOverlays,
-  });
-  const openAppOwnedBlockingOverlay = useCallback((overlay: 'backups' | 'desktopSettings' | 'desktopAppIcon') => {
-    closeDebugLogPanel();
-    closeAppOwnedBlockingOverlays();
-    if (overlay === 'backups') {
-      setIsBackupsOpen(true);
-    } else if (overlay === 'desktopSettings') {
-      setIsDesktopSettingsOpen(true);
-    } else {
-      setIsDesktopAppIconOpen(true);
-    }
-  }, [closeAppOwnedBlockingOverlays, closeDebugLogPanel]); // Open one blocking modal at a time.
-  const hasBlockingOverlay = isFileMenuOpen || isBackupsOpen || isDesktopSettingsOpen || isDesktopAppIconOpen || isDebugLogOpen; // Overlays own focus and pointer input.
 
   // Callbacks to programmatically trigger zoom in/out from controls
   const requestZoomIn = useCallback(() => {
@@ -984,14 +970,6 @@ export default function App() {
     e.target.value = '';
   }, [handleImportSnapshotFromFile, setError]);
 
-  const closeFileMenu = useCallback(() => {
-    setIsFileMenuOpen(false);
-  }, []);
-
-  const toggleFileMenu = useCallback(() => {
-    setIsFileMenuOpen(prev => !prev);
-  }, []);
-
   // Toggle autosave setting from the hamburger menu.
   const handleToggleAutosave = useCallback(() => {
     setAutosaveEnabled(prev => !prev);
@@ -1049,9 +1027,20 @@ export default function App() {
     notifyGenerationPlaced(payload); // Arrival only announces the media; selection changes after an explicit user action.
   }, [notifyGenerationPlaced]);
 
-  const openBackupsModal = useCallback(() => {
-    openAppOwnedBlockingOverlay('backups');
-  }, [openAppOwnedBlockingOverlay]);
+  // Backup listing/restore state lives behind the backups modal.
+  const {
+    backupSessions,
+    isBackupsLoading,
+    openBackupsModal,
+    closeBackupsModal,
+    handleRestoreBackup,
+  } = useBackupsManager({
+    isBackupsOpen,
+    setIsBackupsOpen,
+    openAppOwnedBlockingOverlay,
+    importSnapshotFromFile: handleImportSnapshotFromFile,
+    setError,
+  });
 
   const refreshDesktopSettingsStatus = useCallback(async () => {
     const nextStatus = await window.canvaBananaDesktop?.getSettingsStatus?.();
@@ -1076,47 +1065,6 @@ export default function App() {
   useEffect(() => {
     return window.canvaBananaDesktop?.onOpenManageKeys?.(openDesktopSettings);
   }, [openDesktopSettings]);
-
-  const closeBackupsModal = useCallback(() => {
-    setIsBackupsOpen(false);
-  }, []);
-
-  const refreshBackups = useCallback(async () => {
-    setIsBackupsLoading(true);
-    try {
-      const sessions = await listBackupSessions();
-      setBackupSessions(sessions);
-    } catch (err) {
-      console.error(err);
-      const message = err instanceof Error ? err.message : 'Failed to load backups.';
-      setError(message);
-    } finally {
-      setIsBackupsLoading(false);
-    }
-  }, [setError]);
-
-  const handleRestoreBackup = useCallback(async (sessionId: string) => {
-    try {
-      const session = await getBackupSession(sessionId);
-      if (!session) {
-        setError('Backup not found.');
-        return;
-      }
-      if (session.source) {
-        await handleImportSnapshotFromFile(createDesktopSnapshotSource(session.source));
-      } else if (session.blob) {
-        const backupFile = new File([session.blob], session.fileName, {
-          type: session.blob.type || 'application/octet-stream',
-        });
-        await handleImportSnapshotFromFile(backupFile);
-      }
-      setIsBackupsOpen(false);
-    } catch (err) {
-      console.error(err);
-      const message = err instanceof Error ? err.message : 'Failed to restore backup.';
-      setError(message);
-    }
-  }, [handleImportSnapshotFromFile, setError]);
 
   const handleImportSnapshot = useCallback(() => {
     closeFileMenu();
@@ -1212,13 +1160,6 @@ export default function App() {
     // Autosave after the generation is committed to state.
     autosaveSnapshotRef.current();
   }, [generationTick]);
-
-  useEffect(() => {
-    if (!isBackupsOpen) {
-      return;
-    }
-    refreshBackups();
-  }, [isBackupsOpen, refreshBackups]);
 
   useEffect(() => {
     if (!hasDesktopSettingsBridge) {
