@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
-import { createValueStore, type ValueStore } from './utils/valueStore';
+import { type ValueStore } from './utils/valueStore';
 import { Toolbar } from './components/Toolbar';
 import { PromptBar } from './components/PromptBar';
 import { Canvas, type PanToAnchorRequest } from './components/Canvas';
@@ -106,6 +106,7 @@ import { useTrackpadMode } from './hooks/useTrackpadMode';
 import { useCanvasStressHarness } from './hooks/useCanvasStressHarness';
 import { useBackupsManager } from './hooks/useBackupsManager';
 import { useDesktopIntegration } from './hooks/useDesktopIntegration';
+import { useZoomControls } from './hooks/useZoomControls';
 import { writeClipboardText } from './services/clipboardService';
 import type { FalModelMode } from './services/modelConfig';
 import {
@@ -260,13 +261,6 @@ export default function App() {
   // State for error message display (null if no error)
   const [error, setError] = useState<string | null>(null);
 
-  // Triggers to control zoom-to-fit, zoom-to-selection, zoom-in, and zoom-out actions (increment to trigger effect)
-  const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0);
-  const [zoomToSelectionTrigger, setZoomToSelectionTrigger] = useState(0);
-  const [zoomInTrigger, setZoomInTrigger] = useState(0);
-  const [zoomOutTrigger, setZoomOutTrigger] = useState(0);
-  const canvasScaleStore = useMemo(() => createValueStore(1), []);
-  const [showZoomLevelBadge, setShowZoomLevelBadge] = useState(true);
   const { showFileName, toggleFileName } = useFileNameVisibility(); // The user's View-menu choice survives desktop relaunches.
   const { trackpadMode, toggleTrackpadMode } = useTrackpadMode(); // Trackpad zoom remains an explicit persisted opt-in.
   const [isPresentationMode, setIsPresentationMode] = useState(false);
@@ -375,14 +369,6 @@ export default function App() {
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   // Increment after each successful generation to trigger autosave.
   const [generationTick, setGenerationTick] = useState(0);
-
-  // Callbacks to programmatically trigger zoom in/out from controls
-  const requestZoomIn = useCallback(() => {
-    setZoomInTrigger(prev => prev + 1);
-  }, []);
-  const requestZoomOut = useCallback(() => {
-    setZoomOutTrigger(prev => prev + 1);
-  }, []);
 
   const handleAdjustStrokeSize = useCallback((delta: number) => {
     const adjustedDelta = delta * KEYBOARD_STROKE_STEP;
@@ -563,12 +549,21 @@ export default function App() {
     setKrea2StyleReferenceStrengths(prev => ({ ...prev, [imageId]: normalizeKrea2StyleStrength(value) }));
   }, []);
 
-  const requestZoomToSelection = useCallback(() => {
-    if (selectedImageIds.length === 0) {
-      return;
-    }
-    setZoomToSelectionTrigger(prev => prev + 1);
-  }, [selectedImageIds.length]);
+  // Zoom triggers, scale store, and badge visibility.
+  const {
+    zoomToFitTrigger,
+    zoomToSelectionTrigger,
+    zoomInTrigger,
+    zoomOutTrigger,
+    canvasScaleStore,
+    showZoomLevelBadge,
+    requestZoomIn,
+    requestZoomOut,
+    handleZoomToFit,
+    triggerZoomToSelection,
+    requestZoomToSelection,
+    handleToggleZoomLevelBadge,
+  } = useZoomControls({ hasSelection: selectedImageIds.length > 0 });
 
   const handleVideoPromptAreasChange = useCallback((nextAreas: CanvasVideoPromptArea[]) => {
     setLiveVideoPromptAreas(nextAreas);
@@ -832,10 +827,6 @@ export default function App() {
     })); // Repair the active history snapshot without creating an undo step.
   }, [replaceState, setLiveImages]);
 
-  const handleZoomToFit = useCallback(() => {
-    setZoomToFitTrigger(c => c + 1);
-  }, []);
-
   // Handle audio recording toggle
   const handleRecordToggle = useCallback(async () => {
     if (isRecording) {
@@ -970,9 +961,6 @@ export default function App() {
     setAutosaveEnabled(prev => !prev);
   }, []);
 
-  const handleToggleZoomLevelBadge = useCallback(() => {
-    setShowZoomLevelBadge(prev => !prev);
-  }, []);
   const handleTogglePresentationMode = useCallback(() => {
     setIsPresentationMode(prev => !prev);
   }, []);
@@ -1002,10 +990,11 @@ export default function App() {
       setSelectedVideoPromptAreaId,
       setTool, // Click-to-view returns the canvas to direct selection.
     }, { mediaIds: existingTargetIds, preserveVideoSourceState: notification.mediaType === 'video' });
-    setZoomToSelectionTrigger(prev => prev + 1);
+    triggerZoomToSelection();
   }, [
     dismissGenerationNotification,
     images,
+    triggerZoomToSelection,
     setElementImageIds,
     setReferenceAudioIds,
     setReferenceImageIds,
