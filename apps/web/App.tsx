@@ -31,7 +31,6 @@ import {
   GROK_IMAGINE_VIDEO_MODEL_ID,
   isGptImage2EditModelId,
   isNanoBananaEditModelId,
-  SCAIL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
@@ -45,17 +44,13 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
-  SEEDREAM_V45_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
-  JIMENG_MULTIFRAME_MAX_IMAGES,
-  JIMENG_MULTIFRAME_MIN_IMAGES,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   FAL_VIDEO_MODEL_OPTIONS,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
   isKlingO3VideoModelId,
@@ -70,6 +65,7 @@ import {
   buildPromptBarModelControls,
   getPromptBarModelOptions,
 } from './services/promptBarConfig';
+import { getModelUiCapabilities } from './services/modelCapabilities';
 import { useBlindTestMode } from './hooks/useBlindTestMode';
 import { isOverlapping } from './utils/canvasGeometry';
 import { FileMenu } from './components/FileMenu';
@@ -109,14 +105,7 @@ import { useDesktopIntegration } from './hooks/useDesktopIntegration';
 import { useZoomControls } from './hooks/useZoomControls';
 import { writeClipboardText } from './services/clipboardService';
 import type { FalModelMode } from './services/modelConfig';
-import {
-  buildEffectiveSeedanceReferenceIds,
-  SEEDANCE_REFERENCE_AUDIO_LIMIT,
-  SEEDANCE_REFERENCE_IMAGE_LIMIT,
-  SEEDANCE_REFERENCE_VIDEO_LIMIT,
-  getSeedance2VolcengineReferenceLimits,
-} from './utils/seedanceReferences';
-import { SEEDANCE25_REFERENCE_AUDIO_LIMIT, SEEDANCE25_REFERENCE_IMAGE_LIMIT, SEEDANCE25_REFERENCE_VIDEO_LIMIT } from './utils/seedance25References';
+import { buildEffectiveSeedanceReferenceIds } from './utils/seedanceReferences';
 import {
   buildEmbeddedVideoGenerationOverrides,
   buildVideoPromptAreaMembership,
@@ -309,7 +298,6 @@ export default function App() {
     videoNegativePrompt,
     setVideoNegativePrompt,
     setVideoNegativePromptForModel,
-    shouldShowVideoNegativePrompt,
   } = useVideoNegativePrompt({ isVideoMode: fal.isVideoMode, falVideoModelId: fal.falVideoModelId });
 
   // Negative prompt state for Wan 2.7 Pro Image model
@@ -367,94 +355,28 @@ export default function App() {
   }, [tool]);
 
   // Shows a toast when the reference image limit is reached for the current model.
-  const isKlingO3VideoInputMode = fal.isKlingO3EditMode;
+  // Copy lives in the model capability registry; unknown models get the generic line.
   const showReferenceLimitToast = useCallback((maxReferenceImages: number) => {
     const usingFalProvider = apiProvider === 'fal'; // Fal-only messages require active Fal provider.
-    if (usingFalProvider && isKlingO3VideoModelId(fal.falModelId)) {
-      const variantLabel = fal.isKlingO3EditMode ? 'Kling O3 Edit' : 'Kling O3 Reference';
-      setToastMessage(`${variantLabel} supports up to 5 images total (source + references + elements). Slots remaining: ${Math.max(0, maxReferenceImages)} for references/elements.`);
-      setTimeout(() => setToastMessage(null), 2000);
-      return;
-    }
-    if (usingFalProvider && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
-      setToastMessage('Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.');
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && fal.falModelId === SEEDREAM_V45_MODEL_ID && maxReferenceImages >= 10) {
-      setToastMessage('Seedream 4.5 only accepts up to 10 reference images.');
-      setTimeout(() => setToastMessage(null), 2000);
-      return;
-    }
-    if (usingFalProvider && fal.falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
-      setToastMessage('Wan 2.7 Pro Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.');
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && isGptImage2EditModelId(fal.falModelId)) {
-      const message = maxReferenceImages <= 8
-        ? 'GPT Image 2 annotate supports up to 8 references because the annotation canvas counts as an input.'
-        : 'GPT Image 2 supports up to 10 images total (1 primary + 9 references).';
-      setToastMessage(message);
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && fal.isKrea2LargeModel) {
-      setToastMessage(`Krea 2 Large supports up to ${KREA_2_MAX_STYLE_REFERENCES} style references.`);
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && fal.isMiniMaxH3VideoModel && fal.miniMaxH3Variant === 'reference') {
-      setToastMessage(`MiniMax H3 Reference supports up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} image references.`);
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && fal.isMiniMaxH3VideoModel) {
-      setToastMessage('MiniMax H3 Standard does not use references. Tagged references were cleared.'); // Standard runs drop them at submit, so say so up front.
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && fal.isSeedance25VideoModel && fal.seedance25Variant === 'reference') {
-      setToastMessage(`Seedance 2.5 Reference supports up to ${SEEDANCE25_REFERENCE_IMAGE_LIMIT} image references.`);
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && fal.isSeedance25VideoModel) {
-      setToastMessage('Seedance 2.5 Smart doesn\'t use references — tagged references were removed. Switch to Reference mode to use them.'); // Smart runs drop them at submit, so say so up front.
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
-    }
-    if (usingFalProvider && fal.falModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID && fal.seedance2Variant === 'smart') {
-      setToastMessage('Seedance 2 Smart doesn\'t use references — tagged references were removed. Switch to Reference mode to use them.'); // FAL Smart runs drop them at submit, so say so up front.
-      setTimeout(() => setToastMessage(null), 4000);
-      return;
+    if (usingFalProvider) {
+      const toast = getModelUiCapabilities(fal.falModelId, {
+        klingO3Variant: fal.klingO3Variant,
+        miniMaxH3Variant: fal.miniMaxH3Variant,
+        seedance2Variant: fal.seedance2Variant,
+        seedance25Variant: fal.seedance25Variant,
+      }).referenceLimitToast?.(maxReferenceImages);
+      if (toast) {
+        setToastMessage(toast.message);
+        setTimeout(() => setToastMessage(null), toast.durationMs);
+        return;
+      }
     }
     const totalLimit = maxReferenceImages + 1;
     const referenceLimitLabel = usingFalProvider ? getFalModelLabel(fal.falModelId) : PROVIDER_LABELS.google; // Match label to active provider.
     setToastMessage(`${referenceLimitLabel} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [apiProvider, fal.falModelId, fal.isKlingO3EditMode, fal.isKrea2LargeModel, fal.isMiniMaxH3VideoModel, fal.isSeedance25VideoModel, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
+  }, [apiProvider, fal.falModelId, fal.klingO3Variant, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
 
-  const isKlingO3ReferenceMode = fal.isKlingO3VideoModel && fal.klingO3Variant === 'reference';
-  const isVeo31TailCapable = fal.isVeo31VideoModel && fal.veo31Variant === 'i2v-fflf';
-  const isVeo31ExtendMode = fal.isVeo31VideoModel && fal.veo31Variant === 'extend';
-  const isScailVideoModel = fal.isVideoMode && fal.falVideoModelId === SCAIL_VIDEO_MODEL_ID;
-  const isWan27ReferenceMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'reference'; // Wan Reference labels tagged image/video refs.
-  const isWan27EditMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'edit'; // Wan Edit uses a source video instead of an end frame.
-  const isMiniMaxH3ReferenceMode = fal.isMiniMaxH3VideoModel && fal.miniMaxH3Variant === 'reference';
-  const isMiniMaxH3StandardMode = fal.isMiniMaxH3VideoModel && fal.miniMaxH3Variant === 'standard';
-  const isFlux3KeyframesMode = fal.isFlux3VideoModel && fal.flux3Variant === 'keyframes';
-  const isFlux3FflfMode = fal.isFlux3VideoModel && fal.flux3Variant === 'first-last-frame';
-  const supportsTailFrameSelection = fal.isKlingProVideoSelection
-    || fal.isKlingV3VideoModel
-    || isKlingO3ReferenceMode
-    || isVeo31TailCapable
-    || (fal.isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode)
-    || fal.isSeedance15VideoModel
-    || isMiniMaxH3StandardMode
-    || isFlux3FflfMode
-    || (fal.isSeedance25VideoModel && fal.seedance25Variant === 'smart')
-    || (fal.isSeedance2VideoModel && fal.seedance2Variant === 'smart'); // End-frame capable modes.
   const referenceImageSlotOffset = isGptImage2EditModelId(fal.falModelId) && tool === Tool.ANNOTATE ? 1 : 0; // Annotate uploads one extra input image.
   const isActiveKrea2LargeModel = apiProvider === 'fal' && fal.isKrea2LargeModel; // Krea behavior only applies while Fal is active.
 
@@ -494,6 +416,45 @@ export default function App() {
     handleImageSelection,
     replaceCanvasSelection,
   } = selection;
+
+  // Model-conditional UI behavior comes from the capability registry; the ctx carries
+  // the variant state that refines it. Derived locals keep their historical names.
+  const modelCapabilities = useMemo(() => getModelUiCapabilities(fal.falModelId, {
+    klingVariant: fal.klingVariant,
+    klingO3Variant: fal.klingO3Variant,
+    veo31Variant: fal.veo31Variant,
+    wan27VideoVariant: fal.wan27VideoVariant,
+    miniMaxH3Variant: fal.miniMaxH3Variant,
+    flux3Variant: fal.flux3Variant,
+    seedance2Variant: fal.seedance2Variant,
+    seedance25Variant: fal.seedance25Variant,
+    seedance2VolcengineModel: fal.seedance2VolcengineModel,
+    hasActivePrimaryImage: Boolean(activePrimaryImage),
+    hasPrimarySelection: primarySelectionMediaType !== null,
+  }), [
+    activePrimaryImage,
+    fal.falModelId,
+    fal.flux3Variant,
+    fal.klingO3Variant,
+    fal.klingVariant,
+    fal.miniMaxH3Variant,
+    fal.seedance25Variant,
+    fal.seedance2Variant,
+    fal.seedance2VolcengineModel,
+    fal.veo31Variant,
+    fal.wan27VideoVariant,
+    primarySelectionMediaType,
+  ]);
+  const capabilitySelection = modelCapabilities.selection;
+  const isKlingO3VideoInputMode = capabilitySelection.klingO3VideoInputMode;
+  const isKlingO3ReferenceMode = capabilitySelection.klingO3ReferenceMode;
+  const isVeo31ExtendMode = capabilitySelection.veo31ExtendMode;
+  const isWan27ReferenceMode = capabilitySelection.wan27ReferenceMode; // Wan Reference labels tagged image/video refs.
+  const isWan27EditMode = capabilitySelection.wan27EditMode; // Wan Edit uses a source video instead of an end frame.
+  const isMiniMaxH3ReferenceMode = capabilitySelection.miniMaxH3ReferenceMode;
+  const isFlux3KeyframesMode = capabilitySelection.flux3KeyframesMode;
+  const isFlux3FflfMode = capabilitySelection.flux3FflfMode;
+  const supportsTailFrameSelection = modelCapabilities.supportsTailFrame; // End-frame capable modes.
 
   const [krea2StyleReferenceStrengths, setKrea2StyleReferenceStrengths] = useState<Record<string, number>>({});
   const resetMetadataEditContext = useCallback(() => {
@@ -1017,10 +978,7 @@ export default function App() {
     }
   }, [canCreateVideoPromptAreas, handleToolChange, tool]);
 
-  const isCameraSettingsEnabled = !fal.isVideoMode && (
-    isSeedreamModelId(fal.falModelId)
-    || isNanoBananaEditModelId(fal.falModelId)
-  );
+  const isCameraSettingsEnabled = modelCapabilities.supportsCameraSettings;
 
   const cameraPromptPrefix = useMemo(() => (
     isCameraSettingsEnabled ? buildCameraPromptPrefix(cameraSettings) : ''
@@ -1165,7 +1123,7 @@ export default function App() {
   const isGptImage2Model = !fal.isVideoMode && isGptImage2EditModelId(fal.falModelId);
   const isKrea2LargeModel = isActiveKrea2LargeModel;
   const isGrokModel = !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
-  const isAnnotateModeDisabled = fal.isVideoMode || fal.isFlux2MaxModel || fal.isUpscaleModel;
+  const isAnnotateModeDisabled = !modelCapabilities.supportsAnnotate;
 
   useEffect(() => {
     if (appMode === 'ANNOTATE' && isAnnotateModeDisabled) {
@@ -1173,18 +1131,8 @@ export default function App() {
     }
   }, [appMode, handleModeChange, isAnnotateModeDisabled]);
 
-  const isSeedance2ReferenceMode = fal.isSeedance2VideoModel && (
-    fal.seedance2Variant === 'reference'
-    || (fal.falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID && (fal.seedance2Variant === 'edit' || fal.seedance2Variant === 'extend'))
-  ); // Seedance multimodal modes label the merged selected and tagged refs; Edit/Extend stay Volcengine-only.
-  const seedance2ReferenceLimits = getSeedance2VolcengineReferenceLimits(
-    fal.falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID ? fal.seedance2VolcengineModel : 'standard',
-  ); // Only the Volcengine selector can opt into the larger Seedance 2.5 reference envelope.
-  const seedance2ReferenceModelLabel = fal.falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID && fal.seedance2VolcengineModel === 'seedance25'
-    ? 'Seedance 2.5'
-    : 'Seedance 2';
-  const isSeedance25ReferenceMode = fal.isSeedance25VideoModel && fal.seedance25Variant === 'reference';
-  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode || isFlux3KeyframesMode;
+  const isSeedance25ReferenceMode = capabilitySelection.seedance25ReferenceMode;
+  const isMultimodalReferenceMode = capabilitySelection.multimodalReferenceMode; // Modes that label the merged selected and tagged refs.
   const {
     referenceImageIds: effectiveSeedanceReferenceImageIds,
     referenceVideoIds: effectiveSeedanceReferenceVideoIds,
@@ -1835,7 +1783,7 @@ export default function App() {
     miniMaxH3Variant: fal.miniMaxH3Variant,
     miniMaxH3AspectRatio: fal.miniMaxH3AspectRatio,
     miniMaxH3Duration: fal.miniMaxH3Duration,
-    miniMaxH3UsesSourceAspectRatio: isMiniMaxH3StandardMode && Boolean(activePrimaryImage),
+    miniMaxH3UsesSourceAspectRatio: capabilitySelection.miniMaxH3StandardMode && Boolean(activePrimaryImage),
     flux3Variant: fal.flux3Variant,
     flux3AspectRatio: fal.flux3AspectRatio,
     flux3Resolution: fal.flux3Resolution,
@@ -1986,11 +1934,11 @@ export default function App() {
   const promptBarModelOptions = mapModelOptions(getPromptBarModelOptions(fal.falModelMode));
   const providerLabels = useMemo<Record<ApiProviderId, string>>(() => ({
     google: PROVIDER_LABELS.google,
-    fal: fal.isJimengSeedance2VideoModel
+    fal: modelCapabilities.provider === 'jimeng'
       ? 'JM CLI'
-      : fal.isVolcengineSeedance2VideoModel ? 'VOLCENGINE' : PROVIDER_LABELS.fal,
-  }), [fal.isJimengSeedance2VideoModel, fal.isVolcengineSeedance2VideoModel]);
-  const shouldShowNegativePrompt = shouldShowVideoNegativePrompt || fal.isWan27ImageModel;
+      : modelCapabilities.provider === 'volcengine' ? 'VOLCENGINE' : PROVIDER_LABELS.fal,
+  }), [modelCapabilities.provider]);
+  const shouldShowNegativePrompt = modelCapabilities.showNegativePrompt;
   const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);
   const promptOutlineColor = isCameraPromptAccentActive
     ? '#f59e0b'
@@ -2148,11 +2096,11 @@ export default function App() {
           tailSelectionEnabled={supportsTailFrameSelection}
           isKlingO3VideoInputMode={isKlingO3VideoInputMode}
           isKlingO3ReferenceMode={isKlingO3ReferenceMode}
-          isSeedance15FflfMode={fal.isSeedance15VideoModel}
-          isKlingV3ControlVideoInputMode={fal.isKlingV3ControlVideoModel}
+          isSeedance15FflfMode={capabilitySelection.seedance15FflfMode}
+          isKlingV3ControlVideoInputMode={capabilitySelection.klingV3ControlVideoInputMode}
           isVeo31ExtendMode={isVeo31ExtendMode}
-          isWanAnimateVideoInputMode={fal.isWanAnimateVideoModel || isScailVideoModel}
-          isWan27VideoMode={fal.isWan27VideoModel}
+          isWanAnimateVideoInputMode={capabilitySelection.wanAnimateVideoInputMode}
+          isWan27VideoMode={capabilitySelection.wan27VideoMode}
           onError={setError}
           onMediaPlaybackRejected={handleMediaPlaybackRejected}
           onImageSelect={handleImageSelection}
@@ -2356,53 +2304,7 @@ export default function App() {
           onModelModeChange={handleModelModeChange}
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
-          promptPlaceholder={
-            fal.isFlux3VideoModel
-              ? flux3ModePolicy.inputKind === 'optional-start-image' && primarySelectionMediaType !== null && !activePrimaryImage
-                ? promptPlaceholderText
-                : flux3ModePolicy.inputKind === 'source-video'
-                ? 'Flux 3 Extend: select one video as @Video1 and describe how it should continue... (Cmd/Ctrl + Enter to generate)'
-                : flux3ModePolicy.inputKind === 'keyframe-images'
-                  ? `Flux 3 Keyframes: select or shift-click up to ${flux3ModePolicy.maxImages} still images as @Image1, @Image2, and so on, set their timing, then describe the shot... (Cmd/Ctrl + Enter to generate)`
-                  : flux3ModePolicy.inputKind === 'first-last-images'
-                    ? 'Flux 3 First & Last Frame: select a first image and shift-click a last image, then describe the transition... (Cmd/Ctrl + Enter to generate)'
-                    : activePrimaryImage
-                      ? 'Flux 3 Smart Mode: describe how @Image1 should move... (Cmd/Ctrl + Enter to generate)'
-                      : 'Flux 3 Smart Mode: describe a video, or select one still image for image-to-video... (Cmd/Ctrl + Enter to generate)'
-              : fal.isMiniMaxH3VideoModel
-              ? (fal.miniMaxH3Variant === 'reference'
-                ? `MiniMax H3 Reference: select or shift-click up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... (Cmd/Ctrl + Enter to generate)`
-                : activePrimaryImage
-                  ? 'MiniMax H3 Standard: describe the motion, or shift-click another still image to set the end frame... (Cmd/Ctrl + Enter to generate)'
-                  : 'MiniMax H3 Standard: describe the video, or select an image for image-to-video... (Cmd/Ctrl + Enter to generate)')
-              : fal.falVideoModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
-              ? `Jimeng Multi-frame: select ${JIMENG_MULTIFRAME_MIN_IMAGES}–${JIMENG_MULTIFRAME_MAX_IMAGES} still images in story order. For 2 images, describe the transition; for 3+, separate each transition prompt with ||. (Cmd/Ctrl + Enter to generate)`
-              : fal.isSeedance25VideoModel
-              ? (fal.seedance25Variant === 'reference'
-                ? `Seedance 2.5 Reference: select or shift-click up to ${SEEDANCE25_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE25_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE25_REFERENCE_AUDIO_LIMIT} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... (Cmd/Ctrl + Enter to generate)`
-                : 'Seedance 2.5 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... (Cmd/Ctrl + Enter to generate)')
-              : fal.isSeedance2VideoModel
-              ? (fal.isJimengSeedance2VideoModel
-                ? (fal.seedance2Variant === 'reference'
-                  ? `Seedance 2 (JM CLI) Reference: select or shift-click up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... (Cmd/Ctrl + Enter to generate)`
-                  : 'Seedance 2 (JM CLI) Smart: write a prompt for text-to-video, select a first frame, or Shift-click a second still image for the ending frame... (Cmd/Ctrl + Enter to generate)')
-                : fal.seedance2Variant === 'edit'
-                ? 'Seedance 2 Edit: select a video to edit (@Video1), optionally tag @Image/@Audio replacement clips, then describe the changes... (Cmd/Ctrl + Enter to generate)'
-                : fal.seedance2Variant === 'extend'
-                ? `${seedance2ReferenceModelLabel} Extend: select up to ${seedance2ReferenceLimits.videos} video clips and describe how to chain them, e.g. "@Video1 followed by @Video2", or extend @Video1 forward or backward... (Cmd/Ctrl + Enter to generate)`
-                : fal.seedance2Variant === 'reference'
-                ? `${seedance2ReferenceModelLabel} Reference: select or shift-click up to ${seedance2ReferenceLimits.images} images, ${seedance2ReferenceLimits.videos} videos, and ${seedance2ReferenceLimits.audios} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... (Cmd/Ctrl + Enter to generate)`
-                : 'Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... (Cmd/Ctrl + Enter to generate)')
-              : fal.isWan27ImageModel
-              ? 'Describe your generation, or your edit, or use @ to reference images (4 images in total)... (Cmd/Ctrl + Enter to generate)'
-              : fal.isKlingO3VideoModel
-                ? (isKlingO3ReferenceMode
-                  ? 'Kling O3 Reference: click a start image, Shift-click an end image, Option/Alt-click elements (@Element1), Option/Alt+Shift-click reference images (@Image1)...'
-                  : 'Kling O3 Edit: click a source video, Option/Alt-click elements, Shift-click reference images, then describe the edit... (Cmd/Ctrl + Enter to generate)')
-              : fal.isFlux2MaxModel
-                ? 'Describe your generation, use @ to reference images and elements(objects and characters)... (Cmd/Ctrl + Enter to generate)'
-                : promptPlaceholderText
-          }
+          promptPlaceholder={modelCapabilities.promptPlaceholder ?? promptPlaceholderText}
           showNegativePrompt={shouldShowNegativePrompt}
           showMultiPrompt={fal.isKlingV3VideoModel && fal.klingV3MultiPromptEnabled}
           multiPrompt={fal.klingV3MultiPrompt}
@@ -2415,7 +2317,7 @@ export default function App() {
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
           cameraThemeActive={isCameraPromptAccentActive}
-          klingSuggestionsEnabled={fal.isKlingO3VideoModel || isMultimodalReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel || fal.isFlux3VideoModel}
+          klingSuggestionsEnabled={modelCapabilities.klingSuggestionsEnabled}
           klingReferenceCount={Math.max(klingReferenceCount, flux3PromptMentions.length)}
           klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : klingPromptMentions}
           sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}
