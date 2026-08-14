@@ -79,6 +79,8 @@ const mockState = vi.hoisted(() => {
   const setSourceVideoId = vi.fn();
   const setSourceAudioId = vi.fn();
   const setLiveVideoPromptBars = vi.fn();
+  const runtimeConfig = { isDesktop: false };
+  const getRuntimeConfig = vi.fn(() => runtimeConfig);
   const baseVideoPromptArea = {
     id: 'area-1',
     sequence: 1,
@@ -320,7 +322,8 @@ const mockState = vi.hoisted(() => {
     videoPromptBars: [{ ...baseVideoPromptBar }],
     displayedVideoPromptAreas: [{ ...baseVideoPromptArea }],
     displayedVideoPromptBars: [{ ...baseVideoPromptBar }],
-    runtimeConfig: { isDesktop: false },
+    runtimeConfig,
+    getRuntimeConfig,
   };
 });
 
@@ -328,7 +331,7 @@ vi.mock('../services/runtimeConfig', async () => {
   const actual = await vi.importActual<typeof import('../services/runtimeConfig')>('../services/runtimeConfig');
   return {
     ...actual,
-    getRuntimeConfig: () => mockState.runtimeConfig,
+    getRuntimeConfig: mockState.getRuntimeConfig,
   };
 });
 
@@ -640,6 +643,7 @@ afterEach(() => {
     value: originalNavigatorPlatform,
   });
   mockState.runtimeConfig.isDesktop = false;
+  mockState.getRuntimeConfig.mockClear();
   mockState.handleGenerate.mockClear();
   mockState.onGenerationPlaced = null;
   mockState.selectedImageIds = [];
@@ -758,6 +762,15 @@ describe('App Flux 3 footer gating', () => {
 });
 
 describe('App video prompt area gating', () => {
+  it('does not reread desktop runtime config while App rerenders', () => {
+    mockState.getRuntimeConfig.mockClear();
+
+    const { rerender } = render(<App />);
+    rerender(<App />);
+
+    expect(mockState.getRuntimeConfig).not.toHaveBeenCalled();
+  });
+
   it.each([
     { label: 'an existing multi-item selection', selectedImageIds: ['existing-image-1', 'existing-image-2'] },
     { label: 'no existing selection', selectedImageIds: [] },

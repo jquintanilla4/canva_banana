@@ -802,6 +802,7 @@ export default function App() {
     topControlRailStyle,
     windowDragRegionStyle,
   } = useDesktopIntegration({
+    runtimeConfig,
     setDesktopSettingsMode,
     setIsDesktopSettingsOpen,
     openAppOwnedBlockingOverlay,

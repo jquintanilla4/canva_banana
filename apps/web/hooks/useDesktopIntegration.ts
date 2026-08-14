@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import {
-  getRuntimeConfig,
   type DesktopFileMenuCommand,
   type DesktopSettingsStatus,
+  type RuntimeConfig,
 } from '../services/runtimeConfig';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
 import type { AppBlockingOverlay } from './useBlockingOverlays';
@@ -31,6 +31,7 @@ type DesktopFileMenuState = {
 };
 
 type UseDesktopIntegrationArgs = {
+  runtimeConfig: RuntimeConfig;
   setDesktopSettingsMode: (mode: 'onboarding' | 'manage') => void;
   setIsDesktopSettingsOpen: (open: boolean) => void;
   openAppOwnedBlockingOverlay: (overlay: AppBlockingOverlay) => void;
@@ -41,6 +42,7 @@ type UseDesktopIntegrationArgs = {
 // Electron-only integration: desktop settings status, native file-menu commands,
 // startup onboarding, and macOS window-chrome layout. Safe no-op in the browser.
 export function useDesktopIntegration({
+  runtimeConfig,
   setDesktopSettingsMode,
   setIsDesktopSettingsOpen,
   openAppOwnedBlockingOverlay,
@@ -60,7 +62,6 @@ export function useDesktopIntegration({
   } = menuCommands;
   const { autosaveEnabled, showZoomLevelBadge, showFileName, trackpadMode, isClearingJimengCache } = fileMenuState;
 
-  const runtimeConfig = getRuntimeConfig();
   const [desktopSettingsStatus, setDesktopSettingsStatus] = useState<DesktopSettingsStatus | null>(null);
   const hasDesktopSettingsBridge = typeof window !== 'undefined' && Boolean(window.canvaBananaDesktop?.getSettingsStatus);
   const hasDesktopAppIconBridge = typeof window !== 'undefined' && Boolean(window.canvaBananaDesktop?.appIcon?.getState);
