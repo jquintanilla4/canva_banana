@@ -2,6 +2,7 @@ import type { CanvasVideoPromptBar, GenerationInputs, GenerationProviderId } fro
 import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+  FLUX_3_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
@@ -11,6 +12,7 @@ import {
   getProviderSafeSeedance2Variant,
   getVolcengineSafeSeedance2Settings,
 } from '../services/modelConfig';
+import { resolveFlux3Settings } from './flux3';
 
 type EmbeddedVideoGenerationProviderInput = Pick<GenerationInputs, 'provider' | 'falOptions' | 'volcengineOptions' | 'jimengOptions'>;
 type EmbeddedBarFalOptions = NonNullable<GenerationInputs['falOptions']> & {
@@ -134,6 +136,17 @@ export const buildEmbeddedVideoGenerationProviderInput = (
         multiframeDuration: bar.falOptions?.multiframeDuration ?? '3',
         multiframeResolution: bar.falOptions?.multiframeResolution ?? '720p',
         sessionId: jimengSessionId,
+      },
+    };
+  }
+  if (modelId === FLUX_3_VIDEO_MODEL_ID) {
+    const falOptions = getEmbeddedBarFalOptions(bar);
+    const flux3Settings = resolveFlux3Settings(falOptions);
+    return {
+      provider,
+      falOptions: {
+        ...falOptions,
+        ...flux3Settings,
       },
     };
   }

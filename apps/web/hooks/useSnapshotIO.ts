@@ -39,6 +39,10 @@ import {
   isFalImageModelId,
   isFalImageSizeSelectionValue,
   isFalResolutionSelectionValue,
+  isFlux3AspectRatio,
+  isFlux3Duration,
+  isFlux3Resolution,
+  isFlux3Variant,
   isInfinitalkAccelerationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
@@ -77,6 +81,7 @@ import type { WanCreativity } from '../services/modelConfig';
 import type { UseFalSettingsResult } from './useFalSettings';
 import type { SelectionStateResult } from './useSelectionState';
 import type { AppState } from './useCanvasHistory';
+import { parseFlux3KeyframeTimings, resolveFlux3Settings } from '../utils/flux3';
 
 type ApiProvider = ApiProviderId;
 
@@ -343,6 +348,12 @@ export function useSnapshotIO({
     seedance25Resolution,
     seedance25Duration,
     seedance25GenerateAudio,
+    flux3Variant = 'smart',
+    flux3AspectRatio = 'auto',
+    flux3Resolution = '720p',
+    flux3Duration = 'auto',
+    flux3GenerateAudio = true,
+    flux3KeyframeTimings = [],
     jimengMultiframeDuration,
     jimengMultiframeResolution,
     jimengSessionId,
@@ -406,6 +417,12 @@ export function useSnapshotIO({
     setSeedance25Resolution,
     setSeedance25Duration,
     setSeedance25GenerateAudio,
+    setFlux3Variant = () => undefined,
+    setFlux3AspectRatio = () => undefined,
+    setFlux3Resolution = () => undefined,
+    setFlux3Duration = () => undefined,
+    setFlux3GenerateAudio = () => undefined,
+    setFlux3KeyframeTimings = () => undefined,
     setJimengMultiframeDuration,
     setJimengMultiframeResolution,
     setJimengSessionId,
@@ -426,6 +443,7 @@ export function useSnapshotIO({
     seedanceReferenceOrderIds,
     elementImageIds,
     videoLastFrameImageId,
+    sourceVideoId,
     setSelectedImageIds,
     setReferenceImageIds,
     setReferenceVideoIds,
@@ -433,6 +451,7 @@ export function useSnapshotIO({
     setSeedanceReferenceOrderIds,
     setElementImageIds,
     setVideoLastFrameImageId,
+    setSourceVideoId = () => undefined,
   } = selection;
   // Serialize current canvas state plus UI settings into a binary snapshot for export/share.
   const buildSnapshotBinary = useCallback(async (stateOverride?: AppState, fallbackMediaIds?: ReadonlySet<string>): Promise<SnapshotBinary> => {
@@ -502,6 +521,12 @@ export function useSnapshotIO({
       seedance25Resolution,
       seedance25Duration,
       seedance25GenerateAudio,
+      flux3Variant,
+      flux3AspectRatio,
+      flux3Resolution,
+      flux3Duration,
+      flux3GenerateAudio,
+      flux3KeyframeTimings: flux3KeyframeTimings.map(entry => ({ ...entry })),
       jimengMultiframeDuration,
       jimengMultiframeResolution,
       jimengSessionId,
@@ -520,6 +545,7 @@ export function useSnapshotIO({
       ...(seedanceReferenceOrderIds.length ? { seedanceReferenceOrderIds: [...seedanceReferenceOrderIds] } : {}), // Snapshot restore should preserve Seedance label order.
       ...(elementImageIds.length ? { elementImageIds: [...elementImageIds] } : {}),
       ...(videoLastFrameImageId ? { videoLastFrameImageId } : {}),
+      ...(sourceVideoId ? { sourceVideoId } : {}),
     };
 
     return buildSnapshotBinaryFromState({
@@ -586,6 +612,12 @@ export function useSnapshotIO({
     seedance25Resolution,
     seedance25Duration,
     seedance25GenerateAudio,
+    flux3Variant,
+    flux3AspectRatio,
+    flux3Resolution,
+    flux3Duration,
+    flux3GenerateAudio,
+    flux3KeyframeTimings,
     jimengMultiframeDuration,
     jimengMultiframeResolution,
     jimengSessionId,
@@ -612,6 +644,7 @@ export function useSnapshotIO({
     noteLabelCounterRef,
     tool,
     videoLastFrameImageId,
+    sourceVideoId,
   ]);
 
   const writeSnapshotWithMediaFallbacks = useCallback(async (
@@ -1001,6 +1034,11 @@ export function useSnapshotIO({
       resetHistory(nextState);
 
       const meta = restored.meta;
+      const restoredSourceVideoId = typeof meta?.sourceVideoId === 'string'
+        && restored.images.some(image => image.id === meta.sourceVideoId && image.mediaType === 'video')
+        ? meta.sourceVideoId
+        : null;
+      setSourceVideoId(restoredSourceVideoId); // Restore only a source role backed by a video in this snapshot.
       const maxRestoredNoteLabel = restored.notes.reduce((max, note) => Math.max(max, note.label ?? 0), 0);
       const restoredNoteLabelCounter = typeof meta?.noteLabelCounter === 'number' && Number.isFinite(meta.noteLabelCounter)
         ? Math.floor(meta.noteLabelCounter)
@@ -1011,6 +1049,12 @@ export function useSnapshotIO({
           ? meta.jimengSessionId
           : 0,
       ); // Every imported document owns its Jimeng session; legacy and metadata-free snapshots use zero.
+      setFlux3Variant('smart');
+      setFlux3AspectRatio('auto');
+      setFlux3Resolution('720p');
+      setFlux3Duration('auto');
+      setFlux3GenerateAudio(true);
+      setFlux3KeyframeTimings([]); // Snapshots created before Flux 3 use safe family defaults.
       if (meta) {
         const validAppMode: AppMode =
           meta.appMode === 'CANVAS'
@@ -1210,6 +1254,20 @@ export function useSnapshotIO({
         if (typeof meta.seedance25GenerateAudio === 'boolean') {
           setSeedance25GenerateAudio(meta.seedance25GenerateAudio);
         }
+        const restoredFlux3 = resolveFlux3Settings({
+          flux3Variant: isFlux3Variant(meta.flux3Variant) ? meta.flux3Variant : undefined,
+          flux3AspectRatio: isFlux3AspectRatio(meta.flux3AspectRatio) ? meta.flux3AspectRatio : undefined,
+          flux3Resolution: isFlux3Resolution(meta.flux3Resolution) ? meta.flux3Resolution : undefined,
+          flux3Duration: isFlux3Duration(meta.flux3Duration) ? meta.flux3Duration : undefined,
+          flux3GenerateAudio: typeof meta.flux3GenerateAudio === 'boolean' ? meta.flux3GenerateAudio : undefined,
+          flux3KeyframeTimings: parseFlux3KeyframeTimings(meta.flux3KeyframeTimings),
+        }); // Keyframes and First & Last Frame cannot keep `auto` after restore.
+        setFlux3Variant(restoredFlux3.flux3Variant);
+        setFlux3AspectRatio(restoredFlux3.flux3AspectRatio);
+        setFlux3Resolution(restoredFlux3.flux3Resolution);
+        setFlux3Duration(restoredFlux3.flux3Duration);
+        setFlux3GenerateAudio(restoredFlux3.flux3GenerateAudio);
+        setFlux3KeyframeTimings(restoredFlux3.flux3KeyframeTimings);
         if (isJimengMultiframeDurationSelectionValue(meta.jimengMultiframeDuration)) {
           setJimengMultiframeDuration(meta.jimengMultiframeDuration);
         }
@@ -1365,6 +1423,7 @@ export function useSnapshotIO({
     setReferenceVideoIds,
     setElementImageIds,
     setSelectedImageIds,
+    setSourceVideoId,
     noteLabelCounterRef,
     setTool,
     setVideoLastFrameImageId,

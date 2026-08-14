@@ -145,6 +145,7 @@ interface CanvasProps {
   onVideoPromptBarUpdate: (barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => void;
   onVideoPromptBarSubmit: (barId: string) => void;
   buildVideoPromptBarControls: (bar: CanvasVideoPromptBar) => ReadonlyArray<PromptBarControlConfig>;
+  getVideoPromptBarSubmitError?: (bar: CanvasVideoPromptBar) => string | null;
   embeddedVideoPromptBarModelOptions: ReadonlyArray<{ value: string; label: string }>;
   onScaleChange?: (scale: number) => void;
   isPresentationMode?: boolean;
@@ -337,6 +338,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onVideoPromptBarUpdate,
   onVideoPromptBarSubmit,
   buildVideoPromptBarControls,
+  getVideoPromptBarSubmitError,
   embeddedVideoPromptBarModelOptions,
   onScaleChange,
   isPresentationMode = false,
@@ -1714,6 +1716,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             + Number(Boolean(barMembership.sourceVideoId))
             + Number(Boolean(barMembership.sourceAudioId))
           : 0; // Count only media roles accepted by the active model profile.
+        const videoPromptBarSubmitError = getVideoPromptBarSubmitError?.(bar) ?? null;
         const rawEmbeddedMedia = barMembership
           ? barMembership.orderedMediaIds
             .map(mediaId => images.find(image => image.id === mediaId))
@@ -1808,7 +1811,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   onSubmit={() => onVideoPromptBarSubmit(bar.id)}
                   isLoading={isLoading}
                   inputDisabled={false}
-                  submitDisabled={isRemovedEmbeddedModel || !barMembership || jimengMultiframeDisabledReason !== null || (
+                  submitDisabled={isRemovedEmbeddedModel || !barMembership || videoPromptBarSubmitError !== null || jimengMultiframeDisabledReason !== null || (
                     isEmbeddedSeedanceEditMode(bar, selectedEmbeddedModelId)
                       ? barMembership.acceptedVideoIds.length === 0
                       : isEmbeddedSeedanceReferenceMode(bar, selectedEmbeddedModelId) && usableEmbeddedMediaCount === 0
@@ -1821,7 +1824,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                       && Boolean(bar.klingV3MultiPromptEnabled)
                       && (!bar.prompt.trim() || !bar.klingV3MultiPrompt?.trim())
                   )}
-                  submitDisabledReason={jimengMultiframeDisabledReason}
+                  submitDisabledReason={videoPromptBarSubmitError ?? jimengMultiframeDisabledReason}
                   modelOptions={embeddedModelOptionsForBar}
                   selectedModel={selectedEmbeddedModelId}
                   onModelChange={(modelId) => onVideoPromptBarUpdate(bar.id, currentBar => normalizeEmbeddedPromptBarForModel(currentBar, modelId))}

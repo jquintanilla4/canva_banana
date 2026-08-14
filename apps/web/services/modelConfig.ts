@@ -9,6 +9,10 @@ import type {
   Flux2MaxImageSizeOption,
   GenerationProviderId,
   GenerationKind,
+  Flux3AspectRatio,
+  Flux3Duration,
+  Flux3Resolution,
+  Flux3Variant,
   JimengSeedance2ModelVersion,
   Seedance2VolcengineModel,
 } from '../types';
@@ -68,6 +72,12 @@ export const MINIMAX_H3_VIDEO_MODEL_ID = 'minimax/h3' as const; // MiniMax H3 fa
 export const MINIMAX_H3_TEXT_TO_VIDEO_MODEL_ID = 'minimax/h3/text-to-video' as const; // H3 text endpoint.
 export const MINIMAX_H3_IMAGE_TO_VIDEO_MODEL_ID = 'minimax/h3/image-to-video' as const; // H3 image endpoint.
 export const MINIMAX_H3_REFERENCE_TO_VIDEO_MODEL_ID = 'minimax/h3/reference-to-video' as const; // H3 reference endpoint.
+export const FLUX_3_VIDEO_MODEL_ID = 'blackforestlabs/flux-3' as const; // Flux 3 family selector.
+export const FLUX_3_TEXT_TO_VIDEO_MODEL_ID = 'blackforestlabs/flux-3/text-to-video' as const;
+export const FLUX_3_IMAGE_TO_VIDEO_MODEL_ID = 'blackforestlabs/flux-3/image-to-video' as const;
+export const FLUX_3_FIRST_LAST_FRAME_VIDEO_MODEL_ID = 'blackforestlabs/flux-3/first-last-frame-to-video' as const;
+export const FLUX_3_KEYFRAMES_VIDEO_MODEL_ID = 'blackforestlabs/flux-3/keyframes-to-video' as const;
+export const FLUX_3_EXTEND_VIDEO_MODEL_ID = 'blackforestlabs/flux-3/extend-video' as const;
 export const SEEDANCE_15_VIDEO_MODEL_ID = 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video' as const;
 export const SEEDANCE_2_VIDEO_MODEL_ID = 'volcengine/seedance-2' as const;
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0' as const; // Selector id for the Fal Seedance 2 family.
@@ -149,6 +159,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
 export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_OPTIONS_BASE);
 
 const FAL_VIDEO_MODEL_OPTIONS_BASE = [
+  { value: FLUX_3_VIDEO_MODEL_ID, label: 'Flux 3' },
   { value: GROK_IMAGINE_VIDEO_MODEL_ID, label: 'Grok Imagine' },
   { value: HEYGEN_V3_LIPSYNC_MODEL_ID, label: 'HeyGen V3 Lipsync' },
   { value: INFINITALK_VIDEO_MODEL_ID, label: 'Infinitalk v2v' },
@@ -173,6 +184,37 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
 ] as const;
 
 export const FAL_VIDEO_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_VIDEO_MODEL_OPTIONS_BASE);
+
+export const FLUX3_VARIANT_OPTIONS: ReadonlyArray<{ value: Flux3Variant; label: string }> = [
+  { value: 'smart', label: 'Smart Mode' },
+  { value: 'first-last-frame', label: 'First & Last Frame' },
+  { value: 'keyframes', label: 'Keyframes' },
+  { value: 'extend', label: 'Extend' },
+] as const;
+
+export const FLUX3_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Flux3AspectRatio; label: string }> = [
+  { value: 'auto', label: 'Auto' }, { value: '21:9', label: '21:9' }, { value: '2:1', label: '2:1' },
+  { value: '16:9', label: '16:9' }, { value: '4:3', label: '4:3' }, { value: '1:1', label: '1:1' },
+  { value: '3:4', label: '3:4' }, { value: '9:16', label: '9:16' },
+] as const;
+
+export const FLUX3_RESOLUTION_OPTIONS: ReadonlyArray<{ value: Flux3Resolution; label: string }> = [
+  { value: '720p', label: '720p' }, { value: '1080p', label: '1080p' },
+] as const;
+
+export const FLUX3_DURATION_OPTIONS: ReadonlyArray<{ value: Flux3Duration; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  ...Array.from({ length: 16 }, (_, index) => {
+    const value = String(index + 5) as Exclude<Flux3Duration, 'auto'>;
+    return { value, label: `${value}s` };
+  }),
+];
+
+export const isFlux3VideoModel = (modelId: string | undefined): boolean => modelId === FLUX_3_VIDEO_MODEL_ID;
+export const isFlux3Variant = (value: unknown): value is Flux3Variant => value === 'smart' || value === 'first-last-frame' || value === 'keyframes' || value === 'extend';
+export const isFlux3AspectRatio = (value: unknown): value is Flux3AspectRatio => FLUX3_ASPECT_RATIO_OPTIONS.some(option => option.value === value);
+export const isFlux3Resolution = (value: unknown): value is Flux3Resolution => value === '720p' || value === '1080p';
+export const isFlux3Duration = (value: unknown): value is Flux3Duration => value === 'auto' || (typeof value === 'string' && /^(?:[5-9]|1\d|20)$/.test(value));
 
 export const KLING_VARIANT_OPTIONS: ReadonlyArray<{ value: KlingVariant; label: string }> = [
   { value: 'standard', label: 'Standard' },
@@ -1483,6 +1525,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [VEO_31_IMAGE_TO_VIDEO_MODEL_ID]: 0,
   [WAN_27_VIDEO_MODEL_ID]: 0,
   [MINIMAX_H3_VIDEO_MODEL_ID]: 9, // H3 Reference accepts up to 9 image references.
+  [FLUX_3_VIDEO_MODEL_ID]: 10,
   [SEEDANCE_15_VIDEO_MODEL_ID]: 0,
   [SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Seedance 2 reference mode supports up to 9 image refs.
   [FAL_SEEDANCE_2_VIDEO_MODEL_ID]: 9, // Fal Seedance 2 reference mode supports up to 9 image refs.

@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FLUX_3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
@@ -46,6 +47,7 @@ import {
   SEEDANCE25_REFERENCE_IMAGE_LIMIT,
   SEEDANCE25_REFERENCE_VIDEO_LIMIT,
 } from './seedance25References';
+import { getFlux3ModePolicy } from './flux3';
 
 type CanvasPoint = { x: number; y: number };
 export type EmbeddedVideoPromptBarSizeMode = 'full' | 'mini';
@@ -126,6 +128,19 @@ export const getVideoPromptAreaCapabilityProfile = (
   falOptions?: GenerationFalOptions,
 ): VideoModelCapabilityProfile => {
   const resolvedModelId = getEmbeddedVideoPromptBarModelId(modelId);
+
+  if (resolvedModelId === FLUX_3_VIDEO_MODEL_ID) {
+    const policy = getFlux3ModePolicy(falOptions?.flux3Variant ?? 'smart');
+    return imageOnlyProfile(resolvedModelId, {
+      defaultImageRole: policy.defaultImageRole,
+      defaultVideoRole: policy.defaultVideoRole,
+      shiftImageRole: policy.shiftImageRole,
+      supportedMediaTypes: policy.inputKind === 'source-video' ? ['video'] : ['image'],
+      maxImages: policy.maxImages,
+      maxVideos: policy.maxVideos,
+      supportsTextOnly: policy.supportsTextOnly,
+    });
+  }
 
   if (resolvedModelId === SEEDANCE_2_VIDEO_MODEL_ID || resolvedModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID) {
     const safeVariant = variant ? getProviderSafeSeedance2Variant(resolvedModelId, variant) : variant; // Bars can carry a stale Edit/Extend pick from Volcengine.
@@ -742,3 +757,27 @@ export const buildEmbeddedVideoGenerationOverrides = (
   sourceVideoId: membership.sourceVideoId,
   sourceAudioId: membership.sourceAudioId,
 }); // Generic embedded submit payload.
+
+export const buildEmbeddedFlux3GenerationOverrides = (
+  membership: VideoPromptAreaMembership | undefined,
+  variant: NonNullable<GenerationFalOptions['flux3Variant']>,
+): Pick<GenerationInputs, 'primaryImageId' | 'videoLastFrameImageId' | 'referenceImageIds' | 'referenceVideoIds' | 'sourceVideoId'> => {
+  const inputKind = getFlux3ModePolicy(variant).inputKind;
+  const acceptedImageIds = membership?.acceptedImageIds ?? [];
+  const acceptedVideoIds = membership?.acceptedVideoIds ?? [];
+  if (inputKind === 'source-video') {
+    return { primaryImageId: undefined, videoLastFrameImageId: undefined, referenceImageIds: [], referenceVideoIds: [], sourceVideoId: acceptedVideoIds[0] };
+  }
+  if (inputKind === 'first-last-images') {
+    return {
+      primaryImageId: acceptedImageIds[0],
+      videoLastFrameImageId: acceptedImageIds[1],
+      referenceImageIds: [],
+      sourceVideoId: undefined,
+    };
+  }
+  if (inputKind === 'keyframe-images') {
+    return { primaryImageId: undefined, videoLastFrameImageId: undefined, referenceImageIds: acceptedImageIds, sourceVideoId: undefined };
+  }
+  return { primaryImageId: membership?.primaryImageId, videoLastFrameImageId: undefined, referenceImageIds: [], sourceVideoId: undefined };
+};

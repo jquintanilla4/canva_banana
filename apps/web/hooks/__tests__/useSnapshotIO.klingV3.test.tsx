@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Tool, type CanvasImage } from '../../types';
 import { parseBinarySnapshotFile, readSnapshotBlobPartAsArrayBuffer, type SnapshotByteSource, type SnapshotMetaState } from '../../services/snapshotService';
 import { createDesktopSnapshotSource } from '../../services/desktopSnapshotSource';
-import { KLING_V3_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { FLUX_3_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import { useSnapshotIO } from '../useSnapshotIO';
 import type { SelectionStateResult } from '../useSelectionState';
 import type { UseFalSettingsResult } from '../useFalSettings';
@@ -89,6 +89,24 @@ const buildImage = (overrides: Partial<CanvasImage> = {}): CanvasImage => ({
   hasAudio: false,
   ...overrides,
 }); // Image fixture for snapshot export tests.
+
+const buildVideo = (overrides: Partial<CanvasImage> = {}): CanvasImage => ({
+  id: 'video-1',
+  element: document.createElement('video'),
+  mediaType: 'video',
+  x: 0,
+  y: 0,
+  width: 320,
+  height: 180,
+  rotation: 0,
+  naturalWidth: 320,
+  naturalHeight: 180,
+  file: new File(['video'], 'video.mp4', { type: 'video/mp4' }),
+  isPlaying: false,
+  hasAudio: true,
+  videoDuration: 5,
+  ...overrides,
+}); // Video fixture for source-role snapshot tests.
 
 const fileFromChunks = (chunks: Uint8Array[], fileName = 'scene.bcsnap'): File => {
   const size = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
@@ -1841,5 +1859,125 @@ describe('useSnapshotIO (Kling v3)', () => {
     expect(parsed.manifest.state.meta?.jimengMultiframeDuration).toBe('8');
     expect(parsed.manifest.state.meta?.jimengMultiframeResolution).toBe('1080p');
     expect(parsed.manifest.state.meta?.jimengSessionId).toBe(23);
+  });
+
+  it('round-trips the Flux 3 Extend source video role', async () => {
+    const exportedChunks: Uint8Array[] = [];
+    const setSourceVideoId = vi.fn();
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    window.canvaBananaDesktop = {
+      fileMenu: {
+        beginSaveSnapshot: vi.fn(async () => ({
+          canceled: false as const,
+          fileName: 'flux-extend.bcsnap',
+          writeId: 'export-write-1',
+          autosaveId: 'desktop-target-1',
+        })),
+        writeSnapshotChunk: vi.fn(async ({ data }: { data: ArrayBuffer }) => {
+          exportedChunks.push(new Uint8Array(data));
+          return { written: data.byteLength };
+        }),
+        finishSnapshotWrite: vi.fn(async () => ({ saved: true })),
+        abortSnapshotWrite: vi.fn(async () => ({ aborted: true })),
+      },
+    };
+    const selectionSetters = {
+      setSelectedImageIds: vi.fn(),
+      setReferenceImageIds: vi.fn(),
+      setReferenceVideoIds: vi.fn(),
+      setReferenceAudioIds: vi.fn(),
+      setSeedanceReferenceOrderIds: vi.fn(),
+      setElementImageIds: vi.fn(),
+      setVideoLastFrameImageId: vi.fn(),
+      setSourceVideoId,
+    };
+    const sourceVideo = buildVideo({ id: 'flux-source-video' });
+    const { result } = renderHook(() => useSnapshotIO({
+      ui: {
+        appMode: 'CANVAS',
+        tool: Tool.FREE_SELECTION,
+        brushSize: 20,
+        eraserSize: 20,
+        brushColor: '#ff0000',
+        prompt: 'Continue the source video',
+        apiProvider: 'fal',
+        setAppMode: vi.fn(),
+        setTool: vi.fn(),
+        setBrushSize: vi.fn(),
+        setEraserSize: vi.fn(),
+        setBrushColor: vi.fn(),
+        setPrompt: vi.fn(),
+        setApiProvider: vi.fn(),
+        setError: vi.fn(),
+        setToastMessage: vi.fn(),
+        setIsFileMenuOpen: vi.fn(),
+      },
+      fal: {
+        falModelId: FLUX_3_VIDEO_MODEL_ID,
+        flux3Variant: 'extend',
+        flux3AspectRatio: 'auto',
+        flux3Resolution: '720p',
+        flux3Duration: 'auto',
+        flux3GenerateAudio: true,
+        flux3KeyframeTimings: [],
+        setFalModelMode: vi.fn(),
+        setFalVideoModelId: vi.fn(),
+        setWan27VideoVariant: vi.fn(),
+        handleSeedance2VolcengineModelChange: vi.fn(),
+        setFlux3Variant: vi.fn(),
+        setFlux3AspectRatio: vi.fn(),
+        setFlux3Resolution: vi.fn(),
+        setFlux3Duration: vi.fn(),
+        setFlux3GenerateAudio: vi.fn(),
+        setFlux3KeyframeTimings: vi.fn(),
+        setJimengSessionId: vi.fn(),
+      } as unknown as UseFalSettingsResult,
+      selection: {
+        selectedImageIds: [sourceVideo.id],
+        referenceImageIds: [],
+        referenceVideoIds: [],
+        referenceAudioIds: [],
+        seedanceReferenceOrderIds: [],
+        elementImageIds: [],
+        videoLastFrameImageId: null,
+        sourceVideoId: sourceVideo.id,
+        ...selectionSetters,
+      } as unknown as SelectionStateResult,
+      noteLabelCounterRef: { current: 1 },
+      displayedImages: [sourceVideo],
+      displayedNotes: [],
+      displayedPaths: [],
+      displayedVideoPromptAreas: [],
+      displayedVideoPromptBars: [],
+      resetHistory: vi.fn(),
+      providerAvailability: { google: true, fal: true },
+      availableProviders: ['google', 'fal'],
+      autosaveEnabled: false,
+    }));
+
+    await act(async () => {
+      await result.current.exportSnapshot();
+    });
+
+    const exportedFile = fileFromChunks(exportedChunks, 'flux-extend.bcsnap');
+    const parsed = await parseBinarySnapshotFile(exportedFile);
+    expect(parsed.manifest.state.meta?.sourceVideoId).toBe(sourceVideo.id);
+
+    const exportedBytes = new Uint8Array(await readSnapshotBlobPartAsArrayBuffer(exportedFile, 0, exportedFile.size));
+    const importSource: SnapshotByteSource = {
+      fileName: 'flux-extend.bcsnap',
+      size: exportedBytes.byteLength,
+      type: 'application/octet-stream',
+      readRange: async (offset, length) => cloneArrayBuffer(exportedBytes.subarray(offset, offset + length)),
+      getMediaUrl: async () => 'canva-banana-snapshot-media://flux-source-video',
+      retain: async () => {},
+      close: async () => {},
+    };
+    await act(async () => {
+      await result.current.importSnapshotFromFile(importSource);
+    });
+
+    expect(setSourceVideoId).toHaveBeenLastCalledWith(sourceVideo.id);
+    expect(selectionSetters.setSelectedImageIds).toHaveBeenLastCalledWith([sourceVideo.id]);
   });
 });

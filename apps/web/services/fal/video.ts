@@ -11,6 +11,7 @@ import { mapWithConcurrency } from '../../utils/mapWithConcurrency';
 import { ensureRealSnapshotFile } from '../snapshotService';
 import { convertAudioBlobToWav } from '../audioService';
 import { readIsoBmffVideoFrameRate } from '../../utils/isoBmffVideoFrameRate';
+import { FLUX3_FPS, FLUX3_MAX_KEYFRAMES, getFlux3ModePolicy, normalizeFlux3PromptMentions } from '../../utils/flux3';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
   SEEDANCE25_REFERENCE_AUDIO_MAX_BYTES,
@@ -53,6 +54,12 @@ import {
   MINIMAX_H3_REFERENCE_TO_VIDEO_MODEL_ID,
   MINIMAX_H3_TEXT_TO_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
+  FLUX_3_VIDEO_MODEL_ID,
+  FLUX_3_TEXT_TO_VIDEO_MODEL_ID,
+  FLUX_3_IMAGE_TO_VIDEO_MODEL_ID,
+  FLUX_3_FIRST_LAST_FRAME_VIDEO_MODEL_ID,
+  FLUX_3_KEYFRAMES_VIDEO_MODEL_ID,
+  FLUX_3_EXTEND_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   VEO_31_EXTEND_VIDEO_MODEL_ID,
@@ -149,6 +156,71 @@ export const generateImageToVideo = async (
   const modelId = options.modelId || MINIMAX_H3_VIDEO_MODEL_ID; // Default to the supported MiniMax family.
   if (isRemovedOneToAllAnimateModelId(modelId)) {
     throw new Error('1-to-All Animate is no longer supported.'); // Reject direct calls before any upload or provider request.
+  }
+
+  if (modelId === FLUX_3_VIDEO_MODEL_ID) {
+    const fluxReferenceImages = Array.isArray(options.referenceImages) ? options.referenceImages : [];
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) throw new Error('Flux 3 requires a prompt.');
+    const variant = options.flux3Variant ?? 'smart';
+    const policy = getFlux3ModePolicy(variant);
+    const aspectRatio = options.flux3AspectRatio ?? 'auto';
+    const resolution = options.flux3Resolution ?? '720p';
+    const selectedDuration = options.flux3Duration ?? 'auto';
+    const duration = policy.requiresExplicitDuration
+      ? selectedDuration === 'auto' ? 5 : Number(selectedDuration)
+      : selectedDuration === 'auto' ? 'auto' : Number(selectedDuration);
+    const sharedPayload = {
+      prompt: normalizeFlux3PromptMentions(trimmedPrompt, variant),
+      aspect_ratio: aspectRatio,
+      resolution,
+      duration,
+      generate_audio: options.flux3GenerateAudio ?? true,
+      safety_tolerance: 4,
+    };
+
+    if (policy.inputKind === 'source-video') {
+      if (!options.sourceVideoUrl) throw new Error('Flux 3 Extend requires one source video.');
+      return subscribeForVideoUrl(FLUX_3_EXTEND_VIDEO_MODEL_ID, { ...sharedPayload, video_url: options.sourceVideoUrl }, options);
+    }
+
+    if (policy.inputKind === 'first-last-images') {
+      if (!image || !options.tailImage) throw new Error('Flux 3 First & Last Frame requires exactly two still images.');
+      const [startImageUrl, endImageUrl] = await Promise.all([
+        uploadImageElementToFal(image, { ...options, label: 'Flux 3 first frame' }),
+        uploadImageElementToFal(options.tailImage, { ...options, label: 'Flux 3 last frame' }),
+      ]);
+      return subscribeForVideoUrl(FLUX_3_FIRST_LAST_FRAME_VIDEO_MODEL_ID, {
+        ...sharedPayload,
+        start_image_url: startImageUrl,
+        end_image_url: endImageUrl,
+      }, options);
+    }
+
+    if (policy.inputKind === 'keyframe-images') {
+      if (fluxReferenceImages.length === 0 || fluxReferenceImages.length > FLUX3_MAX_KEYFRAMES) {
+        throw new Error(`Flux 3 Keyframes requires 1-${FLUX3_MAX_KEYFRAMES} still images.`);
+      }
+      const timestamps = options.flux3KeyframeTimestampsSeconds ?? [];
+      if (timestamps.length !== fluxReferenceImages.length) throw new Error('Flux 3 keyframe timing does not match the selected images.');
+      const durationSeconds = typeof duration === 'number' ? duration : 5;
+      if (timestamps.some(seconds => !Number.isFinite(seconds) || seconds < 0 || seconds > durationSeconds)) {
+        throw new Error(`Flux 3 keyframe timestamps must be between 0 and ${durationSeconds} seconds.`);
+      }
+      const frameIndexes = timestamps.map(seconds => Math.round(seconds * FLUX3_FPS));
+      if (new Set(frameIndexes).size !== frameIndexes.length) throw new Error('Flux 3 keyframe timestamps must resolve to unique frames.');
+      const imageUrls = await collectReferenceUploadUrls(fluxReferenceImages, options);
+      return subscribeForVideoUrl(FLUX_3_KEYFRAMES_VIDEO_MODEL_ID, {
+        ...sharedPayload,
+        keyframes: imageUrls.map((image_url, index) => ({ image_url, frame_index: frameIndexes[index] })),
+      }, options);
+    }
+
+    if (image) {
+      const imageUrl = await uploadImageElementToFal(image, { ...options, label: 'Flux 3 starting image' });
+      return subscribeForVideoUrl(FLUX_3_IMAGE_TO_VIDEO_MODEL_ID, { ...sharedPayload, image_url: imageUrl }, options);
+    }
+    return subscribeForVideoUrl(FLUX_3_TEXT_TO_VIDEO_MODEL_ID, sharedPayload, options);
   }
   const duration = options.duration; // Optional duration override.
   const isVeo31ImageToVideoModel = modelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID; // Veo 3.1 i2v route.

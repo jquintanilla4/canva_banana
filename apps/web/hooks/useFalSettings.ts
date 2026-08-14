@@ -6,6 +6,11 @@ import type {
   GenerationInputs,
   GenerationJimengOptions,
   GenerationVolcengineOptions,
+  Flux3AspectRatio,
+  Flux3Duration,
+  Flux3KeyframeTiming,
+  Flux3Resolution,
+  Flux3Variant,
 } from '../types';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
@@ -30,6 +35,7 @@ import {
   WAN_27_VIDEO_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
+  FLUX_3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
@@ -99,6 +105,10 @@ import {
   isMiniMaxH3AspectRatioSelectionValue,
   isMiniMaxH3DurationSelectionValue,
   isMiniMaxH3Variant,
+  isFlux3AspectRatio,
+  isFlux3Duration,
+  isFlux3Resolution,
+  isFlux3Variant,
   normalizeJimengSeedance25AspectRatio,
   normalizeJimengSeedance25Duration,
   isUnavailableLegacyTransferModelId,
@@ -113,6 +123,7 @@ import {
   resolveGenerationTransferModelId,
   resolveGenerationTransferOptions,
 } from '../utils/generationTransferSettings';
+import { getFlux3ModePolicy } from '../utils/flux3';
 import type {
   FalAspectRatioSelectionValue,
   FalGptImage2QualitySelectionValue,
@@ -199,6 +210,7 @@ type FalDerivedState = {
   isGrokImagineVideoModel: boolean;
   isWan27VideoModel: boolean;
   isMiniMaxH3VideoModel: boolean;
+  isFlux3VideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
@@ -267,6 +279,11 @@ type FalHandlers = {
   handleMiniMaxH3VariantChange: (value: string) => void;
   handleMiniMaxH3AspectRatioChange: (value: string) => void;
   handleMiniMaxH3DurationChange: (value: string) => void;
+  handleFlux3VariantChange: (value: string) => void;
+  handleFlux3AspectRatioChange: (value: string) => void;
+  handleFlux3ResolutionChange: (value: string) => void;
+  handleFlux3DurationChange: (value: string) => void;
+  handleFlux3GenerateAudioChange: (value: boolean) => void;
   handleSeedance15AspectRatioChange: (value: string) => void;
   handleSeedance15ResolutionChange: (value: string) => void;
   handleSeedance15DurationChange: (value: string) => void;
@@ -359,6 +376,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   miniMaxH3Variant: MiniMaxH3Variant;
   miniMaxH3AspectRatio: MiniMaxH3AspectRatioSelectionValue;
   miniMaxH3Duration: MiniMaxH3DurationSelectionValue;
+  flux3Variant: Flux3Variant;
+  flux3AspectRatio: Flux3AspectRatio;
+  flux3Resolution: Flux3Resolution;
+  flux3Duration: Flux3Duration;
+  flux3GenerateAudio: boolean;
+  flux3KeyframeTimings: Flux3KeyframeTiming[];
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -449,6 +472,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setMiniMaxH3Variant: Dispatch<SetStateAction<MiniMaxH3Variant>>;
   setMiniMaxH3AspectRatio: Dispatch<SetStateAction<MiniMaxH3AspectRatioSelectionValue>>;
   setMiniMaxH3Duration: Dispatch<SetStateAction<MiniMaxH3DurationSelectionValue>>;
+  setFlux3Variant: Dispatch<SetStateAction<Flux3Variant>>;
+  setFlux3AspectRatio: Dispatch<SetStateAction<Flux3AspectRatio>>;
+  setFlux3Resolution: Dispatch<SetStateAction<Flux3Resolution>>;
+  setFlux3Duration: Dispatch<SetStateAction<Flux3Duration>>;
+  setFlux3GenerateAudio: Dispatch<SetStateAction<boolean>>;
+  setFlux3KeyframeTimings: Dispatch<SetStateAction<Flux3KeyframeTiming[]>>;
   setSeedance15AspectRatio: Dispatch<SetStateAction<Seedance15AspectRatioSelectionValue>>;
   setSeedance15Resolution: Dispatch<SetStateAction<Seedance15ResolutionSelectionValue>>;
   setSeedance15Duration: Dispatch<SetStateAction<Seedance15DurationSelectionValue>>;
@@ -543,6 +572,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [miniMaxH3Variant, setMiniMaxH3Variant] = useState<MiniMaxH3Variant>('reference');
   const [miniMaxH3AspectRatio, setMiniMaxH3AspectRatio] = useState<MiniMaxH3AspectRatioSelectionValue>('adaptive');
   const [miniMaxH3Duration, setMiniMaxH3Duration] = useState<MiniMaxH3DurationSelectionValue>('5');
+  const [flux3Variant, setFlux3Variant] = useState<Flux3Variant>('smart');
+  const [flux3AspectRatio, setFlux3AspectRatio] = useState<Flux3AspectRatio>('auto');
+  const [flux3Resolution, setFlux3Resolution] = useState<Flux3Resolution>('720p');
+  const [flux3Duration, setFlux3Duration] = useState<Flux3Duration>('auto');
+  const [flux3GenerateAudio, setFlux3GenerateAudio] = useState(true);
+  const [flux3KeyframeTimings, setFlux3KeyframeTimings] = useState<Flux3KeyframeTiming[]>([]);
   const [seedance15AspectRatio, setSeedance15AspectRatio] = useState<Seedance15AspectRatioSelectionValue>('16:9');
   const [seedance15Resolution, setSeedance15Resolution] = useState<Seedance15ResolutionSelectionValue>('720p');
   const [seedance15Duration, setSeedance15Duration] = useState<Seedance15DurationSelectionValue>('5');
@@ -599,6 +634,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const isGrokImagineVideoModel = isVideoMode && falVideoModelId === GROK_IMAGINE_VIDEO_MODEL_ID;
   const isWan27VideoModel = isVideoMode && falVideoModelId === WAN_27_VIDEO_MODEL_ID;
   const isMiniMaxH3VideoModel = isVideoMode && falVideoModelId === MINIMAX_H3_VIDEO_MODEL_ID;
+  const isFlux3VideoModel = isVideoMode && falVideoModelId === FLUX_3_VIDEO_MODEL_ID;
   const isSeedance15VideoModel = isVideoMode && falVideoModelId === SEEDANCE_15_VIDEO_MODEL_ID;
   const isSeedance2VideoModel = isVideoMode && isSeedance2VideoModelId(falVideoModelId);
   const isFalSeedance2VideoModel = isVideoMode && falVideoModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID;
@@ -1107,6 +1143,28 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleFlux3VariantChange = useCallback((value: string) => {
+    if (!isFlux3Variant(value)) return;
+    setFlux3Variant(value);
+    if (getFlux3ModePolicy(value).requiresExplicitDuration) {
+      setFlux3Duration(current => current === 'auto' ? '5' : current);
+    }
+  }, []);
+
+  const handleFlux3AspectRatioChange = useCallback((value: string) => {
+    if (isFlux3AspectRatio(value)) setFlux3AspectRatio(value);
+  }, []);
+
+  const handleFlux3ResolutionChange = useCallback((value: string) => {
+    if (isFlux3Resolution(value)) setFlux3Resolution(value);
+  }, []);
+
+  const handleFlux3DurationChange = useCallback((value: string) => {
+    if (isFlux3Duration(value)) setFlux3Duration(value);
+  }, []);
+
+  const handleFlux3GenerateAudioChange = useCallback((value: boolean) => setFlux3GenerateAudio(Boolean(value)), []);
+
   const handleSeedance15AspectRatioChange = useCallback((value: string) => {
     const valid = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] as const;
     if (valid.includes(value as Seedance15AspectRatioSelectionValue)) {
@@ -1442,6 +1500,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       miniMaxH3Variant: setMiniMaxH3Variant,
       miniMaxH3AspectRatio: setMiniMaxH3AspectRatio,
       miniMaxH3Duration: setMiniMaxH3Duration,
+      flux3Variant: setFlux3Variant,
+      flux3AspectRatio: setFlux3AspectRatio,
+      flux3Resolution: setFlux3Resolution,
+      flux3Duration: setFlux3Duration,
+      flux3GenerateAudio: setFlux3GenerateAudio,
+      flux3KeyframeTimings: value => setFlux3KeyframeTimings(value.map(timing => ({ ...timing }))),
       seedance15AspectRatio: setSeedance15AspectRatio,
       seedance15Resolution: setSeedance15Resolution,
       seedance15Duration: setSeedance15Duration,
@@ -1528,6 +1592,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     miniMaxH3Variant,
     miniMaxH3AspectRatio,
     miniMaxH3Duration,
+    flux3Variant,
+    flux3AspectRatio,
+    flux3Resolution,
+    flux3Duration,
+    flux3GenerateAudio,
+    flux3KeyframeTimings,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -1583,6 +1653,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     isVeo31VideoModel,
     isWan27VideoModel,
     isMiniMaxH3VideoModel,
+    isFlux3VideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
@@ -1643,6 +1714,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleMiniMaxH3VariantChange,
     handleMiniMaxH3AspectRatioChange,
     handleMiniMaxH3DurationChange,
+    handleFlux3VariantChange,
+    handleFlux3AspectRatioChange,
+    handleFlux3ResolutionChange,
+    handleFlux3DurationChange,
+    handleFlux3GenerateAudioChange,
     handleSeedance15AspectRatioChange,
     handleSeedance15ResolutionChange,
     handleSeedance15DurationChange,
@@ -1732,6 +1808,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setMiniMaxH3Variant,
     setMiniMaxH3AspectRatio,
     setMiniMaxH3Duration,
+    setFlux3Variant,
+    setFlux3AspectRatio,
+    setFlux3Resolution,
+    setFlux3Duration,
+    setFlux3GenerateAudio,
+    setFlux3KeyframeTimings,
     setSeedance15AspectRatio,
     setSeedance15Resolution,
     setSeedance15Duration,

@@ -23,6 +23,7 @@ import {
   KREA_2_DEFAULT_ASPECT_RATIO,
   KREA_2_DEFAULT_CREATIVITY,
   MINIMAX_H3_VIDEO_MODEL_ID,
+  FLUX_3_VIDEO_MODEL_ID,
   RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   SEEDANCE_15_VIDEO_MODEL_ID,
@@ -47,6 +48,7 @@ import {
   isSeedreamV5ProModelId,
   type FalModelId,
 } from '../services/modelConfig';
+import { resolveFlux3Settings } from './flux3';
 
 export type GenerationTransferOptions = GenerationFalOptions & GenerationVolcengineOptions & GenerationJimengOptions; // Shared shape covers every provider-backed prompt control.
 
@@ -119,6 +121,9 @@ export const getGenerationTransferOptionDefaults = (
     const variant = restoredOptions.miniMaxH3Variant ?? 'reference'; // Standard mode cannot represent the Reference-only Adaptive ratio.
     return { miniMaxH3Variant: variant, miniMaxH3AspectRatio: variant === 'standard' ? '16:9' : 'adaptive', miniMaxH3Duration: '5' }; // H3 defaults follow the restored variant.
   }
+  if (modelId === FLUX_3_VIDEO_MODEL_ID) {
+    return resolveFlux3Settings(restoredOptions);
+  }
   if (modelId === SEEDANCE_15_VIDEO_MODEL_ID) {
     return { seedance15AspectRatio: '16:9', seedance15Resolution: '720p', seedance15Duration: '5', seedance15CameraFixed: false, seedance15Audio: false }; // Seedance 1.5 defaults.
   }
@@ -190,10 +195,13 @@ export const resolveGenerationTransferOptions = (
     ...inferredVariantOptions,
     ...savedOptions,
   }; // Explicit saved controls take precedence over endpoint inference.
-  return {
+  const resolvedOptions = {
     ...getGenerationTransferOptionDefaults(normalizedModelId, restoredOptions),
     ...restoredOptions,
-  }; // Missing legacy fields use the selected model's defaults instead of unrelated live values.
+  };
+  return normalizedModelId === FLUX_3_VIDEO_MODEL_ID
+    ? { ...resolvedOptions, ...resolveFlux3Settings(resolvedOptions) }
+    : resolvedOptions; // Missing legacy fields use the selected model's defaults instead of unrelated live values.
 };
 
 /** Selector model id for providers whose metadata still records their own endpoint. */

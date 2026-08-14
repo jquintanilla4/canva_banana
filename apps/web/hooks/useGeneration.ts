@@ -37,6 +37,7 @@ import {
   WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
+  FLUX_3_VIDEO_MODEL_ID,
   getFalModelLabel,
   getFalNumImageMaxForModel,
   getGptImage2TextToImageModelId,
@@ -96,6 +97,10 @@ import {
   isMiniMaxH3AspectRatioSelectionValue,
   isMiniMaxH3DurationSelectionValue,
   isMiniMaxH3Variant,
+  isFlux3AspectRatio,
+  isFlux3Duration,
+  isFlux3Resolution,
+  isFlux3Variant,
   normalizeJimengSeedance25AspectRatio,
   normalizeJimengSeedance25Duration,
   getSeedreamTextToImageModelId,
@@ -227,6 +232,12 @@ import {
   normalizeSeedanceReferencePromptMentions,
 } from '../utils/seedancePromptMentions';
 import { hasValidJimengMultiframePrompt, parseJimengMultiframeTransitionPrompts } from '../utils/jimengMultiframe';
+import {
+  buildFlux3RunPlan,
+  FLUX3_EXTEND_MAX_SECONDS,
+  getFlux3ExtendVideoFileError,
+  getFlux3ModePolicy,
+} from '../utils/flux3';
 import type { AppState } from './useCanvasHistory';
 
 type UseGenerationArgs = {
@@ -573,6 +584,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     miniMaxH3Variant,
     miniMaxH3AspectRatio,
     miniMaxH3Duration,
+    flux3Variant,
+    flux3AspectRatio,
+    flux3Resolution,
+    flux3Duration,
+    flux3GenerateAudio,
+    flux3KeyframeTimings,
     isMiniMaxH3VideoModel,
     isWan27VideoModel,
     seedance15AspectRatio,
@@ -826,6 +843,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const veo31ResolutionForRun = falOptionsOverride.veo31Resolution ?? veo31Resolution;
     const veo31AspectRatioForRun = falOptionsOverride.veo31AspectRatio ?? veo31AspectRatio;
     const veo31GenerateAudioForRun = falOptionsOverride.veo31GenerateAudio ?? veo31GenerateAudio;
+    const flux3VariantForRun = isFlux3Variant(falOptionsOverride.flux3Variant) ? falOptionsOverride.flux3Variant : flux3Variant;
+    const flux3ModePolicyForRun = getFlux3ModePolicy(flux3VariantForRun);
+    const flux3AspectRatioForRun = isFlux3AspectRatio(falOptionsOverride.flux3AspectRatio) ? falOptionsOverride.flux3AspectRatio : flux3AspectRatio;
+    const flux3ResolutionForRun = isFlux3Resolution(falOptionsOverride.flux3Resolution) ? falOptionsOverride.flux3Resolution : flux3Resolution;
+    const flux3DurationForRun = isFlux3Duration(falOptionsOverride.flux3Duration) ? falOptionsOverride.flux3Duration : flux3Duration;
+    const flux3GenerateAudioForRun = typeof falOptionsOverride.flux3GenerateAudio === 'boolean' ? falOptionsOverride.flux3GenerateAudio : flux3GenerateAudio;
+    const flux3KeyframeTimingsForRun = Array.isArray(falOptionsOverride.flux3KeyframeTimings) ? falOptionsOverride.flux3KeyframeTimings : flux3KeyframeTimings;
     const seedance15AspectRatioForRun = isSeedance15AspectRatioSelectionValue(falOptionsOverride.seedance15AspectRatio)
       ? falOptionsOverride.seedance15AspectRatio
       : seedance15AspectRatio;
@@ -933,6 +957,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ((falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === FAL_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID) && seedance2VariantForRun !== 'smart')
         || ((falVideoModelIdForRun === FAL_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID) && seedance25VariantForRun === 'reference')
         || (falVideoModelIdForRun === MINIMAX_H3_VIDEO_MODEL_ID && miniMaxH3VariantForRun === 'reference')
+        || (falVideoModelIdForRun === FLUX_3_VIDEO_MODEL_ID && flux3ModePolicyForRun.inputKind === 'keyframe-images')
       )
       && !generationOverride; // Multimodal reference models merge selected media into ordered labels.
     const infinitalkSeedValue = infinitalkSeedForRun === 'random'
@@ -974,6 +999,17 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const videoLastFrameImageIdForRun = generationOverride ? generationOverride.videoLastFrameImageId ?? null : videoLastFrameImageId;
     const sourceVideoIdForRun = generationOverride ? generationOverride.sourceVideoId ?? null : sourceVideoId;
     const sourceAudioIdForRun = generationOverride ? generationOverride.sourceAudioId ?? null : sourceAudioId;
+    const flux3RunPlan = buildFlux3RunPlan({
+      prompt: trimmedPrompt,
+      variant: flux3VariantForRun,
+      duration: flux3DurationForRun,
+      primaryImageId: activePrimary?.id,
+      lastFrameImageId: videoLastFrameImageIdForRun,
+      referenceImageIds: referenceImageIdsForRun,
+      sourceVideoId: sourceVideoIdForRun,
+      selectedMediaIds: generationOverride ? undefined : selectedImageIds,
+      keyframeTimings: flux3KeyframeTimingsForRun,
+    });
     const klingO3KeepAudioForRun = typeof generationOverride?.falOptions?.klingO3KeepAudio === 'boolean'
       ? generationOverride.falOptions.klingO3KeepAudio
       : typeof legacyKlingOptions.klingO1KeepAudio === 'boolean'
@@ -1028,6 +1064,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isWan27VideoModelForRun = isVideoMode && falVideoModelIdForRun === WAN_27_VIDEO_MODEL_ID;
     const isWan27ReferenceModeForRun = isWan27VideoModelForRun && wan27VideoVariantForRun === 'reference';
     const isWan27EditModeForRun = isWan27VideoModelForRun && wan27VideoVariantForRun === 'edit';
+    const isFlux3VideoModelForRun = isVideoMode && falVideoModelIdForRun === FLUX_3_VIDEO_MODEL_ID;
+    const isFlux3KeyframesModeForRun = isFlux3VideoModelForRun && flux3ModePolicyForRun.inputKind === 'keyframe-images';
+    const isFlux3FflfModeForRun = isFlux3VideoModelForRun && flux3ModePolicyForRun.inputKind === 'first-last-images';
+    const isFlux3ExtendModeForRun = isFlux3VideoModelForRun && flux3ModePolicyForRun.inputKind === 'source-video';
+    const hasFlux3SmartUnsupportedSelectionForRun = isFlux3VideoModelForRun
+      && flux3ModePolicyForRun.inputKind === 'optional-start-image'
+      && (generationOverride
+        ? primaryImageIdForRun !== null && !activePrimary
+        : selectedImageIds.length > 1
+          || selectedImageIds.some(selectedId => !isImageCanvasMedia(images.find(image => image.id === selectedId))));
     const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
     const isVeo31ExtendMode = isVeo31VideoModelForRun && veo31VariantForRun === 'extend';
     const isFalVideoInputMode = isWanVideoInputMode
@@ -1037,7 +1083,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       || isKlingV3ControlVideoModel
       || isVeo31ExtendMode
       || isScailVideoModel
-      || isWan27EditModeForRun;
+      || isWan27EditModeForRun
+      || isFlux3ExtendModeForRun;
     const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
     const actualKlingO3ModelId = isKlingO3VideoModel ? getKlingO3VideoEndpoint(klingO3VariantForRun) : null;
     const actualKlingV3ControlModelId = isKlingV3ControlVideoModel ? KLING_V3_CONTROL_VIDEO_MODEL_ID : null;
@@ -1053,7 +1100,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isSeedance2ReferenceModeForRun = isAnySeedance2VideoModelForRun && seedance2VariantForRun === 'reference';
     const isSeedance25ReferenceModeForRun = (isFalSeedance25VideoModelForRun || isJimengSeedance25VideoModelForRun) && seedance25VariantForRun === 'reference';
     const isMiniMaxH3ReferenceModeForRun = isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'reference';
-    const isMultimodalReferenceModeForRun = isSeedance2ReferenceModeForRun || isSeedance25ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun;
+    const isMultimodalReferenceModeForRun = isSeedance2ReferenceModeForRun || isSeedance25ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun || isFlux3KeyframesModeForRun;
     const shouldPersistReferenceInputsForRun = !isMiniMaxH3VideoModelForRun || isMiniMaxH3ReferenceModeForRun; // H3 Standard ignores references retained from Reference mode.
     const wan27AudioIdForRun = isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun ? sourceAudioIdForRun : null; // Wan 2.7 Smart supports optional audio.
     const videoDurationForRun: FalVideoDuration | undefined = isKlingVideoModel
@@ -1070,7 +1117,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional))
       && !(usingJimeng && isMultimodalReferenceModeForRun); // Dreamina multimodal prompts are optional.
-    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isMiniMaxH3VideoModelForRun && !isAnySeedance2VideoModelForRun && !isFalSeedance25VideoModelForRun && !isWan27VideoModelForRun && !isKlingO3VideoInputMode && !isFalVideoInputMode
+    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isMiniMaxH3VideoModelForRun && !isFlux3VideoModelForRun && !isAnySeedance2VideoModelForRun && !isFalSeedance25VideoModelForRun && !isWan27VideoModelForRun && !isKlingO3VideoInputMode && !isFalVideoInputMode
       && !(isGrokImagineVideoModel && isGrokImagineVideoEditMode);
     const generationKind: GenerationKind = overrideKind
       ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
@@ -1144,6 +1191,35 @@ export const useGeneration = (args: UseGenerationArgs) => {
         return;
       }
     }
+    if (usingFal && isFlux3VideoModelForRun) {
+      if (hasFlux3SmartUnsupportedSelectionForRun) {
+        setError(generationOverride
+          ? 'Flux 3 Smart could not find its starting image on the canvas.'
+          : 'Flux 3 Smart supports at most one selected still image. Clear extra images, videos, or audio.');
+        return;
+      }
+      if (flux3RunPlan.error) {
+        setError(flux3RunPlan.error);
+        return;
+      }
+      if (isFlux3ExtendModeForRun) {
+        const source = sourceVideoIdForRun ? images.find(image => image.id === sourceVideoIdForRun && image.mediaType === 'video') : null;
+        if (!source) {
+          setError('Flux 3 Extend requires exactly one source video.');
+          return;
+        }
+        const sourceFileError = getFlux3ExtendVideoFileError(source.file);
+        if (sourceFileError) {
+          setError(sourceFileError);
+          return;
+        }
+        const sourceDuration = await resolveOptionalCanvasMediaDurationSeconds(source);
+        if (sourceDuration !== null && sourceDuration >= FLUX3_EXTEND_MAX_SECONDS) {
+          setError('Flux 3 Extend supports source videos under 15 seconds.');
+          return;
+        }
+      }
+    }
     if (isVideoMode) {
       const baseModelLabel = getFalModelLabel(falModelIdForRun);
       const klingO3VariantLabel = klingO3VariantForRun === 'edit' ? 'Edit' : 'Reference';
@@ -1168,6 +1244,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     ? buildSeedance2ModelLabel(baseModelLabel, seedance25VariantForRun)
                   : isMiniMaxH3VideoModelForRun
                     ? `${baseModelLabel} ${miniMaxH3VariantForRun === 'reference' ? 'Reference' : 'Standard'}`
+                  : isFlux3VideoModelForRun
+                    ? `${baseModelLabel} ${flux3RunPlan.policy.label}`
                     : baseModelLabel;
       const findNonOverlappingPlacement = (
         width: number,
@@ -1851,6 +1929,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
           miniMaxH3AspectRatio: miniMaxH3AspectRatioForRun,
           miniMaxH3Duration: miniMaxH3DurationForRun,
         } : {}),
+        ...(isFlux3VideoModelForRun ? {
+          flux3Variant: flux3VariantForRun,
+          flux3AspectRatio: flux3AspectRatioForRun,
+          flux3Resolution: flux3ResolutionForRun,
+          flux3Duration: flux3DurationForRun,
+          flux3GenerateAudio: flux3GenerateAudioForRun,
+          flux3KeyframeTimings: flux3RunPlan.keyframeTimings,
+        } : {}),
         ...(isSeedance15VideoModel ? {
           seedance15AspectRatio: seedance15AspectRatioForRun,
           seedance15Resolution: seedance15ResolutionForRun,
@@ -2281,7 +2367,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             });
             setToastMessage(null);
           }
-        } else if (!activePrimary && !isKlingV3VideoModel && !isWan27VideoModelForRun && !isMiniMaxH3VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun)) && !isFalSeedance25VideoModelForRun) {
+        } else if (!activePrimary && !isKlingV3VideoModel && !isWan27VideoModelForRun && !isMiniMaxH3VideoModelForRun && !isFlux3VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun)) && !isFalSeedance25VideoModelForRun) {
           throw new Error('Unable to find the starting frame for this video.');
         }
 
@@ -2332,7 +2418,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
 
-        const videoSourceImage = ((isFalSeedance2VideoModelForRun || isFalSeedance25VideoModelForRun || isMiniMaxH3VideoModelForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
+        const videoSourceImage = ((isFalSeedance2VideoModelForRun || isFalSeedance25VideoModelForRun || isMiniMaxH3VideoModelForRun || isFlux3KeyframesModeForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
           ? null
           : (isWanAnimateVideoModel || isKlingV3ControlVideoModel || isScailVideoModel)
             ? activePrimary?.element as HTMLImageElement
@@ -2371,6 +2457,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia)
           .map(img => img.element as HTMLImageElement);
+        if (isFlux3KeyframesModeForRun && referenceImagesForRun.length !== referenceImageIdsForRun.length) {
+          const message = 'Flux 3 Keyframes supports still images only.';
+          failQueuedJob(message);
+          setError(message);
+          return;
+        }
         if (isKlingO3VideoModel) {
           if (referenceImagesForRun.length !== referenceImageIdsForRun.length) {
             const message = 'Reference images must be still images.';
@@ -2420,7 +2512,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart') || (isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'smart') || (isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'standard'); // Allow end-frame input for tail-capable variants.
+        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || isFlux3FflfModeForRun || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart') || (isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'smart') || (isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'standard'); // Allow end-frame input for tail-capable variants.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -2576,6 +2668,18 @@ export const useGeneration = (args: UseGenerationArgs) => {
               referenceAudios: seedanceReferenceAudioFilesForRun,
             } : {}),
           } : {}),
+          ...(isFlux3VideoModelForRun ? {
+            flux3Variant: flux3VariantForRun,
+            flux3AspectRatio: flux3AspectRatioForRun,
+            flux3Resolution: flux3ResolutionForRun,
+            flux3Duration: flux3DurationForRun,
+            flux3GenerateAudio: flux3GenerateAudioForRun,
+            ...(isFlux3KeyframesModeForRun ? {
+              referenceImages: referenceImagesForRun,
+              flux3KeyframeTimestampsSeconds: flux3RunPlan.keyframeTimings.map(timing => timing.timestampSeconds),
+            } : {}),
+            ...(isFlux3ExtendModeForRun ? { sourceVideoUrl: sourceVideoUrlForRequest } : {}),
+          } : {}),
           ...(isSeedance15VideoModel ? {
             seedance15AspectRatio: seedance15AspectRatioForRun,
             seedance15Resolution: seedance15ResolutionForRun,
@@ -2703,7 +2807,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             || (isKlingV3VideoModel && klingV3GenerateAudioForRun)
             || (isFalSeedance2VideoModelForRun && seedance2GenerateAudioForRun)
             || (isFalSeedance25VideoModelForRun && seedance25GenerateAudioForRun)
-            || isMiniMaxH3VideoModelForRun; // MiniMax H3 always generates native audio.
+            || isMiniMaxH3VideoModelForRun
+            || (isFlux3VideoModelForRun && flux3GenerateAudioForRun); // Saved audio settings cover browsers without track introspection.
 
           const newVideo: CanvasImage = {
             id: crypto.randomUUID(),
@@ -3456,6 +3561,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     miniMaxH3AspectRatio,
     miniMaxH3Duration,
     isMiniMaxH3VideoModel,
+    flux3Variant,
+    flux3AspectRatio,
+    flux3Resolution,
+    flux3Duration,
+    flux3GenerateAudio,
+    flux3KeyframeTimings,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,

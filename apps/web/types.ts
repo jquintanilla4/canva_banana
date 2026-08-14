@@ -96,6 +96,14 @@ export type Flux2MaxImageSizeOption = Extract<FalImageSizePreset, 'landscape_4_3
 export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
+export type Flux3Variant = 'smart' | 'first-last-frame' | 'keyframes' | 'extend';
+export type Flux3AspectRatio = 'auto' | '21:9' | '2:1' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
+export type Flux3Resolution = '720p' | '1080p';
+export type Flux3Duration = 'auto' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20';
+export interface Flux3KeyframeTiming {
+  imageId: string;
+  timestampSeconds: number;
+}
 export type Seedance2Variant = 'smart' | 'reference' | 'edit' | 'extend'; // Edit/Extend are Volcengine-only; FAL and Jimeng pickers hide them.
 export type Seedance25Variant = 'smart' | 'reference';
 export type Seedance25AspectRatio = '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
@@ -176,6 +184,12 @@ export type GenerationFalOptions = Partial<{
   miniMaxH3Variant: MiniMaxH3Variant;
   miniMaxH3AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
   miniMaxH3Duration: '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  flux3Variant: Flux3Variant;
+  flux3AspectRatio: Flux3AspectRatio;
+  flux3Resolution: Flux3Resolution;
+  flux3Duration: Flux3Duration;
+  flux3GenerateAudio: boolean;
+  flux3KeyframeTimings: Flux3KeyframeTiming[];
   seedance15AspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
   seedance15Resolution: '480p' | '720p' | '1080p';
   seedance15Duration: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';

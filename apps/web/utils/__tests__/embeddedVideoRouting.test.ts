@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, JIMENG_SEEDANCE_25_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, FLUX_3_VIDEO_MODEL_ID, JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, JIMENG_SEEDANCE_25_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasVideoPromptBar } from '../../types';
 import { buildEmbeddedVideoGenerationProviderInput, getEmbeddedBarFalOptions, isEmbeddedSeedanceEditMode } from '../embeddedVideoRouting';
 
@@ -26,6 +26,22 @@ describe('embeddedVideoRouting', () => {
   it('exposes the top-level Volcengine sub-model to embedded capability consumers', () => {
     expect(getEmbeddedBarFalOptions(buildBar({ seedance2VolcengineModel: 'seedance25' })).seedance2VolcengineModel).toBe('seedance25');
   });
+  it('resolves complete Flux defaults for embedded submissions', () => {
+    const input = buildEmbeddedVideoGenerationProviderInput(buildBar({
+      modelId: FLUX_3_VIDEO_MODEL_ID,
+      falOptions: { flux3AspectRatio: '9:16' },
+    }), FLUX_3_VIDEO_MODEL_ID, 0);
+
+    expect(input.falOptions).toMatchObject({
+      flux3Variant: 'smart',
+      flux3AspectRatio: '9:16',
+      flux3Resolution: '720p',
+      flux3Duration: 'auto',
+      flux3GenerateAudio: true,
+      flux3KeyframeTimings: [],
+    });
+  });
+
 
   it('normalizes stale Fal defaults when routing an embedded Jimeng Seedance 2.5 bar', () => {
     const input = buildEmbeddedVideoGenerationProviderInput(buildBar({

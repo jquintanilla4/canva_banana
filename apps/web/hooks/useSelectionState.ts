@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_MAX_REFERENCE_IMAGES,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -25,6 +25,7 @@ import {
   SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT,
   SEEDANCE25_REFERENCE_VIDEO_LIMIT,
 } from '../utils/seedance25References';
+import { getFlux3ModePolicy } from '../utils/flux3';
 
 type SelectionFalSettings = Pick<
   UseFalSettingsResult,
@@ -47,6 +48,8 @@ type SelectionFalSettings = Pick<
   | 'isVeo31VideoModel'
   | 'veo31Variant'
 > & {
+  isFlux3VideoModel?: UseFalSettingsResult['isFlux3VideoModel'];
+  flux3Variant?: UseFalSettingsResult['flux3Variant'];
   wan27VideoVariant?: UseFalSettingsResult['wan27VideoVariant']; // Missing values fall back to Smart.
   isKlingV3VideoModel?: UseFalSettingsResult['isKlingV3VideoModel']; // Older test stubs and snapshots do not carry this flag.
   isKrea2LargeModel?: UseFalSettingsResult['isKrea2LargeModel']; // Older test stubs do not carry this image flag.
@@ -121,6 +124,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isWan27VideoModel,
     isMiniMaxH3VideoModel,
     miniMaxH3Variant,
+    isFlux3VideoModel = false,
+    flux3Variant = 'smart',
     isKrea2LargeModel,
     wan27VideoVariant,
     isSeedance15VideoModel,
@@ -144,6 +149,10 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       || falVideoModelId === WAN_ANIMATE_MODEL_ID
     );
   const isVeo31ExtendMode = isVeo31VideoModel && veo31Variant === 'extend';
+  const flux3ModePolicy = getFlux3ModePolicy(flux3Variant);
+  const isFlux3ExtendMode = isFlux3VideoModel && flux3ModePolicy.inputKind === 'source-video';
+  const isFlux3KeyframesMode = isFlux3VideoModel && flux3ModePolicy.inputKind === 'keyframe-images';
+  const isFlux3FflfMode = isFlux3VideoModel && flux3ModePolicy.inputKind === 'first-last-images';
   const isScailVideoModel = apiProvider === 'fal'
     && falModelMode === 'video'
     && falVideoModelId === SCAIL_VIDEO_MODEL_ID;
@@ -181,15 +190,17 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isMiniMaxH3VideoModel
     && miniMaxH3Variant === 'reference';
-  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode;
-  const multimodalReferenceLabel = isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && seedance2VolcengineModel === 'seedance25') ? 'Seedance 2.5' : 'Seedance 2';
+  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode || isFlux3KeyframesMode;
+  const multimodalReferenceLabel = isFlux3KeyframesMode ? 'Flux 3 Keyframes' : isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && seedance2VolcengineModel === 'seedance25') ? 'Seedance 2.5' : 'Seedance 2';
   const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2Mode ? seedance2VolcengineModel : 'standard'); // Non-Volcengine Seedance 2 providers share the 2.0 envelope.
-  const multimodalReferenceLimits = useMemo(() => isSeedance25ReferenceMode
+  const multimodalReferenceLimits = useMemo(() => isFlux3KeyframesMode
+    ? { images: flux3ModePolicy.maxImages, videos: 0, audios: 0 }
+    : isSeedance25ReferenceMode
     ? { images: SEEDANCE25_REFERENCE_IMAGE_LIMIT, videos: SEEDANCE25_REFERENCE_VIDEO_LIMIT, audios: SEEDANCE25_REFERENCE_AUDIO_LIMIT }
     : isSeedance2ExtendMode
       ? { images: 0, videos: volcengineReferenceLimits.videos, audios: 0 } // Extend chains video clips only.
-      : { images: volcengineReferenceLimits.images, videos: volcengineReferenceLimits.videos, audios: volcengineReferenceLimits.audios }, [isSeedance25ReferenceMode, isSeedance2ExtendMode, volcengineReferenceLimits]);
-  const multimodalReferenceTotalLimit = isSeedance25ReferenceMode
+      : { images: volcengineReferenceLimits.images, videos: volcengineReferenceLimits.videos, audios: volcengineReferenceLimits.audios }, [flux3ModePolicy.maxImages, isFlux3KeyframesMode, isSeedance25ReferenceMode, isSeedance2ExtendMode, volcengineReferenceLimits]);
+  const multimodalReferenceTotalLimit = isFlux3KeyframesMode ? flux3ModePolicy.maxImages : isSeedance25ReferenceMode
     ? SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT
     : isSeedance2ExtendMode
       ? volcengineReferenceLimits.videos // Extend caps out at its video clips.
@@ -199,6 +210,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     || isAudioInputMode
     || isKlingV3ControlVideoInputMode
     || isVeo31ExtendMode
+    || isFlux3ExtendMode
     || isScailVideoModel
     || isWan27EditMode;
   const isKlingO3ReferenceMode = isKlingO3VideoModel && klingO3Variant === 'reference';
@@ -218,6 +230,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && isMiniMaxH3VideoModel
     && miniMaxH3Variant === 'standard';
   const isVeo31TailCapable = isVeo31VideoModel && veo31Variant === 'i2v-fflf';
+  const isFlux3TailCapable = isFlux3FflfMode;
 
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [referenceImageIds, setReferenceImageIds] = useState<string[]>([]);
@@ -228,6 +241,13 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const [videoLastFrameImageId, setVideoLastFrameImageId] = useState<string | null>(null);
   const [sourceVideoId, setSourceVideoId] = useState<string | null>(null);
   const [sourceAudioId, setSourceAudioId] = useState<string | null>(null);
+  const externalSelectionRevision = useRef(0);
+  const keyframesSelectionRevision = useRef(0);
+  const wasFlux3KeyframesMode = useRef(isFlux3KeyframesMode);
+  const setSelectedImageIdsForConsumer = useCallback<Dispatch<SetStateAction<string[]>>>((value) => {
+    externalSelectionRevision.current += 1; // Transfers mark intentional destination inputs before the mode-change cleanup runs.
+    setSelectedImageIds(value);
+  }, []);
 
   const primaryImageId = useMemo(() => selectedImageIds[0] ?? null, [selectedImageIds]);
   const hasSingleImageSelected = selectedImageIds.length === 1;
@@ -273,6 +293,25 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setSourceVideoId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
     setSourceAudioId(prevId => (prevId && imageIdSet.has(prevId) ? prevId : null));
   }, [elementImageIds.length, images, referenceAudioIds.length, referenceImageIds.length, referenceVideoIds.length, seedanceReferenceOrderIds.length, selectedImageIds.length, videoLastFrameImageId, sourceVideoId, sourceAudioId]);
+  useEffect(() => {
+    if (isFlux3KeyframesMode) {
+      keyframesSelectionRevision.current = externalSelectionRevision.current;
+    }
+  });
+  useEffect(() => {
+    const leftFlux3KeyframesMode = wasFlux3KeyframesMode.current && !isFlux3KeyframesMode;
+    wasFlux3KeyframesMode.current = isFlux3KeyframesMode;
+    if (!leftFlux3KeyframesMode || externalSelectionRevision.current !== keyframesSelectionRevision.current) {
+      return;
+    }
+
+    setSelectedImageIds([]);
+    setReferenceImageIds([]);
+    setReferenceVideoIds([]);
+    setReferenceAudioIds([]);
+    setSeedanceReferenceOrderIds([]);
+    setVideoLastFrameImageId(null);
+  }, [isFlux3KeyframesMode]);
 
   const referenceLimits = useMemo(() => {
     if (isMultimodalReferenceMode) {
@@ -301,6 +340,13 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         audios: NO_REFERENCE_LIMIT,
       }; // Seedance 2 (FAL) Smart drops references at submit, so retained tags must clear here instead of silently vanishing.
     }
+    if (isFlux3VideoModel && !isFlux3KeyframesMode) {
+      return {
+        images: NO_REFERENCE_LIMIT,
+        videos: NO_REFERENCE_LIMIT,
+        audios: NO_REFERENCE_LIMIT,
+      }; // Only Flux 3 Keyframes accepts reference media.
+    }
     if (isWan27ReferenceMode) {
       return {
         images: WAN_27_REFERENCE_IMAGE_LIMIT,
@@ -322,7 +368,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       videos: NO_REFERENCE_LIMIT,
       audios: NO_REFERENCE_LIMIT,
     };
-  }, [falModelId, isFalProvider, isFalSeedance2SmartMode, isMiniMaxH3StandardMode, isMultimodalReferenceMode, isSeedance25SmartMode, isWan27EditMode, isWan27ReferenceMode, multimodalReferenceLimits, referenceImageSlotOffset]);
+  }, [falModelId, isFalProvider, isFalSeedance2SmartMode, isFlux3KeyframesMode, isFlux3VideoModel, isMiniMaxH3StandardMode, isMultimodalReferenceMode, isSeedance25SmartMode, isWan27EditMode, isWan27ReferenceMode, multimodalReferenceLimits, referenceImageSlotOffset]);
 
   useEffect(() => {
     if (referenceVideoIds.length > referenceLimits.videos) {
@@ -590,7 +636,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isSeedance25SmartMode && !isMiniMaxH3StandardMode && !isVeo31TailCapable) {
+      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isSeedance25SmartMode && !isMiniMaxH3StandardMode && !isVeo31TailCapable && !isFlux3TailCapable) {
         return;
       }
       if (!imageId) {
@@ -839,6 +885,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isSeedance25SmartMode,
     isMiniMaxH3StandardMode,
     isVeo31TailCapable,
+    isFlux3TailCapable,
     klingVariant,
     onError,
     onReferenceLimit,
@@ -888,7 +935,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     primarySelectionMediaType,
     activePrimaryImage,
     hasSingleImageSelected,
-    setSelectedImageIds,
+    setSelectedImageIds: setSelectedImageIdsForConsumer,
     setReferenceImageIds,
     setReferenceVideoIds,
     setReferenceAudioIds,

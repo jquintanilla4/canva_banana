@@ -2,6 +2,13 @@ import React, { useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { LayerUpIcon } from './Icons';
 import { PromptBarPicker } from './PromptBarPicker';
+import {
+  getPromptBarControlSignature,
+  PromptBarModelControlErrors,
+  PromptBarModelControlList,
+  type PromptBarControl,
+  type PromptBarControlOption,
+} from './promptBarControls';
 import { Tooltip } from './Tooltip';
 import { getRootFontSizePx } from '../utils/uiScale';
 import { KEYBOARD_SHORTCUT_LABELS } from '../utils/keyboardShortcutLabels';
@@ -36,16 +43,6 @@ const getPromptBarViewportClampPx = (sizeMode: 'full' | 'mini'): number => {
   }
 
   return Math.max(320, window.innerWidth - getPromptBarHorizontalGutterPx());
-};
-
-const getControlSignature = (control: FalModelControlConfig): string => {
-  if (control.kind === 'action') {
-    return `${control.id}-${control.disabled}-${control.label}`;
-  }
-  if (control.kind === 'color') {
-    return `${control.id}-${control.value}-${control.disabled}`;
-  }
-  return `${control.id}-${control.value}-${control.options.map(option => option.label).join('~')}`;
 };
 
 type ActiveKlingMention = {
@@ -141,52 +138,7 @@ const getTextareaCaretPosition = (
   };
 };
 
-interface ModelOption {
-  value: string;
-  label: string;
-  highlightColor?: string;
-  tooltip?: string;
-  disabled?: boolean;
-}
-
-interface FalModelSelectControlConfig {
-  kind?: 'select';
-  id: string;
-  prefixLabel?: string;
-  hideSelectedValue?: boolean;
-  ariaLabel: string;
-  options: ReadonlyArray<ModelOption>;
-  value: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-  errorMessage?: string;
-  tooltip?: string;
-}
-
-interface FalModelColorControlConfig {
-  kind: 'color';
-  id: string;
-  prefixLabel: string;
-  ariaLabel: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-  errorMessage?: string;
-}
-
-interface FalModelActionControlConfig {
-  kind: 'action';
-  id: string;
-  label: string;
-  ariaLabel: string;
-  onClick: () => void;
-  disabled: boolean;
-  errorMessage?: string;
-}
-
-type FalModelControlConfig = FalModelSelectControlConfig | FalModelColorControlConfig | FalModelActionControlConfig;
-
-export type PromptBarControlConfig = FalModelControlConfig;
+export type PromptBarControlConfig = PromptBarControl;
 
 interface PromptBarProps {
   prompt: string;
@@ -196,14 +148,14 @@ interface PromptBarProps {
   inputDisabled: boolean;
   submitDisabled: boolean;
   submitDisabledReason?: string | null;
-  modelOptions: ReadonlyArray<ModelOption>;
+  modelOptions: ReadonlyArray<PromptBarControlOption>;
   selectedModel: string;
   onModelChange: (modelId: string) => void;
   modelSelectDisabled: boolean;
   modelMode: 'image' | 'video';
   onModelModeChange: (mode: 'image' | 'video') => void;
   modelModeDisabled?: boolean;
-  modelControls?: ReadonlyArray<FalModelControlConfig>;
+  modelControls?: ReadonlyArray<PromptBarControl>;
   promptPlaceholder?: string;
   showMultiPrompt?: boolean;
   multiPrompt?: string;
@@ -406,7 +358,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   }, [
     selectedModel,
     modelControls
-      ?.map(getControlSignature)
+      ?.map(getPromptBarControlSignature)
       .join('|') ?? '',
     updatePromptBarWidth,
   ]);
@@ -662,9 +614,6 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     cameraThemeActive ? 'caret-amber-400' : ''
   }`;
 
-  const getControlTooltip = (control: FalModelSelectControlConfig): string | undefined =>
-    control.tooltip ?? control.options.find(option => option.value === control.value)?.tooltip; // Prefer selected option guidance.
-
   const modelSelectLabel = modelMode === 'video' ? 'Select video model' : 'Select image edit model';
   const resolvedModeDisabled = modelModeDisabled || modelSelectDisabled;
   const resolvedInlineWidthPx = Math.max(0, Math.min(promptBarMaxWidthPx, maxInlineWidthPx ?? Number.POSITIVE_INFINITY)); // Inline bars reuse the shared width logic before the area cap trims them.
@@ -839,88 +788,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                         disabled={modelSelectDisabled}
                       />
                     </div>
-                    {modelControls?.map(control => {
-                      if (control.kind === 'action') {
-                        return (
-                          <button
-                            key={control.id}
-                            id={control.id}
-                            type="button"
-                            onClick={control.onClick}
-                            disabled={control.disabled}
-                            className="text-sm text-white px-[0.4rem] py-[0.34rem] focus:outline-none focus:ring-0 disabled:text-gray-400 disabled:cursor-not-allowed"
-                            aria-label={control.ariaLabel}
-                          >
-                            {control.label}
-                          </button>
-                        );
-                      }
-
-                      if (control.kind === 'color') {
-                        return (
-                          <div className="relative flex items-center gap-2" key={control.id}>
-                            <span className="text-sm text-gray-200">{control.prefixLabel}</span>
-                            <label className="sr-only" htmlFor={control.id}>
-                              {control.ariaLabel}
-                            </label>
-                            <input
-                              id={control.id}
-                              type="color"
-                              value={control.value}
-                              onChange={(e) => control.onChange(e.target.value)}
-                              disabled={control.disabled}
-                              className="h-7 w-7 cursor-pointer appearance-none rounded-md border border-white/20 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-60"
-                              style={{ colorScheme: 'light dark' }}
-                              aria-label={control.ariaLabel}
-                            />
-                          </div>
-                        );
-                      }
-
-                      const controlTooltip = getControlTooltip(control);
-
-                      return (
-                      <div className="relative flex items-center gap-1" key={control.id} title={controlTooltip}>
-                        {control.hideSelectedValue ? (
-                          <div
-                            className={`inline-flex items-center focus-within:outline-none ${control.disabled ? 'opacity-60' : ''}`}
-                            title={controlTooltip}
-                          >
-                            <PromptBarPicker
-                              id={control.id}
-                              ariaLabel={control.ariaLabel}
-                              options={control.options}
-                              value={control.value}
-                              onChange={control.onChange}
-                              disabled={control.disabled}
-                              displayLabel={control.prefixLabel ?? ''}
-                              title={controlTooltip}
-                            />
-                          </div>
-                        ) : (
-                          <>
-                            {control.prefixLabel && <span className="text-sm text-gray-200">{control.prefixLabel}</span>}
-                            <PromptBarPicker
-                              id={control.id}
-                              ariaLabel={control.ariaLabel}
-                              options={control.options}
-                              value={control.value}
-                              onChange={control.onChange}
-                              disabled={control.disabled}
-                              title={controlTooltip}
-                            />
-                          </>
-                        )}
-                      </div>
-                      );
-                    })}
+                    <PromptBarModelControlList controls={modelControls} />
                   </div>
                 </div>
-                {modelControls?.map(control => control.errorMessage ? (
-                  <p key={`${control.id}-error`} className="text-xs text-red-400">
-                    {control.errorMessage}
-                  </p>
-                ) : null)}
+                <PromptBarModelControlErrors controls={modelControls} />
               </div>
             )}
           </div>

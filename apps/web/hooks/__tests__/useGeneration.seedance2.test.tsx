@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
+  FLUX_3_VIDEO_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
@@ -1006,6 +1007,314 @@ describe('useGeneration (seedance 2)', () => {
         seedance2GenerateAudio: false,
       }),
     );
+  });
+
+  it('routes validated Flux 3 keyframes through the main generation workflow', async () => {
+    const first = buildCanvasMedia('flux-keyframe-1', 'image');
+    const second = buildCanvasMedia('flux-keyframe-2', 'image');
+    const fal = createFalStub();
+    fal.falVideoModelId = FLUX_3_VIDEO_MODEL_ID;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.flux3Variant = 'keyframes';
+    fal.flux3AspectRatio = '16:9';
+    fal.flux3Resolution = '1080p';
+    fal.flux3Duration = '10';
+    fal.flux3GenerateAudio = false;
+    fal.flux3KeyframeTimings = [
+      { imageId: first.id, timestampSeconds: 0 },
+      { imageId: second.id, timestampSeconds: 10 },
+    ];
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '@Image1 becomes @Image2',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({ referenceImageIds: [first.id, second.id] }),
+      images: [first, second],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      '@Image1 becomes @Image2',
+      null,
+      expect.objectContaining({
+        modelId: FLUX_3_VIDEO_MODEL_ID,
+        flux3Variant: 'keyframes',
+        flux3AspectRatio: '16:9',
+        flux3Resolution: '1080p',
+        flux3Duration: '10',
+        flux3GenerateAudio: false,
+        referenceImages: [first.element, second.element],
+        flux3KeyframeTimestampsSeconds: [0, 10],
+      }),
+    );
+  });
+
+  it('rejects extra selected media in Flux 3 Smart mode', async () => {
+    const first = buildCanvasMedia('flux-smart-image', 'image') as CanvasImage & { element: HTMLImageElement };
+    const second = buildCanvasMedia('flux-smart-video', 'video');
+    const fal = createFalStub();
+    fal.falVideoModelId = FLUX_3_VIDEO_MODEL_ID;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.flux3Variant = 'smart';
+    fal.flux3Duration = 'auto';
+    const setError = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A paper bird takes flight',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [first.id, second.id],
+        primaryImageId: first.id,
+        primaryImage: first,
+        primarySelectionMediaType: 'image',
+        activePrimaryImage: first,
+      }),
+      images: [first, second],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(setError).toHaveBeenCalledWith('Flux 3 Smart supports at most one selected still image. Clear extra images, videos, or audio.');
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Flux Smart retry when its saved starting image was deleted', async () => {
+    const fal = createFalStub();
+    fal.falVideoModelId = FLUX_3_VIDEO_MODEL_ID;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.flux3Variant = 'smart';
+    const setError = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: '',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate({
+        kind: 'video',
+        prompt: 'A paper bird takes flight',
+        provider: 'fal',
+        modelId: FLUX_3_VIDEO_MODEL_ID,
+        modelMode: 'video',
+        primaryImageId: 'deleted-image',
+        falOptions: { flux3Variant: 'smart' },
+      });
+    });
+
+    expect(setError).toHaveBeenCalledWith('Flux 3 Smart could not find its starting image on the canvas.');
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+  });
+
+  it('submits the latest Flux 3 settings after the prompt bar changes mode', async () => {
+    const first = buildCanvasMedia('flux-latest-keyframe-1', 'image');
+    const second = buildCanvasMedia('flux-latest-keyframe-2', 'image');
+    const selection = createSelectionStub({ referenceImageIds: [first.id, second.id] });
+    const images = [first, second];
+    type FluxSettings = Pick<UseFalSettingsResult, 'flux3Variant' | 'flux3AspectRatio' | 'flux3Resolution' | 'flux3Duration' | 'flux3GenerateAudio' | 'flux3KeyframeTimings'>;
+    const initialFluxSettings: FluxSettings = {
+      flux3Variant: 'smart',
+      flux3AspectRatio: 'auto',
+      flux3Resolution: '720p',
+      flux3Duration: 'auto',
+      flux3GenerateAudio: true,
+      flux3KeyframeTimings: [],
+    };
+    const updatedFluxSettings: FluxSettings = {
+      flux3Variant: 'keyframes',
+      flux3AspectRatio: '16:9',
+      flux3Resolution: '1080p',
+      flux3Duration: '10',
+      flux3GenerateAudio: false,
+      flux3KeyframeTimings: [
+        { imageId: first.id, timestampSeconds: 1 },
+        { imageId: second.id, timestampSeconds: 9 },
+      ],
+    };
+    const fal = createFalStub();
+    fal.falVideoModelId = FLUX_3_VIDEO_MODEL_ID;
+    fal.isVolcengineSeedance2VideoModel = false;
+    const paths: [] = [];
+    const setError = vi.fn();
+    const setIsLoading = vi.fn();
+    const setFalJobs = vi.fn();
+    const setState = vi.fn();
+    const setToastMessage = vi.fn();
+    const setTool = vi.fn();
+    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so submitted settings can be inspected.
+
+    const { result, rerender } = renderHook(
+      ({ fluxSettings }: { fluxSettings: FluxSettings }) => {
+        Object.assign(fal, fluxSettings);
+        return useGeneration({
+          appMode: 'CANVAS',
+          tool: Tool.FREE_SELECTION,
+          prompt: '@Image1 becomes @Image2',
+          promptPrefix: '',
+          apiProvider: 'fal',
+          fal,
+          selection,
+          images,
+          paths,
+          videoNegativePrompt: '',
+          setError,
+          setIsLoading,
+          setFalJobs,
+          setState,
+          setToastMessage,
+          setTool,
+        });
+      },
+      { initialProps: { fluxSettings: initialFluxSettings } },
+    );
+
+    rerender({ fluxSettings: updatedFluxSettings });
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
+      '@Image1 becomes @Image2',
+      null,
+      expect.objectContaining({
+        modelId: FLUX_3_VIDEO_MODEL_ID,
+        flux3Variant: 'keyframes',
+        flux3AspectRatio: '16:9',
+        flux3Resolution: '1080p',
+        flux3Duration: '10',
+        flux3GenerateAudio: false,
+        referenceImages: [first.element, second.element],
+        flux3KeyframeTimestampsSeconds: [1, 9],
+      }),
+    );
+  });
+
+  it('rejects unsupported canvas media at the Flux Smart submission boundary', async () => {
+    const video = buildCanvasMedia('flux-smart-video', 'video');
+    const fal = createFalStub();
+    fal.falVideoModelId = FLUX_3_VIDEO_MODEL_ID;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.flux3Variant = 'smart';
+    const setError = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A city waking at sunrise',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        selectedImageIds: [video.id],
+        primaryImageId: video.id,
+        primaryImage: video,
+        primarySelectionMediaType: 'video',
+      }),
+      images: [video],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(setError).toHaveBeenCalledWith('Flux 3 Smart supports at most one selected still image. Clear extra images, videos, or audio.');
+    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a MOV file', 'video/quicktime', 5, 'MP4 source videos only'],
+    ['a 15-second MP4 file', 'video/mp4', 15, 'under 15 seconds'],
+  ])('rejects %s before a Flux Extend upload', async (_case, fileType, durationSeconds, expectedError) => {
+    const video = buildCanvasMedia('flux-extend-source', 'video', durationSeconds);
+    video.file = new File(['video'], 'source-video', { type: fileType });
+    const fal = createFalStub();
+    fal.falVideoModelId = FLUX_3_VIDEO_MODEL_ID;
+    fal.isVolcengineSeedance2VideoModel = false;
+    fal.flux3Variant = 'extend';
+    const setError = vi.fn();
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Continue @Video1',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({ sourceVideoId: video.id, selectedImageIds: [video.id] }),
+      images: [video],
+      paths: [],
+      videoNegativePrompt: '',
+      setError,
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate();
+    });
+
+    expect(setError).toHaveBeenCalledWith(expect.stringContaining(expectedError));
+    expect(uploadVideoToFal).not.toHaveBeenCalled();
+    expect(generateImageToVideo).not.toHaveBeenCalled();
   });
 
   it('normalizes stale Volcengine-only retry variants at the Fal submission boundary', async () => {

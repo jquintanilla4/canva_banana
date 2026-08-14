@@ -7,6 +7,7 @@ import type {
   CanvasNote,
   CanvasVideoPromptArea,
   CanvasVideoPromptBar,
+  Flux3KeyframeTiming,
   GenerationInputs,
   Path,
   Point,
@@ -20,6 +21,10 @@ import {
   isFalVideoModelId,
   isFalResolutionSelectionValue,
   isFlux2MaxImageSizeSelectionValue,
+  isFlux3AspectRatio,
+  isFlux3Duration,
+  isFlux3Resolution,
+  isFlux3Variant,
   isGenerationProvider,
   isJimengMultiframeDurationSelectionValue,
   isJimengMultiframeResolutionSelectionValue,
@@ -88,6 +93,7 @@ import { generateWaveformImage, loadAudioFromBlob, loadAudioFromUrl } from './au
 import { createSnapshotRangeCursor } from './snapshotRangeReader';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR } from '../utils/canvasColorOptions';
 import { getCanvasMediaDurationSeconds } from '../utils/canvasMediaDuration';
+import { parseFlux3KeyframeTimings } from '../utils/flux3';
 
 const isVideoPromptAreaMediaRole = (value: unknown): value is CanvasVideoPromptArea['mediaRoles'][string] =>
   value === 'primary'
@@ -96,6 +102,19 @@ const isVideoPromptAreaMediaRole = (value: unknown): value is CanvasVideoPromptA
   || value === 'tail'
   || value === 'sourceVideo'
   || value === 'sourceAudio'; // Snapshot role guard.
+
+const normalizeSnapshotPromptBarFalOptions = (value: unknown): GenerationInputs['falOptions'] | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  const normalized = { ...raw } as GenerationInputs['falOptions'];
+  if ('flux3Variant' in raw && !isFlux3Variant(raw.flux3Variant)) delete normalized.flux3Variant;
+  if ('flux3AspectRatio' in raw && !isFlux3AspectRatio(raw.flux3AspectRatio)) delete normalized.flux3AspectRatio;
+  if ('flux3Resolution' in raw && !isFlux3Resolution(raw.flux3Resolution)) delete normalized.flux3Resolution;
+  if ('flux3Duration' in raw && !isFlux3Duration(raw.flux3Duration)) delete normalized.flux3Duration;
+  if ('flux3GenerateAudio' in raw && typeof raw.flux3GenerateAudio !== 'boolean') delete normalized.flux3GenerateAudio;
+  if ('flux3KeyframeTimings' in raw) normalized.flux3KeyframeTimings = parseFlux3KeyframeTimings(raw.flux3KeyframeTimings);
+  return normalized;
+};
 
 // Handles snapshot serialization/deserialization so canvases can be saved/restored across sessions.
 export type SnapshotImageManifest = {
@@ -190,6 +209,12 @@ export type SnapshotManifestV2 = {
         seedance25Resolution?: string;
         seedance25Duration?: string;
         seedance25GenerateAudio?: boolean;
+        flux3Variant?: string;
+        flux3AspectRatio?: string;
+        flux3Resolution?: string;
+        flux3Duration?: string;
+        flux3GenerateAudio?: boolean;
+        flux3KeyframeTimings?: Flux3KeyframeTiming[];
         jimengMultiframeDuration?: string;
         jimengMultiframeResolution?: string;
         jimengSessionId?: number;
@@ -208,6 +233,7 @@ export type SnapshotManifestV2 = {
       seedanceReferenceOrderIds?: string[];
       elementImageIds?: string[];
       videoLastFrameImageId?: string | null;
+      sourceVideoId?: string | null;
     } | undefined;
   };
 };
@@ -369,6 +395,12 @@ export type SnapshotMetaState = {
   seedance25Resolution?: string;
   seedance25Duration?: string;
   seedance25GenerateAudio?: boolean;
+  flux3Variant?: string;
+  flux3AspectRatio?: string;
+  flux3Resolution?: string;
+  flux3Duration?: string;
+  flux3GenerateAudio?: boolean;
+  flux3KeyframeTimings?: Flux3KeyframeTiming[];
   jimengMultiframeDuration?: string;
   jimengMultiframeResolution?: string;
   jimengSessionId?: number;
@@ -387,6 +419,7 @@ export type SnapshotMetaState = {
   seedanceReferenceOrderIds?: string[];
   elementImageIds?: string[];
   videoLastFrameImageId?: string | null;
+  sourceVideoId?: string | null;
 };
 
 export type SnapshotSourceFormat = 'binary-v2' | 'legacy-json';
@@ -1559,7 +1592,7 @@ export const restoreSnapshotFromFile = async (
       ? rawModelId
       : SEEDANCE_2_VIDEO_MODEL_ID; // Keep removed model ids so generation can block them safely.
     const isJimengBar = modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
-    const falOptions = bar?.falOptions && typeof bar.falOptions === 'object' ? { ...bar.falOptions } : undefined;
+    const falOptions = normalizeSnapshotPromptBarFalOptions(bar?.falOptions);
     const falJimengModelVersion: CanvasVideoPromptBar['seedance2JimengModelVersion'] | undefined = falOptions && isJimengSeedance2ModelVersion((falOptions as { seedance2JimengModelVersion?: unknown }).seedance2JimengModelVersion)
       ? (falOptions as { seedance2JimengModelVersion: CanvasVideoPromptBar['seedance2JimengModelVersion'] }).seedance2JimengModelVersion
       : undefined; // Older embedded bars kept the Jimeng channel inside falOptions.
@@ -1606,13 +1639,16 @@ export const restoreSnapshotFromFile = async (
     };
   });
 
+  const normalizedMeta = meta && typeof meta === 'object'
+    ? { ...meta, flux3KeyframeTimings: parseFlux3KeyframeTimings((meta as { flux3KeyframeTimings?: unknown }).flux3KeyframeTimings) }
+    : meta;
   return {
     images: restoredImages,
     notes: sanitizedNotes,
     paths: sanitizedPaths,
     videoPromptAreas: sanitizedVideoPromptAreas,
     videoPromptBars: sanitizedVideoPromptBars,
-    meta,
+    meta: normalizedMeta,
     sourceFormat: isBinarySnapshot ? 'binary-v2' : 'legacy-json', // Callers use the parsed format for safe write decisions.
     sourceRetention: sourceRetentionRequired ? 'required' : 'not-required', // Empty, materialized, and legacy imports no longer own a source handle.
     droppedLegacyNoteCount,
@@ -1851,6 +1887,25 @@ export const normalizeSnapshotImageMetadata = (
       }
       if (isMiniMaxH3DurationSelectionValue(typed.miniMaxH3Duration)) {
         normalizedOptions.miniMaxH3Duration = typed.miniMaxH3Duration;
+      }
+      if (isFlux3Variant(typed.flux3Variant)) {
+        normalizedOptions.flux3Variant = typed.flux3Variant;
+      }
+      if (isFlux3AspectRatio(typed.flux3AspectRatio)) {
+        normalizedOptions.flux3AspectRatio = typed.flux3AspectRatio;
+      }
+      if (isFlux3Resolution(typed.flux3Resolution)) {
+        normalizedOptions.flux3Resolution = typed.flux3Resolution;
+      }
+      if (isFlux3Duration(typed.flux3Duration)) {
+        normalizedOptions.flux3Duration = typed.flux3Duration;
+      }
+      if (typeof typed.flux3GenerateAudio === 'boolean') {
+        normalizedOptions.flux3GenerateAudio = typed.flux3GenerateAudio;
+      }
+      if (Array.isArray(typed.flux3KeyframeTimings)) {
+        const timings = parseFlux3KeyframeTimings(typed.flux3KeyframeTimings);
+        if (timings.length > 0) normalizedOptions.flux3KeyframeTimings = timings;
       }
 
       const wanTargetResolution = (typed as { wanTargetResolution?: unknown }).wanTargetResolution;

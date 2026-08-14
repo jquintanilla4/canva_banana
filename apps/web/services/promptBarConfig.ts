@@ -65,6 +65,13 @@ import type {
   WanCreativity,
   WanTargetResolution,
 } from './modelConfig';
+import type { Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
+import type {
+  PromptBarControl as PromptBarModelControl,
+  PromptBarSelectControl,
+} from '../components/promptBarControls';
+export type { PromptBarKeyframesControl } from '../components/promptBarControls';
+import { getFlux3ModePolicy } from '../utils/flux3';
 import {
   FAL_CRYSTAL_CREATIVITY_OPTIONS,
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
@@ -79,6 +86,10 @@ import {
   KREA_2_CREATIVITY_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
   FLUX2_MAX_IMAGE_SIZE_OPTIONS,
+  FLUX3_ASPECT_RATIO_OPTIONS,
+  FLUX3_DURATION_OPTIONS,
+  FLUX3_RESOLUTION_OPTIONS,
+  FLUX3_VARIANT_OPTIONS,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS,
@@ -173,42 +184,59 @@ import {
   WAN_27_IMAGE_MAX_IMAGES_OPTIONS,
 } from './modelConfig';
 
-type PromptBarSelectControl = {
-  kind?: 'select';
-  id: string;
-  prefixLabel?: string;
-  hideSelectedValue?: boolean;
-  ariaLabel: string;
-  options: ReadonlyArray<{ value: string; label: string; disabled?: boolean; tooltip?: string }>;
-  value: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-  errorMessage?: string;
-  tooltip?: string;
+type Flux3PromptBarControlsInput = {
+  idPrefix?: string;
+  variant: Flux3Variant;
+  aspectRatio: Flux3AspectRatio;
+  resolution: Flux3Resolution;
+  duration: Flux3Duration;
+  generateAudio: boolean;
+  keyframeTimings: ReadonlyArray<Flux3KeyframeTiming>;
+  keyframeError?: string;
+  isLoading: boolean;
+  onVariantChange: (value: Flux3Variant) => void;
+  onAspectRatioChange: (value: Flux3AspectRatio) => void;
+  onResolutionChange: (value: Flux3Resolution) => void;
+  onDurationChange: (value: Flux3Duration) => void;
+  onGenerateAudioChange: (value: boolean) => void;
+  onKeyframeTimingChange: (imageId: string, timestampSeconds: number) => void;
 };
 
-type PromptBarColorControl = {
-  kind: 'color';
-  id: string;
-  prefixLabel: string;
-  ariaLabel: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-  errorMessage?: string;
+export const buildFlux3PromptBarControls = ({
+  idPrefix, variant, aspectRatio, resolution, duration, generateAudio, keyframeTimings, keyframeError,
+  isLoading, onVariantChange, onAspectRatioChange, onResolutionChange, onDurationChange,
+  onGenerateAudioChange, onKeyframeTimingChange,
+}: Flux3PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => {
+  const id = (name: string) => idPrefix ? `${idPrefix}-flux3-${name}` : `flux3-${name}`;
+  const policy = getFlux3ModePolicy(variant);
+  const durationOptions = FLUX3_DURATION_OPTIONS.filter(option => !policy.requiresExplicitDuration || option.value !== 'auto');
+  const controls: PromptBarModelControl[] = [buildSeedancePickerControl({
+    id: id('variant-select'), ariaLabel: 'Select Flux 3 variant', options: FLUX3_VARIANT_OPTIONS,
+    value: variant, onChange: value => onVariantChange(value as Flux3Variant), isLoading,
+  }), buildSeedancePickerControl({
+    id: id('aspect-ratio-select'), prefixLabel: 'AR', ariaLabel: 'Select Flux 3 aspect ratio', options: FLUX3_ASPECT_RATIO_OPTIONS,
+    value: aspectRatio, onChange: value => onAspectRatioChange(value as Flux3AspectRatio), isLoading,
+  }), buildSeedancePickerControl({
+    id: id('duration-select'), ariaLabel: 'Select Flux 3 duration', options: durationOptions,
+    value: duration === 'auto' && policy.requiresExplicitDuration ? '5' : duration,
+    onChange: value => onDurationChange(value as Flux3Duration), isLoading,
+  }), buildSeedancePickerControl({
+    id: id('resolution-select'), prefixLabel: 'Resolution', ariaLabel: 'Select Flux 3 resolution', options: FLUX3_RESOLUTION_OPTIONS,
+    value: resolution, onChange: value => onResolutionChange(value as Flux3Resolution), isLoading,
+  }), buildSeedancePickerControl({
+    id: id('audio-select'), prefixLabel: 'Audio', ariaLabel: 'Toggle Flux 3 audio generation',
+    options: [{ value: 'true', label: 'ON' }, { value: 'false', label: 'OFF' }], value: generateAudio ? 'true' : 'false',
+    onChange: value => onGenerateAudioChange(value === 'true'), isLoading,
+  })];
+  if (policy.inputKind === 'keyframe-images') {
+    controls.push({
+      kind: 'keyframes', id: id('keyframes-button'), label: `Keyframes ${keyframeTimings.length}`,
+      ariaLabel: 'Edit Flux 3 keyframe timing', entries: keyframeTimings, durationSeconds: Number(duration === 'auto' ? 5 : duration),
+      onTimingChange: onKeyframeTimingChange, disabled: isLoading, ...(keyframeError ? { errorMessage: keyframeError } : {}),
+    });
+  }
+  return controls;
 };
-
-type PromptBarActionControl = {
-  kind: 'action';
-  id: string;
-  label: string;
-  ariaLabel: string;
-  onClick: () => void;
-  disabled: boolean;
-  errorMessage?: string;
-};
-
-export type PromptBarModelControl = PromptBarSelectControl | PromptBarColorControl | PromptBarActionControl;
 
 type SeedancePickerControlInput = {
   id: string;
@@ -750,6 +778,7 @@ export type PromptBarControlsInput = {
   isVeo31VideoModel: boolean;
   isWan27VideoModel: boolean;
   isMiniMaxH3VideoModel: boolean;
+  isFlux3VideoModel: boolean;
   isSeedance15VideoModel: boolean;
   isSeedance2VideoModel: boolean;
   isFalSeedance2VideoModel: boolean;
@@ -806,6 +835,13 @@ export type PromptBarControlsInput = {
   miniMaxH3AspectRatio: MiniMaxH3AspectRatioSelectionValue;
   miniMaxH3Duration: MiniMaxH3DurationSelectionValue;
   miniMaxH3UsesSourceAspectRatio: boolean;
+  flux3Variant: Flux3Variant;
+  flux3AspectRatio: Flux3AspectRatio;
+  flux3Resolution: Flux3Resolution;
+  flux3Duration: Flux3Duration;
+  flux3GenerateAudio: boolean;
+  flux3KeyframeTimings: ReadonlyArray<Flux3KeyframeTiming>;
+  flux3KeyframeError?: string;
   seedance15AspectRatio: Seedance15AspectRatioSelectionValue;
   seedance15Resolution: Seedance15ResolutionSelectionValue;
   seedance15Duration: Seedance15DurationSelectionValue;
@@ -894,6 +930,12 @@ export type PromptBarControlsInput = {
   onMiniMaxH3VariantChange: (value: string) => void;
   onMiniMaxH3AspectRatioChange: (value: string) => void;
   onMiniMaxH3DurationChange: (value: string) => void;
+  onFlux3VariantChange: (value: string) => void;
+  onFlux3AspectRatioChange: (value: string) => void;
+  onFlux3ResolutionChange: (value: string) => void;
+  onFlux3DurationChange: (value: string) => void;
+  onFlux3GenerateAudioChange: (value: boolean) => void;
+  onFlux3KeyframeTimingChange: (imageId: string, timestampSeconds: number) => void;
   onSeedance15AspectRatioChange: (value: string) => void;
   onSeedance15ResolutionChange: (value: string) => void;
   onSeedance15DurationChange: (value: string) => void;
@@ -965,6 +1007,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isVeo31VideoModel,
     isWan27VideoModel,
     isMiniMaxH3VideoModel,
+    isFlux3VideoModel,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
     isFalSeedance2VideoModel,
@@ -1021,6 +1064,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     miniMaxH3AspectRatio,
     miniMaxH3Duration,
     miniMaxH3UsesSourceAspectRatio,
+    flux3Variant,
+    flux3AspectRatio,
+    flux3Resolution,
+    flux3Duration,
+    flux3GenerateAudio,
+    flux3KeyframeTimings,
+    flux3KeyframeError,
     seedance15AspectRatio,
     seedance15Resolution,
     seedance15Duration,
@@ -1109,6 +1159,12 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onMiniMaxH3VariantChange,
     onMiniMaxH3AspectRatioChange,
     onMiniMaxH3DurationChange,
+    onFlux3VariantChange,
+    onFlux3AspectRatioChange,
+    onFlux3ResolutionChange,
+    onFlux3DurationChange,
+    onFlux3GenerateAudioChange,
+    onFlux3KeyframeTimingChange,
     onSeedance15AspectRatioChange,
     onSeedance15ResolutionChange,
     onSeedance15DurationChange,
@@ -1683,6 +1739,26 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       onVariantChange: onMiniMaxH3VariantChange,
       onAspectRatioChange: onMiniMaxH3AspectRatioChange,
       onDurationChange: onMiniMaxH3DurationChange,
+    }));
+  }
+
+  if (isFlux3VideoModel) {
+    controls.push(...buildFlux3PromptBarControls({
+      idPrefix: controlIdPrefix,
+      variant: flux3Variant,
+      aspectRatio: flux3AspectRatio,
+      resolution: flux3Resolution,
+      duration: flux3Duration,
+      generateAudio: flux3GenerateAudio,
+      keyframeTimings: flux3KeyframeTimings,
+      keyframeError: flux3KeyframeError,
+      isLoading,
+      onVariantChange: value => onFlux3VariantChange(value),
+      onAspectRatioChange: value => onFlux3AspectRatioChange(value),
+      onResolutionChange: value => onFlux3ResolutionChange(value),
+      onDurationChange: value => onFlux3DurationChange(value),
+      onGenerateAudioChange: onFlux3GenerateAudioChange,
+      onKeyframeTimingChange: onFlux3KeyframeTimingChange,
     }));
   }
 

@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
 import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
+import type { Flux3InputKind } from '../utils/flux3';
 import {
   getFalModelLabel,
   getFalNumImageMaxForModel,
@@ -53,6 +53,9 @@ type Args = {
   isKlingV3ControlVideoModel: boolean;
   isVeo31VideoModel: boolean;
   isMiniMaxH3VideoModel?: boolean;
+  isFlux3VideoModel?: boolean;
+  flux3InputKind?: Flux3InputKind;
+  flux3ValidationError?: string | null;
   miniMaxH3Variant?: 'standard' | 'reference';
   miniMaxH3ReferenceAssetCount?: number;
   isSeedance2VideoModel: boolean;
@@ -108,6 +111,9 @@ export function useGenerationGuards({
   isKlingV3ControlVideoModel,
   isVeo31VideoModel,
   isMiniMaxH3VideoModel = false,
+  isFlux3VideoModel = false,
+  flux3InputKind = 'optional-start-image',
+  flux3ValidationError = null,
   miniMaxH3Variant = 'reference',
   miniMaxH3ReferenceAssetCount = 0,
   isSeedance2VideoModel,
@@ -132,6 +138,7 @@ export function useGenerationGuards({
   const isKlingO3VideoInputMode = isKlingO3EditMode;
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
+  const isFlux3ExtendMode = isVideoMode && isFlux3VideoModel && flux3InputKind === 'source-video';
   const isScailVideoModel = isVideoMode && falModelId === SCAIL_VIDEO_MODEL_ID;
   const isLipsyncVideoModel = isVideoMode && falModelId === SYNC_LIPSYNC_MODEL_ID;
   const isHeygenV3LipsyncVideoModel = isVideoMode && falModelId === HEYGEN_V3_LIPSYNC_MODEL_ID;
@@ -162,6 +169,7 @@ export function useGenerationGuards({
     || isAudioInputMode
     || isKlingV3ControlVideoModel
     || isVeo31ExtendMode
+    || isFlux3ExtendMode
     || isScailVideoModel
     || isWan27EditMode;
   const isVideoInputMode = isKlingO3VideoInputMode || isFalVideoInputMode;
@@ -186,6 +194,17 @@ export function useGenerationGuards({
     && !isMiniMaxH3ReferenceMode
     && primarySelectionMediaType !== null
     && !hasPrimaryImage;
+  const hasFlux3SmartUnsupportedSelection = apiProvider === 'fal'
+    && isVideoMode
+    && isFlux3VideoModel
+    && flux3InputKind === 'optional-start-image'
+    && (
+      selectedMediaCount > 1
+      || (primarySelectionMediaType !== null && !hasPrimaryImage)
+    );
+  const flux3SmartUnsupportedSelectionReason = hasFlux3SmartUnsupportedSelection
+    ? 'Flux 3 Smart supports at most one selected still image. Clear extra images, videos, or audio.'
+    : null;
   const hasWan27SmartUnsupportedSelection = apiProvider === 'fal'
     && isVideoMode
     && isWan27VideoModel
@@ -199,7 +218,7 @@ export function useGenerationGuards({
     && primarySelectionMediaType !== null
     && !hasPrimaryImage;
   // Central place for prompt bar UX rules (disable states, placeholders) based on model/tool constraints.
-  return useMemo(() => {
+  return (() => {
     const usingFal = apiProvider === 'fal';
     const isCanvasGenerationTool = tool === Tool.SELECTION || tool === Tool.FREE_SELECTION;
     const hasPrimaryVideoSelected = primarySelectionMediaType === 'video';
@@ -231,11 +250,11 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional || isJimengReferenceMode));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isSeedance2VideoModel && !isSeedance25VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isFlux3VideoModel && !isSeedance2VideoModel && !isSeedance25VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKlingV3Control = usingFal && isKlingV3ControlVideoModel && !hasKlingV3ControlStillImage;
     const requiresSelectedImageForScail = usingFal && isScailVideoModel && !hasScailStillImage;
-    const requiresSourceVideoForVideoInput = usingFal && isVideoMode && isVideoInputMode && !hasSourceVideo;
+    const requiresSourceVideoForVideoInput = usingFal && isVideoMode && (isVideoInputMode || isFlux3ExtendMode) && !hasSourceVideo;
     const requiresSourceAudioForVideoInput = usingFal && isVideoMode && isAudioInputMode && !hasSourceAudio;
     const editConstraintsActive = !isVideoMode && !isTextToImage && !isUpscaleModel && (
       appMode === 'CANVAS' && !isCanvasGenerationTool
@@ -249,10 +268,12 @@ export function useGenerationGuards({
       (usingFal && isSeedance2ExtendMode && seedance2ReferenceVideoCount === 0) ||
       (usingFal && isSeedance25ReferenceMode && seedance25ReferenceAssetCount === 0) ||
       (usingFal && isWan27ReferenceMode && !hasWan27ReferenceAssets) ||
+      (usingFal && isFlux3VideoModel && flux3ValidationError !== null) ||
       jimengMultiframeDisabledReason !== null ||
       hasSeedance2SmartUnsupportedSelection ||
       hasSeedance25SmartUnsupportedSelection ||
       hasMiniMaxH3StandardUnsupportedSelection ||
+      hasFlux3SmartUnsupportedSelection ||
       hasWan27SmartUnsupportedSelection ||
       hasKlingV3UnsupportedSelection ||
       requiresSelectedImageForUpscale ||
@@ -266,6 +287,11 @@ export function useGenerationGuards({
 
     const promptPlaceholderText = (() => {
       if (isVideoMode) {
+        if (flux3SmartUnsupportedSelectionReason) {
+          return selectedMediaCount > 1
+            ? flux3SmartUnsupportedSelectionReason
+            : 'Flux 3 Smart uses a still image as its optional starting frame. Clear the current video or audio selection to run text-to-video...';
+        }
         if (isMiniMaxH3VideoModel) {
           if (isMiniMaxH3ReferenceMode) {
             return miniMaxH3ReferenceAssetCount > 0
@@ -383,6 +409,11 @@ export function useGenerationGuards({
         }
         if (isVideoInputMode) {
           const hasAllInputs = hasSourceVideo && (!isInfinitalkVideoModel || hasSourceAudio);
+          if (isFlux3ExtendMode) {
+            return hasSourceVideo
+              ? 'Describe how you want to extend the source video...'
+              : 'Select a source video, then describe how you want to extend it...';
+          }
           if (hasAllInputs) {
             if (isWanVideoInputMode) {
               return 'Describe how you want to enhance this video (optional)...';
@@ -431,7 +462,9 @@ export function useGenerationGuards({
 
     return {
       submitDisabled,
-      submitDisabledReason: jimengMultiframeDisabledReason,
+      submitDisabledReason: flux3SmartUnsupportedSelectionReason
+        ?? (usingFal && isFlux3VideoModel ? flux3ValidationError : null)
+        ?? jimengMultiframeDisabledReason,
       promptPlaceholderText,
       disablePromptInput,
       shouldValidateFalOptions,
@@ -439,65 +472,5 @@ export function useGenerationGuards({
       isTextToImage,
       promptEmpty,
     };
-  }, [
-    activePrimaryImage,
-    apiProvider,
-    appMode,
-    falModelId,
-    falNumImages,
-    hasSelectedStillImage,
-    hasSourceAudio,
-    hasSourceVideo,
-    hasMiniMaxH3StandardUnsupportedSelection,
-    hasSeedance2SmartUnsupportedSelection,
-    hasSeedance25SmartUnsupportedSelection,
-    hasWan27SmartUnsupportedSelection,
-    hasKlingV3UnsupportedSelection,
-    primarySelectionMediaType,
-    isGrokImagineVideoModel,
-    isHeygenV3LipsyncVideoModel,
-    isGptImage2Model,
-    isJimengMultiframeVideoModel,
-    isJimengReferenceMode,
-    isKrea2LargeModel,
-    isNanoBananaModel,
-    isKlingV3ControlVideoModel,
-    isKlingO3EditMode,
-    isKlingO3VideoInputMode,
-    isKlingO3VideoModel,
-    isKlingV3SmartVideoModel,
-    isKlingVideoModel,
-    isMiniMaxH3VideoModel,
-    isMiniMaxH3ReferenceMode,
-    isSeedance2VideoModel,
-    isSeedance2EditMode,
-    isSeedance2ExtendMode,
-    isSeedance25VideoModel,
-    isSeedance25ReferenceMode,
-    isWanAnimateVideoModel,
-    isScailVideoModel,
-    isInfinitalkVideoModel,
-    isLipsyncVideoModel,
-    isWan27VideoModel,
-    isWan27ReferenceMode,
-    isWan27EditMode,
-    isVeo31ExtendMode,
-    isSeedreamModel,
-    isUpscaleModel,
-    isVideoMode,
-    prompt,
-    selectedMediaCount,
-    selectedStillImageCount,
-    miniMaxH3ReferenceAssetCount,
-    miniMaxH3Variant,
-    seedance2ReferenceAssetCount,
-    seedance2ReferenceVideoCount,
-    seedance2Variant,
-    seedance2VolcengineLabel,
-    seedance2VolcengineReferenceLimits,
-    seedance25ReferenceAssetCount,
-    seedance25Variant,
-    wan27ReferenceAssetCount,
-    tool,
-  ]);
+  })();
 }

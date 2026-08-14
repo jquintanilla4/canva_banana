@@ -41,6 +41,7 @@ import {
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
+  FLUX_3_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
@@ -93,6 +94,7 @@ import { useImageResize } from './hooks/useImageResize';
 import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
 import { useKlingReferenceHelpers } from './hooks/useKlingReferenceHelpers';
 import { useKlingPromptMentions } from './hooks/useKlingPromptMentions';
+import { useFlux3PromptState } from './hooks/useFlux3PromptState';
 import { useVideoNegativePrompt } from './hooks/useVideoNegativePrompt';
 import { useFalQueueJobs } from './hooks/useFalQueueJobs';
 import { useDebugLogState } from './hooks/useDebugLogState';
@@ -122,6 +124,12 @@ import {
   isUsableVideoPromptAreaModel,
   getAreaPromptBarRect,
 } from './utils/videoPromptAreas';
+import {
+  buildEmbeddedFlux3PromptState,
+  updateEmbeddedFlux3Duration,
+  updateEmbeddedFlux3KeyframeTiming,
+  updateEmbeddedFlux3Variant,
+} from './utils/embeddedFlux3';
 import {
   buildEmbeddedVideoGenerationProviderInput,
   getEmbeddedBarFalOptions,
@@ -483,6 +491,8 @@ export default function App() {
   const isWan27EditMode = fal.isWan27VideoModel && fal.wan27VideoVariant === 'edit'; // Wan Edit uses a source video instead of an end frame.
   const isMiniMaxH3ReferenceMode = fal.isMiniMaxH3VideoModel && fal.miniMaxH3Variant === 'reference';
   const isMiniMaxH3StandardMode = fal.isMiniMaxH3VideoModel && fal.miniMaxH3Variant === 'standard';
+  const isFlux3KeyframesMode = fal.isFlux3VideoModel && fal.flux3Variant === 'keyframes';
+  const isFlux3FflfMode = fal.isFlux3VideoModel && fal.flux3Variant === 'first-last-frame';
   const supportsTailFrameSelection = fal.isKlingProVideoSelection
     || fal.isKlingV3VideoModel
     || isKlingO3ReferenceMode
@@ -490,6 +500,7 @@ export default function App() {
     || (fal.isWan27VideoModel && !isWan27ReferenceMode && !isWan27EditMode)
     || fal.isSeedance15VideoModel
     || isMiniMaxH3StandardMode
+    || isFlux3FflfMode
     || (fal.isSeedance25VideoModel && fal.seedance25Variant === 'smart')
     || (fal.isSeedance2VideoModel && fal.seedance2Variant === 'smart'); // End-frame capable modes.
   const referenceImageSlotOffset = isGptImage2EditModelId(fal.falModelId) && tool === Tool.ANNOTATE ? 1 : 0; // Annotate uploads one extra input image.
@@ -1381,7 +1392,7 @@ export default function App() {
     ? 'Seedance 2.5'
     : 'Seedance 2';
   const isSeedance25ReferenceMode = fal.isSeedance25VideoModel && fal.seedance25Variant === 'reference';
-  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode;
+  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode || isFlux3KeyframesMode;
   const {
     referenceImageIds: effectiveSeedanceReferenceImageIds,
     referenceVideoIds: effectiveSeedanceReferenceVideoIds,
@@ -1396,10 +1407,27 @@ export default function App() {
     orderedReferenceIds: seedanceReferenceOrderIds,
   }), [images, isMultimodalReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, seedanceReferenceOrderIds, selectedImageIds]);
   const {
+    modePolicy: flux3ModePolicy,
+    runPlan: flux3RunPlan,
+    keyframeError: flux3KeyframeError,
+    canvasLabels: flux3CanvasLabels,
+    promptMentions: flux3PromptMentions,
+    handleDurationChange: handleFlux3DurationChange,
+    handleKeyframeTimingChange: handleFlux3KeyframeTimingChange,
+  } = useFlux3PromptState({
+    settings: fal,
+    prompt,
+    primaryImageId: activePrimaryImage?.id ?? null,
+    lastFrameImageId: videoLastFrameImageId,
+    referenceImageIds: effectiveSeedanceReferenceImageIds,
+    sourceVideoId,
+    selectedMediaIds: selectedImageIds,
+  });
+  const {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
   } = useKlingReferenceHelpers({
-    labelReferences: fal.isKlingO3VideoModel || isMultimodalReferenceMode || isWan27ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel,
+    labelReferences: fal.isKlingO3VideoModel || isMultimodalReferenceMode || isWan27ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel || fal.isFlux3VideoModel,
     primaryImageId,
     primaryImageMediaType: primarySelectionMediaType,
     includePrimaryImageAsReference: !isKlingO3ReferenceMode && !isMultimodalReferenceMode && !isWan27ReferenceMode, // Only API prompt references get @Image labels.
@@ -1410,7 +1438,7 @@ export default function App() {
     elementImageIds,
     isEditMode: isKlingO3VideoInputMode,
     sourceVideoId,
-    includeTailFrame: false,
+    includeTailFrame: isFlux3FflfMode,
     tailImageId: videoLastFrameImageId,
   });
   const videoPromptAreaBarById = useMemo(() => (
@@ -1472,8 +1500,9 @@ export default function App() {
   const seedance2ReferenceAssetCount = effectiveSeedanceReferenceImageIds.length + effectiveSeedanceReferenceVideoIds.length + effectiveSeedanceReferenceAudioIds.length; // Seedance reference mode treats selected media as effective refs too.
   const canvasReferenceOrderLabels = useMemo(() => ({
     ...(klingReferenceOrderLabels ?? {}),
+    ...flux3CanvasLabels,
     ...videoPromptAreaLabelMap,
-  }), [klingReferenceOrderLabels, videoPromptAreaLabelMap]); // Area labels should render on canvas without replacing the legacy reference flow.
+  }), [flux3CanvasLabels, klingReferenceOrderLabels, videoPromptAreaLabelMap]); // Area labels should render on canvas without replacing the legacy reference flow.
   const canvasElementOrderLabels = useMemo(() => ({
     ...(klingElementOrderLabels ?? {}),
     ...videoPromptAreaLabelMap,
@@ -1507,13 +1536,28 @@ export default function App() {
       return;
     }
     const targetModelId = getEmbeddedVideoPromptBarModelId(targetBar.modelId);
-    const generationOverrides = buildEmbeddedVideoGenerationOverrides(membership);
-    const providerInput = buildEmbeddedVideoGenerationProviderInput(
+    const embeddedFlux3State = buildEmbeddedFlux3PromptState(targetBar, membership);
+    if (targetModelId === FLUX_3_VIDEO_MODEL_ID && embeddedFlux3State.runPlan.error) {
+      return;
+    }
+    const generationOverrides = targetModelId === FLUX_3_VIDEO_MODEL_ID
+      ? embeddedFlux3State.generationOverrides
+      : buildEmbeddedVideoGenerationOverrides(membership);
+    const baseProviderInput = buildEmbeddedVideoGenerationProviderInput(
       targetBar,
       targetModelId,
       fal.jimengSessionId,
       Boolean(generationOverrides.primaryImageId),
     );
+    const providerInput = targetModelId === FLUX_3_VIDEO_MODEL_ID && baseProviderInput.falOptions
+      ? {
+        ...baseProviderInput,
+        falOptions: {
+          ...baseProviderInput.falOptions,
+          flux3KeyframeTimings: embeddedFlux3State.runPlan.keyframeTimings,
+        },
+      }
+      : baseProviderInput;
     if (isJimengEmbeddedVideoModel(targetModelId) && !(await jimengSetup.ensureReady())) {
       return;
     }
@@ -1548,10 +1592,18 @@ export default function App() {
       .filter(option => isUsableVideoPromptAreaModel(option.value))
       .map(option => ({ value: option.value, label: option.label }))
   ), []);
+  const getEmbeddedVideoPromptBarSubmitError = useCallback((bar: CanvasVideoPromptBar): string | null => {
+    if (getEmbeddedVideoPromptBarModelId(bar.modelId) !== FLUX_3_VIDEO_MODEL_ID) {
+      return null;
+    }
+    const membership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined;
+    return buildEmbeddedFlux3PromptState(bar, membership).runPlan.error;
+  }, [videoPromptAreaMemberships]);
   const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => {
     const modelId = getEmbeddedVideoPromptBarModelId(bar.modelId);
     const options = bar.falOptions ?? {};
     const barMembership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined;
+    const embeddedFlux3State = buildEmbeddedFlux3PromptState(bar, barMembership);
     const updateFalOption = (key: keyof NonNullable<CanvasVideoPromptBar['falOptions']>, value: unknown) => {
       handleEmbeddedPromptBarUpdate(bar.id, currentBar => ({
         ...currentBar,
@@ -1590,6 +1642,7 @@ export default function App() {
       isVeo31VideoModel: modelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
       isWan27VideoModel: modelId === WAN_27_VIDEO_MODEL_ID,
       isMiniMaxH3VideoModel: modelId === MINIMAX_H3_VIDEO_MODEL_ID,
+      isFlux3VideoModel: modelId === FLUX_3_VIDEO_MODEL_ID,
       isSeedance15VideoModel: modelId === SEEDANCE_15_VIDEO_MODEL_ID,
       isSeedance2VideoModel: modelId === SEEDANCE_2_VIDEO_MODEL_ID || modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID || modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
       isFalSeedance2VideoModel: modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -1648,6 +1701,13 @@ export default function App() {
       miniMaxH3UsesSourceAspectRatio: modelId === MINIMAX_H3_VIDEO_MODEL_ID
         && (options.miniMaxH3Variant ?? 'reference') === 'standard'
         && Boolean(barMembership?.primaryImageId),
+      flux3Variant: embeddedFlux3State.settings.flux3Variant,
+      flux3AspectRatio: embeddedFlux3State.settings.flux3AspectRatio,
+      flux3Resolution: embeddedFlux3State.settings.flux3Resolution,
+      flux3Duration: embeddedFlux3State.settings.flux3Duration,
+      flux3GenerateAudio: embeddedFlux3State.settings.flux3GenerateAudio,
+      flux3KeyframeTimings: embeddedFlux3State.runPlan.keyframeTimings,
+      flux3KeyframeError: embeddedFlux3State.runPlan.keyframeError ?? undefined,
       seedance15AspectRatio: options.seedance15AspectRatio ?? fal.seedance15AspectRatio,
       seedance15Resolution: options.seedance15Resolution ?? fal.seedance15Resolution,
       seedance15Duration: options.seedance15Duration ?? fal.seedance15Duration,
@@ -1749,6 +1809,21 @@ export default function App() {
       },
       onMiniMaxH3AspectRatioChange: value => updateFalOption('miniMaxH3AspectRatio', value),
       onMiniMaxH3DurationChange: value => updateFalOption('miniMaxH3Duration', value),
+      onFlux3VariantChange: value => handleEmbeddedPromptBarUpdate(
+        bar.id,
+        currentBar => updateEmbeddedFlux3Variant(currentBar, value),
+      ),
+      onFlux3AspectRatioChange: value => updateFalOption('flux3AspectRatio', value),
+      onFlux3ResolutionChange: value => updateFalOption('flux3Resolution', value),
+      onFlux3DurationChange: value => handleEmbeddedPromptBarUpdate(
+        bar.id,
+        currentBar => updateEmbeddedFlux3Duration(currentBar, value),
+      ),
+      onFlux3GenerateAudioChange: value => updateFalOption('flux3GenerateAudio', value),
+      onFlux3KeyframeTimingChange: (imageId, timestampSeconds) => handleEmbeddedPromptBarUpdate(
+        bar.id,
+        currentBar => updateEmbeddedFlux3KeyframeTiming(currentBar, barMembership, imageId, timestampSeconds),
+      ),
       onSeedance15AspectRatioChange: value => updateFalOption('seedance15AspectRatio', value),
       onSeedance15ResolutionChange: value => updateFalOption('seedance15Resolution', value),
       onSeedance15DurationChange: value => updateFalOption('seedance15Duration', value),
@@ -1862,6 +1937,9 @@ export default function App() {
     isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
     isVeo31VideoModel: fal.isVeo31VideoModel,
     isMiniMaxH3VideoModel: fal.isMiniMaxH3VideoModel,
+    isFlux3VideoModel: fal.isFlux3VideoModel,
+    flux3InputKind: flux3RunPlan.policy.inputKind,
+    flux3ValidationError: flux3RunPlan.error,
     miniMaxH3Variant: fal.miniMaxH3Variant,
     miniMaxH3ReferenceAssetCount: isMiniMaxH3ReferenceMode ? seedance2ReferenceAssetCount : 0,
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
@@ -1909,6 +1987,7 @@ export default function App() {
     isVeo31VideoModel: fal.isVeo31VideoModel,
     isWan27VideoModel: fal.isWan27VideoModel,
     isMiniMaxH3VideoModel: fal.isMiniMaxH3VideoModel,
+    isFlux3VideoModel: fal.isFlux3VideoModel,
     isSeedance15VideoModel: fal.isSeedance15VideoModel,
     isSeedance2VideoModel: fal.isSeedance2VideoModel,
     isFalSeedance2VideoModel: fal.isFalSeedance2VideoModel,
@@ -1965,6 +2044,13 @@ export default function App() {
     miniMaxH3AspectRatio: fal.miniMaxH3AspectRatio,
     miniMaxH3Duration: fal.miniMaxH3Duration,
     miniMaxH3UsesSourceAspectRatio: isMiniMaxH3StandardMode && Boolean(activePrimaryImage),
+    flux3Variant: fal.flux3Variant,
+    flux3AspectRatio: fal.flux3AspectRatio,
+    flux3Resolution: fal.flux3Resolution,
+    flux3Duration: fal.flux3Duration,
+    flux3GenerateAudio: fal.flux3GenerateAudio,
+    flux3KeyframeTimings: fal.flux3KeyframeTimings,
+    flux3KeyframeError: flux3KeyframeError ?? undefined,
     seedance15AspectRatio: fal.seedance15AspectRatio,
     seedance15Resolution: fal.seedance15Resolution,
     seedance15Duration: fal.seedance15Duration,
@@ -2057,6 +2143,12 @@ export default function App() {
     onMiniMaxH3VariantChange: fal.handleMiniMaxH3VariantChange,
     onMiniMaxH3AspectRatioChange: fal.handleMiniMaxH3AspectRatioChange,
     onMiniMaxH3DurationChange: fal.handleMiniMaxH3DurationChange,
+    onFlux3VariantChange: fal.handleFlux3VariantChange,
+    onFlux3AspectRatioChange: fal.handleFlux3AspectRatioChange,
+    onFlux3ResolutionChange: fal.handleFlux3ResolutionChange,
+    onFlux3DurationChange: handleFlux3DurationChange,
+    onFlux3GenerateAudioChange: fal.handleFlux3GenerateAudioChange,
+    onFlux3KeyframeTimingChange: handleFlux3KeyframeTimingChange,
     onSeedance15AspectRatioChange: fal.handleSeedance15AspectRatioChange,
     onSeedance15ResolutionChange: fal.handleSeedance15ResolutionChange,
     onSeedance15DurationChange: fal.handleSeedance15DurationChange,
@@ -2397,6 +2489,7 @@ export default function App() {
           onVideoPromptBarUpdate={handleEmbeddedPromptBarUpdate}
           onVideoPromptBarSubmit={handleEmbeddedVideoPromptSubmit}
           buildVideoPromptBarControls={buildEmbeddedVideoPromptBarControls}
+          getVideoPromptBarSubmitError={getEmbeddedVideoPromptBarSubmitError}
           embeddedVideoPromptBarModelOptions={embeddedVideoPromptBarModelOptions}
           isPresentationMode={isPresentationMode}
         />
@@ -2558,7 +2651,19 @@ export default function App() {
           modelModeDisabled={apiProvider !== 'fal' || isLoading}
           modelControls={promptBarModelControls}
           promptPlaceholder={
-            fal.isMiniMaxH3VideoModel
+            fal.isFlux3VideoModel
+              ? flux3ModePolicy.inputKind === 'optional-start-image' && primarySelectionMediaType !== null && !activePrimaryImage
+                ? promptPlaceholderText
+                : flux3ModePolicy.inputKind === 'source-video'
+                ? 'Flux 3 Extend: select one video as @Video1 and describe how it should continue... (Cmd/Ctrl + Enter to generate)'
+                : flux3ModePolicy.inputKind === 'keyframe-images'
+                  ? `Flux 3 Keyframes: select or shift-click up to ${flux3ModePolicy.maxImages} still images as @Image1, @Image2, and so on, set their timing, then describe the shot... (Cmd/Ctrl + Enter to generate)`
+                  : flux3ModePolicy.inputKind === 'first-last-images'
+                    ? 'Flux 3 First & Last Frame: select a first image and shift-click a last image, then describe the transition... (Cmd/Ctrl + Enter to generate)'
+                    : activePrimaryImage
+                      ? 'Flux 3 Smart Mode: describe how @Image1 should move... (Cmd/Ctrl + Enter to generate)'
+                      : 'Flux 3 Smart Mode: describe a video, or select one still image for image-to-video... (Cmd/Ctrl + Enter to generate)'
+              : fal.isMiniMaxH3VideoModel
               ? (fal.miniMaxH3Variant === 'reference'
                 ? `MiniMax H3 Reference: select or shift-click up to ${SEEDANCE_REFERENCE_IMAGE_LIMIT} images, ${SEEDANCE_REFERENCE_VIDEO_LIMIT} videos, and ${SEEDANCE_REFERENCE_AUDIO_LIMIT} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... (Cmd/Ctrl + Enter to generate)`
                 : activePrimaryImage
@@ -2604,9 +2709,9 @@ export default function App() {
           promptOutlineColor={promptOutlineColor}
           negativePromptOutlineColor={negativePromptOutlineColor}
           cameraThemeActive={isCameraPromptAccentActive}
-          klingSuggestionsEnabled={fal.isKlingO3VideoModel || isMultimodalReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel}
-          klingReferenceCount={klingReferenceCount}
-          klingSuggestionOptions={klingPromptMentions}
+          klingSuggestionsEnabled={fal.isKlingO3VideoModel || isMultimodalReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel || fal.isFlux3VideoModel}
+          klingReferenceCount={Math.max(klingReferenceCount, flux3PromptMentions.length)}
+          klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : klingPromptMentions}
           sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}
           leadingAccessory={shouldShowVideoPromptBarAccessory ? (
             <Tooltip label="Create video prompt bar">

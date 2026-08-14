@@ -293,6 +293,8 @@ const mockState = vi.hoisted(() => {
     onGenerationPlaced: null as ((payload: GenerationPlacedPayload) => void) | null,
     selectedImageIds: [] as string[],
     activePrimaryImage: null as CanvasImage | null,
+    primaryImageId: null as string | null,
+    videoLastFrameImageId: null as string | null,
     setSelectedImageIds,
     setReferenceImageIds,
     setReferenceVideoIds,
@@ -445,10 +447,10 @@ vi.mock('../hooks/useSelectionState', () => ({
     referenceAudioIds: [],
     seedanceReferenceOrderIds: [],
     elementImageIds: [],
-    videoLastFrameImageId: null,
+    videoLastFrameImageId: mockState.videoLastFrameImageId,
     sourceVideoId: null,
     sourceAudioId: null,
-    primaryImageId: mockState.activePrimaryImage?.id ?? null,
+    primaryImageId: mockState.primaryImageId ?? mockState.activePrimaryImage?.id ?? null,
     primarySelectionMediaType: mockState.activePrimaryImage?.mediaType ?? null,
     activePrimaryImage: mockState.activePrimaryImage,
     hasSingleImageSelected: mockState.selectedImageIds.length === 1,
@@ -522,8 +524,8 @@ vi.mock('../hooks/useAudioRecording', () => ({
 }));
 
 vi.mock('../hooks/useGenerationGuards', () => ({
-  useGenerationGuards: () => ({
-    submitDisabled: false,
+  useGenerationGuards: ({ isFlux3VideoModel, flux3ValidationError }: { isFlux3VideoModel?: boolean; flux3ValidationError?: string | null }) => ({
+    submitDisabled: Boolean(isFlux3VideoModel && flux3ValidationError),
     promptPlaceholderText: 'Describe your generation',
     disablePromptInput: false,
     shouldValidateFalOptions: false,
@@ -639,6 +641,8 @@ afterEach(() => {
   mockState.onGenerationPlaced = null;
   mockState.selectedImageIds = [];
   mockState.activePrimaryImage = null;
+  mockState.primaryImageId = null;
+  mockState.videoLastFrameImageId = null;
   mockState.setSelectedImageIds.mockClear();
   mockState.importSnapshotWithPicker.mockReset();
   mockState.importSnapshotWithPicker.mockImplementation((callback: () => void) => callback()); // Default tests use the hidden-input fallback path.
@@ -679,6 +683,10 @@ afterEach(() => {
     isVideoMode: true,
     isSeedance2VideoModel: true,
     isFalSeedance2VideoModel: false,
+    isFlux3VideoModel: false,
+    flux3Variant: 'smart',
+    flux3Duration: 'auto',
+    flux3KeyframeTimings: [],
     isVolcengineSeedance2VideoModel: true,
     isJimengSeedance2VideoModel: false,
     isSeedance25VideoModel: false,
@@ -695,6 +703,55 @@ afterEach(() => {
   mockState.falState.handleModelModeChange.mockClear();
   mockState.falState.applyGenerationSettings.mockReset();
   mockState.falState.applyGenerationSettings.mockReturnValue(true);
+});
+
+describe('App Flux 3 footer gating', () => {
+  it('rejects a non-image primary in First & Last Frame mode', () => {
+    const video = buildCanvasMedia('flux-video-primary', 'video');
+    const lastFrame = buildCanvasMedia('flux-last-frame', 'image');
+    mockState.selectedImageIds = [video.id];
+    mockState.primaryImageId = video.id;
+    mockState.videoLastFrameImageId = lastFrame.id;
+    mockState.activePrimaryImage = null;
+    mockState.images = [video, lastFrame];
+    mockState.displayedImages = [video, lastFrame];
+    Object.assign(mockState.falState, {
+      falModelId: 'blackforestlabs/flux-3',
+      falVideoModelId: 'blackforestlabs/flux-3',
+      isFlux3VideoModel: true,
+      flux3Variant: 'first-last-frame',
+      flux3Duration: '5',
+      flux3KeyframeTimings: [],
+    });
+
+    render(<App />);
+
+    expect(mockState.lastPromptBarProps?.submitDisabled).toBe(true);
+  });
+
+  it('rejects extra selected media in First & Last Frame mode', () => {
+    const firstFrame = buildCanvasMedia('flux-first-frame', 'image');
+    const lastFrame = buildCanvasMedia('flux-last-frame', 'image');
+    const extraFrame = buildCanvasMedia('flux-extra-frame', 'image');
+    mockState.selectedImageIds = [firstFrame.id, extraFrame.id];
+    mockState.primaryImageId = firstFrame.id;
+    mockState.videoLastFrameImageId = lastFrame.id;
+    mockState.activePrimaryImage = firstFrame;
+    mockState.images = [firstFrame, lastFrame, extraFrame];
+    mockState.displayedImages = [firstFrame, lastFrame, extraFrame];
+    Object.assign(mockState.falState, {
+      falModelId: 'blackforestlabs/flux-3',
+      falVideoModelId: 'blackforestlabs/flux-3',
+      isFlux3VideoModel: true,
+      flux3Variant: 'first-last-frame',
+      flux3Duration: '5',
+      flux3KeyframeTimings: [],
+    });
+
+    render(<App />);
+
+    expect(mockState.lastPromptBarProps?.submitDisabled).toBe(true);
+  });
 });
 
 describe('App video prompt area gating', () => {
@@ -1471,6 +1528,114 @@ describe('App video prompt area gating', () => {
       volcengineOptions: expect.anything(),
     }));
   });
+  it('submits resolved defaults for an untouched embedded Flux bar', () => {
+    const fluxBar = {
+      ...mockState.baseVideoPromptBar,
+      modelId: 'blackforestlabs/flux-3',
+    };
+    mockState.videoPromptBars = [fluxBar];
+    mockState.displayedVideoPromptBars = [fluxBar];
+
+    render(<App />);
+    const buildControls = mockState.lastCanvasProps?.buildVideoPromptBarControls as
+      | ((bar: typeof fluxBar) => Array<{ id: string; value?: string }>)
+      | undefined;
+    const controlValues = Object.fromEntries((buildControls?.(fluxBar) ?? []).map(control => [control.id, control.value]));
+    expect(controlValues).toMatchObject({
+      [`${fluxBar.id}-flux3-variant-select`]: 'smart',
+      [`${fluxBar.id}-flux3-aspect-ratio-select`]: 'auto',
+      [`${fluxBar.id}-flux3-duration-select`]: 'auto',
+      [`${fluxBar.id}-flux3-resolution-select`]: '720p',
+      [`${fluxBar.id}-flux3-audio-select`]: 'true',
+    });
+
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'video',
+      provider: 'fal',
+      modelId: 'blackforestlabs/flux-3',
+      falOptions: expect.objectContaining({
+        flux3Variant: 'smart',
+        flux3AspectRatio: 'auto',
+        flux3Resolution: '720p',
+        flux3Duration: 'auto',
+        flux3GenerateAudio: true,
+        flux3KeyframeTimings: [],
+      }),
+    }));
+  });
+  it('does not dispatch an embedded Flux generation with an empty prompt', () => {
+    const fluxBar = {
+      ...mockState.baseVideoPromptBar,
+      modelId: 'blackforestlabs/flux-3',
+      prompt: '   ',
+    };
+    mockState.videoPromptBars = [fluxBar];
+    mockState.displayedVideoPromptBars = [fluxBar];
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).not.toHaveBeenCalled();
+  });
+  it('keeps embedded Keyframes display and submission on the same valid duration', () => {
+    const fluxBar = {
+      ...mockState.baseVideoPromptBar,
+      modelId: 'blackforestlabs/flux-3',
+      falOptions: {
+        flux3Variant: 'keyframes' as const,
+        flux3Duration: 'auto' as const,
+      },
+    };
+    mockState.videoPromptBars = [fluxBar];
+    mockState.displayedVideoPromptBars = [fluxBar];
+    const frames = [buildCanvasMedia('flux-frame-1', 'image'), buildCanvasMedia('flux-frame-2', 'image')];
+    mockState.images = frames;
+    mockState.displayedImages = frames;
+    mockState.videoPromptAreas = [{
+      ...mockState.baseVideoPromptArea,
+      orderedMediaIds: frames.map(frame => frame.id),
+    }];
+    mockState.displayedVideoPromptAreas = [...mockState.videoPromptAreas];
+
+    render(<App />);
+
+    const buildControls = mockState.lastCanvasProps?.buildVideoPromptBarControls as
+      | ((bar: typeof fluxBar) => Array<{ id: string; value?: string }>)
+      | undefined;
+    const durationControl = (buildControls?.(fluxBar) ?? []).find(control => control.id.endsWith('flux3-duration-select'));
+    expect(durationControl?.value).toBe('5');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(expect.objectContaining({
+      falOptions: expect.objectContaining({
+        flux3Variant: 'keyframes',
+        flux3Duration: '5',
+      }),
+    }));
+  });
+  it('does not dispatch an invalid embedded Flux generation', () => {
+    const fluxBar = {
+      ...mockState.baseVideoPromptBar,
+      modelId: 'blackforestlabs/flux-3',
+      falOptions: {
+        flux3Variant: 'keyframes' as const,
+        flux3Duration: '5' as const,
+      },
+    };
+    mockState.videoPromptBars = [fluxBar];
+    mockState.displayedVideoPromptBars = [fluxBar];
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
+
+    expect(mockState.handleGenerate).not.toHaveBeenCalled();
+  });
+
+
 
   it('normalizes a new embedded MiniMax H3 bar to 16:9 when Standard is selected', () => {
     const h3Bar = {

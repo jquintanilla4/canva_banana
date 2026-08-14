@@ -9,6 +9,10 @@ import type {
   FalKrea2CreativityOption,
   FalResolutionOption,
   FalVideoDuration,
+  Flux3AspectRatio,
+  Flux3Duration,
+  Flux3Resolution,
+  Flux3Variant,
 } from '../../types'; // Shared app types.
 import type {
   GrokImagineVideoAspectRatioSelectionValue,
@@ -190,6 +194,12 @@ export interface GenerateVideoOptions {
   miniMaxH3Variant?: MiniMaxH3Variant;
   miniMaxH3AspectRatio?: MiniMaxH3AspectRatioSelectionValue;
   miniMaxH3Duration?: MiniMaxH3DurationSelectionValue;
+  flux3Variant?: Flux3Variant;
+  flux3AspectRatio?: Flux3AspectRatio;
+  flux3Resolution?: Flux3Resolution;
+  flux3Duration?: Flux3Duration;
+  flux3GenerateAudio?: boolean;
+  flux3KeyframeTimestampsSeconds?: number[];
   seedance15AspectRatio?: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
   seedance15Resolution?: '480p' | '720p' | '1080p';
   seedance15Duration?: '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12';

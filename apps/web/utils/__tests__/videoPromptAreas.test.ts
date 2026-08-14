@@ -3,6 +3,7 @@ import type { CanvasImage, CanvasVideoPromptArea } from '../../types';
 import { FAL_SEEDANCE_2_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import {
   buildEmbeddedSeedanceAreaMembership,
+  buildEmbeddedFlux3GenerationOverrides,
   buildVideoPromptAreaMembership,
   FULL_VIDEO_PROMPT_BAR_SCALE_THRESHOLD,
   getAreaPromptBarRect,
@@ -130,6 +131,39 @@ describe('video prompt area helpers', () => {
     expect(reference.maxImages).toBe(30);
     expect(reference.maxVideos).toBe(10);
     expect(reference.maxAudios).toBe(10);
+  });
+
+  it('gives every Flux 3 variant its canvas media roles and limits', () => {
+    const smart = getVideoPromptAreaCapabilityProfile('blackforestlabs/flux-3', undefined, { flux3Variant: 'smart' });
+    const firstLast = getVideoPromptAreaCapabilityProfile('blackforestlabs/flux-3', undefined, { flux3Variant: 'first-last-frame' });
+    const keyframes = getVideoPromptAreaCapabilityProfile('blackforestlabs/flux-3', undefined, { flux3Variant: 'keyframes' });
+    const extend = getVideoPromptAreaCapabilityProfile('blackforestlabs/flux-3', undefined, { flux3Variant: 'extend' });
+
+    expect(smart).toEqual(expect.objectContaining({ supportedMediaTypes: ['image'], maxImages: 1, supportsTextOnly: true }));
+    expect(firstLast).toEqual(expect.objectContaining({ defaultImageRole: 'reference', maxImages: 2, supportsTextOnly: false }));
+    expect(keyframes).toEqual(expect.objectContaining({ defaultImageRole: 'reference', maxImages: 10, supportsTextOnly: false }));
+    expect(extend).toEqual(expect.objectContaining({ supportedMediaTypes: ['video'], maxImages: 0, maxVideos: 1 }));
+  });
+
+  it('maps ordered embedded Flux media into variant-specific generation roles', () => {
+    const membership = {
+      orderedMediaIds: ['image-1', 'image-2', 'video-1'],
+      acceptedImageIds: ['image-1', 'image-2'],
+      acceptedVideoIds: ['video-1'],
+      acceptedAudioIds: [],
+      elementImageIds: [],
+      ignoredMediaIds: [],
+      orderLabels: { 'image-1': '@Image1', 'image-2': '@Image2', 'video-1': '@Video1' },
+    };
+
+    expect(buildEmbeddedFlux3GenerationOverrides(membership, 'first-last-frame')).toEqual({
+      primaryImageId: 'image-1',
+      videoLastFrameImageId: 'image-2',
+      referenceImageIds: [],
+      sourceVideoId: undefined,
+    });
+    expect(buildEmbeddedFlux3GenerationOverrides(membership, 'keyframes').referenceImageIds).toEqual(['image-1', 'image-2']);
+    expect(buildEmbeddedFlux3GenerationOverrides(membership, 'extend').sourceVideoId).toBe('video-1');
   });
 
   it('gives Volcengine Seedance 2 Edit multimodal slots and Extend video-only slots', () => {

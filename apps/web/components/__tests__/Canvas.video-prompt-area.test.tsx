@@ -400,6 +400,38 @@ describe('Canvas video prompt area tool', () => {
 
     expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(false);
   });
+  it('shows and applies an embedded model submit error', () => {
+    const submitError = 'Flux 3 Keyframes requires at least two keyframes.';
+    render(
+      <Canvas
+        {...buildCanvasProps({
+          videoPromptAreas: [{
+            id: 'area-1', sequence: 1, label: 'Video prompt area 01', x: 40, y: 60,
+            width: 720, height: 360, promptBarId: 'bar-1', orderedMediaIds: [],
+          }],
+          videoPromptBars: [{
+            id: 'bar-1', assignedAreaId: 'area-1', modelId: 'blackforestlabs/flux-3',
+            x: 0, y: 0, width: 720, height: 190, prompt: 'Animate the keyframes',
+            negativePrompt: '', seedance2Variant: 'reference', seedance2VolcengineModel: 'standard',
+            seedance2AspectRatio: '16:9', seedance2Resolution: '720p', seedance2Duration: '5',
+            seedance2GenerateAudio: false, seedance2CameraFixed: false,
+          }],
+          videoPromptAreaMemberships: {
+            'area-1': {
+              orderedMediaIds: [], acceptedImageIds: [], acceptedVideoIds: [], acceptedAudioIds: [],
+              elementImageIds: [], ignoredMediaIds: [], orderLabels: {},
+            },
+          },
+          getVideoPromptBarSubmitError: () => submitError,
+          embeddedVideoPromptBarModelOptions: [{ value: 'blackforestlabs/flux-3', label: 'Flux 3' }],
+        })}
+      />,
+    );
+
+    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(submitError)).toBeTruthy();
+  });
+
 
   it('labels restored 1-to-All prompt bars as unavailable and blocks submission', () => {
     const videoPromptArea: CanvasVideoPromptArea = {
