@@ -2,12 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { getBackupSession, listBackupSessions, type BackupSessionSummary } from '../services/backupService';
 import { createDesktopSnapshotSource } from '../services/desktopSnapshotSource';
 import type { SnapshotByteSource } from '../services/snapshotService';
-import type { AppBlockingOverlay } from './useBlockingOverlays';
 
 type UseBackupsManagerArgs = {
   isBackupsOpen: boolean;
   setIsBackupsOpen: (open: boolean) => void;
-  openAppOwnedBlockingOverlay: (overlay: AppBlockingOverlay) => void;
   importSnapshotFromFile: (file: SnapshotByteSource) => Promise<void>;
   setError: (message: string | null) => void;
 };
@@ -16,16 +14,11 @@ type UseBackupsManagerArgs = {
 export function useBackupsManager({
   isBackupsOpen,
   setIsBackupsOpen,
-  openAppOwnedBlockingOverlay,
   importSnapshotFromFile,
   setError,
 }: UseBackupsManagerArgs) {
   const [backupSessions, setBackupSessions] = useState<BackupSessionSummary[]>([]);
   const [isBackupsLoading, setIsBackupsLoading] = useState(false);
-
-  const openBackupsModal = useCallback(() => {
-    openAppOwnedBlockingOverlay('backups');
-  }, [openAppOwnedBlockingOverlay]);
 
   const closeBackupsModal = useCallback(() => {
     setIsBackupsOpen(false);
@@ -78,7 +71,6 @@ export function useBackupsManager({
   return {
     backupSessions,
     isBackupsLoading,
-    openBackupsModal,
     closeBackupsModal,
     handleRestoreBackup,
   };

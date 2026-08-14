@@ -1,11 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { type ValueStore } from './utils/valueStore';
 import { Toolbar } from './components/Toolbar';
-import { PromptBar } from './components/PromptBar';
 import { Canvas } from './components/Canvas';
 import { MIN_STROKE_SIZE, MAX_STROKE_SIZE, KEYBOARD_STROKE_STEP } from './components/canvas/constants';
 import { RecordingOverlay } from './components/RecordingOverlay';
-import { BackupsModal } from './components/BackupsModal';
 import {
   Tool,
   AppMode,
@@ -15,11 +13,7 @@ import {
   type GenerationPlacedPayload,
 } from './types';
 import { FalQueuePanel } from './components/FalQueuePanel';
-import { DebugLogPanel } from './components/DebugLogPanel';
-import { clearDebugLogs } from './services/debugLog';
 import { JimengSetupPanel } from './components/JimengSetupPanel';
-import { DesktopSettingsModal } from './components/DesktopSettingsModal';
-import { DesktopAppIconModal } from './components/DesktopAppIconModal';
 import { PromptChatPanel } from './components/PromptChatPanel';
 import { NotesPanel } from './components/NotesPanel';
 import {
@@ -40,8 +34,6 @@ import { useBlindTestMode } from './hooks/useBlindTestMode';
 import { isOverlapping } from './utils/canvasGeometry';
 import { FileMenu } from './components/FileMenu';
 import { ViewToolbar } from './components/ViewToolbar';
-import { ProviderSwitcher } from './components/ProviderSwitcher';
-import { Tooltip } from './components/Tooltip';
 import { StatusBanner } from './components/StatusBanner';
 import { ImageResizeToast } from './components/ImageResizeToast';
 import { GenerationCanvasNotifications } from './components/GenerationCanvasNotifications';
@@ -71,7 +63,8 @@ import { useGenerationPromptBarTransfer } from './hooks/useGenerationPromptBarTr
 import { useFileNameVisibility } from './hooks/useFileNameVisibility';
 import { useTrackpadMode } from './hooks/useTrackpadMode';
 import { useCanvasStressHarness } from './hooks/useCanvasStressHarness';
-import { useBackupsManager } from './hooks/useBackupsManager';
+import { AppModals } from './components/app/AppModals';
+import { AppFooter } from './components/app/AppFooter';
 import { useDesktopIntegration } from './hooks/useDesktopIntegration';
 import { useZoomControls } from './hooks/useZoomControls';
 import { useVideoPromptBars } from './hooks/useVideoPromptBars';
@@ -92,7 +85,6 @@ import { getCanvasImagePrompt } from './utils/canvasImagePrompt';
 import { applyGenerationPlacementSelection } from './utils/generationPlacementSelection';
 import { getGenerationTransferBlockReason } from './utils/generationPromptBarTransfer';
 import { OVERLAY_LAYER_CLASS_NAMES } from './utils/overlayLayers';
-import { PlusIcon } from './components/Icons';
 import {
   EMPTY_CAMERA_SELECTION,
   buildCameraPromptPrefix,
@@ -785,20 +777,9 @@ export default function App() {
     notifyGenerationPlaced(payload); // Arrival only announces the media; selection changes after an explicit user action.
   }, [notifyGenerationPlaced]);
 
-  // Backup listing/restore state lives behind the backups modal.
-  const {
-    backupSessions,
-    isBackupsLoading,
-    openBackupsModal,
-    closeBackupsModal,
-    handleRestoreBackup,
-  } = useBackupsManager({
-    isBackupsOpen,
-    setIsBackupsOpen,
-    openAppOwnedBlockingOverlay,
-    importSnapshotFromFile: handleImportSnapshotFromFile,
-    setError,
-  });
+  const openBackupsModal = useCallback(() => {
+    openAppOwnedBlockingOverlay('backups');
+  }, [openAppOwnedBlockingOverlay]); // Backup listing/restore state lives inside AppModals.
 
   const handleImportSnapshot = useCallback(() => {
     closeFileMenu();
@@ -1437,26 +1418,24 @@ export default function App() {
         onActivate={handleGenerationNotificationActivate}
         onDismiss={dismissGenerationNotification}
       />
-      <BackupsModal
-        isOpen={isBackupsOpen}
-        isLoading={isBackupsLoading}
-        sessions={backupSessions}
-        onClose={closeBackupsModal}
-        onRestore={handleRestoreBackup}
+      <AppModals
+        isBackupsOpen={isBackupsOpen}
+        setIsBackupsOpen={setIsBackupsOpen}
+        importSnapshotFromFile={handleImportSnapshotFromFile}
+        setError={setError}
+        isDesktopSettingsOpen={isDesktopSettingsOpen}
+        setIsDesktopSettingsOpen={setIsDesktopSettingsOpen}
+        desktopSettingsStatus={desktopSettingsStatus}
+        setDesktopSettingsStatus={setDesktopSettingsStatus}
+        desktopSettingsMode={desktopSettingsMode}
+        hasDesktopAppIconBridge={hasDesktopAppIconBridge}
+        isDesktopAppIconOpen={isDesktopAppIconOpen}
+        setIsDesktopAppIconOpen={setIsDesktopAppIconOpen}
+        isDebugLogOpen={isDebugLogOpen}
+        debugLogEntries={debugLogEntries}
+        closeDebugLogPanel={closeDebugLogPanel}
+        copyLastEntry={copyLastEntry}
       />
-      <DesktopSettingsModal
-        isOpen={isDesktopSettingsOpen}
-        onClose={() => setIsDesktopSettingsOpen(false)}
-        initialStatus={desktopSettingsStatus}
-        onStatusChange={setDesktopSettingsStatus}
-        mode={desktopSettingsMode}
-      />
-      {hasDesktopAppIconBridge && (
-        <DesktopAppIconModal
-          isOpen={isDesktopAppIconOpen}
-          onClose={() => setIsDesktopAppIconOpen(false)}
-        />
-      )}
       {isResizeToastOpen && (
         <ImageResizeToast
           width={resizeWidth}
@@ -1508,78 +1487,40 @@ export default function App() {
         </button>
       )}
 
-      {/* Debug log panel */}
-      {isDebugLogOpen && (
-        <DebugLogPanel
-          entries={debugLogEntries}
-          onClose={closeDebugLogPanel}
-          onClear={clearDebugLogs}
-          onCopy={copyLastEntry}
-        />
-      )}
-
-      {/* Provider switcher (if available and not cropping/transforming) */}
-      {!cropMode && !transformMode && AVAILABLE_PROVIDERS.length > 0 && (
-        <ProviderSwitcher
-          providers={AVAILABLE_PROVIDERS}
-          activeProvider={apiProvider}
-          labels={providerLabels}
-          disabled={isLoading}
-          onSelect={setApiProvider}
-        />
-      )}
-
-      {/* Prompt bar (if not cropping/transforming) */}
-      {!cropMode && !transformMode && (
-        <PromptBar
-          prompt={prompt}
-          onPromptChange={setPrompt}
-          onSubmit={handlePromptSubmit}
-          isLoading={isLoading}
-          inputDisabled={disablePromptInput || isEmbeddedPromptBarActive}
-          submitDisabled={submitDisabled || isEmbeddedPromptBarActive || jimengSetup.shouldBlockSelectedSubmit}
-          submitDisabledReason={isEmbeddedPromptBarActive ? null : submitDisabledReason}
-          modelOptions={promptBarModelOptions}
-          selectedModel={fal.falModelId}
-          onModelChange={fal.handleFalModelChange}
-          modelSelectDisabled={apiProvider !== 'fal' || isLoading}
-          modelMode={fal.falModelMode}
-          onModelModeChange={handleModelModeChange}
-          modelModeDisabled={apiProvider !== 'fal' || isLoading}
-          modelControls={promptBarModelControls}
-          promptPlaceholder={modelCapabilities.promptPlaceholder ?? promptPlaceholderText}
-          showNegativePrompt={shouldShowNegativePrompt}
-          showMultiPrompt={fal.isKlingV3VideoModel && fal.klingV3MultiPromptEnabled}
-          multiPrompt={fal.klingV3MultiPrompt}
-          onMultiPromptChange={fal.handleKlingV3MultiPromptChange}
-          multiPromptPlaceholder="Describe the second Kling 3.0 Pro shot... (Cmd/Ctrl + Enter to generate)"
-          multiPromptOutlineColor={fal.isKlingV3VideoModel && fal.klingV3MultiPromptEnabled ? '#38bdf8' : undefined}
-          negativePrompt={activeNegativePrompt}
-          onNegativePromptChange={activeNegativePromptSetter}
-          negativePromptPlaceholder={fal.isWan27ImageModel ? 'Describe what the image should avoid... (optional)' : 'Describe what the video should avoid... (optional)'}
-          promptOutlineColor={promptOutlineColor}
-          negativePromptOutlineColor={negativePromptOutlineColor}
-          cameraThemeActive={isCameraPromptAccentActive}
-          klingSuggestionsEnabled={modelCapabilities.klingSuggestionsEnabled}
-          klingReferenceCount={Math.max(klingReferenceCount, flux3PromptMentions.length)}
-          klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : klingPromptMentions}
-          sizeMode={isEmbeddedPromptBarActive ? 'mini' : 'full'}
-          leadingAccessory={shouldShowVideoPromptBarAccessory ? (
-            <Tooltip label="Create video prompt bar">
-              <button
-                type="button"
-                onClick={handleCreateVideoPromptBar}
-                disabled={isLoading}
-                className={`flex shrink-0 self-start items-center justify-center rounded-2xl bg-gray-900/70 text-white shadow-xl transition-all duration-300 ease-out hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-45 ${isEmbeddedPromptBarActive ? 'h-[2.28rem] w-[2.28rem]' : 'h-[3.2rem] w-[3.2rem]'}`}
-                aria-label="Create video prompt bar"
-              >
-                <PlusIcon className="h-4 w-4" />
-              </button>
-            </Tooltip>
-          ) : undefined}
-          focusRequestToken={promptFocusRequestToken}
-        />
-      )}
+      {/* Provider switcher + prompt bar (hidden while cropping/transforming) */}
+      <AppFooter
+        hidden={Boolean(cropMode) || Boolean(transformMode)}
+        providers={AVAILABLE_PROVIDERS}
+        apiProvider={apiProvider}
+        providerLabels={providerLabels}
+        onProviderSelect={setApiProvider}
+        isLoading={isLoading}
+        fal={fal}
+        prompt={prompt}
+        onPromptChange={setPrompt}
+        onSubmit={handlePromptSubmit}
+        isEmbeddedPromptBarActive={isEmbeddedPromptBarActive}
+        disablePromptInput={disablePromptInput}
+        submitDisabled={submitDisabled}
+        submitDisabledReason={submitDisabledReason}
+        jimengBlocksSubmit={jimengSetup.shouldBlockSelectedSubmit}
+        modelOptions={promptBarModelOptions}
+        onModelModeChange={handleModelModeChange}
+        modelControls={promptBarModelControls}
+        promptPlaceholder={modelCapabilities.promptPlaceholder ?? promptPlaceholderText}
+        showNegativePrompt={shouldShowNegativePrompt}
+        negativePrompt={activeNegativePrompt}
+        onNegativePromptChange={activeNegativePromptSetter}
+        promptOutlineColor={promptOutlineColor}
+        negativePromptOutlineColor={negativePromptOutlineColor}
+        cameraThemeActive={isCameraPromptAccentActive}
+        klingSuggestionsEnabled={modelCapabilities.klingSuggestionsEnabled}
+        klingReferenceCount={Math.max(klingReferenceCount, flux3PromptMentions.length)}
+        klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : klingPromptMentions}
+        showCreateVideoPromptBarButton={shouldShowVideoPromptBarAccessory}
+        onCreateVideoPromptBar={handleCreateVideoPromptBar}
+        focusRequestToken={promptFocusRequestToken}
+      />
       </>)}
     </div>
   );
