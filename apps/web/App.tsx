@@ -105,6 +105,7 @@ import { useFileNameVisibility } from './hooks/useFileNameVisibility';
 import { useTrackpadMode } from './hooks/useTrackpadMode';
 import { useCanvasStressHarness } from './hooks/useCanvasStressHarness';
 import { useBackupsManager } from './hooks/useBackupsManager';
+import { useDesktopIntegration } from './hooks/useDesktopIntegration';
 import { writeClipboardText } from './services/clipboardService';
 import type { FalModelMode } from './services/modelConfig';
 import {
@@ -139,7 +140,6 @@ import { markCanvasMediaStoppedByIds, stopCanvasMediaPlaybackByIds } from './uti
 import { getCanvasImagePrompt } from './utils/canvasImagePrompt';
 import { applyGenerationPlacementSelection } from './utils/generationPlacementSelection';
 import { getGenerationTransferBlockReason } from './utils/generationPromptBarTransfer';
-import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from './utils/promptBarFooterLayout';
 import { OVERLAY_LAYER_CLASS_NAMES } from './utils/overlayLayers';
 import { normalizeKrea2StyleStrength } from './utils/krea2StyleStrength';
 import { PlusIcon } from './components/Icons';
@@ -150,15 +150,13 @@ import {
   hasCameraSettings,
   type CameraSettingsSelection,
 } from './utils/cameraSettings';
-import { getRuntimeConfig, hasRuntimeConfigValue, type DesktopFileMenuCommand, type DesktopSettingsStatus } from './services/runtimeConfig';
+import { getRuntimeConfig, hasRuntimeConfigValue } from './services/runtimeConfig';
 
 // Type alias for API providers
 type ApiProvider = ApiProviderId;
 // Defines preferred order of API providers
 const PROVIDER_ORDER: ReadonlyArray<ApiProviderId> = ['google', 'fal'];
 const runtimeConfig = getRuntimeConfig(); // Shared Vite/Electron configuration snapshot.
-const shouldAutoOpenDesktopOnboarding = (status: DesktopSettingsStatus): boolean =>
-  status.isPackaged && status.fields.FAL_API_KEY?.present !== true; // Startup onboarding only requires the Fal key.
 // Detect which API providers are usable based on available API keys in env.
 const providerAvailability: Record<ApiProvider, boolean> = {
   google: hasRuntimeConfigValue(runtimeConfig.geminiApiKey ?? runtimeConfig.apiKey),
@@ -373,9 +371,6 @@ export default function App() {
     closeDebugLogPanel,
     copyLastEntry,
   } = useBlockingOverlays();
-  const [desktopSettingsStatus, setDesktopSettingsStatus] = useState<DesktopSettingsStatus | null>(null);
-  const hasDesktopSettingsBridge = typeof window !== 'undefined' && Boolean(window.canvaBananaDesktop?.getSettingsStatus);
-  const hasDesktopAppIconBridge = typeof window !== 'undefined' && Boolean(window.canvaBananaDesktop?.appIcon?.getState);
   // Autosave is opt-out; user can disable it in the file menu.
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   // Increment after each successful generation to trigger autosave.
@@ -1042,36 +1037,49 @@ export default function App() {
     setError,
   });
 
-  const refreshDesktopSettingsStatus = useCallback(async () => {
-    const nextStatus = await window.canvaBananaDesktop?.getSettingsStatus?.();
-    if (nextStatus) {
-      setDesktopSettingsStatus(nextStatus);
-    }
-    return nextStatus ?? null;
-  }, []);
-
-  const openDesktopSettings = useCallback(() => {
-    setDesktopSettingsMode('manage');
-    openAppOwnedBlockingOverlay('desktopSettings');
-    void refreshDesktopSettingsStatus();
-  }, [openAppOwnedBlockingOverlay, refreshDesktopSettingsStatus]);
-
-  const openDesktopAppIcon = useCallback(() => {
-    if (hasDesktopAppIconBridge) {
-      openAppOwnedBlockingOverlay('desktopAppIcon');
-    }
-  }, [hasDesktopAppIconBridge, openAppOwnedBlockingOverlay]);
-
-  useEffect(() => {
-    return window.canvaBananaDesktop?.onOpenManageKeys?.(openDesktopSettings);
-  }, [openDesktopSettings]);
-
   const handleImportSnapshot = useCallback(() => {
     closeFileMenu();
     importSnapshotWithPicker(() => {
       snapshotInputRef.current?.click();
     });
   }, [closeFileMenu, importSnapshotWithPicker]);
+
+  // Electron-only integration: settings status, native file-menu commands, macOS chrome.
+  const {
+    desktopSettingsStatus,
+    setDesktopSettingsStatus,
+    hasDesktopSettingsBridge,
+    hasDesktopAppIconBridge,
+    openDesktopSettings,
+    openDesktopAppIcon,
+    isMacDesktop,
+    shouldShowReactFileMenu,
+    leadingRailJustificationClass,
+    topControlRailStyle,
+    windowDragRegionStyle,
+  } = useDesktopIntegration({
+    setDesktopSettingsMode,
+    setIsDesktopSettingsOpen,
+    openAppOwnedBlockingOverlay,
+    menuCommands: {
+      importSnapshot: handleImportSnapshot,
+      exportSnapshot: handleExportSnapshot,
+      openBackups: openBackupsModal,
+      toggleAutosave: handleToggleAutosave,
+      toggleZoomLevelBadge: handleToggleZoomLevelBadge,
+      toggleFileName,
+      toggleTrackpadMode,
+      openDebugLog: openDebugLogPanel,
+      clearJimengCache: jimengSetup.handleClearCache,
+    },
+    fileMenuState: {
+      autosaveEnabled,
+      showZoomLevelBadge,
+      showFileName,
+      trackpadMode,
+      isClearingJimengCache: jimengSetup.isClearingCache,
+    },
+  });
 
   useEffect(() => {
     if (!isResizeToastOpen) return;
@@ -1160,28 +1168,6 @@ export default function App() {
     // Autosave after the generation is committed to state.
     autosaveSnapshotRef.current();
   }, [generationTick]);
-
-  useEffect(() => {
-    if (!hasDesktopSettingsBridge) {
-      return;
-    }
-    let cancelled = false;
-    window.canvaBananaDesktop?.getSettingsStatus?.().then(status => {
-      if (!status || cancelled) {
-        return;
-      }
-      setDesktopSettingsStatus(status);
-      if (shouldAutoOpenDesktopOnboarding(status)) {
-        setDesktopSettingsMode('onboarding');
-        setIsDesktopSettingsOpen(true);
-      }
-    }).catch(err => {
-      console.error('Failed to load desktop settings status:', err);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [hasDesktopSettingsBridge]);
 
   useKeyboardShortcuts({
     onGenerate: handlePromptSubmit,
@@ -2152,88 +2138,7 @@ export default function App() {
   const negativePromptOutlineColor = shouldShowNegativePrompt ? '#f87171' : undefined;
   const activeNegativePrompt = generationNegativePrompt;
   const activeNegativePromptSetter = fal.isWan27ImageModel ? setWan27ImageNegativePrompt : setVideoNegativePrompt;
-  const isMacDesktop = runtimeConfig.isDesktop && typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
-  const hasNativeFileMenuBridge = isMacDesktop && typeof window !== 'undefined' && typeof window.canvaBananaDesktop?.fileMenu?.onCommand === 'function';
-  const shouldShowReactFileMenu = !isMacDesktop; // macOS desktop uses the native application menu.
-  const leadingRailJustificationClass = isMacDesktop ? 'justify-center' : 'justify-start'; // Center the macOS filename without moving the cross-platform menu.
   const isTopToolbarSuppressed = cropMode !== null || transformMode !== null; // Keep its grid width while crop or transform controls take over.
-  const topControlRailStyle: React.CSSProperties = isMacDesktop
-    ? { paddingLeft: '86px', paddingRight: FLOATING_EDGE_CONTROL_SIDE_OFFSET }
-    : { paddingInline: FLOATING_EDGE_CONTROL_SIDE_OFFSET }; // Shift controls away from macOS traffic lights.
-  const windowDragRegionStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties; // Electron-only CSS for hidden titlebar dragging.
-
-  useEffect(() => {
-    if (!hasNativeFileMenuBridge) {
-      return;
-    }
-    return window.canvaBananaDesktop?.fileMenu?.onCommand?.((command: DesktopFileMenuCommand) => {
-      switch (command) {
-        case 'importSnapshot':
-          handleImportSnapshot();
-          break;
-        case 'exportSnapshot':
-          void handleExportSnapshot();
-          break;
-        case 'openBackups':
-          openBackupsModal();
-          break;
-        case 'toggleAutosave':
-          handleToggleAutosave();
-          break;
-        case 'toggleZoomLevelBadge':
-          handleToggleZoomLevelBadge();
-          break;
-        case 'toggleFileName':
-          toggleFileName();
-          break;
-        case 'toggleTrackpadMode':
-          toggleTrackpadMode();
-          break;
-        case 'openDebugLog':
-          openDebugLogPanel();
-          break;
-        case 'openManageKeys':
-          openDesktopSettings();
-          break;
-        case 'openChangeIcon':
-          openDesktopAppIcon();
-          break;
-        case 'clearJimengCache':
-          void jimengSetup.handleClearCache();
-          break;
-        default: {
-          const exhaustiveCommand: never = command;
-          return exhaustiveCommand;
-        }
-      }
-    });
-  }, [
-    handleExportSnapshot,
-    handleImportSnapshot,
-    handleToggleAutosave,
-    handleToggleZoomLevelBadge,
-    hasNativeFileMenuBridge,
-    jimengSetup.handleClearCache,
-    openBackupsModal,
-    openDesktopAppIcon,
-    openDebugLogPanel,
-    openDesktopSettings,
-    toggleFileName,
-    toggleTrackpadMode,
-  ]);
-
-  useEffect(() => {
-    if (!hasNativeFileMenuBridge) {
-      return;
-    }
-    void window.canvaBananaDesktop?.fileMenu?.setState?.({
-      autosaveEnabled,
-      showZoomLevelBadge,
-      showFileName,
-      trackpadMode,
-      isClearingJimengCache: jimengSetup.isClearingCache,
-    });
-  }, [autosaveEnabled, hasNativeFileMenuBridge, jimengSetup.isClearingCache, showFileName, showZoomLevelBadge, trackpadMode]);
 
   // TSX (React with Tailwind CSS utility classes)
   return (
