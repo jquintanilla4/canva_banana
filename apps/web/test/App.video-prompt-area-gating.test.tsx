@@ -523,7 +523,10 @@ vi.mock('../hooks/useAudioRecording', () => ({
   }),
 }));
 
-vi.mock('../hooks/useGenerationGuards', () => ({
+vi.mock('../hooks/useGenerationGuards', async (importOriginal) => ({
+  // Keep the real args assembler so App can build the guard args; only the guard
+  // evaluation itself is stubbed.
+  buildGenerationGuardArgs: (await importOriginal<typeof import('../hooks/useGenerationGuards')>()).buildGenerationGuardArgs,
   useGenerationGuards: ({ isFlux3VideoModel, flux3ValidationError }: { isFlux3VideoModel?: boolean; flux3ValidationError?: string | null }) => ({
     submitDisabled: Boolean(isFlux3VideoModel && flux3ValidationError),
     promptPlaceholderText: 'Describe your generation',

@@ -23,16 +23,12 @@ import { DesktopAppIconModal } from './components/DesktopAppIconModal';
 import { PromptChatPanel } from './components/PromptChatPanel';
 import { NotesPanel } from './components/NotesPanel';
 import {
-  GROK_IMAGINE_IMAGE_MODEL_ID, // Grok Imagine model id.
   isGptImage2EditModelId,
-  isNanoBananaEditModelId,
   FLUX_3_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
-  KREA_2_MAX_STYLE_REFERENCES,
-  isSeedreamModelId,
 } from './services/modelConfig';
 import {
   buildPromptBarModelControls,
@@ -51,6 +47,8 @@ import { ImageResizeToast } from './components/ImageResizeToast';
 import { GenerationCanvasNotifications } from './components/GenerationCanvasNotifications';
 import { SnapshotFileName } from './components/SnapshotFileName';
 import { useGeneration } from './hooks/useGeneration';
+import { useCanvasReferenceLabels } from './hooks/useCanvasReferenceLabels';
+import { useKrea2StyleStrengths } from './hooks/useKrea2StyleStrengths';
 import { useCanvasHistory } from './hooks/useCanvasHistory';
 import { useSelectionState } from './hooks/useSelectionState';
 import { useFalSettings } from './hooks/useFalSettings';
@@ -59,10 +57,9 @@ import { useCanvasMediaActions } from './hooks/useCanvasMediaActions';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAudioRecordingToCanvas } from './hooks/useAudioRecordingToCanvas';
 import { useNotesPanel } from './hooks/useNotesPanel';
-import { useGenerationGuards } from './hooks/useGenerationGuards';
+import { buildGenerationGuardArgs, useGenerationGuards } from './hooks/useGenerationGuards';
 import { useImageResize } from './hooks/useImageResize';
 import { useDuplicateCanvasMedia } from './hooks/useDuplicateCanvasMedia';
-import { useKlingReferenceHelpers } from './hooks/useKlingReferenceHelpers';
 import { useKlingPromptMentions } from './hooks/useKlingPromptMentions';
 import { useFlux3PromptState } from './hooks/useFlux3PromptState';
 import { useVideoNegativePrompt } from './hooks/useVideoNegativePrompt';
@@ -95,7 +92,6 @@ import { getCanvasImagePrompt } from './utils/canvasImagePrompt';
 import { applyGenerationPlacementSelection } from './utils/generationPlacementSelection';
 import { getGenerationTransferBlockReason } from './utils/generationPromptBarTransfer';
 import { OVERLAY_LAYER_CLASS_NAMES } from './utils/overlayLayers';
-import { normalizeKrea2StyleStrength } from './utils/krea2StyleStrength';
 import { PlusIcon } from './components/Icons';
 import {
   EMPTY_CAMERA_SELECTION,
@@ -122,11 +118,6 @@ const AVAILABLE_PROVIDERS = PROVIDER_ORDER.filter(provider => providerAvailabili
 const PROVIDER_LABELS: Record<ApiProvider, string> = { google: 'Google', fal: 'FAL' }; // Mapping of provider IDs to display names
 const DEFAULT_API_PROVIDER: ApiProvider = AVAILABLE_PROVIDERS[0] ?? 'google'; // Default provider (first available or fallback)
 const clampStrokeSize = (value: number) => Math.min(MAX_STROKE_SIZE, Math.max(MIN_STROKE_SIZE, value));
-const areKrea2StrengthMapsEqual = (left: Record<string, number>, right: Record<string, number>): boolean => {
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  return leftKeys.length === rightKeys.length && leftKeys.every(key => left[key] === right[key]);
-};
 const formatZoomPercentage = (scale: number): string => {
   const percentage = scale * 100;
   if (percentage < 10) {
@@ -445,14 +436,14 @@ export default function App() {
   const isKlingO3VideoInputMode = capabilitySelection.klingO3VideoInputMode;
   const isKlingO3ReferenceMode = capabilitySelection.klingO3ReferenceMode;
   const isVeo31ExtendMode = capabilitySelection.veo31ExtendMode;
-  const isWan27ReferenceMode = capabilitySelection.wan27ReferenceMode; // Wan Reference labels tagged image/video refs.
-  const isWan27EditMode = capabilitySelection.wan27EditMode; // Wan Edit uses a source video instead of an end frame.
-  const isMiniMaxH3ReferenceMode = capabilitySelection.miniMaxH3ReferenceMode;
-  const isFlux3KeyframesMode = capabilitySelection.flux3KeyframesMode;
-  const isFlux3FflfMode = capabilitySelection.flux3FflfMode;
   const supportsTailFrameSelection = modelCapabilities.supportsTailFrame; // End-frame capable modes.
 
-  const [krea2StyleReferenceStrengths, setKrea2StyleReferenceStrengths] = useState<Record<string, number>>({});
+  // Per-reference style strengths for Krea 2 Large.
+  const {
+    krea2StyleReferenceStrengths,
+    setKrea2StyleReferenceStrengths,
+    handleKrea2StyleReferenceStrengthChange,
+  } = useKrea2StyleStrengths({ isActive: isActiveKrea2LargeModel, referenceImageIds });
   const resetMetadataEditContext = useCallback(() => {
     setAppMode('CANVAS'); // Loaded edits use the normal canvas workflow.
     setTool(Tool.SELECTION); // A neutral selection avoids reusing the current brush tool.
@@ -476,21 +467,6 @@ export default function App() {
   const getMetadataTransferBlockReason = useCallback((imageId: string): string | null => (
     getGenerationTransferBlockReason(displayedImages.find(image => image.id === imageId)?.metadata?.generation, providerAvailability)
   ), [displayedImages]); // The toolbar disables the action instead of letting it replace the prompt and fail.
-  useEffect(() => {
-    if (!isActiveKrea2LargeModel) {
-      setKrea2StyleReferenceStrengths(prev => (Object.keys(prev).length === 0 ? prev : {}));
-      return;
-    }
-    const activeReferenceIds = referenceImageIds.slice(0, KREA_2_MAX_STYLE_REFERENCES);
-    setKrea2StyleReferenceStrengths(prev => {
-      const next = Object.fromEntries(activeReferenceIds.map(id => [id, normalizeKrea2StyleStrength(prev[id] ?? 1)]));
-      return areKrea2StrengthMapsEqual(prev, next) ? prev : next;
-    });
-  }, [isActiveKrea2LargeModel, referenceImageIds]);
-  const handleKrea2StyleReferenceStrengthChange = useCallback((imageId: string, value: number) => {
-    setKrea2StyleReferenceStrengths(prev => ({ ...prev, [imageId]: normalizeKrea2StyleStrength(value) }));
-  }, []);
-
   // Zoom triggers, scale store, and badge visibility.
   const {
     zoomToFitTrigger,
@@ -1020,11 +996,6 @@ export default function App() {
   const canMoveUp = selectedImageIndex > -1 && selectedImageIndex < images.length - 1;
   const canMoveDown = selectedImageIndex > -1 && selectedImageIndex > 0;
 
-  const isSeedreamModel = !fal.isVideoMode && isSeedreamModelId(fal.falModelId);
-  const isNanoBananaModel = !fal.isVideoMode && isNanoBananaEditModelId(fal.falModelId);
-  const isGptImage2Model = !fal.isVideoMode && isGptImage2EditModelId(fal.falModelId);
-  const isKrea2LargeModel = isActiveKrea2LargeModel;
-  const isGrokModel = !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
   const isAnnotateModeDisabled = !modelCapabilities.supportsAnnotate;
 
   useEffect(() => {
@@ -1033,7 +1004,6 @@ export default function App() {
     }
   }, [appMode, handleModeChange, isAnnotateModeDisabled]);
 
-  const isSeedance25ReferenceMode = capabilitySelection.seedance25ReferenceMode;
   const isMultimodalReferenceMode = capabilitySelection.multimodalReferenceMode; // Modes that label the merged selected and tagged refs.
   const {
     referenceImageIds: effectiveSeedanceReferenceImageIds,
@@ -1049,7 +1019,6 @@ export default function App() {
     orderedReferenceIds: seedanceReferenceOrderIds,
   }), [images, isMultimodalReferenceMode, referenceAudioIds, referenceImageIds, referenceVideoIds, seedanceReferenceOrderIds, selectedImageIds]);
   const {
-    modePolicy: flux3ModePolicy,
     runPlan: flux3RunPlan,
     keyframeError: flux3KeyframeError,
     canvasLabels: flux3CanvasLabels,
@@ -1065,57 +1034,39 @@ export default function App() {
     sourceVideoId,
     selectedMediaIds: selectedImageIds,
   });
+  // Reference/element @-labels and the merged id lists Canvas renders.
   const {
-    referenceOrderLabels: klingReferenceOrderLabels,
-    elementOrderLabels: klingElementOrderLabels,
-  } = useKlingReferenceHelpers({
-    labelReferences: fal.isKlingO3VideoModel || isMultimodalReferenceMode || isWan27ReferenceMode || fal.isFlux2MaxModel || fal.isWan27ImageModel || fal.isFlux3VideoModel,
-    primaryImageId,
-    primaryImageMediaType: primarySelectionMediaType,
-    includePrimaryImageAsReference: !isKlingO3ReferenceMode && !isMultimodalReferenceMode && !isWan27ReferenceMode, // Only API prompt references get @Image labels.
-    referenceImageIds: isMultimodalReferenceMode ? effectiveSeedanceReferenceImageIds : referenceImageIds,
-    referenceVideoIds: isMultimodalReferenceMode ? effectiveSeedanceReferenceVideoIds : referenceVideoIds,
-    referenceAudioIds: isMultimodalReferenceMode ? effectiveSeedanceReferenceAudioIds : referenceAudioIds,
-    labelElements: fal.isKlingO3VideoModel,
+    klingReferenceOrderLabels,
+    klingElementOrderLabels,
+    seedance2ReferenceAssetCount,
+    canvasElementImageIds,
+    canvasReferenceOrderLabels,
+    canvasElementOrderLabels,
+    canvasReferenceImageIds,
+    canvasReferenceVideoIds,
+    canvasReferenceAudioIds,
+  } = useCanvasReferenceLabels({
+    capabilitySelection,
+    klingSuggestionsEnabled: modelCapabilities.klingSuggestionsEnabled,
+    isKlingO3VideoModel: fal.isKlingO3VideoModel,
+    effectiveSeedanceReferenceImageIds,
+    effectiveSeedanceReferenceVideoIds,
+    effectiveSeedanceReferenceAudioIds,
+    referenceImageIds,
+    referenceVideoIds,
+    referenceAudioIds,
     elementImageIds,
-    isEditMode: isKlingO3VideoInputMode,
+    primaryImageId,
+    primarySelectionMediaType,
     sourceVideoId,
-    includeTailFrame: isFlux3FflfMode,
-    tailImageId: videoLastFrameImageId,
+    videoLastFrameImageId,
+    flux3CanvasLabels,
+    videoPromptAreaLabelMap,
+    acceptedVideoPromptImageIds,
+    acceptedVideoPromptVideoIds,
+    acceptedVideoPromptAudioIds,
+    acceptedVideoPromptElementIds,
   });
-  // Stable identity matters: this feeds Canvas's draw callback, and a fresh array every
-  // App render would force a full canvas repaint on unrelated state changes.
-  const canvasElementImageIds = useMemo(() => (
-    Array.from(new Set([...elementImageIds, ...acceptedVideoPromptElementIds]))
-  ), [elementImageIds, acceptedVideoPromptElementIds]);
-  const seedance2ReferenceAssetCount = effectiveSeedanceReferenceImageIds.length + effectiveSeedanceReferenceVideoIds.length + effectiveSeedanceReferenceAudioIds.length; // Seedance reference mode treats selected media as effective refs too.
-  const canvasReferenceOrderLabels = useMemo(() => ({
-    ...(klingReferenceOrderLabels ?? {}),
-    ...flux3CanvasLabels,
-    ...videoPromptAreaLabelMap,
-  }), [flux3CanvasLabels, klingReferenceOrderLabels, videoPromptAreaLabelMap]); // Area labels should render on canvas without replacing the legacy reference flow.
-  const canvasElementOrderLabels = useMemo(() => ({
-    ...(klingElementOrderLabels ?? {}),
-    ...videoPromptAreaLabelMap,
-  }), [klingElementOrderLabels, videoPromptAreaLabelMap]); // Element labels share the same area role labels.
-  const canvasReferenceImageIds = useMemo(() => (
-    Array.from(new Set([
-      ...(isMultimodalReferenceMode ? effectiveSeedanceReferenceImageIds : referenceImageIds),
-      ...acceptedVideoPromptImageIds,
-    ]))
-  ), [acceptedVideoPromptImageIds, effectiveSeedanceReferenceImageIds, isMultimodalReferenceMode, referenceImageIds]);
-  const canvasReferenceVideoIds = useMemo(() => (
-    Array.from(new Set([
-      ...(isMultimodalReferenceMode ? effectiveSeedanceReferenceVideoIds : referenceVideoIds),
-      ...acceptedVideoPromptVideoIds,
-    ]))
-  ), [acceptedVideoPromptVideoIds, effectiveSeedanceReferenceVideoIds, isMultimodalReferenceMode, referenceVideoIds]);
-  const canvasReferenceAudioIds = useMemo(() => (
-    Array.from(new Set([
-      ...(isMultimodalReferenceMode ? effectiveSeedanceReferenceAudioIds : referenceAudioIds),
-      ...acceptedVideoPromptAudioIds,
-    ]))
-  ), [acceptedVideoPromptAudioIds, effectiveSeedanceReferenceAudioIds, isMultimodalReferenceMode, referenceAudioIds]);
 
   const handleEmbeddedVideoPromptSubmit = useCallback(async (barId: string) => {
     const targetBar = displayedVideoPromptBars.find(bar => bar.id === barId);
@@ -1188,52 +1139,26 @@ export default function App() {
     shouldValidateFalOptions,
     isNumImagesInvalid,
     isTextToImage,
-  } = useGenerationGuards({
+  } = useGenerationGuards(buildGenerationGuardArgs({
     apiProvider,
     appMode,
     tool,
     prompt,
-    isKlingO3EditMode: fal.isKlingO3EditMode,
+    fal,
+    capabilities: modelCapabilities,
+    flux3RunPlan,
     hasSourceVideo: hasSourceVideoSelected,
     hasSourceAudio: hasSourceAudioSelected,
-    isVideoMode: fal.isVideoMode,
-    isUpscaleModel: fal.isUpscaleModel,
-    isSeedreamModel,
-    isNanoBananaModel,
-    isGptImage2Model,
-    isKrea2LargeModel,
-    isGrokModel, // Grok validation flag.
-    isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
-    isKlingVideoModel: fal.isKlingVideoModel,
-    isKlingV3VideoModel: fal.isKlingV3VideoModel,
-    isKlingO3VideoModel: fal.isKlingO3VideoModel,
-    isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
-    isVeo31VideoModel: fal.isVeo31VideoModel,
-    isMiniMaxH3VideoModel: fal.isMiniMaxH3VideoModel,
-    isFlux3VideoModel: fal.isFlux3VideoModel,
-    flux3InputKind: flux3RunPlan.policy.inputKind,
-    flux3ValidationError: flux3RunPlan.error,
-    miniMaxH3Variant: fal.miniMaxH3Variant,
-    miniMaxH3ReferenceAssetCount: isMiniMaxH3ReferenceMode ? seedance2ReferenceAssetCount : 0,
-    isSeedance2VideoModel: fal.isSeedance2VideoModel,
-    seedance2Variant: fal.seedance2Variant,
     seedance2ReferenceAssetCount,
     seedance2ReferenceVideoCount: effectiveSeedanceReferenceVideoIds.length,
-    seedance2VolcengineModel: fal.seedance2VolcengineModel,
-    isSeedance25VideoModel: fal.isSeedance25VideoModel,
-    seedance25Variant: fal.seedance25Variant,
-    seedance25ReferenceAssetCount: isSeedance25ReferenceMode ? seedance2ReferenceAssetCount : 0,
-    wan27VideoVariant: fal.wan27VideoVariant,
-    wan27ReferenceAssetCount: isWan27ReferenceMode ? referenceImageIds.length + referenceVideoIds.length : 0,
-    veo31Variant: fal.veo31Variant,
-    falModelId: fal.falModelId,
-    falNumImages: fal.falNumImages,
+    taggedReferenceImageCount: referenceImageIds.length,
+    taggedReferenceVideoCount: referenceVideoIds.length,
     activePrimaryImage,
     primarySelectionMediaType,
     hasSelectedStillImage,
     selectedMediaCount: selectedImageIds.length,
     selectedStillImageCount,
-  });
+  }));
 
   // Derive UI controls for the prompt bar based on provider, model, and mode selections.
   const promptBarModelControls = buildPromptBarModelControls(buildFooterPromptBarControlsInput({

@@ -1,5 +1,13 @@
 import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
 import type { Flux3InputKind } from '../utils/flux3';
+import type { UseFalSettingsResult } from './useFalSettings';
+import type { ModelUiCapabilities } from '../services/modelCapabilities';
+import {
+  GROK_IMAGINE_IMAGE_MODEL_ID,
+  isGptImage2EditModelId,
+  isNanoBananaEditModelId,
+  isSeedreamModelId,
+} from '../services/modelConfig';
 import {
   getFalModelLabel,
   getFalNumImageMaxForModel,
@@ -77,6 +85,98 @@ type Args = {
   selectedMediaCount: number;
   selectedStillImageCount: number;
 };
+
+export type GenerationGuardsArgs = Args;
+
+type BuildGenerationGuardArgsParams = {
+  apiProvider: 'google' | 'fal';
+  appMode: 'CANVAS' | 'ANNOTATE';
+  tool: Tool;
+  prompt: string;
+  fal: UseFalSettingsResult;
+  capabilities: ModelUiCapabilities;
+  flux3RunPlan: { policy: { inputKind: Flux3InputKind }; error?: string | null };
+  hasSourceVideo: boolean;
+  hasSourceAudio: boolean;
+  seedance2ReferenceAssetCount: number;
+  seedance2ReferenceVideoCount: number;
+  taggedReferenceImageCount: number;
+  taggedReferenceVideoCount: number;
+  activePrimaryImage: unknown;
+  primarySelectionMediaType: 'image' | 'video' | 'audio' | null;
+  hasSelectedStillImage: boolean;
+  selectedMediaCount: number;
+  selectedStillImageCount: number;
+};
+
+// Assembles the guards' argument bag from live settings plus the capability
+// registry, so App does not have to thread ~30 model flags by hand. The Args type
+// itself stays unchanged — the per-model test suites construct it directly.
+export const buildGenerationGuardArgs = ({
+  apiProvider,
+  appMode,
+  tool,
+  prompt,
+  fal,
+  capabilities,
+  flux3RunPlan,
+  hasSourceVideo,
+  hasSourceAudio,
+  seedance2ReferenceAssetCount,
+  seedance2ReferenceVideoCount,
+  taggedReferenceImageCount,
+  taggedReferenceVideoCount,
+  activePrimaryImage,
+  primarySelectionMediaType,
+  hasSelectedStillImage,
+  selectedMediaCount,
+  selectedStillImageCount,
+}: BuildGenerationGuardArgsParams): GenerationGuardsArgs => ({
+  apiProvider,
+  appMode,
+  tool,
+  prompt,
+  isKlingO3EditMode: fal.isKlingO3EditMode,
+  hasSourceVideo,
+  hasSourceAudio,
+  isVideoMode: fal.isVideoMode,
+  isUpscaleModel: fal.isUpscaleModel,
+  isSeedreamModel: !fal.isVideoMode && isSeedreamModelId(fal.falModelId),
+  isNanoBananaModel: !fal.isVideoMode && isNanoBananaEditModelId(fal.falModelId),
+  isGptImage2Model: !fal.isVideoMode && isGptImage2EditModelId(fal.falModelId),
+  isKrea2LargeModel: apiProvider === 'fal' && fal.isKrea2LargeModel, // Krea behavior only applies while Fal is active.
+  isGrokModel: !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID, // Grok text-to-image.
+  isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
+  isKlingVideoModel: fal.isKlingVideoModel,
+  isKlingV3VideoModel: fal.isKlingV3VideoModel,
+  isKlingO3VideoModel: fal.isKlingO3VideoModel,
+  isKlingV3ControlVideoModel: fal.isKlingV3ControlVideoModel,
+  isVeo31VideoModel: fal.isVeo31VideoModel,
+  isMiniMaxH3VideoModel: fal.isMiniMaxH3VideoModel,
+  isFlux3VideoModel: fal.isFlux3VideoModel,
+  flux3InputKind: flux3RunPlan.policy.inputKind,
+  flux3ValidationError: flux3RunPlan.error,
+  miniMaxH3Variant: fal.miniMaxH3Variant,
+  miniMaxH3ReferenceAssetCount: capabilities.selection.miniMaxH3ReferenceMode ? seedance2ReferenceAssetCount : 0,
+  isSeedance2VideoModel: fal.isSeedance2VideoModel,
+  seedance2Variant: fal.seedance2Variant,
+  seedance2ReferenceAssetCount,
+  seedance2ReferenceVideoCount,
+  seedance2VolcengineModel: fal.seedance2VolcengineModel,
+  isSeedance25VideoModel: fal.isSeedance25VideoModel,
+  seedance25Variant: fal.seedance25Variant,
+  seedance25ReferenceAssetCount: capabilities.selection.seedance25ReferenceMode ? seedance2ReferenceAssetCount : 0,
+  wan27VideoVariant: fal.wan27VideoVariant,
+  wan27ReferenceAssetCount: capabilities.selection.wan27ReferenceMode ? taggedReferenceImageCount + taggedReferenceVideoCount : 0,
+  veo31Variant: fal.veo31Variant,
+  falModelId: fal.falModelId,
+  falNumImages: fal.falNumImages,
+  activePrimaryImage,
+  primarySelectionMediaType,
+  hasSelectedStillImage,
+  selectedMediaCount,
+  selectedStillImageCount,
+});
 
 export type GenerationGuardsResult = {
   submitDisabled: boolean;
