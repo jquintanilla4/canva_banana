@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildPromptContextMenuTemplate, isFooterPromptContextMenuTarget } from './prompt-context-menu.mjs';
+import { buildPromptContextMenuTemplate, isTextEntryContextMenuTarget } from './prompt-context-menu.mjs';
 
 const buildParams = (overrides = {}) => ({
   dictionarySuggestions: [],
@@ -16,37 +16,16 @@ const buildParams = (overrides = {}) => ({
   ...overrides,
 });
 
-describe('footer prompt context menu', () => {
-  it('detects the marked footer textarea at the context-menu coordinates', async () => {
-    const frame = { executeJavaScript: vi.fn().mockResolvedValue(true) };
-
-    await expect(isFooterPromptContextMenuTarget({ frame, x: 12, y: 24, isEditable: true })).resolves.toBe(true);
-
-    expect(frame.executeJavaScript).toHaveBeenCalledTimes(1);
-    expect(frame.executeJavaScript.mock.calls[0][0]).toContain('document.elementFromPoint(12, 24)');
-    expect(frame.executeJavaScript.mock.calls[0][0]).toContain('data-footer-prompt-context-menu');
+describe('text entry context menu', () => {
+  it('accepts every editable renderer target', () => {
+    expect(isTextEntryContextMenuTarget({ isEditable: true, formControlType: 'text-area' })).toBe(true);
+    expect(isTextEntryContextMenuTarget({ isEditable: true, formControlType: 'input-text' })).toBe(true);
+    expect(isTextEntryContextMenuTarget({ isEditable: true, formControlType: 'none' })).toBe(true);
   });
 
-  it('converts context-menu coordinates to CSS pixels at non-default zoom', async () => {
-    const frame = { executeJavaScript: vi.fn().mockResolvedValue(true) };
-
-    await expect(isFooterPromptContextMenuTarget({ frame, x: 18, y: 36, isEditable: true, zoomFactor: 1.5 })).resolves.toBe(true);
-
-    expect(frame.executeJavaScript.mock.calls[0][0]).toContain('document.elementFromPoint(12, 24)');
-  });
-
-  it('ignores non-editable targets without evaluating the renderer', async () => {
-    const frame = { executeJavaScript: vi.fn() };
-
-    await expect(isFooterPromptContextMenuTarget({ frame, x: 12, y: 24, isEditable: false })).resolves.toBe(false);
-
-    expect(frame.executeJavaScript).not.toHaveBeenCalled();
-  });
-
-  it('ignores a target when its frame detaches during hit testing', async () => {
-    const frame = { executeJavaScript: vi.fn().mockRejectedValue(new Error('Frame was detached')) };
-
-    await expect(isFooterPromptContextMenuTarget({ frame, x: 12, y: 24, isEditable: true })).resolves.toBe(false);
+  it('ignores non-editable targets such as the canvas', () => {
+    expect(isTextEntryContextMenuTarget({ isEditable: false, formControlType: 'none' })).toBe(false);
+    expect(isTextEntryContextMenuTarget()).toBe(false);
   });
 
   it('wires spelling suggestions and dictionary addition to their native actions', () => {
