@@ -17,6 +17,7 @@ import {
   writeDesktopSettingsFileAtomic,
 } from './settings-env.mjs';
 import { APPLICATION_MENU_ITEM_IDS, FILE_MENU_COMMANDS, buildApplicationMenuTemplate } from './application-menu.mjs';
+import { buildPromptContextMenuTemplate, isFooterPromptContextMenuTarget } from './prompt-context-menu.mjs';
 import { createAppQuitBarrier } from './app-quit-barrier.mjs';
 import { createBoundedHttpServerShutdown } from './bounded-http-server-shutdown.mjs';
 import { createManagedServiceLifecycle } from './managed-service-lifecycle.mjs';
@@ -1383,12 +1384,50 @@ const createMainWindow = async () => {
   });
   mainWindow = createdWindow;
   const rendererOwnerId = createdWindow.webContents.id;
+  let latestPromptContextMenuRequest = 0;
 
   createdWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternalOpenUrl(url)) {
       void shell.openExternal(url); // External auth/help links should leave the app sandbox.
     }
     return { action: 'deny' };
+  });
+
+  createdWindow.webContents.on('context-menu', (_event, params) => {
+    const requestId = ++latestPromptContextMenuRequest;
+    void isFooterPromptContextMenuTarget({
+      ...params,
+      zoomFactor: createdWindow.webContents.getZoomFactor(),
+    }).then((isFooterPromptTarget) => {
+      if (!isFooterPromptTarget || requestId !== latestPromptContextMenuRequest || createdWindow.isDestroyed() || createdWindow.webContents.isDestroyed()) {
+        return;
+      }
+
+      const template = buildPromptContextMenuTemplate(params, {
+        replaceMisspelling: suggestion => {
+          if (!createdWindow.isDestroyed() && !createdWindow.webContents.isDestroyed()) {
+            createdWindow.webContents.replaceMisspelling(suggestion); // Chromium replaces the word selected by the native context-menu event.
+          }
+        },
+        addWordToDictionary: word => {
+          if (!createdWindow.isDestroyed() && !createdWindow.webContents.isDestroyed()) {
+            createdWindow.webContents.session.addWordToSpellCheckerDictionary(word);
+          }
+        },
+      });
+
+      try {
+        Menu.buildFromTemplate(template).popup({
+          window: createdWindow,
+          frame: params.frame,
+          sourceType: params.menuSourceType,
+          x: params.x,
+          y: params.y,
+        });
+      } catch {
+        // The originating frame can detach after hit testing but before the native menu opens.
+      }
+    });
   });
 
   createdWindow.webContents.on('will-navigate', (event, url) => {

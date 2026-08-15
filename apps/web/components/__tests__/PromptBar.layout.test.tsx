@@ -135,7 +135,10 @@ const renderPromptBar = (overrides: Partial<React.ComponentProps<typeof PromptBa
   />
 );
 
-const renderInlinePromptBar = (maxInlineWidthPx?: number) => render(
+const renderInlinePromptBar = (
+  maxInlineWidthPx?: number,
+  overrides: Partial<React.ComponentProps<typeof PromptBar>> = {},
+) => render(
   <PromptBar
     layout="inline"
     prompt="Animate the subject"
@@ -155,6 +158,7 @@ const renderInlinePromptBar = (maxInlineWidthPx?: number) => render(
     onModelModeChange={vi.fn()}
     modelControls={modelControls}
     maxInlineWidthPx={maxInlineWidthPx}
+    {...overrides}
   />
 );
 
@@ -390,6 +394,36 @@ describe('PromptBar layout', () => {
 
     window.requestAnimationFrame = ORIGINAL_REQUEST_ANIMATION_FRAME;
     window.cancelAnimationFrame = ORIGINAL_CANCEL_ANIMATION_FRAME;
+  });
+
+  it('marks every footer prompt textarea for the native desktop context menu', () => {
+    renderPromptBar({
+      showMultiPrompt: true,
+      multiPrompt: 'Continue the shot',
+      onMultiPromptChange: vi.fn(),
+      showNegativePrompt: true,
+      negativePrompt: 'Avoid blur',
+      onNegativePromptChange: vi.fn(),
+    });
+
+    expect(screen.getByLabelText('Prompt input').getAttribute('data-footer-prompt-context-menu')).toBe('true');
+    expect(screen.getByLabelText('Multi prompt input').getAttribute('data-footer-prompt-context-menu')).toBe('true');
+    expect(screen.getByLabelText('Negative prompt input').getAttribute('data-footer-prompt-context-menu')).toBe('true');
+  });
+
+  it('does not mark inline canvas prompt textareas for the native desktop context menu', () => {
+    renderInlinePromptBar(undefined, {
+      showMultiPrompt: true,
+      multiPrompt: 'Continue the shot',
+      onMultiPromptChange: vi.fn(),
+      showNegativePrompt: true,
+      negativePrompt: 'Avoid blur',
+      onNegativePromptChange: vi.fn(),
+    });
+
+    expect(screen.getByLabelText('Prompt input').getAttribute('data-footer-prompt-context-menu')).toBeNull();
+    expect(screen.getByLabelText('Multi prompt input').getAttribute('data-footer-prompt-context-menu')).toBeNull();
+    expect(screen.getByLabelText('Negative prompt input').getAttribute('data-footer-prompt-context-menu')).toBeNull();
   });
 
   it('mounts overflowing footer controls at the final measured width before animation frames run', () => {

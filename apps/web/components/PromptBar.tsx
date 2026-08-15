@@ -642,6 +642,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               </div>
               <textarea
                 ref={multiPromptTextareaRef}
+                data-footer-prompt-context-menu={layout === 'footer' ? 'true' : undefined}
                 value={multiPrompt ?? ''}
                 onChange={(e) => onMultiPromptChange?.(e.target.value)}
                 onKeyDown={handleSubmitShortcut}
@@ -663,6 +664,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               </div>
               <textarea
                 ref={negativeTextareaRef}
+                data-footer-prompt-context-menu={layout === 'footer' ? 'true' : undefined}
                 value={negativePrompt ?? ''}
                 onChange={(e) => onNegativePromptChange?.(e.target.value)}
                 onKeyDown={handleSubmitShortcut}
@@ -680,6 +682,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
           <div className="flex min-w-0 flex-1 flex-col">
             <textarea
               ref={textareaRef}
+              data-footer-prompt-context-menu={layout === 'footer' ? 'true' : undefined}
               value={prompt}
               onChange={(e) => handlePromptChange(e.target.value, e.target.selectionStart)}
               onKeyDown={handlePromptKeyDown}
