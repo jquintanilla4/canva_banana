@@ -528,6 +528,7 @@ export default function App() {
     cropMode,
     transformMode,
     isRemovingBackground,
+    downloadProgress,
     handleFilesDrop,
     handleFileChange,
     handleDownload,
@@ -543,6 +544,7 @@ export default function App() {
     displayedImages,
     hasSingleImageSelected,
     primaryImageId,
+    selectedImageIds,
     setState,
     setSelectedImageIds,
     setReferenceImageIds,
@@ -1254,7 +1256,8 @@ export default function App() {
               canUndo={canUndo}
               canRedo={canRedo}
               onDownload={handleDownload}
-              isImageSelected={hasSingleImageSelected}
+              selectedMediaCount={selectedImageIds.length}
+              downloadProgress={downloadProgress}
               isObjectSelected={selectedImageIds.length > 0}
               onDelete={handleDelete}
               onResize={openResizeToast}

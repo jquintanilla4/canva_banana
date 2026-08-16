@@ -14,7 +14,11 @@ const getManualChunk = (id: string): string | undefined => {
   if (!normalizedId.includes('/node_modules/')) {
     return undefined; // App code stays in route-level chunks.
   }
-  if (normalizedId.includes('/node_modules/react/') || normalizedId.includes('/node_modules/react-dom/')) {
+  if (
+    normalizedId.includes('/node_modules/react/')
+    || normalizedId.includes('/node_modules/react-dom/')
+    || normalizedId.includes('/node_modules/scheduler/')
+  ) {
     return 'vendor-react'; // Keep the React runtime cached separately.
   }
   if (normalizedId.includes('/node_modules/react-icons/')) {
@@ -25,6 +29,9 @@ const getManualChunk = (id: string): string | undefined => {
   }
   if (normalizedId.includes('/node_modules/@google/genai/')) {
     return 'vendor-google'; // Gemini SDK code is provider-specific.
+  }
+  if (normalizedId.includes('/node_modules/@zip.js/zip.js/')) {
+    return undefined; // Keep ZIP.js in the dynamic bulk-download chunk.
   }
   return 'vendor'; // Remaining shared dependencies go in a stable vendor chunk.
 };

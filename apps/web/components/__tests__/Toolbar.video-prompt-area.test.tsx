@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Toolbar } from '../Toolbar';
 import { Tool } from '../../types';
@@ -25,7 +25,8 @@ const buildToolbarProps = (overrides: Partial<ComponentProps<typeof Toolbar>> = 
   canUndo: false,
   canRedo: false,
   onDownload: vi.fn(),
-  isImageSelected: false,
+  selectedMediaCount: 0,
+  downloadProgress: null,
   isObjectSelected: false,
   onDelete: vi.fn(),
   onRemoveBackground: vi.fn(),
@@ -65,5 +66,33 @@ describe('Toolbar video prompt area tool', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Video Prompt Area (G)' }));
 
     expect(onToolChange).toHaveBeenCalledWith(Tool.VIDEO_PROMPT_AREA);
+  });
+});
+
+describe('Toolbar media download action', () => {
+  it('enables and pluralizes downloads for single and multi-selection', () => {
+    const { container, rerender } = render(<Toolbar {...buildToolbarProps({ selectedMediaCount: 1 })} />);
+    const toolbar = within(container);
+
+    expect((toolbar.getByRole('button', { name: 'Download Selected Item' }) as HTMLButtonElement).disabled).toBe(false);
+
+    rerender(<Toolbar {...buildToolbarProps({ selectedMediaCount: 3 })} />);
+    expect((toolbar.getByRole('button', { name: 'Download 3 Selected Items as ZIP' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('shows progress and blocks repeat clicks while an archive is being created', () => {
+    const onDownload = vi.fn();
+    const { container } = render(<Toolbar {...buildToolbarProps({
+      selectedMediaCount: 1,
+      onDownload,
+      downloadProgress: { phase: 'archiving', completedItems: 2, totalItems: 3 },
+    })} />);
+
+    const button = within(container).getByRole('button', { name: 'Download 3 Selected Items as ZIP • 2/3' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(button.querySelector('.animate-spin')).not.toBeNull();
+    expect(within(container).getByRole('status').textContent).toBe('Archiving selected media, 2 of 3');
+    fireEvent.click(button);
+    expect(onDownload).not.toHaveBeenCalled();
   });
 });

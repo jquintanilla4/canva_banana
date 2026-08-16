@@ -40,6 +40,7 @@ import { SNAPSHOT_DOWNLOAD_TOKEN_PARAM, createSnapshotDownloadCoordinator } from
 import { attachBlobDownloadCompletionNotifier } from './blob-download-lifecycle.mjs';
 import { canReplaceSnapshotAutosaveTarget } from './snapshot-autosave-target.mjs';
 import { createRendererResourceEpochs } from './renderer-resource-epochs.mjs';
+import { createMediaArchiveWriteController, sanitizeMediaArchiveFileName } from './media-archive-write-controller.mjs';
 import snapshotOperationBudget from './snapshot-operation-budget.cjs';
 import {
   MAX_SNAPSHOT_BACKUP_COUNT,
@@ -147,6 +148,10 @@ const snapshotWriteSessions = new Map();
 const snapshotWriteOperations = new Set();
 const snapshotReadSources = new Map();
 const rendererResourceEpochs = createRendererResourceEpochs();
+const mediaArchiveWriteController = createMediaArchiveWriteController({
+  isOwnerCurrent: owner => rendererResourceEpochs.isCurrent(owner),
+  isSameOwner: (left, right) => rendererResourceEpochs.isSame(left, right),
+});
 let pendingSnapshotWriteSessions = 0;
 let pendingSnapshotReadSources = 0;
 let reservedSnapshotBackupBytes = 0; // Tracks active backup temp-file reservations.
@@ -640,6 +645,7 @@ const releaseRendererSnapshotResources = async (ownerId) => {
   await Promise.allSettled([
     abortInvalidatedSnapshotWriteSessions(invalidation),
     closeInvalidatedSnapshotReadSources(invalidation),
+    mediaArchiveWriteController.abortWhere(owner => rendererResourceEpochs.wasInvalidated(owner, invalidation)),
   ]); // Reloads release renderer-owned resources without disabling future writes.
 };
 
@@ -1568,6 +1574,24 @@ ipcMain.handle('canva-banana:file-menu-begin-save-snapshot', async (event, paylo
   };
 });
 
+ipcMain.handle('canva-banana:file-menu-begin-media-archive-write', async (event, payload) => {
+  const owner = rendererResourceEpochs.capture(event.sender.id);
+  const suggestedName = sanitizeMediaArchiveFileName(payload?.suggestedName);
+  const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+  const dialogOptions = {
+    defaultPath: join(app.getPath('documents'), suggestedName),
+    filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+  };
+  const result = targetWindow
+    ? await dialog.showSaveDialog(targetWindow, dialogOptions)
+    : await dialog.showSaveDialog(dialogOptions);
+  if (result.canceled || !result.filePath) return { canceled: true };
+  rendererResourceEpochs.assertCurrent(owner, 'Media archive save dialog belongs to an inactive renderer document.');
+  const targetPath = result.filePath.toLowerCase().endsWith('.zip') ? result.filePath : `${result.filePath}.zip`;
+  const session = await mediaArchiveWriteController.begin({ targetPath, owner });
+  return { canceled: false, ...session };
+});
+
 ipcMain.handle('canva-banana:file-menu-begin-autosave-snapshot', async (event, payload) => {
   const owner = rendererResourceEpochs.capture(event.sender.id);
   const autosaveId = typeof payload?.autosaveId === 'string' ? payload.autosaveId : '';
@@ -1620,6 +1644,22 @@ ipcMain.handle('canva-banana:file-menu-finish-snapshot-write', async (event, pay
 
 ipcMain.handle('canva-banana:file-menu-abort-snapshot-write', async (event, payload) => (
   abortSnapshotWriteSession(payload?.writeId, rendererResourceEpochs.capture(event.sender.id))
+));
+
+ipcMain.handle('canva-banana:file-menu-write-media-archive-chunk', async (event, payload) => (
+  mediaArchiveWriteController.write({
+    writeId: payload?.writeId,
+    data: payload?.data,
+    owner: rendererResourceEpochs.capture(event.sender.id),
+  })
+));
+
+ipcMain.handle('canva-banana:file-menu-finish-media-archive-write', async (event, payload) => (
+  mediaArchiveWriteController.finish(payload?.writeId, rendererResourceEpochs.capture(event.sender.id))
+));
+
+ipcMain.handle('canva-banana:file-menu-abort-media-archive-write', async (event, payload) => (
+  mediaArchiveWriteController.abort(payload?.writeId, rendererResourceEpochs.capture(event.sender.id))
 ));
 
 ipcMain.handle('canva-banana:file-menu-read-snapshot-range', async (event, payload) => (
@@ -1787,6 +1827,7 @@ const cleanupBeforeQuit = async () => {
   const results = await Promise.allSettled([
     managedServiceLifecycle.shutdown(),
     abortAllSnapshotWriteSessions(),
+    mediaArchiveWriteController.shutdown(),
     closeAllSnapshotReadSources(),
   ]); // Electron does not await asynchronous event listeners, so the barrier owns this promise.
   results.forEach(result => {

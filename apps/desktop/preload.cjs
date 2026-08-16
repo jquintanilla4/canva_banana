@@ -32,6 +32,7 @@ const canvasMediaDownloadFinishedChannel = 'canva-banana:canvas-media-download-f
 const maxSnapshotChunkBytes = 16 * 1024 * 1024; // Keep each snapshot IPC message bounded.
 const maxSnapshotChunkOperations = 4; // Normal streams await one chunk while hostile bursts are rejected.
 const maxSnapshotChunkOperationBytes = maxSnapshotChunkBytes * 2; // Total snapshot size remains independent of concurrent IPC memory.
+const maxMediaArchiveChunkBytes = 4 * 1024 * 1024; // Archive output uses smaller IPC chunks while total ZIP size remains unlimited.
 const maxClipboardTextChars = 1_000_000; // Keep native clipboard IPC bounded to app-sized text.
 const arrayBufferByteLengthGetter = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')?.get; // Requires a real ArrayBuffer receiver.
 const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'byteLength')?.get; // Requires a real typed-array receiver.
@@ -45,6 +46,11 @@ const snapshotReadOperationBudget = createSnapshotOperationBudget({
   maxOperations: maxSnapshotChunkOperations,
   maxBytes: maxSnapshotChunkOperationBytes,
   errorMessage: 'Too many snapshot read ranges are already in progress.',
+});
+const mediaArchiveWriteOperationBudget = createSnapshotOperationBudget({
+  maxOperations: maxSnapshotChunkOperations,
+  maxBytes: maxMediaArchiveChunkBytes * 2,
+  errorMessage: 'Too many media archive write chunks are already in progress.',
 });
 
 const normalizeBaseUrl = (value, fallback) => {
@@ -150,6 +156,28 @@ const assertSnapshotReadSourcePayload = (payload) => {
   return payload;
 };
 
+const assertBeginMediaArchivePayload = (payload) => {
+  const suggestedName = assertNonEmptyString(payload?.suggestedName, 'Media archive filename is invalid.');
+  if (suggestedName.length > 255 || suggestedName.includes('/') || suggestedName.includes('\\') || !suggestedName.toLowerCase().endsWith('.zip')) {
+    throw new Error('Media archive filename is invalid.');
+  }
+  return payload;
+};
+
+const assertMediaArchiveWriteIdPayload = (payload) => {
+  const writeId = assertNonEmptyString(payload?.writeId, 'Media archive write session is invalid.');
+  if (!/^[A-Za-z0-9_-]+$/.test(writeId)) throw new Error('Media archive write session is invalid.');
+  return payload;
+};
+
+const assertMediaArchiveChunkPayload = (payload) => {
+  assertMediaArchiveWriteIdPayload(payload);
+  const byteLength = getSnapshotBinaryByteLength(payload?.data);
+  if (byteLength === null) throw new Error('Media archive data must be binary.');
+  if (byteLength > maxMediaArchiveChunkBytes) throw new Error('Media archive data chunk is too large.');
+  return payload;
+};
+
 const invokeWithSnapshotBudget = async (budget, bytes, channel, payload) => {
   const releaseOperation = budget.reserve(bytes); // Context isolation stops renderer code from bypassing this IPC gate.
   try {
@@ -224,6 +252,13 @@ contextBridge.exposeInMainWorld('canvaBananaDesktop', {
     }, // Imports read bounded ranges with concurrent backpressure.
     getSnapshotMediaUrl: payload => ipcRenderer.invoke('canva-banana:file-menu-get-snapshot-media-url', assertSnapshotMediaUrlPayload(payload)), // Media elements stream through a scoped URL.
     downloadSnapshotMedia: payload => ipcRenderer.invoke('canva-banana:file-menu-download-snapshot-media', assertSnapshotMediaDownloadPayload(payload)), // Main starts custom-protocol downloads without renderer navigation.
+    beginMediaArchiveWrite: payload => ipcRenderer.invoke('canva-banana:file-menu-begin-media-archive-write', assertBeginMediaArchivePayload(payload)), // Main owns the ZIP save dialog and atomic temp file.
+    writeMediaArchiveChunk: payload => {
+      const safePayload = assertMediaArchiveChunkPayload(payload);
+      return invokeWithSnapshotBudget(mediaArchiveWriteOperationBudget, getSnapshotBinaryByteLength(safePayload.data), 'canva-banana:file-menu-write-media-archive-chunk', safePayload);
+    }, // ZIP output is streamed through bounded IPC with backpressure.
+    finishMediaArchiveWrite: payload => ipcRenderer.invoke('canva-banana:file-menu-finish-media-archive-write', assertMediaArchiveWriteIdPayload(payload)), // Main atomically exposes only complete archives.
+    abortMediaArchiveWrite: payload => ipcRenderer.invoke('canva-banana:file-menu-abort-media-archive-write', assertMediaArchiveWriteIdPayload(payload)), // Failed ZIP creation removes the temp file.
     retainSnapshotRead: payload => ipcRenderer.invoke('canva-banana:file-menu-retain-snapshot-read', assertSnapshotReadSourcePayload(payload)), // Imported media keeps its read source.
     closeSnapshotRead: payload => ipcRenderer.invoke('canva-banana:file-menu-close-snapshot-read', assertSnapshotReadSourcePayload(payload)), // Release main-side read metadata.
     listSnapshotBackups: () => ipcRenderer.invoke('canva-banana:file-menu-list-snapshot-backups'), // Desktop backups live outside IndexedDB.

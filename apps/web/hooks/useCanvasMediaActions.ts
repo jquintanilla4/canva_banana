@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type React from 'react';
 import {
   type CanvasImage,
@@ -10,7 +10,11 @@ import {
 import { getNaturalSize, loadMediaFromBlob } from '../services/mediaService';
 import { loadAudioFromBlob, generateWaveformImage } from '../services/audioService';
 import { removeBackground as removeFalBackground } from '../services/falService';
-import { downloadCanvasMedia } from '../services/canvasMediaDownloadService';
+import {
+  CanvasMediaDownloadCancelledError,
+  downloadCanvasMediaSelection,
+  type CanvasMediaDownloadProgress,
+} from '../services/canvasMediaDownloadService';
 import type { AppState, CommitOverrides } from './useCanvasHistory';
 
 type CropModeState = { imageId: string; rect: { x: number; y: number; width: number; height: number; }; };
@@ -21,12 +25,13 @@ type UseCanvasMediaActionsArgs = {
   displayedImages: CanvasImage[];
   hasSingleImageSelected: boolean;
   primaryImageId: string | null;
+  selectedImageIds: string[];
   setState: Dispatch<SetStateAction<AppState>>;
   setSelectedImageIds: (ids: string[]) => void;
   setReferenceImageIds: (ids: string[]) => void;
   setTool: (tool: Tool) => void;
   setError: (message: string | null) => void;
-  setToastMessage: (message: string | null) => void;
+  setToastMessage: Dispatch<SetStateAction<string | null>>;
   setLiveImages: (images: CanvasImage[] | null) => void;
   // handleCommit can take overrides when a caller already has the next slices computed.
   handleCommit: (overrides?: CommitOverrides) => void;
@@ -36,6 +41,7 @@ type UseCanvasMediaActionsResult = {
   cropMode: CropModeState | null;
   transformMode: TransformModeState | null;
   isRemovingBackground: boolean;
+  downloadProgress: CanvasMediaDownloadProgress | null;
   handleFilesDrop: (files: FileList, point: Point) => void;
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleDownload: () => void;
@@ -56,6 +62,7 @@ export function useCanvasMediaActions({
   displayedImages,
   hasSingleImageSelected,
   primaryImageId,
+  selectedImageIds,
   setState,
   setSelectedImageIds,
   setReferenceImageIds,
@@ -68,6 +75,9 @@ export function useCanvasMediaActions({
   const [cropMode, setCropMode] = useState<CropModeState | null>(null);
   const [transformMode, setTransformMode] = useState<TransformModeState | null>(null);
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<CanvasMediaDownloadProgress | null>(null);
+  const isDownloadingRef = useRef(false); // A ref blocks a second click before React commits the busy state.
+  const downloadToastIdRef = useRef(0); // Only the latest download may expire its toast.
 
   // Adds dropped/uploaded images, videos, and audio to the canvas and selects the last one placed.
   const handleFilesDrop = useCallback((files: FileList, point: Point) => {
@@ -243,15 +253,41 @@ export function useCanvasMediaActions({
   }, [handleFilesDrop]);
 
   const handleDownload = useCallback(async () => {
-    if (!hasSingleImageSelected || !primaryImageId) return;
-    const imageToDownload = images.find(img => img.id === primaryImageId);
-    if (!imageToDownload) return;
+    if (selectedImageIds.length === 0 || isDownloadingRef.current) return;
+    const imageById = new Map(images.map(image => [image.id, image]));
+    const selectedMedia = selectedImageIds.flatMap(id => {
+      const image = imageById.get(id);
+      return image ? [image] : [];
+    });
+    if (selectedMedia.length === 0) return;
+    isDownloadingRef.current = true;
     try {
-      await downloadCanvasMedia(imageToDownload);
+      setError(null);
+      const result = await downloadCanvasMediaSelection(selectedMedia, setDownloadProgress);
+      const skippedNames = result.skipped.slice(0, 3).map(item => item.fileName).join(', ');
+      const skippedSuffix = result.skipped.length > 3 ? `, +${result.skipped.length - 3} more` : '';
+      const successMessage = selectedMedia.length === 1
+        ? 'Download started'
+        : result.downloadedCount === 1
+          ? 'Downloaded 1 selected item'
+          : `Downloaded ${result.downloadedCount} selected items as ZIP`;
+      const toastMessage = result.skipped.length > 0
+        ? `${successMessage}; skipped ${result.skipped.length}: ${skippedNames}${skippedSuffix}`
+        : successMessage;
+      const downloadToastId = ++downloadToastIdRef.current;
+      setToastMessage(toastMessage);
+      setTimeout(() => {
+        if (downloadToastId !== downloadToastIdRef.current) return;
+        setToastMessage(currentMessage => currentMessage === toastMessage ? null : currentMessage);
+      }, 3000);
     } catch (error) {
+      if (error instanceof CanvasMediaDownloadCancelledError) return;
       setError(error instanceof Error ? error.message : 'No downloadable source found for this item.');
+    } finally {
+      isDownloadingRef.current = false;
+      setDownloadProgress(null);
     }
-  }, [hasSingleImageSelected, images, primaryImageId, setError]);
+  }, [images, selectedImageIds, setError, setToastMessage]);
 
   const handleBackgroundRemoval = useCallback(async () => {
     if (!hasSingleImageSelected || !primaryImageId) {
@@ -415,6 +451,7 @@ export function useCanvasMediaActions({
     cropMode,
     transformMode,
     isRemovingBackground,
+    downloadProgress,
     handleFilesDrop,
     handleFileChange,
     handleDownload,

@@ -118,6 +118,7 @@ describe('preload desktop bridge', () => {
     const writeChunkResult = { written: 0 };
     const finishWriteResult = { saved: true };
     const abortWriteResult = { aborted: true };
+    const beginArchiveResult = { canceled: false, fileName: 'canvas-media.zip', writeId: 'archive-1' };
     const readRangeResult = new ArrayBuffer(0);
     const backupSummaries = [];
     const backupOpenResult = { sourceId: 'source-1', fileName: 'snapshot.bcsnap', size: 0, type: 'application/octet-stream' };
@@ -142,6 +143,14 @@ describe('preload desktop bridge', () => {
             return finishWriteResult; // Finished writes atomically replace the target.
           case 'canva-banana:file-menu-abort-snapshot-write':
             return abortWriteResult; // Failed writes clean up temp files.
+          case 'canva-banana:file-menu-begin-media-archive-write':
+            return beginArchiveResult; // Main owns the native ZIP save dialog.
+          case 'canva-banana:file-menu-write-media-archive-chunk':
+            return writeChunkResult; // Archive chunks stay bounded by preload and main.
+          case 'canva-banana:file-menu-finish-media-archive-write':
+            return finishWriteResult; // Finished archives are atomically renamed.
+          case 'canva-banana:file-menu-abort-media-archive-write':
+            return abortWriteResult; // Failed archives remove their temp files.
           case 'canva-banana:file-menu-read-snapshot-range':
             return readRangeResult; // Import reads bounded byte ranges.
           case 'canva-banana:file-menu-get-snapshot-media-url':
@@ -211,6 +220,10 @@ describe('preload desktop bridge', () => {
     })).resolves.toBe(writeChunkResult);
     await expect(exposedApi.fileMenu.finishSnapshotWrite({ writeId: 'write-1' })).resolves.toBe(finishWriteResult);
     await expect(exposedApi.fileMenu.abortSnapshotWrite({ writeId: 'write-1' })).resolves.toBe(abortWriteResult);
+    await expect(exposedApi.fileMenu.beginMediaArchiveWrite({ suggestedName: 'canvas-media.zip' })).resolves.toBe(beginArchiveResult);
+    await expect(exposedApi.fileMenu.writeMediaArchiveChunk({ writeId: 'archive-1', data: new ArrayBuffer(0) })).resolves.toBe(writeChunkResult);
+    await expect(exposedApi.fileMenu.finishMediaArchiveWrite({ writeId: 'archive-1' })).resolves.toBe(finishWriteResult);
+    await expect(exposedApi.fileMenu.abortMediaArchiveWrite({ writeId: 'archive-1' })).resolves.toBe(abortWriteResult);
     await expect(exposedApi.fileMenu.readSnapshotRange({
       sourceId: 'source-1',
       offset: 0,
@@ -254,6 +267,13 @@ describe('preload desktop bridge', () => {
     });
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-write-snapshot-chunk', {
       writeId: 'write-1',
+      data: expect.any(ArrayBuffer),
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-begin-media-archive-write', {
+      suggestedName: 'canvas-media.zip',
+    });
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-write-media-archive-chunk', {
+      writeId: 'archive-1',
       data: expect.any(ArrayBuffer),
     });
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-get-snapshot-media-url', {
@@ -413,6 +433,30 @@ describe('preload desktop bridge', () => {
     })).toThrow(/media range/);
     expect(() => exposedApi.fileMenu.downloadSnapshotMedia({ url: '' })).toThrow(/download URL/);
     expect(() => exposedApi.fileMenu.retainSnapshotRead({ sourceId: '' })).toThrow(/read source/);
+    expect(ipcRenderer.invoke).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid media archive payloads before IPC', () => {
+    const ipcRenderer = {
+      sendSync: vi.fn(),
+      invoke: vi.fn(),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const contextBridge = {
+      exposeInMainWorld: vi.fn((_name, api) => {
+        exposedApi = api;
+      }),
+    };
+    loadPreloadWithElectron({ contextBridge, ipcRenderer });
+
+    expect(() => exposedApi.fileMenu.beginMediaArchiveWrite({ suggestedName: '../escape.zip' })).toThrow(/filename/);
+    expect(() => exposedApi.fileMenu.writeMediaArchiveChunk({
+      writeId: 'archive-1',
+      data: new Uint8Array(4 * 1024 * 1024 + 1),
+    })).toThrow(/too large/);
+    expect(() => exposedApi.fileMenu.finishMediaArchiveWrite({ writeId: 'bad id' })).toThrow(/write session/);
+    expect(() => exposedApi.fileMenu.abortMediaArchiveWrite({ writeId: '' })).toThrow(/write session/);
     expect(ipcRenderer.invoke).not.toHaveBeenCalled();
   });
 

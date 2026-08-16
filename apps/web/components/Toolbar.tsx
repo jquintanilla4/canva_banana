@@ -28,6 +28,13 @@ import {
   type CameraSettingsSelection,
 } from "../utils/cameraSettings";
 import { KEYBOARD_SHORTCUT_LABELS } from "../utils/keyboardShortcutLabels";
+import type { CanvasMediaDownloadProgress } from "../services/canvasMediaDownloadService";
+
+const DOWNLOAD_PHASE_LABELS: Record<CanvasMediaDownloadProgress["phase"], string> = {
+  preparing: "Preparing",
+  archiving: "Archiving",
+  saving: "Saving",
+};
 
 interface ToolbarProps {
   activeTool: Tool;
@@ -49,7 +56,8 @@ interface ToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   onDownload: () => void;
-  isImageSelected: boolean;
+  selectedMediaCount: number;
+  downloadProgress: CanvasMediaDownloadProgress | null;
   isObjectSelected: boolean;
   onDelete: () => void;
   onRemoveBackground: () => void;
@@ -146,7 +154,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   canUndo,
   canRedo,
   onDownload,
-  isImageSelected,
+  selectedMediaCount,
+  downloadProgress,
   isObjectSelected,
   onDelete,
   onRemoveBackground,
@@ -184,6 +193,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const videoPromptAreaToolDetail = isVideoPromptAreaToolEnabled
     ? undefined
     : "Switch to a video model to create video prompt areas";
+  const downloadItemCount = downloadProgress?.totalItems ?? selectedMediaCount;
+  const downloadLabel = downloadItemCount > 1
+    ? `Download ${downloadItemCount} Selected Items as ZIP`
+    : "Download Selected Item";
+  const downloadDetail = downloadProgress
+    ? `${downloadProgress.completedItems}/${downloadProgress.totalItems}`
+    : undefined;
+  const downloadStatus = downloadProgress
+    ? `${DOWNLOAD_PHASE_LABELS[downloadProgress.phase]} selected media, ${downloadProgress.completedItems} of ${downloadProgress.totalItems}`
+    : "";
   const modeMenuVisibility = isModeMenuOpen
     ? "opacity-100 pointer-events-auto"
     : "opacity-0 pointer-events-none";
@@ -515,13 +534,30 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
         </Tooltip>
         <ToolButton
-          label="Download Selected Image"
+          label={downloadLabel}
+          detail={downloadDetail}
           onClick={onDownload}
-          disabled={!isImageSelected}
+          disabled={selectedMediaCount === 0 || downloadProgress !== null}
           isActive={false}
         >
-          <DownloadIcon className="w-4 h-4" />
+          {downloadProgress ? (
+            <svg
+              className="h-4 w-4 animate-spin"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <DownloadIcon className="w-4 h-4" />
+          )}
         </ToolButton>
+        <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {downloadStatus}
+        </span>
         <Tooltip label="Delete Selected Object" shortcut={KEYBOARD_SHORTCUT_LABELS.deleteObject}>
           <button
             onClick={onDelete}

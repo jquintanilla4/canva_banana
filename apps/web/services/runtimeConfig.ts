@@ -170,6 +170,19 @@ export type DesktopSnapshotWriteResult = {
   saved: boolean;
 };
 
+export type DesktopBeginMediaArchiveWriteResult =
+  | { canceled: true }
+  | { canceled: false; writeId: string; fileName: string };
+
+export type DesktopMediaArchiveWritePayload = {
+  writeId: string;
+  data: ArrayBuffer;
+};
+
+export type DesktopMediaArchiveWriteIdPayload = {
+  writeId: string;
+};
+
 export type DesktopChatHistoryClearedPayload = {
   revision?: number;
 };
@@ -205,6 +218,10 @@ declare global {
         readSnapshotRange?: (payload: DesktopSnapshotReadRangePayload) => Promise<ArrayBuffer>;
         getSnapshotMediaUrl?: (payload: DesktopSnapshotMediaUrlPayload) => Promise<string>;
         downloadSnapshotMedia?: (payload: { url: string }) => Promise<{ started: boolean }>;
+        beginMediaArchiveWrite?: (payload: { suggestedName: string }) => Promise<DesktopBeginMediaArchiveWriteResult>;
+        writeMediaArchiveChunk?: (payload: DesktopMediaArchiveWritePayload) => Promise<{ written: number }>;
+        finishMediaArchiveWrite?: (payload: DesktopMediaArchiveWriteIdPayload) => Promise<{ saved: boolean }>;
+        abortMediaArchiveWrite?: (payload: DesktopMediaArchiveWriteIdPayload) => Promise<{ aborted: boolean }>;
         retainSnapshotRead?: (payload: { sourceId: string }) => Promise<{ retained: boolean }>;
         closeSnapshotRead?: (payload: { sourceId: string }) => Promise<{ closed: boolean }>;
         listSnapshotBackups?: () => Promise<DesktopSnapshotBackupSummary[]>;
