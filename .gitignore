@@ -29,6 +29,7 @@ apps/python-backend/dist/
 apps/python-backend/build/
 apps/desktop/resources/
 apps/desktop/generated/
+trial-state.json
 out/
 
 # Editor directories and files
