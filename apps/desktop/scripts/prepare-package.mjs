@@ -4,6 +4,11 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APP_ICON_RESOURCE_DIR_NAME, getAppIconResourceSpecs } from '../app-icon-store.mjs';
+import {
+  BUILD_VARIANT_FILE_NAME,
+  parseBuildVariantMetadata,
+  writeBuildVariantMetadata,
+} from '../build-variant.mjs';
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const scriptsDir = dirname(currentFilePath);
@@ -16,6 +21,7 @@ const webResourceDir = resolve(desktopDir, 'resources/web');
 const pythonResourceDir = resolve(desktopDir, 'resources/python-backend');
 const appIconResourceDir = resolve(desktopDir, 'resources', APP_ICON_RESOURCE_DIR_NAME);
 const generatedSecureBackendPath = resolve(desktopDir, 'generated/secure-backend/server.mjs');
+const generatedBuildVariantPath = resolve(desktopDir, 'generated', BUILD_VARIANT_FILE_NAME);
 
 const run = (label, command, args, extraEnv = {}) => new Promise((resolveRun, rejectRun) => {
   const child = spawn(command, args, {
@@ -38,23 +44,27 @@ const resetDir = async (dir) => {
   await mkdir(dir, { recursive: true }); // Recreate the resource root for recursive copies.
 };
 
-await run('web build', 'npm', ['-w', '@canva-banana/web', 'run', 'build'], { CANVA_BANANA_DESKTOP_PACKAGE: '1' });
-await run('python backend build', 'npm', ['-w', '@canva-banana/python-backend', 'run', 'build:packaged-backend']);
+export const preparePackage = async ({ buildMetadata }) => {
+  const metadata = parseBuildVariantMetadata(buildMetadata);
+  await run('web build', 'npm', ['-w', '@canva-banana/web', 'run', 'build'], { CANVA_BANANA_DESKTOP_PACKAGE: '1' });
+  await run('python backend build', 'npm', ['-w', '@canva-banana/python-backend', 'run', 'build:packaged-backend']);
 
-if (!existsSync(resolve(webDistDir, 'index.html'))) {
-  throw new Error('Web build did not produce apps/web/dist/index.html');
-}
-if (!existsSync(resolve(pythonDistDir, 'canva-banana-python-backend'))) {
-  throw new Error('PyInstaller did not produce the packaged Python backend executable');
-}
+  if (!existsSync(resolve(webDistDir, 'index.html'))) {
+    throw new Error('Web build did not produce apps/web/dist/index.html');
+  }
+  if (!existsSync(resolve(pythonDistDir, 'canva-banana-python-backend'))) {
+    throw new Error('PyInstaller did not produce the packaged Python backend executable');
+  }
 
-await resetDir(webResourceDir);
-await resetDir(pythonResourceDir);
-await resetDir(appIconResourceDir);
-await mkdir(dirname(generatedSecureBackendPath), { recursive: true });
-await cp(webDistDir, webResourceDir, { recursive: true });
-await cp(pythonDistDir, pythonResourceDir, { recursive: true });
-await cp(secureBackendSourcePath, generatedSecureBackendPath);
-for (const spec of getAppIconResourceSpecs(desktopDir)) {
-  await cp(spec.sourcePath, resolve(appIconResourceDir, spec.resourceFileName)); // Keep packaged icon names stable for the registry.
-}
+  await resetDir(webResourceDir);
+  await resetDir(pythonResourceDir);
+  await resetDir(appIconResourceDir);
+  await mkdir(dirname(generatedSecureBackendPath), { recursive: true });
+  await cp(webDistDir, webResourceDir, { recursive: true });
+  await cp(pythonDistDir, pythonResourceDir, { recursive: true });
+  await cp(secureBackendSourcePath, generatedSecureBackendPath);
+  await writeBuildVariantMetadata(generatedBuildVariantPath, metadata);
+  for (const spec of getAppIconResourceSpecs(desktopDir)) {
+    await cp(spec.sourcePath, resolve(appIconResourceDir, spec.resourceFileName)); // Keep packaged icon names stable for the registry.
+  }
+};

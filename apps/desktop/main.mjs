@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, powerMonitor, protocol, session, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -61,6 +61,7 @@ import {
   getDevRendererUrl,
   isAllowedAudioPermissionRequest,
 } from './security.mjs';
+import { createDesktopTrialGate } from './desktop-trial-gate.mjs';
 
 const { createSnapshotOperationBudget } = snapshotOperationBudget;
 
@@ -141,6 +142,18 @@ const getAppIconPath = () => getAppIconPreferencePath(app.getPath('userData')); 
 const supportsDockIcon = () => process.platform === 'darwin' && typeof app.dock?.setIcon === 'function'; // Electron exposes Dock icons only on macOS.
 
 const getSelectedAppIconId = () => readSelectedAppIconId(getAppIconPath());
+
+const desktopTrialGate = createDesktopTrialGate({
+  isPackaged: app.isPackaged,
+  desktopDir,
+  getUserDataPath: () => app.getPath('userData'),
+  showMessageBox: options => dialog.showMessageBox(options),
+  hideApp: () => {
+    BrowserWindow.getAllWindows().forEach(window => window.hide()); // Hide app content before the blocking dialog appears.
+    Menu.setApplicationMenu(null);
+  },
+  quit: () => app.quit(), // The existing quit barrier performs service and snapshot cleanup.
+});
 
 const chatHistoryStore = createChatHistoryStore({ getHistoryPath: getChatHistoryPath });
 const snapshotAutosaveTargets = new Map();
@@ -1266,7 +1279,9 @@ const managedServiceLifecycle = createManagedServiceLifecycle({
 });
 
 const focusMainWindowForMenuCommand = async () => {
+  if (managedServiceLifecycle.isShutdownRequested() || !await desktopTrialGate.check()) return null;
   const targetWindow = await ensureMainWindow();
+  if (managedServiceLifecycle.isShutdownRequested() || !await desktopTrialGate.check() || targetWindow.isDestroyed()) return null;
   if (targetWindow.isMinimized()) {
     targetWindow.restore(); // Native menu commands should work after the app is minimized.
   }
@@ -1277,6 +1292,7 @@ const focusMainWindowForMenuCommand = async () => {
 
 const sendFileMenuCommand = async (command) => {
   const targetWindow = await focusMainWindowForMenuCommand();
+  if (!targetWindow) return;
   const send = () => {
     if (!targetWindow.isDestroyed() && !targetWindow.webContents.isDestroyed()) {
       targetWindow.webContents.send(fileMenuCommandChannel, command); // React owns the actual app behavior.
@@ -1465,6 +1481,7 @@ const ensureMainWindow = async () => {
 };
 
 const startDesktopApp = async () => {
+  if (!await desktopTrialGate.initialize()) return;
   await migrateLegacyDesktopSettings();
   loadDesktopEnv();
   await reconcileSnapshotBackupDirectory(getSnapshotBackupDir()).catch(error => console.error('Snapshot backup recovery failed.', error));
@@ -1483,21 +1500,27 @@ const startDesktopApp = async () => {
   });
 
   await applySavedDockIcon();
+  if (!await desktopTrialGate.check()) return;
   const serviceUrls = await managedServiceLifecycle.start();
-  if (!serviceUrls || managedServiceLifecycle.isShutdownRequested()) return;
+  if (!serviceUrls || managedServiceLifecycle.isShutdownRequested() || !await desktopTrialGate.check()) return;
   refreshRuntimeConfig(serviceUrls);
   installApplicationMenu();
   await ensureMainWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      void ensureMainWindow(); // macOS reopens a window after startup has initialized runtime config.
-    }
+    void (async () => {
+      if (!await desktopTrialGate.check()) return;
+      if (BrowserWindow.getAllWindows().length === 0) {
+        await ensureMainWindow(); // macOS reopens a window after startup has initialized runtime config.
+      }
+    })();
   });
+  powerMonitor.on('resume', () => void desktopTrialGate.check()); // Sleeping past the deadline must block before further use.
 };
 
 const focusMainWindowAfterStartup = async () => {
   await startupPromise;
+  if (!await desktopTrialGate.check()) return null;
   return focusMainWindowForMenuCommand(); // Second launches wait for the initialized owner instance.
 };
 
@@ -1823,8 +1846,10 @@ app.on('window-all-closed', () => {
 });
 
 const cleanupBeforeQuit = async () => {
+  desktopTrialGate.stop();
   snapshotDownloadCoordinator.cancelAll(); // Quit interrupts downloads so deferred source closure cannot stall shutdown.
   const results = await Promise.allSettled([
+    desktopTrialGate.flush(),
     managedServiceLifecycle.shutdown(),
     abortAllSnapshotWriteSessions(),
     mediaArchiveWriteController.shutdown(),

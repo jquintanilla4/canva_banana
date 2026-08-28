@@ -6,6 +6,9 @@ const require = createRequire(import.meta.url);
 const { version: defaultElectronVersion } = require('electron/package.json'); // Keeps all-arch resolution aligned with Forge.
 
 export const getFlagValue = (args, names) => { // Reads --flag value and --flag=value forms.
+  let found = false;
+  let match;
+
   for (const [index, arg] of args.entries()) {
     const [name, inlineValue] = arg.split('=', 2);
 
@@ -13,10 +16,15 @@ export const getFlagValue = (args, names) => { // Reads --flag value and --flag=
       continue;
     }
 
-    return inlineValue ?? args[index + 1];
+    if (found) {
+      throw new Error(`Target flag ${names.join('/')} may only be specified once.`);
+    }
+
+    found = true;
+    match = inlineValue ?? args[index + 1];
   }
 
-  return undefined;
+  return match;
 };
 
 export const resolveConcreteTargetArchs = (targetArch, targetPlatform, electronVersion = defaultElectronVersion) => { // Converts Forge arch input to output folders.

@@ -9,6 +9,11 @@ import {
   getMacAppPath,
   resolveConcreteTargetArchs,
 } from './mac-package-targets.mjs';
+import {
+  assertTrialBuildTargetPlatform,
+  getBuildVariantArgs,
+  parseBuildVariantArgs,
+} from './build-variant-options.mjs';
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const scriptsDir = dirname(currentFilePath);
@@ -110,15 +115,17 @@ if (cliArgs.includes('--help') || cliArgs.includes('-h')) {
   process.exit(0);
 }
 
-const targetArch = getFlagValue(cliArgs, ['--arch', '-a']) ?? process.env.npm_config_arch ?? getHostArch();
-const targetPlatform = getFlagValue(cliArgs, ['--platform', '-p']) ?? process.env.npm_config_platform ?? process.platform;
-const packageArgs = withTargetArgs(collectPackageArgs(cliArgs), targetArch, targetPlatform);
-const makeArgs = withTargetArgs(cliArgs, targetArch, targetPlatform);
+const { metadata: buildMetadata, passthroughArgs } = parseBuildVariantArgs(cliArgs);
+const targetArch = getFlagValue(passthroughArgs, ['--arch', '-a']) ?? process.env.npm_config_arch ?? getHostArch();
+const targetPlatform = getFlagValue(passthroughArgs, ['--platform', '-p']) ?? process.env.npm_config_platform ?? process.platform;
+assertTrialBuildTargetPlatform(buildMetadata, targetPlatform);
+const packageArgs = withTargetArgs(collectPackageArgs(passthroughArgs), targetArch, targetPlatform);
+const makeArgs = withTargetArgs(passthroughArgs, targetArch, targetPlatform);
 const concreteTargetArchs = targetPlatform === 'darwin' ? resolveConcreteTargetArchs(targetArch, targetPlatform) : [targetArch];
 
 validateNotarizationConfig(targetPlatform);
 assertPackagedPythonBackendTargetArch(targetArch, targetPlatform, getHostArch());
-run('desktop build', 'npm', ['run', 'build']);
+run('desktop build', 'npm', ['run', 'build', '--', ...getBuildVariantArgs(buildMetadata)]);
 run('electron forge package', 'electron-forge', ['package', ...packageArgs]);
 
 for (const concreteTargetArch of concreteTargetArchs) {

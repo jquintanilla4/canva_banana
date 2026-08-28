@@ -8,13 +8,15 @@
     "dev": "node scripts/dev.mjs",
     "start": "electron .",
     "start:built": "npm run build && electron .",
-    "build": "npm run prepare:package && npm run verify:package",
+    "build": "node scripts/build-desktop.mjs",
     "test": "vitest run",
-    "prepare:package": "node scripts/prepare-package.mjs",
+    "prepare:package": "node scripts/build-desktop.mjs",
     "verify:package": "node scripts/verify-package-resources.mjs",
     "verify:mac-app": "node scripts/verify-mac-app.mjs",
     "package": "node scripts/package-mac-app.mjs package",
-    "make": "node scripts/package-mac-app.mjs make"
+    "package:trial": "node scripts/package-mac-app.mjs package --trial",
+    "make": "node scripts/package-mac-app.mjs make",
+    "make:trial": "node scripts/package-mac-app.mjs make --trial"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.2",

@@ -11,8 +11,18 @@ import {
 describe('mac package target helpers', () => {
   it('reads inline and separated flag values', () => {
     expect(getFlagValue(['--arch=x64'], ['--arch', '-a'])).toBe('x64');
+    expect(getFlagValue(['-a=arm64'], ['--arch', '-a'])).toBe('arm64');
     expect(getFlagValue(['-a', 'arm64'], ['--arch', '-a'])).toBe('arm64');
     expect(getFlagValue(['--platform', 'darwin'], ['--platform', '-p'])).toBe('darwin');
+  });
+
+  it.each([
+    { args: ['--arch=x64', '-a', 'arm64'], names: ['--arch', '-a'] },
+    { args: ['-a', 'arm64', '--arch=arm64'], names: ['--arch', '-a'] },
+    { args: ['-p=darwin', '--platform', 'darwin'], names: ['--platform', '-p'] },
+    { args: ['--platform', 'darwin', '-p=darwin'], names: ['--platform', '-p'] },
+  ])('rejects duplicate target flags across aliases and value forms: $args', ({ args, names }) => {
+    expect(() => getFlagValue(args, names)).toThrow(/may only be specified once/);
   });
 
   it('resolves Forge multi-arch input to concrete macOS app outputs', () => {

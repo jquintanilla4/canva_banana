@@ -233,6 +233,19 @@ npm run make:mac
 - `npm run make:mac` creates distributable artifacts.
 - `npm -w @canva-banana/desktop run start:built` builds and launches the finished desktop app.
 
+### Building a Time-Limited Trial
+
+Regular builds remain unrestricted. To create a packaged trial or trial distributable, pass an exact future expiration timestamp with a timezone:
+
+```bash
+npm run package:mac:trial -- --expires-at=2026-09-30T23:59:59-07:00
+npm run make:mac:trial -- --expires-at=2026-09-30T23:59:59-07:00
+```
+
+The build rejects missing, timezone-free, invalid, or past timestamps. Trial users see the expiration date on every launch, and the app blocks and quits when that instant is reached. A regular build uses the same app identity and user-data location, so it can replace a trial without removing settings, backups, or saved snapshots.
+
+Trial enforcement is offline deterrence rather than unbreakable DRM. Signed and notarized distribution protects the embedded deadline from casual modification, and the app detects meaningful clock rollback, but a determined user with full control of the Mac can still bypass a fully local restriction.
+
 Local artifacts are ad-hoc signed. A build shared with another Mac must use an Apple Developer ID certificate and Apple notarization:
 
 ```bash
