@@ -4,6 +4,9 @@ import type {
   Path,
   ImageDimensions,
   FalGptImage2QualityOption,
+  GptImage25Variant,
+  GptImage25Background,
+  GptImage25Quality,
   FalImageSizeOption,
   FalAspectRatioOption,
   FalKrea2CreativityOption,
@@ -97,6 +100,9 @@ export interface GenerateImageEditOptions {
   numImages?: number;
   resolution?: FalResolutionOption;
   gptImage2Quality?: FalGptImage2QualityOption;
+  gptImage25Quality?: GptImage25Quality;
+  gptImage25Background?: GptImage25Background;
+  gptImage25Variant?: GptImage25Variant;
   wan27ImageSize?: string;
   wan27ImageMaxImages?: string;
   negativePrompt?: string;
@@ -114,6 +120,9 @@ export interface GenerateImageOptions {
   resolution?: FalResolutionOption;
   referenceImages?: HTMLImageElement[];
   gptImage2Quality?: FalGptImage2QualityOption;
+  gptImage25Quality?: GptImage25Quality;
+  gptImage25Background?: GptImage25Background;
+  gptImage25Variant?: GptImage25Variant;
   krea2Creativity?: FalKrea2CreativityOption;
   imageStyleReferences?: Array<{ image: HTMLImageElement; strength: number }>;
   flux2MaxImageSize?: string;

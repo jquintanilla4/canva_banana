@@ -18,6 +18,7 @@ import { PromptChatPanel } from './components/PromptChatPanel';
 import { NotesPanel } from './components/NotesPanel';
 import {
   isGptImage2EditModelId,
+  isGptImage25Model,
   FLUX_3_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -356,7 +357,7 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2000);
   }, [apiProvider, fal.falModelId, fal.klingO3Variant, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
 
-  const referenceImageSlotOffset = isGptImage2EditModelId(fal.falModelId) && tool === Tool.ANNOTATE ? 1 : 0; // Annotate uploads one extra input image.
+  const referenceImageSlotOffset = (isGptImage2EditModelId(fal.falModelId) || isGptImage25Model(fal.falModelId)) && tool === Tool.ANNOTATE ? 1 : 0; // Annotate uploads one extra input image.
   const isActiveKrea2LargeModel = apiProvider === 'fal' && fal.isKrea2LargeModel; // Krea behavior only applies while Fal is active.
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).

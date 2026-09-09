@@ -1,5 +1,5 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
-import { Tool, type FalAspectRatioOption, type FalImageSizeOption, type FalResolutionOption } from '../../types'; // Shared types.
+import { Tool, type FalAspectRatioOption, type FalImageSizeOption, type FalResolutionOption, type GptImage25Quality, type GptImage25Background } from '../../types'; // Shared types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageEditOptions, GenerateImageEditParams } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
 import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
@@ -19,10 +19,16 @@ import {
   isSeedreamEditModelId,
   normalizeModelId,
   resolveGptImage2SizeForFal,
+  resolveGptImage25Input,
   resolveSeedreamCustomSizeForModel,
 } from './models'; // Model helpers.
 import {
   FLUX2_MAX_EDIT_MODEL_ID,
+  GPT_IMAGE_25_MODEL_ID,
+  GPT_IMAGE_25_DEFAULTS,
+  getGptImage25Endpoint,
+  isGptImage25Model,
+  isGptImage25Variant,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_EDIT_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
@@ -60,7 +66,15 @@ export const generateImageEdit = async (
 ): Promise<FalImageGenerationResult> => { // Edit an image with Fal.
   ensureFalClientConfigured();
 
-  const modelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
+  const selectedModelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
+  const modelId = selectedModelId === GPT_IMAGE_25_MODEL_ID
+    ? getGptImage25Endpoint(isGptImage25Variant(options.gptImage25Variant) ? options.gptImage25Variant : GPT_IMAGE_25_DEFAULTS.gptImage25Variant, 'edit')
+    : selectedModelId;
+  const isGptImage25 = isGptImage25Model(modelId);
+  const gptImage25Input = isGptImage25 ? resolveGptImage25Input(options) : undefined;
+  if (isGptImage25 && 1 + (tool === Tool.ANNOTATE ? 1 : 0) + (referenceImages?.length ?? 0) > 16) {
+    throw new Error('GPT Image 2.5 supports up to 16 total input images. Please reduce the number of selected images.');
+  }
   const isSeedreamAnnotateSingle = tool === Tool.ANNOTATE && isSeedreamEditModelId(modelId);
   const imageUrls: string[] = [];
   let annotationImageUrl: string | undefined;
@@ -472,7 +486,8 @@ export const generateImageEdit = async (
     output_format?: 'png';
     sync_mode: boolean;
     image_size?: { width: number; height: number } | string;
-    quality?: 'low' | 'medium' | 'high';
+    quality?: GptImage25Quality;
+    background?: GptImage25Background;
     num_images?: number;
     aspect_ratio?: string;
     resolution?: FalResolutionOption;
@@ -480,7 +495,7 @@ export const generateImageEdit = async (
   } = {
     prompt,
     image_urls: orderedImageUrls,
-    sync_mode: !isSeedreamModel && !isNanoBananaModel && !isGptImage2Model, // Keep queue history visible for async models.
+    sync_mode: !isSeedreamModel && !isNanoBananaModel && !isGptImage2Model && !isGptImage25, // Keep queue history visible for async models.
   };
 
   if (!isSeedreamModel) {
@@ -514,6 +529,10 @@ export const generateImageEdit = async (
   } else if (isGptImage2Model) {
     body.image_size = resolveGptImage2SizeForFal(imageSizeOption); // GPT Image 2 supports auto in edit mode.
     body.quality = options.gptImage2Quality ?? 'medium'; // App default overrides Fal high default.
+  }
+
+  if (gptImage25Input) {
+    Object.assign(body, gptImage25Input);
   }
 
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {

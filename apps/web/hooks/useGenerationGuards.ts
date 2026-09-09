@@ -5,6 +5,7 @@ import type { ModelUiCapabilities } from '../services/modelCapabilities';
 import {
   GROK_IMAGINE_IMAGE_MODEL_ID,
   isGptImage2EditModelId,
+  isGptImage25Model,
   isNanoBananaEditModelId,
   isSeedreamModelId,
 } from '../services/modelConfig';
@@ -143,7 +144,7 @@ export const buildGenerationGuardArgs = ({
   isUpscaleModel: fal.isUpscaleModel,
   isSeedreamModel: !fal.isVideoMode && isSeedreamModelId(fal.falModelId),
   isNanoBananaModel: !fal.isVideoMode && isNanoBananaEditModelId(fal.falModelId),
-  isGptImage2Model: !fal.isVideoMode && isGptImage2EditModelId(fal.falModelId),
+  isGptImage2Model: !fal.isVideoMode && (isGptImage2EditModelId(fal.falModelId) || isGptImage25Model(fal.falModelId)),
   isKrea2LargeModel: apiProvider === 'fal' && fal.isKrea2LargeModel, // Krea behavior only applies while Fal is active.
   isGrokModel: !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID, // Grok text-to-image.
   isGrokImagineVideoModel: fal.isGrokImagineVideoModel,

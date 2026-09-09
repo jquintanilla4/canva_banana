@@ -65,7 +65,7 @@ import type {
   WanCreativity,
   WanTargetResolution,
 } from './modelConfig';
-import type { Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
+import type { GptImage25Variant, GptImage25Background, GptImage25Quality, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
 import type {
   PromptBarControl as PromptBarModelControl,
   PromptBarSelectControl,
@@ -77,6 +77,12 @@ import {
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   GPT_IMAGE_2_IMAGE_SIZE_OPTIONS,
+  isGptImage25Model,
+  GPT_IMAGE_25_IMAGE_SIZE_OPTIONS,
+  GPT_IMAGE_25_DEFAULTS,
+  GPT_IMAGE_25_VARIANT_OPTIONS,
+  GPT_IMAGE_25_BACKGROUND_OPTIONS,
+  GPT_IMAGE_25_QUALITY_OPTIONS,
   GPT_IMAGE_2_QUALITY_OPTIONS,
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_IMAGE_MODEL_OPTIONS,
@@ -872,6 +878,9 @@ export type PromptBarControlsInput = {
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
   gptImage2Quality?: FalGptImage2QualitySelectionValue;
+  gptImage25Quality?: GptImage25Quality;
+  gptImage25Background?: GptImage25Background;
+  gptImage25Variant?: GptImage25Variant;
   krea2AspectRatio?: Krea2AspectRatioSelectionValue;
   krea2Creativity?: Krea2CreativitySelectionValue;
   falScaleFactor: number;
@@ -966,6 +975,9 @@ export type PromptBarControlsInput = {
   onRecraftAddColor: () => void;
   onRecraftRemoveColor: () => void;
   onGptImage2QualityChange?: (value: string) => void;
+  onGptImage25QualityChange?: (value: string) => void;
+  onGptImage25BackgroundChange?: (value: string) => void;
+  onGptImage25VariantChange?: (value: string) => void;
   onKrea2AspectRatioChange?: (value: string) => void;
   onKrea2CreativityChange?: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
@@ -1101,6 +1113,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     recraftBackgroundColor,
     recraftColors,
     gptImage2Quality = 'medium',
+    gptImage25Quality = GPT_IMAGE_25_DEFAULTS.gptImage25Quality,
+    gptImage25Background = GPT_IMAGE_25_DEFAULTS.gptImage25Background,
+    gptImage25Variant = GPT_IMAGE_25_DEFAULTS.gptImage25Variant,
     krea2AspectRatio = '16:9',
     krea2Creativity = 'medium',
     falScaleFactor,
@@ -1195,6 +1210,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onRecraftAddColor,
     onRecraftRemoveColor,
     onGptImage2QualityChange = () => undefined,
+    onGptImage25QualityChange = () => undefined,
+    onGptImage25BackgroundChange = () => undefined,
+    onGptImage25VariantChange = () => undefined,
     onKrea2AspectRatioChange = () => undefined,
     onKrea2CreativityChange = () => undefined,
     onFalScaleFactorChange,
@@ -1996,6 +2014,46 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
+  const isGptImage25 = !isVideoMode && isGptImage25Model(falModelId);
+  if (apiProvider === 'fal' && isGptImage25) {
+    controls.push({
+      id: 'fal-gpt-image-25-variant-select',
+      prefixLabel: 'Variant',
+      ariaLabel: 'Select GPT Image 2.5 variant',
+      options: GPT_IMAGE_25_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: gptImage25Variant,
+      onChange: onGptImage25VariantChange,
+      disabled: isLoading,
+    });
+    controls.push({
+      id: 'fal-gpt-image-25-size-select',
+      prefixLabel: 'Size',
+      ariaLabel: 'Select GPT Image 2.5 size',
+      options: GPT_IMAGE_25_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: falImageSizeSelection,
+      onChange: onFalImageSizeChange,
+      disabled: isLoading,
+    });
+    controls.push({
+      id: 'fal-gpt-image-25-quality-select',
+      prefixLabel: 'Quality',
+      ariaLabel: 'Select GPT Image 2.5 quality',
+      options: GPT_IMAGE_25_QUALITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: gptImage25Quality,
+      onChange: onGptImage25QualityChange,
+      disabled: isLoading,
+    });
+    controls.push({
+      id: 'fal-gpt-image-25-background-select',
+      prefixLabel: 'Background',
+      ariaLabel: 'Select GPT Image 2.5 background',
+      options: GPT_IMAGE_25_BACKGROUND_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: gptImage25Background,
+      onChange: onGptImage25BackgroundChange,
+      disabled: isLoading,
+    });
+  }
+
   const shouldShowGptImage2ImageControls = apiProvider === 'fal' && isGptImage2Model;
   if (shouldShowGptImage2ImageControls) {
     controls.push({
@@ -2075,7 +2133,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2Model); // Include GPT Image 2 for Num control.
+    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2Model || isGptImage25); // Include GPT Image 2 for Num control.
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.

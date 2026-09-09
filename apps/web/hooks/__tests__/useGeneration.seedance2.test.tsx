@@ -5,6 +5,7 @@ import {
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
+  GPT_IMAGE_25_MODEL_ID,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -3176,12 +3177,12 @@ describe('useGeneration (seedance 2)', () => {
     expect(vi.mocked(generateFalImage).mock.calls[0]?.[1]?.imageStyleReferences).toHaveLength(10);
   });
 
-  it('caps GPT Image 2 annotate references at 8 because the annotation canvas is an input', async () => {
+  it.each([{ modelId: GPT_IMAGE_2_EDIT_MODEL_ID, limit: 8 }, { modelId: GPT_IMAGE_25_MODEL_ID, limit: 14 }])('caps $modelId annotate references at $limit', async ({ modelId, limit }) => {
     const primary = buildCanvasMedia('primary', 'image') as CanvasImage & { element: HTMLImageElement };
-    const references = Array.from({ length: 9 }, (_, index) => buildCanvasMedia(`ref-${index + 1}`, 'image'));
+    const references = Array.from({ length: limit + 1 }, (_, index) => buildCanvasMedia(`ref-${index + 1}`, 'image'));
     const fal = createFalStub();
     fal.falModelMode = 'image';
-    fal.falImageModelId = GPT_IMAGE_2_EDIT_MODEL_ID;
+    fal.falImageModelId = modelId;
     vi.mocked(generateFalImageEdit).mockImplementation(() => new Promise(() => {})); // Keep pending so request options can be inspected.
 
     const { result } = renderHook(() => useGeneration({
@@ -3214,7 +3215,7 @@ describe('useGeneration (seedance 2)', () => {
         kind: 'image_edit',
         prompt: 'Edit with annotated guidance',
         provider: 'fal',
-        modelId: GPT_IMAGE_2_EDIT_MODEL_ID,
+        modelId,
         modelMode: 'image',
         primaryImageId: primary.id,
         referenceImageIds: references.map(image => image.id),
@@ -3222,9 +3223,48 @@ describe('useGeneration (seedance 2)', () => {
       await Promise.resolve();
     });
 
-    expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0]?.referenceImages).toHaveLength(8);
+    expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0]?.referenceImages).toHaveLength(limit);
   });
 
+
+  it.each((['text_to_image', 'image_edit'] as const).flatMap(kind =>
+    (['saved', 'missing', 'malformed'] as const).map(settings => ({ kind, settings })),
+  ))('replays GPT Image 2.5 $kind with $settings settings instead of live picker values', async ({ kind, settings }) => {
+    const primary = buildCanvasMedia('gpt25-primary', 'image') as CanvasImage & { element: HTMLImageElement };
+    const fal = createFalStub();
+    fal.falModelMode = 'image';
+    fal.falImageModelId = GPT_IMAGE_25_MODEL_ID;
+    fal.gptImage25Variant = settings === 'saved' ? 'sunburst' : 'flare';
+    fal.gptImage25Background = settings === 'saved' ? 'auto' : 'opaque';
+    fal.gptImage25Quality = settings === 'saved' ? 'high' : 'max';
+    fal.falImageSizeSelection = '2688x1152';
+    fal.falNumImages = 3;
+    let queuedJobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      queuedJobs = typeof value === 'function' ? value(queuedJobs) : value;
+    });
+    vi.mocked(generateFalImage).mockImplementation(() => new Promise(() => {}));
+    vi.mocked(generateFalImageEdit).mockImplementation(() => new Promise(() => {}));
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: '', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(), images: [primary], paths: [], videoNegativePrompt: '',
+      setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs, setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    const expectedOptions = settings === 'saved'
+      ? { gptImage25Variant: 'flare' as const, gptImage25Background: 'transparent' as const, gptImage25Quality: 'max' as const, imageSizeSelection: '2048x2048' as const, numImages: 4 }
+      : { gptImage25Variant: 'sunburst' as const, gptImage25Background: 'auto' as const, gptImage25Quality: 'high' as const, imageSizeSelection: 'auto' as const, numImages: 1 };
+    const falOptions = settings === 'saved' ? expectedOptions : settings === 'malformed'
+      ? { gptImage25Variant: 'bad', gptImage25Background: 'bad', gptImage25Quality: 'bad', imageSizeSelection: undefined, numImages: undefined } as unknown as typeof expectedOptions
+      : undefined;
+    await act(async () => {
+      void result.current.handleGenerate({ kind, prompt: 'Replay image', provider: 'fal', modelId: GPT_IMAGE_25_MODEL_ID, modelMode: 'image', primaryImageId: kind === 'image_edit' ? primary.id : undefined, falOptions });
+      await Promise.resolve();
+    });
+    const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
+    const { imageSizeSelection, ...expectedRequestOptions } = expectedOptions;
+    expect(request).toMatchObject({ modelId: GPT_IMAGE_25_MODEL_ID, ...expectedRequestOptions, imageSize: imageSizeSelection });
+    expect(queuedJobs[0]?.retryInputs?.falOptions).toMatchObject(expectedOptions);
+  });
   it('blocks Seedance reference submissions when reference videos total more than 15 seconds', async () => {
     const fal = createFalStub();
     fal.seedance2Variant = 'reference';

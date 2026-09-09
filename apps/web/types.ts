@@ -57,6 +57,9 @@ export type FalImageSizePreset =
   | '1152x2048'
   | '2560x1440'
   | '1440x2560'
+  | '2688x1152'
+  | '2016x864'
+  | '1344x576'
   | 'auto'
   | 'auto_1K'
   | 'auto_2K'
@@ -90,6 +93,9 @@ export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
 
 export type FalResolutionOption = '1K' | '2K' | '4K';
 export type FalGptImage2QualityOption = 'low' | 'medium' | 'high';
+export type GptImage25Variant = 'flare' | 'sunburst';
+export type GptImage25Background = 'auto' | 'transparent' | 'opaque';
+export type GptImage25Quality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type FalKrea2CreativityOption = 'raw' | 'low' | 'medium' | 'high';
 export type Flux2MaxImageSizeOption = Extract<FalImageSizePreset, 'landscape_4_3' | 'landscape_16_9' | 'portrait_4_3' | 'portrait_16_9' | 'square' | 'square_hd'>;
 
@@ -123,6 +129,9 @@ export type GenerationFalOptions = Partial<{
   resolutionSelection: FalResolutionOption;
   flux2MaxImageSize: Flux2MaxImageSizeOption; // Flux 2 Max output size replayed by retries.
   gptImage2Quality: FalGptImage2QualityOption;
+  gptImage25Variant: GptImage25Variant;
+  gptImage25Background: GptImage25Background;
+  gptImage25Quality: GptImage25Quality;
   krea2Creativity: FalKrea2CreativityOption;
   krea2StyleReferenceStrengths: Record<string, number>;
   numImages: number;

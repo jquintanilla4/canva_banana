@@ -30,6 +30,9 @@ import {
   isJimengMultiframeResolutionSelectionValue,
   isJimengSeedance2ModelVersion,
   isGptImage2QualitySelectionValue,
+  isGptImage25Quality,
+  isGptImage25Background,
+  isGptImage25Variant,
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
@@ -1731,6 +1734,15 @@ export const normalizeSnapshotImageMetadata = (
       }
       if (isFlux2MaxImageSizeSelectionValue((typed as { flux2MaxImageSize?: unknown }).flux2MaxImageSize)) {
         normalizedOptions.flux2MaxImageSize = typed.flux2MaxImageSize; // Keep the saved Flux output dimensions for reruns.
+      }
+      if (isGptImage25Variant(typed?.gptImage25Variant)) {
+        normalizedOptions.gptImage25Variant = typed.gptImage25Variant;
+      }
+      if (isGptImage25Background(typed?.gptImage25Background)) {
+        normalizedOptions.gptImage25Background = typed.gptImage25Background;
+      }
+      if (isGptImage25Quality(typed?.gptImage25Quality)) {
+        normalizedOptions.gptImage25Quality = typed.gptImage25Quality;
       }
       if (isGptImage2QualitySelectionValue((typed as { gptImage2Quality?: unknown }).gptImage2Quality)) {
         normalizedOptions.gptImage2Quality = typed.gptImage2Quality;

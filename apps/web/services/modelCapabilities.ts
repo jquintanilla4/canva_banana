@@ -28,6 +28,7 @@ import {
   WAN_VISION_ENHANCER_MODEL_ID,
   getMaxReferenceImages,
   isGptImage2EditModelId,
+  isGptImage25Model,
   isKlingO3VideoModelId,
   isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
@@ -200,6 +201,17 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
       promptPlaceholder: `Describe your generation, or your edit, or use @ to reference images (4 images in total)... ${GENERATE_SUFFIX}`,
       referenceLimitToast: () => ({
         message: 'Wan 2.7 Pro Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.',
+        durationMs: 4000,
+      }),
+    },
+  },
+  {
+    matches: (modelId) => isGptImage25Model(modelId),
+    base: {
+      referenceLimitToast: (max) => ({
+        message: max <= 14
+          ? 'GPT Image 2.5 annotate supports up to 14 references because the annotation canvas counts as an input.'
+          : 'GPT Image 2.5 supports up to 16 images total (1 primary + 15 references).',
         durationMs: 4000,
       }),
     },

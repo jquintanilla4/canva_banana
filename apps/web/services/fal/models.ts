@@ -1,5 +1,10 @@
 import type { FalAspectRatioOption, FalImageSizeOption } from '../../types'; // UI option types.
+import type { GenerateImageOptions } from './types';
 import {
+  GPT_IMAGE_25_DEFAULTS,
+  GPT_IMAGE_25_IMAGE_SIZE_OPTIONS,
+  isGptImage25Quality,
+  isGptImage25Background,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
@@ -85,14 +90,20 @@ const GPT_IMAGE_2_EXPLICIT_SIZE_MAP = {
   '1152x2048': { width: 1152, height: 2048 },
   '2560x1440': { width: 2560, height: 1440 },
   '1440x2560': { width: 1440, height: 2560 },
-} as const; // Explicit GPT Image 2 pixel sizes.
+  '2688x1152': { width: 2688, height: 1152 },
+  '2016x864': { width: 2016, height: 864 },
+  '1344x576': { width: 1344, height: 576 },
+} as const; // Explicit pixel sizes shared by GPT Image 2 and 2.5.
 type GptImage2ExplicitSizeKey = keyof typeof GPT_IMAGE_2_EXPLICIT_SIZE_MAP; // Explicit size keys.
 const isGptImage2ExplicitSize = (value: unknown): value is GptImage2ExplicitSizeKey =>
   value === '2048x2048'
   || value === '2048x1152'
   || value === '1152x2048'
   || value === '2560x1440'
-  || value === '1440x2560'; // Explicit size guard.
+  || value === '1440x2560'
+  || value === '2688x1152'
+  || value === '2016x864'
+  || value === '1344x576'; // Explicit size guard.
 
 export const resolveGptImage2SizeForFal = (
   imageSizeOption: FalImageSizeOption,
@@ -103,4 +114,18 @@ export const resolveGptImage2SizeForFal = (
   return isGptImage2ExplicitSize(imageSizeOption)
     ? GPT_IMAGE_2_EXPLICIT_SIZE_MAP[imageSizeOption]
     : imageSizeOption;
+};
+
+export const resolveGptImage25Input = (
+  options: Pick<GenerateImageOptions, 'imageSize' | 'gptImage25Quality' | 'gptImage25Background'>,
+) => {
+  const imageSize = options.imageSize ?? GPT_IMAGE_25_DEFAULTS.imageSizeSelection;
+  if (imageSize !== 'default' && !GPT_IMAGE_25_IMAGE_SIZE_OPTIONS.some(option => option.value === imageSize)) {
+    throw new Error('Please select a supported GPT Image 2.5 image size.');
+  }
+  return {
+    image_size: resolveGptImage2SizeForFal(imageSize),
+    quality: isGptImage25Quality(options.gptImage25Quality) ? options.gptImage25Quality : GPT_IMAGE_25_DEFAULTS.gptImage25Quality,
+    background: isGptImage25Background(options.gptImage25Background) ? options.gptImage25Background : GPT_IMAGE_25_DEFAULTS.gptImage25Background,
+  };
 };

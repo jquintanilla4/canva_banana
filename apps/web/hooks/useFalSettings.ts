@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type {
   ApiProviderId,
+  GptImage25Variant,
+  GptImage25Background,
+  GptImage25Quality,
   FalVideoDuration,
   GenerationFalOptions,
   GenerationInputs,
@@ -19,6 +22,12 @@ import {
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   GPT_IMAGE_2_IMAGE_SIZE_OPTIONS,
+  GPT_IMAGE_25_IMAGE_SIZE_OPTIONS,
+  GPT_IMAGE_25_DEFAULTS,
+  isGptImage25Model,
+  isGptImage25Variant,
+  isGptImage25Background,
+  isGptImage25Quality,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
@@ -312,6 +321,9 @@ type FalHandlers = {
   handleRecraftAddColor: () => void;
   handleRecraftRemoveColor: () => void;
   handleGptImage2QualityChange: (value: string) => void;
+  handleGptImage25QualityChange: (value: string) => void;
+  handleGptImage25BackgroundChange: (value: string) => void;
+  handleGptImage25VariantChange: (value: string) => void;
   handleKrea2AspectRatioChange: (value: string) => void;
   handleKrea2CreativityChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
@@ -411,6 +423,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
   gptImage2Quality: FalGptImage2QualitySelectionValue;
+  gptImage25Quality: GptImage25Quality;
+  gptImage25Background: GptImage25Background;
+  gptImage25Variant: GptImage25Variant;
   krea2AspectRatio: Krea2AspectRatioSelectionValue;
   krea2Creativity: Krea2CreativitySelectionValue;
   falImageSizeSelection: FalImageSizeSelectionValue;
@@ -506,6 +521,9 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setRecraftBackgroundColor: Dispatch<SetStateAction<RecraftRgbColor>>;
   setRecraftColors: Dispatch<SetStateAction<RecraftRgbColor[]>>;
   setGptImage2Quality: Dispatch<SetStateAction<FalGptImage2QualitySelectionValue>>;
+  setGptImage25Quality: Dispatch<SetStateAction<GptImage25Quality>>;
+  setGptImage25Background: Dispatch<SetStateAction<GptImage25Background>>;
+  setGptImage25Variant: Dispatch<SetStateAction<GptImage25Variant>>;
   setKrea2AspectRatio: Dispatch<SetStateAction<Krea2AspectRatioSelectionValue>>;
   setKrea2Creativity: Dispatch<SetStateAction<Krea2CreativitySelectionValue>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
@@ -607,6 +625,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [recraftBackgroundColor, setRecraftBackgroundColor] = useState<RecraftRgbColor>(RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR);
   const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
   const [gptImage2Quality, setGptImage2Quality] = useState<FalGptImage2QualitySelectionValue>('medium');
+  const [gptImage25Quality, setGptImage25Quality] = useState<GptImage25Quality>(GPT_IMAGE_25_DEFAULTS.gptImage25Quality);
+  const [gptImage25Background, setGptImage25Background] = useState<GptImage25Background>(GPT_IMAGE_25_DEFAULTS.gptImage25Background);
+  const [gptImage25Variant, setGptImage25Variant] = useState<GptImage25Variant>(GPT_IMAGE_25_DEFAULTS.gptImage25Variant);
   const [krea2AspectRatio, setKrea2AspectRatio] = useState<Krea2AspectRatioSelectionValue>(KREA_2_DEFAULT_ASPECT_RATIO);
   const [krea2Creativity, setKrea2Creativity] = useState<Krea2CreativitySelectionValue>(KREA_2_DEFAULT_CREATIVITY);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
@@ -833,8 +854,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (falModelMode === 'video') {
       return;
     }
-    if (falModelId === GPT_IMAGE_2_EDIT_MODEL_ID) {
-      const validImageSizeOptions = GPT_IMAGE_2_IMAGE_SIZE_OPTIONS.map(option => option.value);
+    if (falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId)) {
+      const validImageSizeOptions = (isGptImage25Model(falModelId) ? GPT_IMAGE_25_IMAGE_SIZE_OPTIONS : GPT_IMAGE_2_IMAGE_SIZE_OPTIONS).map(option => option.value);
       if (!validImageSizeOptions.includes(falImageSizeSelection)) {
         setFalImageSizeSelection('auto'); // GPT Image 2 defaults to auto size in the UI.
       }
@@ -1332,6 +1353,18 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setRecraftColors(prev => prev.slice(0, Math.max(0, prev.length - 1)));
   }, []);
 
+  const handleGptImage25VariantChange = useCallback((value: string) => {
+    if (isGptImage25Variant(value)) setGptImage25Variant(value);
+  }, []);
+
+  const handleGptImage25BackgroundChange = useCallback((value: string) => {
+    if (isGptImage25Background(value)) setGptImage25Background(value);
+  }, []);
+
+  const handleGptImage25QualityChange = useCallback((value: string) => {
+    if (isGptImage25Quality(value)) setGptImage25Quality(value);
+  }, []);
+
   const handleGptImage2QualityChange = useCallback((value: string) => {
     if (isGptImage2QualitySelectionValue(value)) {
       setGptImage2Quality(value);
@@ -1444,6 +1477,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       resolutionSelection: setFalResolutionSelection,
       flux2MaxImageSize: setFlux2MaxImageSize,
       gptImage2Quality: setGptImage2Quality,
+      gptImage25Quality: setGptImage25Quality,
+      gptImage25Background: setGptImage25Background,
+      gptImage25Variant: setGptImage25Variant,
       krea2Creativity: setKrea2Creativity,
       numImages: value => setFalNumImages(
         Math.min(getFalNumImageMaxForModel(normalizedModelId), Math.max(1, Math.floor(value))),
@@ -1627,6 +1663,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     recraftBackgroundColor,
     recraftColors,
     gptImage2Quality,
+    gptImage25Quality,
+    gptImage25Background,
+    gptImage25Variant,
     krea2AspectRatio,
     krea2Creativity,
     isFlux2MaxModel,
@@ -1747,6 +1786,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleRecraftAddColor,
     handleRecraftRemoveColor,
     handleGptImage2QualityChange,
+    handleGptImage25QualityChange,
+    handleGptImage25BackgroundChange,
+    handleGptImage25VariantChange,
     handleKrea2AspectRatioChange,
     handleKrea2CreativityChange,
     handleFalImageSizeChange,
@@ -1842,6 +1884,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setRecraftBackgroundColor,
     setRecraftColors,
     setGptImage2Quality,
+    setGptImage25Quality,
+    setGptImage25Background,
+    setGptImage25Variant,
     setKrea2AspectRatio,
     setKrea2Creativity,
     setFalImageSizeSelection,

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { useSelectionState } from '../useSelectionState';
 import {
   GPT_IMAGE_2_EDIT_MODEL_ID,
+  GPT_IMAGE_25_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../../services/modelConfig';
@@ -228,15 +229,15 @@ describe('useSelectionState (Krea 2 Large)', () => {
     expect(result.current.referenceImageIds).toEqual(['image-2']);
   });
 
-  it('trims existing GPT Image 2 references when annotate reserves an input slot', () => {
-    const images = Array.from({ length: 9 }, (_, index) => buildCanvasMedia(`ref-${index + 1}`));
+  it.each([{ modelId: GPT_IMAGE_2_EDIT_MODEL_ID, limit: 9 }, { modelId: GPT_IMAGE_25_MODEL_ID, limit: 15 }])('trims $modelId references when annotate reserves an input slot', ({ modelId, limit }) => {
+    const images = Array.from({ length: limit }, (_, index) => buildCanvasMedia(`ref-${index + 1}`));
     const onReferenceLimit = vi.fn();
     const { result, rerender } = renderHook(
       ({ referenceImageSlotOffset }: { referenceImageSlotOffset: number }) => useSelectionState({
         images,
         apiProvider: 'fal',
         fal: buildFal({
-          falModelId: GPT_IMAGE_2_EDIT_MODEL_ID,
+          falModelId: modelId,
           isKrea2LargeModel: false,
         }),
         referenceImageSlotOffset,
@@ -254,8 +255,8 @@ describe('useSelectionState (Krea 2 Large)', () => {
 
     rerender({ referenceImageSlotOffset: 1 });
 
-    expect(result.current.referenceImageIds).toEqual(images.slice(0, 8).map(image => image.id));
-    expect(onReferenceLimit).toHaveBeenCalledWith(8);
+    expect(result.current.referenceImageIds).toEqual(images.slice(0, limit - 1).map(image => image.id));
+    expect(onReferenceLimit).toHaveBeenCalledWith(limit - 1);
   });
 
   it('does not apply GPT Image 2 reference caps or annotate slot offsets while Google is active', () => {

@@ -39,6 +39,11 @@ import {
   WAN_VISION_ENHANCER_MODEL_ID,
   isFalImageModelId,
   isGptImage2Model,
+  isGptImage25Model,
+  isGptImage25Variant,
+  isGptImage25Background,
+  isGptImage25Quality,
+  GPT_IMAGE_25_DEFAULTS,
   isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
   isRecraftV4ProModel,
@@ -169,6 +174,7 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [CRYSTAL_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, creativity: 0 } }, // Crystal defaults.
   { matches: [SEEDVR_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, noiseScale: 0.1 } }, // SeedVR defaults.
   { matches: [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID], defaults: { flux2MaxImageSize: 'landscape_4_3' } }, // Flux defaults.
+  { matches: (modelId) => isGptImage25Model(modelId), defaults: GPT_IMAGE_25_DEFAULTS },
   { matches: (modelId) => isGptImage2Model(modelId), defaults: { imageSizeSelection: 'auto', gptImage2Quality: 'medium' } }, // GPT Image defaults.
   { matches: (modelId) => isKrea2LargeModelId(modelId), defaults: { aspectRatioSelection: KREA_2_DEFAULT_ASPECT_RATIO, krea2Creativity: KREA_2_DEFAULT_CREATIVITY } }, // Krea defaults.
   { matches: [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID], defaults: { wan27ImageAspectRatio: 'landscape_16_9', wan27ImageMaxImages: '1' } }, // Wan image defaults.
@@ -238,6 +244,16 @@ export const resolveGenerationTransferOptions = (
     ...getGenerationTransferOptionDefaults(normalizedModelId, restoredOptions),
     ...restoredOptions,
   };
+  if (isGptImage25Model(normalizedModelId)) {
+    return {
+      ...resolvedOptions,
+      imageSizeSelection: resolvedOptions.imageSizeSelection ?? GPT_IMAGE_25_DEFAULTS.imageSizeSelection,
+      numImages: resolvedOptions.numImages ?? GPT_IMAGE_25_DEFAULTS.numImages,
+      gptImage25Variant: isGptImage25Variant(resolvedOptions.gptImage25Variant) ? resolvedOptions.gptImage25Variant : GPT_IMAGE_25_DEFAULTS.gptImage25Variant,
+      gptImage25Background: isGptImage25Background(resolvedOptions.gptImage25Background) ? resolvedOptions.gptImage25Background : GPT_IMAGE_25_DEFAULTS.gptImage25Background,
+      gptImage25Quality: isGptImage25Quality(resolvedOptions.gptImage25Quality) ? resolvedOptions.gptImage25Quality : GPT_IMAGE_25_DEFAULTS.gptImage25Quality,
+    }; // Restoring settings and retrying share the same defaults for missing or malformed controls.
+  }
   return normalizedModelId === FLUX_3_VIDEO_MODEL_ID
     ? { ...resolvedOptions, ...resolveFlux3Settings(resolvedOptions) }
     : resolvedOptions; // Missing legacy fields use the selected model's defaults instead of unrelated live values.

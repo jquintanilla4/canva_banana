@@ -1,5 +1,5 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
-import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption } from '../../types'; // Shared option types.
+import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption, GptImage25Quality, GptImage25Background } from '../../types'; // Shared option types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
 import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
@@ -9,9 +9,14 @@ import { emitFalPhase } from './phase'; // Phase update helper.
 import { extractInlineData, normalizeFalImageMetadata, runFalDownloadStep } from './responses'; // Response parsing helpers.
 import { createRandomSeed } from './random'; // Seed helper.
 import { uploadImageElementToFal } from './media'; // Media upload helper.
-import { isSeedreamTextToImageModelId, normalizeModelId, resolveGptImage2SizeForFal, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
+import { isSeedreamTextToImageModelId, normalizeModelId, resolveGptImage2SizeForFal, resolveGptImage25Input, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
 import {
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  GPT_IMAGE_25_MODEL_ID,
+  GPT_IMAGE_25_DEFAULTS,
+  getGptImage25Endpoint,
+  isGptImage25Model,
+  isGptImage25Variant,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
   isGptImage2TextToImageModelId,
@@ -43,7 +48,11 @@ export const generateImage = async (
 ): Promise<FalImageGenerationResult> => { // Generate an image from text.
   ensureFalClientConfigured();
 
-  const modelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+  const selectedModelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+  const modelId = selectedModelId === GPT_IMAGE_25_MODEL_ID
+    ? getGptImage25Endpoint(isGptImage25Variant(options.gptImage25Variant) ? options.gptImage25Variant : GPT_IMAGE_25_DEFAULTS.gptImage25Variant, 'text-to-image')
+    : selectedModelId;
+  const isGptImage25 = isGptImage25Model(modelId);
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
   const isSeedreamV5ProTextToImage = isSeedreamV5ProModelId(modelId);
   const isNanoBananaTextToImage = isNanoBananaTextToImageModelId(modelId);
@@ -73,7 +82,8 @@ export const generateImage = async (
     num_images?: number;
     aspect_ratio?: string;
     image_size?: { width: number; height: number } | string;
-    quality?: 'low' | 'medium' | 'high';
+    quality?: GptImage25Quality;
+    background?: GptImage25Background;
     creativity?: 'raw' | 'low' | 'medium' | 'high';
     image_style_references?: Array<{ image_url: string; strength: number }>;
     seed?: number;
@@ -84,7 +94,7 @@ export const generateImage = async (
     enable_safety_checker?: boolean;
   } = {
     prompt,
-    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isGptImage2TextToImage && !isKrea2TextToImage && !isRecraftV4ProTextToImage, // Keep queue history visible for async models.
+    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isGptImage2TextToImage && !isGptImage25 && !isKrea2TextToImage && !isRecraftV4ProTextToImage, // Keep queue history visible for async models.
   };
 
   if (isKrea2TextToImage) {
@@ -139,6 +149,10 @@ export const generateImage = async (
     wan27Body.enable_safety_checker = true;
     delete wan27Body.output_format;
     delete wan27Body.sync_mode;
+  }
+
+  if (isGptImage25) {
+    Object.assign(body, resolveGptImage25Input(options));
   }
 
   if (isGptImage2TextToImage) {
