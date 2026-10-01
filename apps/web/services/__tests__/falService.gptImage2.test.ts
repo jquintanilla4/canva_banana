@@ -48,6 +48,16 @@ describe('falService (GPT Image 2)', () => {
     expect(GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID).toBe('openai/gpt-image-2');
   });
 
+  it.each([{ tool: Tool.SELECTION, references: 9 }, { tool: Tool.ANNOTATE, references: 8 }])('rejects extra references before uploading for $tool', async ({ tool, references }) => {
+    await expect(generateImageEdit({
+      prompt: 'Keep the subject', image: document.createElement('img'), tool, paths: [],
+      imageDimensions: { width: 1024, height: 1024 },
+      referenceImages: Array.from({ length: references + 1 }, () => document.createElement('img')),
+    }, { modelId: GPT_IMAGE_2_EDIT_MODEL_ID })).rejects.toThrow('10 total input images');
+    expect(fal.storage.upload).not.toHaveBeenCalled();
+    expect(fal.subscribe).not.toHaveBeenCalled();
+  });
+
   it('exposes explicit 2K GPT Image 2 size choices with pixel labels', () => {
     expect(GPT_IMAGE_2_IMAGE_SIZE_OPTIONS).toEqual(expect.arrayContaining([
       { value: '2048x2048', label: '2K Square (2048x2048)' },

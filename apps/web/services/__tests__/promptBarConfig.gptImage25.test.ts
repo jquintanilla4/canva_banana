@@ -5,10 +5,40 @@ import { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_2_EDIT_MODEL_ID } from '../modelConfig
 import { buildPromptBarModelControls, type PromptBarControlsInput } from '../promptBarConfig';
 import { buildSnapshotBinaryFromState, snapshotBinaryToBlob, restoreSnapshotFromFile, type SnapshotMetaState, normalizeSnapshotImageMetadata } from '../snapshotService';
 import type { GenerationInputs } from '../../types';
+import { getGptImage25Endpoint } from '../gptImage25Config';
+import { resolveGenerationTransferOptions } from '../../utils/generationTransferSettings';
 
 const generation: GenerationInputs = { kind: 'text_to_image', prompt: 'A subject', provider: 'fal', modelId: GPT_IMAGE_25_MODEL_ID, modelMode: 'image' };
 
 describe('GPT Image 2.5 controls and saved settings', () => {
+  it.each((['flare', 'sunburst'] as const).flatMap(variant =>
+    (['edit', 'text-to-image'] as const).map(mode => ({ variant, mode })),
+  ))('restores the $variant $mode alias and does not inherit live controls', ({ variant, mode }) => {
+    const saved: GenerationInputs = {
+      ...generation, modelId: getGptImage25Endpoint(variant, mode), kind: mode === 'edit' ? 'image_edit' : 'text_to_image',
+    };
+    const { result } = renderHook(() => useFalSettings({ apiProvider: 'fal' }));
+    act(() => {
+      result.current.handleGptImage25VariantChange(variant === 'flare' ? 'sunburst' : 'flare');
+      result.current.handleGptImage25QualityChange('max');
+      result.current.handleGptImage25BackgroundChange('opaque');
+      result.current.setFalNumImages(3);
+      expect(result.current.applyGenerationSettings(saved)).toBe(true);
+    });
+    expect(result.current).toMatchObject({
+      falImageModelId: GPT_IMAGE_25_MODEL_ID, gptImage25Variant: variant, gptImage25Quality: 'high',
+      gptImage25Background: 'auto', falImageSizeSelection: 'auto', falNumImages: 1,
+    });
+  });
+
+  it('repairs unsupported saved sizes, quality, background, and counts', () => {
+    const saved = {
+      ...generation, falOptions: { gptImage25Quality: 'bad', gptImage25Background: 'bad', imageSizeSelection: 'square', numImages: NaN },
+    } as unknown as GenerationInputs;
+    expect(resolveGenerationTransferOptions(saved, GPT_IMAGE_25_MODEL_ID)).toMatchObject({
+      gptImage25Quality: 'high', gptImage25Background: 'auto', imageSizeSelection: 'auto', numImages: 1,
+    });
+  });
   it('uses existing select controls, hides them for other models, and disables them while loading', () => {
     const onVariant = vi.fn();
     const input = { apiProvider: 'fal', falModelId: GPT_IMAGE_25_MODEL_ID, isVideoMode: false, falModelMode: 'image', usingFal: true, falNumImages: 1, falImageSizeSelection: 'auto', onGptImage25VariantChange: onVariant, isLoading: true } as unknown as PromptBarControlsInput;

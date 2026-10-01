@@ -1,6 +1,8 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_EDIT_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45EditInput, type Ideogram45EditRequest } from './ideogram45';
+import { resolveGptImage2SettingsForRequest, resolveGptImage25SettingsForRequest, serializeGptImage2Input, serializeGptImage25Input } from './gptImage';
+import { getModelReferenceCapabilities } from '../modelReferenceCapabilities';
 import { Tool, type FalAspectRatioOption, type FalImageSizeOption, type FalResolutionOption, type GptImage25Quality, type GptImage25Background } from '../../types'; // Shared types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageEditOptions, GenerateImageEditParams } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
@@ -20,22 +22,17 @@ import {
   FAL_MODEL_ID,
   isSeedreamEditModelId,
   normalizeModelId,
-  resolveGptImage2SizeForFal,
-  resolveGptImage25Input,
   resolveSeedreamCustomSizeForModel,
 } from './models'; // Model helpers.
 import {
   FLUX2_MAX_EDIT_MODEL_ID,
-  GPT_IMAGE_25_MODEL_ID,
-  GPT_IMAGE_25_DEFAULTS,
-  getGptImage25Endpoint,
   isGptImage25Model,
-  isGptImage25Variant,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_EDIT_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
   isGptImage2EditModelId,
+  isGptImage2TextToImageModelId,
   isNanoBananaEditModelId,
   isSeedreamV5ProModelId,
   WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
@@ -69,18 +66,24 @@ export const generateImageEdit = async (
   ensureFalClientConfigured();
 
   const selectedModelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
-  const modelId = selectedModelId === GPT_IMAGE_25_MODEL_ID
-    ? getGptImage25Endpoint(isGptImage25Variant(options.gptImage25Variant) ? options.gptImage25Variant : GPT_IMAGE_25_DEFAULTS.gptImage25Variant, 'edit')
-    : isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_EDIT_MODEL_ID : selectedModelId;
+  const gptImage2Settings = isGptImage2EditModelId(selectedModelId) || isGptImage2TextToImageModelId(selectedModelId)
+    ? resolveGptImage2SettingsForRequest('image_edit', options) : undefined;
+  const gptImage25Settings = isGptImage25Model(selectedModelId)
+    ? resolveGptImage25SettingsForRequest('image_edit', options) : undefined;
+  const modelId = gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
+    ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_EDIT_MODEL_ID : selectedModelId);
+  const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
+    : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings) : undefined;
   const isIdeogram45 = isIdeogram45Model(modelId);
   const ideogram45Input = isIdeogram45 ? resolveIdeogram45EditInput(options) : undefined;
-  if (isIdeogram45 && (referenceImages?.length ?? 0) + (tool === Tool.ANNOTATE ? 1 : 0) > 4) {
-    throw new Error('Ideogram 4.5 supports up to 4 reference images. The annotation image also counts as a reference.');
-  }
   const isGptImage25 = isGptImage25Model(modelId);
-  const gptImage25Input = isGptImage25 ? resolveGptImage25Input(options) : undefined;
-  if (isGptImage25 && 1 + (tool === Tool.ANNOTATE ? 1 : 0) + (referenceImages?.length ?? 0) > 16) {
-    throw new Error('GPT Image 2.5 supports up to 16 total input images. Please reduce the number of selected images.');
+  if (isIdeogram45 || isGptImage25 || isGptImage2EditModelId(modelId)) {
+    const { referenceCapacity, availableReferenceSlots } = getModelReferenceCapabilities(modelId, tool);
+    if ((referenceImages?.length ?? 0) > availableReferenceSlots) {
+      throw new Error(isIdeogram45
+        ? `Ideogram 4.5 supports up to ${referenceCapacity} reference images. The annotation image also counts as a reference.`
+        : `${isGptImage25 ? 'GPT Image 2.5' : 'GPT Image 2'} supports up to ${referenceCapacity + 1} total input images. Please reduce the number of selected images.`);
+    }
   }
   const isSeedreamAnnotateSingle = tool === Tool.ANNOTATE && isSeedreamEditModelId(modelId);
   const imageUrls: string[] = [];
@@ -482,9 +485,6 @@ export const generateImageEdit = async (
     throw new Error('Seedream 5 Pro supports up to 10 total input images. Please reduce the number of selected images.');
   }
 
-  if (isGptImage2Model && imageUrls.length > 10) {
-    throw new Error('GPT Image 2 supports up to 10 total input images. Please reduce the number of selected images.');
-  }
   const orderedImageUrls = isNanoBananaModel ? [...imageUrls].reverse() : imageUrls; // Nano labels inputs from the end of the array.
 
   const body: {
@@ -533,15 +533,10 @@ export const generateImageEdit = async (
       body.aspect_ratio = aspectRatioOption;
     }
     body.resolution = resolutionOption;
-  } else if (isGptImage2Model) {
-    body.image_size = resolveGptImage2SizeForFal(imageSizeOption); // GPT Image 2 supports auto in edit mode.
-    body.quality = options.gptImage2Quality ?? 'medium'; // App default overrides Fal high default.
   }
 
-  if (gptImage25Input) {
-    Object.assign(body, gptImage25Input);
-  }
-  if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (gptImageInput) Object.assign(body, gptImageInput);
+  if (!ideogram45Input && !gptImageInput && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {

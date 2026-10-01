@@ -1,6 +1,7 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45TextInput, type Ideogram45TextRequest } from './ideogram45';
+import { resolveGptImage2SettingsForRequest, resolveGptImage25SettingsForRequest, serializeGptImage2Input, serializeGptImage25Input } from './gptImage';
 import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption, GptImage25Quality, GptImage25Background } from '../../types'; // Shared option types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
@@ -11,17 +12,14 @@ import { emitFalPhase } from './phase'; // Phase update helper.
 import { extractInlineData, normalizeFalImageMetadata, runFalDownloadStep } from './responses'; // Response parsing helpers.
 import { createRandomSeed } from './random'; // Seed helper.
 import { uploadImageElementToFal } from './media'; // Media upload helper.
-import { isSeedreamTextToImageModelId, normalizeModelId, resolveGptImage2SizeForFal, resolveGptImage25Input, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
+import { isSeedreamTextToImageModelId, normalizeModelId, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
 import {
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
-  GPT_IMAGE_25_MODEL_ID,
-  GPT_IMAGE_25_DEFAULTS,
-  getGptImage25Endpoint,
   isGptImage25Model,
-  isGptImage25Variant,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
   isGptImage2TextToImageModelId,
+  isGptImage2EditModelId,
   isKrea2AspectRatioSelectionValue,
   isKrea2CreativitySelectionValue,
   isNanoBananaTextToImageModelId,
@@ -51,9 +49,15 @@ export const generateImage = async (
   ensureFalClientConfigured();
 
   const selectedModelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
-  const modelId = selectedModelId === GPT_IMAGE_25_MODEL_ID
-    ? getGptImage25Endpoint(isGptImage25Variant(options.gptImage25Variant) ? options.gptImage25Variant : GPT_IMAGE_25_DEFAULTS.gptImage25Variant, 'text-to-image')
-    : isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_MODEL_ID : selectedModelId;
+  const gptImage2Settings = isGptImage2TextToImageModelId(selectedModelId) || isGptImage2EditModelId(selectedModelId)
+    ? resolveGptImage2SettingsForRequest('text_to_image', options) : undefined;
+  const gptImage25Settings = isGptImage25Model(selectedModelId)
+    ? resolveGptImage25SettingsForRequest('text_to_image', options) : undefined;
+  const modelId = gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
+    ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_MODEL_ID : selectedModelId);
+  const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
+    : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings) : undefined;
+  const ideogram45Input = isIdeogram45Model(modelId) ? resolveIdeogram45TextInput(options) : undefined;
   const isGptImage25 = isGptImage25Model(modelId);
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
   const isSeedreamV5ProTextToImage = isSeedreamV5ProModelId(modelId);
@@ -153,15 +157,9 @@ export const generateImage = async (
     delete wan27Body.sync_mode;
   }
 
-  if (isGptImage25) {
-    Object.assign(body, resolveGptImage25Input(options));
-  }
-  if (isGptImage2TextToImage) {
-    body.quality = options.gptImage2Quality ?? 'medium'; // App default overrides Fal high default.
-    body.image_size = resolveGptImage2SizeForFal(imageSizeOption); // Use one size control for t2i/edit.
-  }
+  if (gptImageInput) Object.assign(body, gptImageInput);
 
-  if (!isKrea2TextToImage && !isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!ideogram45Input && !gptImageInput && !isKrea2TextToImage && !isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {
@@ -186,17 +184,15 @@ export const generateImage = async (
     if (supportsResolution) {
       body.resolution = resolutionOption;
     }
-  } else if (isGptImage2TextToImage) {
-    // GPT Image 2 uses image_size instead of aspect_ratio/resolution.
   } else if (supportsAspectRatio && aspectRatioOption !== 'default') {
     body.aspect_ratio = aspectRatioOption;
   }
 
   let latestRequestId: string | undefined;
 
-  const requestBody = isIdeogram45Model(modelId) ? {
+  const requestBody = ideogram45Input ? {
     prompt,
-    ...resolveIdeogram45TextInput(options),
+    ...ideogram45Input,
   } satisfies Ideogram45TextRequest : body;
   emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
   logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', { input: requestBody });

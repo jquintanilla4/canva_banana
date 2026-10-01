@@ -1,14 +1,10 @@
 import type { FalImageSizeOption, Ideogram45EditPrecision, Ideogram45Quality } from '../../types';
 import type { GenerateImageEditOptions, GenerateImageOptions } from './types';
-import { getFalNumImageMaxForModel } from '../modelConfig';
 import {
-  IDEOGRAM_45_DEFAULTS,
-  IDEOGRAM_45_IMAGE_SIZE_OPTIONS,
-  IDEOGRAM_45_MODEL_ID,
-  isIdeogram45EditPrecision,
-  isIdeogram45Quality,
-  normalizeIdeogram45Quality,
-} from '../ideogram45Config';
+  resolveIdeogram45RunSettings,
+  type Ideogram45EditRunSettings,
+  type Ideogram45TextRunSettings,
+} from '../ideogram45RunSettings';
 
 interface Ideogram45Request {
   prompt: string;
@@ -30,47 +26,50 @@ export interface Ideogram45EditRequest extends Ideogram45Request {
   edit_precision: Ideogram45EditPrecision;
 }
 
-const resolveIdeogram45ImageSize = (
-  imageSize: FalImageSizeOption | undefined,
+const serializeIdeogram45ImageSize = (
+  imageSize: FalImageSizeOption,
   autoSize: 'auto' | 'square_hd',
-  preserveSource = false,
 ): Ideogram45Request['image_size'] => {
-  const selectedSize = imageSize === 'default' ? 'auto' : imageSize ?? 'auto';
-  if (!IDEOGRAM_45_IMAGE_SIZE_OPTIONS.some(option => option.value === selectedSize)) {
-    throw new Error('Please select a supported Ideogram 4.5 image size.');
-  }
-  if (selectedSize === 'auto' || preserveSource) return autoSize;
-  const explicitSize = selectedSize.match(/^(\d+)x(\d+)$/);
-  return explicitSize ? { width: Number(explicitSize[1]), height: Number(explicitSize[2]) } : selectedSize;
+  if (imageSize === 'auto') return autoSize;
+  const explicitSize = imageSize.match(/^(\d+)x(\d+)$/);
+  return explicitSize ? { width: Number(explicitSize[1]), height: Number(explicitSize[2]) } : imageSize;
 };
 
-const resolveIdeogram45NumImages = (numImages: number | undefined): Pick<Ideogram45Request, 'num_images'> =>
-  typeof numImages === 'number' && Number.isFinite(numImages)
-    ? { num_images: Math.min(getFalNumImageMaxForModel(IDEOGRAM_45_MODEL_ID), Math.max(1, Math.floor(numImages))) }
-    : {};
-
-export const resolveIdeogram45TextInput = (
-  options: Pick<GenerateImageOptions, 'imageSize' | 'ideogram45Quality' | 'numImages' | 'seed'>,
+export const serializeIdeogram45TextInput = (
+  settings: Ideogram45TextRunSettings,
 ): Omit<Ideogram45TextRequest, 'prompt'> => ({
-  image_size: resolveIdeogram45ImageSize(options.imageSize, 'square_hd'),
-  quality: isIdeogram45Quality(options.ideogram45Quality) && options.ideogram45Quality !== 'very_low'
-    ? options.ideogram45Quality : IDEOGRAM_45_DEFAULTS.ideogram45Quality,
+  image_size: serializeIdeogram45ImageSize(settings.imageSizeSelection, 'square_hd'),
+  quality: settings.quality,
   enable_prompt_expansion: true,
   sync_mode: false,
-  ...resolveIdeogram45NumImages(options.numImages),
-  ...(typeof options.seed === 'number' && Number.isFinite(options.seed) ? { seed: Math.floor(options.seed) } : {}),
+  ...(settings.numImages !== undefined ? { num_images: settings.numImages } : {}),
+  ...(settings.seed !== undefined ? { seed: settings.seed } : {}),
 });
 
+export const serializeIdeogram45EditInput = (
+  settings: Ideogram45EditRunSettings,
+): Omit<Ideogram45EditRequest, 'prompt' | 'image_url' | 'reference_image_urls'> => ({
+  image_size: serializeIdeogram45ImageSize(settings.imageSizeSelection, 'auto'),
+  quality: settings.quality,
+  edit_precision: settings.editPrecision,
+  sync_mode: false,
+  ...(settings.numImages !== undefined ? { num_images: settings.numImages } : {}),
+});
+
+export const resolveIdeogram45TextInput = (
+  options: Pick<GenerateImageOptions, 'imageSize' | 'ideogram45Quality' | 'ideogram45EditPrecision' | 'numImages' | 'seed' | 'ideogram45RunSettings'>,
+): Omit<Ideogram45TextRequest, 'prompt'> => serializeIdeogram45TextInput(
+  options.ideogram45RunSettings ?? resolveIdeogram45RunSettings({
+    kind: 'text_to_image', quality: options.ideogram45Quality, editPrecision: options.ideogram45EditPrecision,
+    imageSizeSelection: options.imageSize, numImages: options.numImages, seed: options.seed,
+  }),
+);
+
 export const resolveIdeogram45EditInput = (
-  options: Pick<GenerateImageEditOptions, 'imageSize' | 'ideogram45Quality' | 'ideogram45EditPrecision' | 'numImages'>,
-): Omit<Ideogram45EditRequest, 'prompt' | 'image_url' | 'reference_image_urls'> => {
-  const precision = isIdeogram45EditPrecision(options.ideogram45EditPrecision)
-    ? options.ideogram45EditPrecision : IDEOGRAM_45_DEFAULTS.ideogram45EditPrecision;
-  return {
-    image_size: resolveIdeogram45ImageSize(options.imageSize, 'auto', precision === 'high'),
-    quality: normalizeIdeogram45Quality(options.ideogram45Quality, true, precision),
-    edit_precision: precision,
-    sync_mode: false,
-    ...resolveIdeogram45NumImages(options.numImages),
-  };
-};
+  options: Pick<GenerateImageEditOptions, 'imageSize' | 'ideogram45Quality' | 'ideogram45EditPrecision' | 'numImages' | 'ideogram45RunSettings'>,
+): Omit<Ideogram45EditRequest, 'prompt' | 'image_url' | 'reference_image_urls'> => serializeIdeogram45EditInput(
+  options.ideogram45RunSettings ?? resolveIdeogram45RunSettings({
+    kind: 'image_edit', quality: options.ideogram45Quality, editPrecision: options.ideogram45EditPrecision,
+    imageSizeSelection: options.imageSize, numImages: options.numImages,
+  }),
+);

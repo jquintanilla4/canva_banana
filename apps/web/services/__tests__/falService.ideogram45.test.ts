@@ -5,6 +5,7 @@ import { generateImage, generateImageEdit } from '../falService';
 import { FAL_IMAGE_MODEL_OPTIONS, getFalNumImageMaxForModel, getFalNumImageOptionsForModel, getMaxReferenceImages, normalizeFalModelId } from '../modelConfig';
 import { IDEOGRAM_45_MODEL_ID, IDEOGRAM_45_EDIT_MODEL_ID, IDEOGRAM_45_IMAGE_SIZE_OPTIONS } from '../ideogram45Config';
 import type { Ideogram45EditRequest, Ideogram45TextRequest } from '../fal/ideogram45';
+import * as runSettings from '../ideogram45RunSettings';
 
 vi.mock('@fal-ai/client', () => ({ fal: { config: vi.fn(), storage: { upload: vi.fn() }, subscribe: vi.fn() } }));
 
@@ -101,6 +102,30 @@ describe('Ideogram 4.5 Fal requests', () => {
     expect(vi.mocked(fal.subscribe).mock.calls.at(-1)?.[1].input).toHaveProperty('quality', 'medium');
     await generateImage('A subject', { modelId: IDEOGRAM_45_MODEL_ID, ideogram45Quality: 'bad' as Ideogram45Quality, numImages: 0, seed: 42 });
     expect(vi.mocked(fal.subscribe).mock.calls.at(-1)?.[1].input).toMatchObject({ quality: 'medium', num_images: 1, seed: 42 });
+  });
+
+  it('serializes resolved settings without resolving again or inheriting conflicting raw options', async () => {
+    const text = runSettings.resolveIdeogram45RunSettings({
+      kind: 'text_to_image', quality: 'high', imageSizeSelection: '2048x2048', numImages: 7, seed: 42,
+    });
+    const edit = runSettings.resolveIdeogram45RunSettings({
+      kind: 'image_edit', quality: 'very_low', editPrecision: 'high', imageSizeSelection: '2560x1440', numImages: 8,
+    });
+    const resolver = vi.spyOn(runSettings, 'resolveIdeogram45RunSettings');
+    await generateImage('A subject', { modelId: IDEOGRAM_45_MODEL_ID, ideogram45RunSettings: text, ideogram45Quality: 'low', imageSize: 'auto_2K', numImages: 1 });
+    expect(vi.mocked(fal.subscribe).mock.calls[0][1].input).toEqual({
+      prompt: 'A subject', image_size: { width: 2048, height: 2048 }, quality: 'high',
+      num_images: 7, seed: 42, enable_prompt_expansion: true, sync_mode: false,
+    });
+    await generateImageEdit(editParams(), {
+      modelId: IDEOGRAM_45_MODEL_ID, ideogram45RunSettings: edit,
+      ideogram45Quality: 'very_low', ideogram45EditPrecision: 'regular', imageSize: '2048x2048', numImages: 1,
+    });
+    expect(vi.mocked(fal.subscribe).mock.calls[1][1].input).toEqual({
+      prompt: editParams().prompt, image_url: 'https://example.com/input.png',
+      image_size: 'auto', quality: 'medium', edit_precision: 'high', num_images: 8, sync_mode: false,
+    });
+    expect(resolver).not.toHaveBeenCalled();
   });
 
   it.each(IDEOGRAM_45_IMAGE_SIZE_OPTIONS.map(option => option.value))('supports %s and preserves source size for precise edits', async imageSize => {

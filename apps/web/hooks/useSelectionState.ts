@@ -13,7 +13,8 @@ import {
   SEEDANCE_15_VIDEO_MODEL_ID,
   isKlingO3VideoModelId,
 } from '../services/modelConfig';
-import type { ApiProviderId, CanvasImage } from '../types';
+import { Tool, type ApiProviderId, type CanvasImage } from '../types';
+import { getModelReferenceCapabilities } from '../services/modelReferenceCapabilities';
 import type { UseFalSettingsResult } from './useFalSettings';
 import {
   getSeedance2VolcengineReferenceLimits,
@@ -64,7 +65,7 @@ type SelectionOptions = {
   images: CanvasImage[];
   apiProvider: ApiProviderId;
   fal: SelectionFalSettings;
-  referenceImageSlotOffset?: number;
+  tool?: Tool;
   onError: (message: string) => void;
   onReferenceLimit: (maxReferenceImages: number) => void;
 };
@@ -106,7 +107,7 @@ const WAN_27_EDIT_IMAGE_LIMIT = 1; // Wan edit accepts one optional reference im
 const NO_REFERENCE_LIMIT = 0; // Non-reference modes should not keep video/audio refs.
 
 export const useSelectionState = (options: SelectionOptions): SelectionStateResult => {
-  const { images, apiProvider, fal, referenceImageSlotOffset = 0, onError, onReferenceLimit } = options;
+  const { images, apiProvider, fal, tool = Tool.SELECTION, onError, onReferenceLimit } = options;
   const {
     falModelId,
     falModelMode,
@@ -361,14 +362,14 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
         audios: NO_REFERENCE_LIMIT,
       };
     }
-    const maxReferenceImages = isFalProvider ? getMaxReferenceImages(falModelId) : DEFAULT_MAX_REFERENCE_IMAGES; // Google keeps the app default cap.
-    const slotOffset = isFalProvider ? referenceImageSlotOffset : 0; // Reserved input slots are model-specific.
+    const maxReferenceImages = isFalProvider
+      ? getModelReferenceCapabilities(falModelId, tool).availableReferenceSlots : DEFAULT_MAX_REFERENCE_IMAGES;
     return {
-      images: Math.max(0, maxReferenceImages - slotOffset), // Reserve slots used by extra generated inputs.
+      images: maxReferenceImages,
       videos: NO_REFERENCE_LIMIT,
       audios: NO_REFERENCE_LIMIT,
     };
-  }, [falModelId, isFalProvider, isFalSeedance2SmartMode, isFlux3KeyframesMode, isFlux3VideoModel, isMiniMaxH3StandardMode, isMultimodalReferenceMode, isSeedance25SmartMode, isWan27EditMode, isWan27ReferenceMode, multimodalReferenceLimits, referenceImageSlotOffset]);
+  }, [falModelId, isFalProvider, isFalSeedance2SmartMode, isFlux3KeyframesMode, isFlux3VideoModel, isMiniMaxH3StandardMode, isMultimodalReferenceMode, isSeedance25SmartMode, isWan27EditMode, isWan27ReferenceMode, multimodalReferenceLimits, tool]);
 
   useEffect(() => {
     if (referenceVideoIds.length > referenceLimits.videos) {
@@ -746,10 +747,9 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       }
       // Reference images power Kling prompts; enforce per-model limits.
       const baseMaxReferenceImages = isFalProvider ? getMaxReferenceImages(falModelId) : DEFAULT_MAX_REFERENCE_IMAGES; // Google should not inherit Fal model caps.
-      const slotOffset = isFalProvider ? referenceImageSlotOffset : 0; // Annotate input reservation only applies to Fal.
       const maxReferenceImages = isKlingO3VideoSelection
         ? Math.max(0, baseMaxReferenceImages - elementImageIds.length)
-        : Math.max(0, baseMaxReferenceImages - slotOffset);
+        : isFalProvider ? getModelReferenceCapabilities(falModelId, tool).availableReferenceSlots : baseMaxReferenceImages;
       const isAlreadyReference = referenceImageIds.includes(imageId);
       if (!isAlreadyReference) {
         setElementImageIds(prev => prev.filter(id => id !== imageId));
@@ -908,7 +908,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     multimodalReferenceLimits,
     isWan27ReferenceMode,
     isActiveKrea2LargeModel,
-    referenceImageSlotOffset,
+    tool,
   ]);
 
   const replaceCanvasSelection = useCallback((imageIds: string[]) => {

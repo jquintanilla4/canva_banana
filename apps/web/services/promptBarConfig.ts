@@ -66,7 +66,11 @@ import type {
   WanTargetResolution,
 } from './modelConfig';
 import type { GptImage25Variant, GptImage25Background, GptImage25Quality, Ideogram45Quality, Ideogram45EditPrecision, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
-import { IDEOGRAM_45_DEFAULTS, IDEOGRAM_45_IMAGE_SIZE_OPTIONS, IDEOGRAM_45_EDIT_PRECISION_OPTIONS, isIdeogram45Model, getIdeogram45QualityOptions, normalizeIdeogram45Quality } from './ideogram45Config';
+import { isIdeogram45Model } from './ideogram45Config';
+import { buildIdeogram45Controls } from './promptBar/ideogram45Controls';
+import { buildGptImage2Controls } from './promptBar/gptImage2Controls';
+import { buildGptImage25Controls } from './promptBar/gptImage25Controls';
+import { isGptImage25Model } from './gptImage25Config';
 import type {
   PromptBarControl as PromptBarModelControl,
   PromptBarSelectControl,
@@ -77,14 +81,6 @@ import {
   FAL_CRYSTAL_CREATIVITY_OPTIONS,
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
-  GPT_IMAGE_2_IMAGE_SIZE_OPTIONS,
-  isGptImage25Model,
-  GPT_IMAGE_25_IMAGE_SIZE_OPTIONS,
-  GPT_IMAGE_25_DEFAULTS,
-  GPT_IMAGE_25_VARIANT_OPTIONS,
-  GPT_IMAGE_25_BACKGROUND_OPTIONS,
-  GPT_IMAGE_25_QUALITY_OPTIONS,
-  GPT_IMAGE_2_QUALITY_OPTIONS,
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_RESOLUTION_OPTIONS,
@@ -1118,13 +1114,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
-    gptImage2Quality = 'medium',
-    gptImage25Quality = GPT_IMAGE_25_DEFAULTS.gptImage25Quality,
-    ideogram45Quality = IDEOGRAM_45_DEFAULTS.ideogram45Quality,
-    ideogram45EditPrecision = IDEOGRAM_45_DEFAULTS.ideogram45EditPrecision,
+    gptImage2Quality,
+    gptImage25Quality,
+    ideogram45Quality,
+    ideogram45EditPrecision,
     ideogram45IsEditing = false,
-    gptImage25Background = GPT_IMAGE_25_DEFAULTS.gptImage25Background,
-    gptImage25Variant = GPT_IMAGE_25_DEFAULTS.gptImage25Variant,
+    gptImage25Background,
+    gptImage25Variant,
     krea2AspectRatio = '16:9',
     krea2Creativity = 'medium',
     falScaleFactor,
@@ -2028,94 +2024,28 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   const isGptImage25 = !isVideoMode && isGptImage25Model(falModelId);
   const isIdeogram45 = !isVideoMode && isIdeogram45Model(falModelId);
   if (apiProvider === 'fal' && isIdeogram45) {
-    const preserveSize = ideogram45IsEditing && ideogram45EditPrecision === 'high';
-    controls.push({
-      id: 'fal-ideogram-45-size-select',
-      prefixLabel: 'Size',
-      ariaLabel: 'Select Ideogram 4.5 size',
-      options: IDEOGRAM_45_IMAGE_SIZE_OPTIONS,
-      value: preserveSize ? 'auto' : falImageSizeSelection,
-      onChange: onFalImageSizeChange,
-      disabled: isLoading || preserveSize,
-      ...(preserveSize ? { tooltip: 'High-precision edits preserve the source size.' } : {}),
-    }, {
-      id: 'fal-ideogram-45-quality-select',
-      prefixLabel: 'Quality',
-      ariaLabel: 'Select Ideogram 4.5 quality',
-      options: getIdeogram45QualityOptions(ideogram45IsEditing, ideogram45EditPrecision),
-      value: normalizeIdeogram45Quality(ideogram45Quality, ideogram45IsEditing, ideogram45EditPrecision),
-      onChange: onIdeogram45QualityChange,
-      disabled: isLoading,
-    }, {
-      id: 'fal-ideogram-45-edit-precision-select',
-      prefixLabel: 'Edit precision',
-      ariaLabel: 'Select Ideogram 4.5 edit precision',
-      options: IDEOGRAM_45_EDIT_PRECISION_OPTIONS,
-      value: ideogram45EditPrecision,
-      onChange: onIdeogram45EditPrecisionChange,
-      disabled: isLoading || !ideogram45IsEditing,
-      tooltip: ideogram45IsEditing ? 'High precision restores unchanged pixels.' : 'Select an image to enable edit precision.',
-    });
+    controls.push(...buildIdeogram45Controls({
+      isEditing: ideogram45IsEditing, isLoading,
+      quality: ideogram45Quality, editPrecision: ideogram45EditPrecision, imageSizeSelection: falImageSizeSelection,
+      onSizeChange: onFalImageSizeChange, onQualityChange: onIdeogram45QualityChange,
+      onEditPrecisionChange: onIdeogram45EditPrecisionChange,
+    }));
   }
   if (apiProvider === 'fal' && isGptImage25) {
-    controls.push({
-      id: 'fal-gpt-image-25-variant-select',
-      prefixLabel: 'Variant',
-      ariaLabel: 'Select GPT Image 2.5 variant',
-      options: GPT_IMAGE_25_VARIANT_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: gptImage25Variant,
-      onChange: onGptImage25VariantChange,
-      disabled: isLoading,
-    });
-    controls.push({
-      id: 'fal-gpt-image-25-size-select',
-      prefixLabel: 'Size',
-      ariaLabel: 'Select GPT Image 2.5 size',
-      options: GPT_IMAGE_25_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: falImageSizeSelection,
-      onChange: onFalImageSizeChange,
-      disabled: isLoading,
-    });
-    controls.push({
-      id: 'fal-gpt-image-25-quality-select',
-      prefixLabel: 'Quality',
-      ariaLabel: 'Select GPT Image 2.5 quality',
-      options: GPT_IMAGE_25_QUALITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: gptImage25Quality,
-      onChange: onGptImage25QualityChange,
-      disabled: isLoading,
-    });
-    controls.push({
-      id: 'fal-gpt-image-25-background-select',
-      prefixLabel: 'Background',
-      ariaLabel: 'Select GPT Image 2.5 background',
-      options: GPT_IMAGE_25_BACKGROUND_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: gptImage25Background,
-      onChange: onGptImage25BackgroundChange,
-      disabled: isLoading,
-    });
+    controls.push(...buildGptImage25Controls({
+      isLoading, quality: gptImage25Quality, variant: gptImage25Variant, background: gptImage25Background,
+      imageSizeSelection: falImageSizeSelection, onSizeChange: onFalImageSizeChange,
+      onQualityChange: onGptImage25QualityChange, onVariantChange: onGptImage25VariantChange,
+      onBackgroundChange: onGptImage25BackgroundChange,
+    }));
   }
 
   const shouldShowGptImage2ImageControls = apiProvider === 'fal' && isGptImage2Model;
   if (shouldShowGptImage2ImageControls) {
-    controls.push({
-      id: 'fal-gpt-image-2-size-select',
-      prefixLabel: 'Size',
-      ariaLabel: 'Select GPT Image 2 image size',
-      options: GPT_IMAGE_2_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: falImageSizeSelection,
-      onChange: onFalImageSizeChange,
-      disabled: isLoading,
-    });
-    controls.push({
-      id: 'fal-gpt-image-2-quality-select',
-      prefixLabel: 'Quality',
-      ariaLabel: 'Select GPT Image 2 quality',
-      options: GPT_IMAGE_2_QUALITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: gptImage2Quality,
-      onChange: onGptImage2QualityChange,
-      disabled: isLoading,
-    });
+    controls.push(...buildGptImage2Controls({
+      isLoading, quality: gptImage2Quality, imageSizeSelection: falImageSizeSelection,
+      onSizeChange: onFalImageSizeChange, onQualityChange: onGptImage2QualityChange,
+    }));
   }
 
   const shouldShowKrea2Controls = apiProvider === 'fal' && isKrea2LargeModel;

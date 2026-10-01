@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { IDEOGRAM_45_DEFAULTS, IDEOGRAM_45_IMAGE_SIZE_OPTIONS, isIdeogram45Model, isIdeogram45Quality, isIdeogram45EditPrecision, normalizeIdeogram45Quality } from '../services/ideogram45Config';
+import { GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
+import { GPT_IMAGE_25_IMAGE_SIZE_OPTIONS } from '../services/gptImage25Config';
 import type {
   ApiProviderId,
   Ideogram45Quality,
@@ -24,8 +26,6 @@ import {
   DEFAULT_FAL_VIDEO_MODEL_ID,
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
-  GPT_IMAGE_2_IMAGE_SIZE_OPTIONS,
-  GPT_IMAGE_25_IMAGE_SIZE_OPTIONS,
   GPT_IMAGE_25_DEFAULTS,
   isGptImage25Model,
   isGptImage25Variant,
@@ -631,7 +631,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [recraftImageSize, setRecraftImageSize] = useState<RecraftV4ProImageSizeSelectionValue>(RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE);
   const [recraftBackgroundColor, setRecraftBackgroundColor] = useState<RecraftRgbColor>(RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR);
   const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
-  const [gptImage2Quality, setGptImage2Quality] = useState<FalGptImage2QualitySelectionValue>('medium');
+  const [gptImage2Quality, setGptImage2Quality] = useState<FalGptImage2QualitySelectionValue>(GPT_IMAGE_2_DEFAULTS.gptImage2Quality);
   const [gptImage25Quality, setGptImage25Quality] = useState<GptImage25Quality>(GPT_IMAGE_25_DEFAULTS.gptImage25Quality);
   const [ideogram45Settings, setIdeogram45Settings] = useState<{ quality: Ideogram45Quality; editPrecision: Ideogram45EditPrecision }>({
     quality: IDEOGRAM_45_DEFAULTS.ideogram45Quality,
@@ -867,8 +867,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       return;
     }
     if (falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId)) {
-      const validImageSizeOptions = (isGptImage25Model(falModelId) ? GPT_IMAGE_25_IMAGE_SIZE_OPTIONS : GPT_IMAGE_2_IMAGE_SIZE_OPTIONS).map(option => option.value);
-      if (!validImageSizeOptions.includes(falImageSizeSelection)) {
+      const validImageSizeOptions = isGptImage25Model(falModelId) ? GPT_IMAGE_25_IMAGE_SIZE_OPTIONS : GPT_IMAGE_2_IMAGE_SIZE_OPTIONS;
+      if (!validImageSizeOptions.some(option => option.value === falImageSizeSelection)) {
         setFalImageSizeSelection('auto'); // GPT Image 2 defaults to auto size in the UI.
       }
       return;

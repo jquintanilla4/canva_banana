@@ -40,6 +40,9 @@ import type {
   Wan27VideoResolutionSelectionValue,
   Wan27VideoVariant,
 } from '../modelConfig'; // Model-specific option types.
+import type { Ideogram45EditRunSettings, Ideogram45TextRunSettings } from '../ideogram45RunSettings';
+import type { GptImage2RunSettings } from '../gptImage2RunSettings';
+import type { GptImage25RunSettings } from '../gptImage25RunSettings';
 
 export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED'; // Fal queue status enum.
 export type FalQueueLogs = Array<{ message?: string }> | Record<string, unknown> | string | undefined; // Fal log payload shapes.
@@ -102,11 +105,14 @@ export interface GenerateImageEditOptions {
   numImages?: number;
   resolution?: FalResolutionOption;
   gptImage2Quality?: FalGptImage2QualityOption;
+  gptImage2RunSettings?: GptImage2RunSettings<'image_edit'>;
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  gptImage25RunSettings?: GptImage25RunSettings<'image_edit'>;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
+  ideogram45RunSettings?: Ideogram45EditRunSettings; // Resolved settings take precedence over raw picker options.
   wan27ImageSize?: string;
   wan27ImageMaxImages?: string;
   negativePrompt?: string;
@@ -124,11 +130,14 @@ export interface GenerateImageOptions {
   resolution?: FalResolutionOption;
   referenceImages?: HTMLImageElement[];
   gptImage2Quality?: FalGptImage2QualityOption;
+  gptImage2RunSettings?: GptImage2RunSettings<'text_to_image'>;
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  gptImage25RunSettings?: GptImage25RunSettings<'text_to_image'>;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
+  ideogram45RunSettings?: Ideogram45TextRunSettings;
   krea2Creativity?: FalKrea2CreativityOption;
   imageStyleReferences?: Array<{ image: HTMLImageElement; strength: number }>;
   flux2MaxImageSize?: string;

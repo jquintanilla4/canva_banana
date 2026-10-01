@@ -49,6 +49,8 @@ import type {
   Wan27VideoVariant,
 } from '../types';
 import { getFlux3ModePolicy } from '../utils/flux3';
+import { Tool } from '../types';
+import { getModelReferenceCapabilities } from './modelReferenceCapabilities';
 import { getEmbeddedVideoProvider } from '../utils/embeddedVideoRouting';
 import {
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
@@ -170,17 +172,29 @@ const GENERATE_SUFFIX = '(Cmd/Ctrl + Enter to generate)';
 const referencePlaceholder = (modelLabel: string, images: number, videos: number, audios: number): string =>
   `${modelLabel} Reference: select or shift-click up to ${images} images, ${videos} videos, and ${audios} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... ${GENERATE_SUFFIX}`;
 
+const annotationReferenceToast = (
+  modelId: string,
+  modelLabel: string,
+  sourceIsSeparate = false,
+): NonNullable<ModelUiCapabilities['referenceLimitToast']> => {
+  const { referenceCapacity, availableReferenceSlots } = getModelReferenceCapabilities(modelId, Tool.ANNOTATE);
+  return (max) => ({
+    message: max <= availableReferenceSlots
+      ? `${modelLabel} annotate supports up to ${availableReferenceSlots} references because the ${sourceIsSeparate ? 'annotation image counts as a reference' : 'annotation canvas counts as an input'}.`
+      : sourceIsSeparate
+        ? `${modelLabel} supports one source image plus up to ${referenceCapacity} references.`
+        : `${modelLabel} supports up to ${referenceCapacity + 1} images total (1 primary + ${referenceCapacity} references).`,
+    durationMs: 4000,
+  });
+};
+
 const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
     matches: (modelId) => isIdeogram45Model(modelId),
-    base: {
-      referenceLimitToast: (max) => ({
-        message: max < 4
-          ? 'Ideogram 4.5 annotate supports up to 3 references because the annotation image counts as a reference.'
-          : 'Ideogram 4.5 supports one source image plus up to 4 references.',
-        durationMs: 4000,
-      }),
-    },
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: annotationReferenceToast(modelId, 'Ideogram 4.5', true),
+    }),
   },
   // ---- Image models -------------------------------------------------------------
   {
@@ -219,25 +233,17 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   },
   {
     matches: (modelId) => isGptImage25Model(modelId),
-    base: {
-      referenceLimitToast: (max) => ({
-        message: max <= 14
-          ? 'GPT Image 2.5 annotate supports up to 14 references because the annotation canvas counts as an input.'
-          : 'GPT Image 2.5 supports up to 16 images total (1 primary + 15 references).',
-        durationMs: 4000,
-      }),
-    },
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: annotationReferenceToast(modelId, 'GPT Image 2.5'),
+    }),
   },
   {
     matches: (modelId) => isGptImage2EditModelId(modelId),
-    base: {
-      referenceLimitToast: (max) => ({
-        message: max <= 8
-          ? 'GPT Image 2 annotate supports up to 8 references because the annotation canvas counts as an input.'
-          : 'GPT Image 2 supports up to 10 images total (1 primary + 9 references).',
-        durationMs: 4000,
-      }),
-    },
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: annotationReferenceToast(modelId, 'GPT Image 2'),
+    }),
   },
   {
     matches: (modelId) => isKrea2LargeModelId(modelId),

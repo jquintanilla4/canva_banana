@@ -2,6 +2,7 @@ import type { FalImageSizeOption, GenerationFalOptions, Ideogram45EditPrecision,
 
 export const IDEOGRAM_45_MODEL_ID = 'ideogram/v4.5' as const; // One picker entry for generation and editing.
 export const IDEOGRAM_45_EDIT_MODEL_ID = 'ideogram/v4.5/edit' as const;
+export const IDEOGRAM_45_MAX_OUTPUT_IMAGES = 8;
 export const isIdeogram45Model = (modelId: string | undefined): boolean =>
   modelId === IDEOGRAM_45_MODEL_ID || modelId === IDEOGRAM_45_EDIT_MODEL_ID;
 export const IDEOGRAM_45_DEFAULTS = {
@@ -29,7 +30,7 @@ export const getIdeogram45QualityOptions = (isEditing: boolean, precision: Ideog
 export const normalizeIdeogram45Quality = (value: unknown, isEditing: boolean, precision: Ideogram45EditPrecision): Ideogram45Quality =>
   getIdeogram45QualityOptions(isEditing, precision).some(option => option.value === value) && isIdeogram45Quality(value)
     ? value : IDEOGRAM_45_DEFAULTS.ideogram45Quality;
-export const IDEOGRAM_45_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeOption; label: string }> = [
+export const IDEOGRAM_45_IMAGE_SIZE_OPTIONS = [
   { value: 'auto', label: 'Auto (square / match source)' },
   { value: 'square_hd', label: 'Square (1024x1024)' },
   { value: 'landscape_4_3', label: 'Landscape 4:3' },
@@ -39,4 +40,5 @@ export const IDEOGRAM_45_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSize
   { value: '2048x2048', label: '2K Square (2048x2048)' },
   { value: '2560x1440', label: '2K Landscape (2560x1440)' },
   { value: '1440x2560', label: '2K Portrait (1440x2560)' },
-];
+] as const satisfies ReadonlyArray<{ value: FalImageSizeOption; label: string }>;
+export type Ideogram45ImageSize = (typeof IDEOGRAM_45_IMAGE_SIZE_OPTIONS)[number]['value'];

@@ -4,6 +4,9 @@ import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
+  IDEOGRAM_45_MODEL_ID,
+  GPT_IMAGE_2_EDIT_MODEL_ID,
+  GPT_IMAGE_25_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -18,6 +21,11 @@ import type { AppState } from '../useCanvasHistory';
 import type { UseFalSettingsResult } from '../useFalSettings';
 import type { SelectionStateResult } from '../useSelectionState';
 import { useGeneration } from '../useGeneration';
+import * as ideogramPolicy from '../../services/ideogram45RunSettings';
+import { serializeIdeogram45EditInput, serializeIdeogram45TextInput } from '../../services/fal/ideogram45';
+import * as gptImage2Policy from '../../services/gptImage2RunSettings';
+import * as gptImage25Policy from '../../services/gptImage25RunSettings';
+import { serializeGptImage2Input, serializeGptImage25Input } from '../../services/fal/gptImage';
 
 vi.mock('../../services/geminiService', async () => {
   const actual = await vi.importActual<typeof import('../../services/geminiService')>('../../services/geminiService');
@@ -275,6 +283,113 @@ describe('useGeneration placement notifications', () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it.each(['text_to_image', 'image_edit'] as const)('uses one resolved Ideogram object for $kind requests, retries, and completed metadata', async kind => {
+    const primary = buildCanvasImage('ideogram-source');
+    const stateHarness = createStateHarness();
+    const fal = createFalStub({
+      falImageModelId: IDEOGRAM_45_MODEL_ID, ideogram45Quality: 'very_low', ideogram45EditPrecision: 'high',
+      falImageSizeSelection: '2560x1440', falNumImages: 3,
+    });
+    const resolver = vi.spyOn(ideogramPolicy, 'resolveIdeogram45RunSettings');
+    const setError = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      jobs = typeof value === 'function' ? value(jobs) : value;
+    });
+    const output = { imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '', requestId: 'ideogram-complete' };
+    vi.mocked(generateFalImage).mockResolvedValue(output);
+    vi.mocked(generateFalImageEdit).mockResolvedValue(output);
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A sign', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(kind === 'image_edit' ? {
+        primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
+        primarySelectionMediaType: 'image', selectedImageIds: [primary.id],
+      } : {}), images: [primary], paths: [], videoNegativePrompt: '',
+      setError, setIsLoading: vi.fn(), setFalJobs, setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => { await result.current.handleGenerate(); });
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(resolver).toHaveBeenCalledTimes(1);
+    const resolved = kind === 'text_to_image'
+      ? vi.mocked(generateFalImage).mock.calls[0]?.[1]?.ideogram45RunSettings
+      : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1]?.ideogram45RunSettings;
+    expect(resolved).toBe(resolver.mock.results[0]?.value);
+    expect(resolved).toMatchObject({ kind, quality: 'medium', numImages: 3 });
+    const expected = ideogramPolicy.serializeIdeogram45GenerationOptions(resolved!);
+    const retryOptions = jobs[0]?.retryInputs?.falOptions;
+    const metadata = stateHarness.state.images[0]?.metadata?.generation?.falOptions;
+    expect(metadata).toEqual(retryOptions);
+    expect(metadata).toMatchObject(expected);
+    const wire = resolved!.kind === 'text_to_image' ? serializeIdeogram45TextInput(resolved!) : serializeIdeogram45EditInput(resolved!);
+    expect(wire).toMatchObject({
+      quality: expected.ideogram45Quality, num_images: expected.numImages,
+      image_size: kind === 'image_edit' ? 'auto' : { width: 2560, height: 1440 },
+    });
+    expect(jobs[0]?.status).toBe('COMPLETED');
+  });
+
+  it.each((['2', '2.5'] as const).flatMap(model =>
+    (['text_to_image', 'image_edit'] as const).flatMap(kind =>
+      (['live', 'saved'] as const).map(source => ({ model, kind, source })),
+    ),
+  ))('resolves GPT Image $model $kind $source settings once for requests, retry, and completed metadata', async ({ model, kind, source }) => {
+    const primary = buildCanvasImage('gpt-source');
+    const stateHarness = createStateHarness();
+    const fal = createFalStub({
+      falImageModelId: model === '2' ? GPT_IMAGE_2_EDIT_MODEL_ID : GPT_IMAGE_25_MODEL_ID,
+      gptImage2Quality: 'low', gptImage25Variant: 'sunburst', gptImage25Quality: 'max', gptImage25Background: 'transparent',
+      falImageSizeSelection: '2560x1440', falNumImages: 3,
+    });
+    const resolver2 = vi.spyOn(gptImage2Policy, 'resolveGptImage2RunSettings');
+    const resolver25 = vi.spyOn(gptImage25Policy, 'resolveGptImage25RunSettings');
+    const setError = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      jobs = typeof value === 'function' ? value(jobs) : value;
+    });
+    const output = { imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '', requestId: 'gpt-complete' };
+    vi.mocked(generateFalImage).mockResolvedValue(output);
+    vi.mocked(generateFalImageEdit).mockResolvedValue(output);
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A poster', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(kind === 'image_edit' && source === 'live' ? {
+        primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
+        primarySelectionMediaType: 'image', selectedImageIds: [primary.id],
+      } : {}), images: [primary], paths: [], videoNegativePrompt: '',
+      setError, setIsLoading: vi.fn(), setFalJobs, setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => {
+      await result.current.handleGenerate(source === 'live' ? undefined : {
+        kind, prompt: 'A saved poster', provider: 'fal', modelMode: 'image',
+        modelId: model === '2' ? 'openai/gpt-image-2' : `openai/gpt-image-2.5/flare/${kind === 'image_edit' ? 'edit' : 'text-to-image'}`,
+        primaryImageId: kind === 'image_edit' ? primary.id : undefined,
+      });
+    });
+    expect(setError).toHaveBeenLastCalledWith(null);
+    const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
+    const resolver = model === '2' ? resolver2 : resolver25;
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(model === '2' ? resolver25 : resolver2).not.toHaveBeenCalled();
+    const resolved = model === '2' ? request?.gptImage2RunSettings : request?.gptImage25RunSettings;
+    expect(resolved).toBe(resolver.mock.results[0]?.value);
+    expect(resolved).toMatchObject({ kind, numImages: source === 'live' ? 3 : 1 });
+    const metadata = stateHarness.state.images[0]?.metadata?.generation?.falOptions;
+    expect(metadata).toEqual(jobs[0]?.retryInputs?.falOptions);
+    if (model === '2') {
+      const settings = request!.gptImage2RunSettings!;
+      expect(metadata).toMatchObject(gptImage2Policy.serializeGptImage2GenerationOptions(settings));
+      expect(serializeGptImage2Input(settings)).toMatchObject({ quality: metadata!.gptImage2Quality, num_images: metadata!.numImages });
+    } else {
+      const settings = request!.gptImage25RunSettings!;
+      expect(metadata).toMatchObject(gptImage25Policy.serializeGptImage25GenerationOptions(settings));
+      expect(serializeGptImage25Input(settings)).toMatchObject({
+        quality: metadata!.gptImage25Quality, background: metadata!.gptImage25Background, num_images: metadata!.numImages,
+      });
+      expect(settings.variant).toBe(source === 'saved' ? 'flare' : 'sunburst');
+    }
+    expect(jobs[0]?.status).toBe('COMPLETED');
   });
 
   it('notifies the app when generated image batches are placed', async () => {

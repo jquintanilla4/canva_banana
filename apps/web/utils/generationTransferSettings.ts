@@ -40,10 +40,6 @@ import {
   isFalImageModelId,
   isGptImage2Model,
   isGptImage25Model,
-  isGptImage25Variant,
-  isGptImage25Background,
-  isGptImage25Quality,
-  GPT_IMAGE_25_DEFAULTS,
   isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
   isRecraftV4ProModel,
@@ -54,7 +50,12 @@ import {
   type FalModelId,
 } from '../services/modelConfig';
 import { resolveFlux3Settings } from './flux3';
-import { IDEOGRAM_45_DEFAULTS, IDEOGRAM_45_IMAGE_SIZE_OPTIONS, isIdeogram45Model, isIdeogram45EditPrecision, normalizeIdeogram45Quality } from '../services/ideogram45Config';
+import { IDEOGRAM_45_DEFAULTS, isIdeogram45Model } from '../services/ideogram45Config';
+import { resolveIdeogram45RunSettings, serializeIdeogram45GenerationOptions } from '../services/ideogram45RunSettings';
+import { GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
+import { GPT_IMAGE_25_DEFAULTS } from '../services/gptImage25Config';
+import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions } from '../services/gptImage2RunSettings';
+import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions } from '../services/gptImage25RunSettings';
 
 export type GenerationTransferOptions = GenerationFalOptions & GenerationVolcengineOptions & GenerationJimengOptions; // Shared shape covers every provider-backed prompt control.
 
@@ -177,7 +178,7 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID], defaults: { flux2MaxImageSize: 'landscape_4_3' } }, // Flux defaults.
   { matches: (modelId) => isGptImage25Model(modelId), defaults: GPT_IMAGE_25_DEFAULTS },
   { matches: (modelId) => isIdeogram45Model(modelId), defaults: IDEOGRAM_45_DEFAULTS },
-  { matches: (modelId) => isGptImage2Model(modelId), defaults: { imageSizeSelection: 'auto', gptImage2Quality: 'medium' } }, // GPT Image defaults.
+  { matches: (modelId) => isGptImage2Model(modelId), defaults: GPT_IMAGE_2_DEFAULTS },
   { matches: (modelId) => isKrea2LargeModelId(modelId), defaults: { aspectRatioSelection: KREA_2_DEFAULT_ASPECT_RATIO, krea2Creativity: KREA_2_DEFAULT_CREATIVITY } }, // Krea defaults.
   { matches: [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID], defaults: { wan27ImageAspectRatio: 'landscape_16_9', wan27ImageMaxImages: '1' } }, // Wan image defaults.
   {
@@ -247,25 +248,40 @@ export const resolveGenerationTransferOptions = (
     ...restoredOptions,
   };
   if (isGptImage25Model(normalizedModelId)) {
+    const settings = resolveGptImage25RunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
+      modelId: generation.modelId,
+      variant: generation.falOptions?.gptImage25Variant,
+      quality: resolvedOptions.gptImage25Quality,
+      background: resolvedOptions.gptImage25Background,
+      imageSizeSelection: resolvedOptions.imageSizeSelection,
+      numImages: resolvedOptions.numImages,
+    }, 'restore');
     return {
       ...resolvedOptions,
-      imageSizeSelection: resolvedOptions.imageSizeSelection ?? GPT_IMAGE_25_DEFAULTS.imageSizeSelection,
-      numImages: resolvedOptions.numImages ?? GPT_IMAGE_25_DEFAULTS.numImages,
-      gptImage25Variant: isGptImage25Variant(resolvedOptions.gptImage25Variant) ? resolvedOptions.gptImage25Variant : GPT_IMAGE_25_DEFAULTS.gptImage25Variant,
-      gptImage25Background: isGptImage25Background(resolvedOptions.gptImage25Background) ? resolvedOptions.gptImage25Background : GPT_IMAGE_25_DEFAULTS.gptImage25Background,
-      gptImage25Quality: isGptImage25Quality(resolvedOptions.gptImage25Quality) ? resolvedOptions.gptImage25Quality : GPT_IMAGE_25_DEFAULTS.gptImage25Quality,
+      ...serializeGptImage25GenerationOptions(settings),
     }; // Restoring settings and retrying share the same defaults for missing or malformed controls.
   }
+  if (isGptImage2Model(normalizedModelId)) {
+    const settings = resolveGptImage2RunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
+      quality: resolvedOptions.gptImage2Quality,
+      imageSizeSelection: resolvedOptions.imageSizeSelection,
+      numImages: resolvedOptions.numImages,
+    }, 'restore');
+    return { ...resolvedOptions, ...serializeGptImage2GenerationOptions(settings) };
+  }
   if (isIdeogram45Model(normalizedModelId)) {
-    const precision = isIdeogram45EditPrecision(resolvedOptions.ideogram45EditPrecision)
-      ? resolvedOptions.ideogram45EditPrecision : IDEOGRAM_45_DEFAULTS.ideogram45EditPrecision;
+    const settings = resolveIdeogram45RunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
+      quality: resolvedOptions.ideogram45Quality,
+      editPrecision: resolvedOptions.ideogram45EditPrecision,
+      imageSizeSelection: resolvedOptions.imageSizeSelection,
+      numImages: resolvedOptions.numImages,
+    }, 'restore');
     return {
       ...resolvedOptions,
-      ideogram45EditPrecision: precision,
-      ideogram45Quality: normalizeIdeogram45Quality(resolvedOptions.ideogram45Quality, generation.kind === 'image_edit', precision),
-      imageSizeSelection: IDEOGRAM_45_IMAGE_SIZE_OPTIONS.some(option => option.value === resolvedOptions.imageSizeSelection)
-        ? resolvedOptions.imageSizeSelection : IDEOGRAM_45_DEFAULTS.imageSizeSelection,
-      numImages: Number.isFinite(resolvedOptions.numImages) ? resolvedOptions.numImages : IDEOGRAM_45_DEFAULTS.numImages,
+      ...serializeIdeogram45GenerationOptions(settings),
     };
   }
   return normalizedModelId === FLUX_3_VIDEO_MODEL_ID

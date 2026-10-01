@@ -2,9 +2,6 @@ import type {
   ApiProviderId,
   FalAspectRatioOption,
   FalGptImage2QualityOption,
-  GptImage25Variant,
-  GptImage25Background,
-  GptImage25Quality,
   FalImageSizePreset,
   FalKrea2CreativityOption,
   FalResolutionOption,
@@ -21,7 +18,11 @@ import type {
   Seedance2VolcengineModel,
 } from '../types';
 import { getRuntimeConfig } from './runtimeConfig';
-import { IDEOGRAM_45_MODEL_ID, IDEOGRAM_45_EDIT_MODEL_ID, isIdeogram45Model } from './ideogram45Config';
+import { IDEOGRAM_45_MODEL_ID, IDEOGRAM_45_EDIT_MODEL_ID, IDEOGRAM_45_MAX_OUTPUT_IMAGES, isIdeogram45Model } from './ideogram45Config';
+import { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_MAX_OUTPUT_IMAGES, GPT_IMAGE_2_NUM_IMAGE_OPTIONS } from './gptImage2Config';
+import { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_MAX_OUTPUT_IMAGES, GPT_IMAGE_25_NUM_IMAGE_OPTIONS, isGptImage25Model } from './gptImage25Config';
+export { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_QUALITY_OPTIONS, GPT_IMAGE_2_DEFAULTS, isGptImage2QualitySelectionValue } from './gptImage2Config';
+export { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_DEFAULTS, GPT_IMAGE_25_VARIANT_OPTIONS, GPT_IMAGE_25_BACKGROUND_OPTIONS, GPT_IMAGE_25_QUALITY_OPTIONS, isGptImage25Model, isGptImage25Variant, isGptImage25Background, isGptImage25Quality, getGptImage25Endpoint } from './gptImage25Config';
 export * from './ideogram45Config';
 
 // Central registry of supported model IDs plus helpers for validation/labeling in the UI.
@@ -29,9 +30,6 @@ export const NANO_BANANA_PRO_EDIT_MODEL_ID = 'fal-ai/nano-banana-pro/edit' as co
 export const NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-pro' as const;
 export const NANO_BANANA_2_EDIT_MODEL_ID = 'fal-ai/nano-banana-2/edit' as const; // Nano Banana 2 edit endpoint.
 export const NANO_BANANA_2_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana-2' as const; // Nano Banana 2 t2i endpoint.
-export const GPT_IMAGE_2_EDIT_MODEL_ID = 'openai/gpt-image-2/edit' as const; // GPT Image 2 edit endpoint.
-export const GPT_IMAGE_25_MODEL_ID = 'openai/gpt-image-2.5' as const; // One picker entry for both variants.
-export const GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID = 'openai/gpt-image-2' as const; // GPT Image 2 t2i endpoint.
 export const KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID = 'krea/v2/large/text-to-image' as const; // Krea 2 Large t2i endpoint.
 export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
 export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
@@ -1035,82 +1033,6 @@ export const WAN_27_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan27ImageM
   { value: '5', label: '5' },
 ] as const;
 
-export const GPT_IMAGE_2_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
-  { value: 'auto', label: 'Auto (default)' },
-  { value: '2048x2048', label: '2K Square (2048x2048)' },
-  { value: '2560x1440', label: '2K Landscape (2560x1440)' },
-  { value: '1440x2560', label: '2K Portrait (1440x2560)' },
-  { value: '2048x1152', label: 'HD Landscape (2048x1152)' },
-  { value: '1152x2048', label: 'HD Portrait (1152x2048)' },
-  { value: 'landscape_4_3', label: 'Landscape 4:3 (1024x768)' },
-  { value: 'landscape_16_9', label: 'Landscape 16:9 (1024x576)' },
-  { value: 'portrait_4_3', label: 'Portrait 3:4 (768x1024)' },
-  { value: 'portrait_16_9', label: 'Portrait 9:16 (576x1024)' },
-  { value: 'square', label: 'Square (512x512)' },
-  { value: 'square_hd', label: 'Square HD (1024x1024)' },
-] as const;
-
-export const GPT_IMAGE_25_DEFAULTS = {
-  gptImage25Variant: 'sunburst',
-  gptImage25Quality: 'high',
-  gptImage25Background: 'auto',
-  imageSizeSelection: 'auto',
-  numImages: 1,
-} as const satisfies Required<Pick<GenerationFalOptions, 'gptImage25Variant' | 'gptImage25Quality' | 'gptImage25Background' | 'imageSizeSelection' | 'numImages'>>;
-
-export const isGptImage25Model = (modelId: string | undefined): boolean =>
-  modelId === GPT_IMAGE_25_MODEL_ID || /^openai\/gpt-image-2\.5\/(flare|sunburst)\/(edit|text-to-image)$/.test(modelId ?? '');
-
-export const getGptImage25Endpoint = (variant: GptImage25Variant, mode: 'edit' | 'text-to-image'): string =>
-  `${GPT_IMAGE_25_MODEL_ID}/${variant}/${mode}`;
-
-export const GPT_IMAGE_25_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImageSizeSelectionValue; label: string }> = [
-  { value: 'auto', label: 'Auto (default)' },
-  { value: '2048x2048', label: '2K Square (2048x2048)' },
-  { value: '2560x1440', label: '2K Landscape (2560x1440)' },
-  { value: '1440x2560', label: '2K Portrait (1440x2560)' },
-  { value: '2688x1152', label: '2K Cinematic 21:9 (2688x1152)' },
-  { value: '2048x1152', label: 'HD Landscape (2048x1152)' },
-  { value: '1152x2048', label: 'HD Portrait (1152x2048)' },
-  { value: '2016x864', label: 'HD Cinematic 21:9 (2016x864)' },
-  { value: 'landscape_4_3', label: 'Landscape 4:3 (1024x768)' },
-  { value: 'portrait_4_3', label: 'Portrait 3:4 (768x1024)' },
-  { value: 'square_hd', label: 'Square HD (1024x1024)' },
-  { value: '1344x576', label: 'Cinematic 21:9 (1344x576)' },
-];
-
-export const GPT_IMAGE_25_VARIANT_OPTIONS: ReadonlyArray<{ value: GptImage25Variant; label: string }> = [
-  { value: 'flare', label: 'Flare' },
-  { value: 'sunburst', label: 'Sunburst' },
-];
-export const isGptImage25Variant = (value: unknown): value is GptImage25Variant =>
-  value === 'flare' || value === 'sunburst';
-
-export const GPT_IMAGE_25_BACKGROUND_OPTIONS: ReadonlyArray<{ value: GptImage25Background; label: string }> = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'transparent', label: 'Transparent' },
-  { value: 'opaque', label: 'Opaque' },
-];
-export const isGptImage25Background = (value: unknown): value is GptImage25Background =>
-  value === 'auto' || value === 'transparent' || value === 'opaque';
-
-export const GPT_IMAGE_25_QUALITY_OPTIONS: ReadonlyArray<{ value: GptImage25Quality; label: string }> = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'XHigh' },
-  { value: 'max', label: 'Max' },
-];
-export const isGptImage25Quality = (value: unknown): value is GptImage25Quality =>
-  value === 'auto' || value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh' || value === 'max';
-
-export const GPT_IMAGE_2_QUALITY_OPTIONS: ReadonlyArray<{ value: FalGptImage2QualitySelectionValue; label: string }> = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-] as const;
-
 export type Krea2AspectRatioSelectionValue = '1:1' | '4:3' | '3:2' | '16:9' | '2.35:1' | '4:5' | '2:3' | '9:16';
 export type Krea2CreativitySelectionValue = FalKrea2CreativityOption;
 export const KREA_2_DEFAULT_ASPECT_RATIO: Krea2AspectRatioSelectionValue = '16:9';
@@ -1161,9 +1083,6 @@ export const isWan27ImageAspectRatioSelectionValue = (value: unknown): value is 
 
 export const isWan27ImageMaxImagesSelectionValue = (value: unknown): value is Wan27ImageMaxImagesSelectionValue =>
   value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
-
-export const isGptImage2QualitySelectionValue = (value: unknown): value is FalGptImage2QualitySelectionValue =>
-  value === 'low' || value === 'medium' || value === 'high';
 
 export const isKrea2AspectRatioSelectionValue = (value: unknown): value is Krea2AspectRatioSelectionValue =>
   value === '1:1' || value === '4:3' || value === '3:2' || value === '16:9' || value === '2.35:1' || value === '4:5' || value === '2:3' || value === '9:16';
@@ -1411,6 +1330,8 @@ const VIDEO_NEGATIVE_PROMPT_MODEL_IDS = [
 export const isVideoNegativePromptModelId = (value: string | undefined): boolean =>
   typeof value === 'string' && (VIDEO_NEGATIVE_PROMPT_MODEL_IDS as readonly string[]).includes(value); // Other video models must never write into a shared bucket.
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
+  if (isGptImage25Model(value)) return GPT_IMAGE_25_MODEL_ID;
+  if (value === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID) return GPT_IMAGE_2_EDIT_MODEL_ID;
   if (value === IDEOGRAM_45_EDIT_MODEL_ID) {
     return IDEOGRAM_45_MODEL_ID;
   }
@@ -1497,10 +1418,17 @@ export const getSeedreamImageSizeOptions = (modelId: string | undefined) =>
 
 export const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 export const FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE = [1, 2, 3, 4, 5, 6] as const;
+const IDEOGRAM_45_NUM_IMAGE_OPTIONS = Array.from({ length: IDEOGRAM_45_MAX_OUTPUT_IMAGES }, (_, index) => index + 1);
 export const getFalNumImageMaxForModel = (modelId: string | undefined): number =>
-  isIdeogram45Model(modelId) ? 8 : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 6 : 4;
+  isIdeogram45Model(modelId) ? IDEOGRAM_45_MAX_OUTPUT_IMAGES
+    : isGptImage25Model(modelId) ? GPT_IMAGE_25_MAX_OUTPUT_IMAGES
+      : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_MAX_OUTPUT_IMAGES
+        : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 6 : 4;
 export const getFalNumImageOptionsForModel = (modelId: string | undefined): ReadonlyArray<number> =>
-  isIdeogram45Model(modelId) ? [1, 2, 3, 4, 5, 6, 7, 8] : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS;
+  isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
+    : isGptImage25Model(modelId) ? GPT_IMAGE_25_NUM_IMAGE_OPTIONS
+      : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_NUM_IMAGE_OPTIONS
+        : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS;
 export const FAL_CRYSTAL_SCALE_FACTOR_OPTIONS = Array.from({ length: 10 }, (_, index) => {
   const factor = index + 1;
   return { value: `${factor}`, label: `${factor}x` } as const;

@@ -22,7 +22,7 @@ import {
   WAN_27_EDIT_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
 } from '../../services/modelConfig';
-import { Tool, type CanvasImage, type FalQueueJob } from '../../types';
+import { Tool, type CanvasImage, type FalQueueJob, type GenerationFalOptions } from '../../types';
 import { generateImage as generateFalImage, generateImageEdit as generateFalImageEdit, generateImageToVideo, uploadVideoToFal } from '../../services/falService';
 import { generateImage as generateGoogleImage, generateImageEdit as generateGoogleImageEdit } from '../../services/geminiService';
 import { loadMediaFromBlob } from '../../services/mediaService';
@@ -31,6 +31,9 @@ import { generateJimengSeedanceVideo } from '../../services/jimengService';
 import type { UseFalSettingsResult } from '../useFalSettings';
 import type { SelectionStateResult } from '../useSelectionState';
 import { useGeneration } from '../useGeneration';
+import { serializeIdeogram45GenerationOptions } from '../../services/ideogram45RunSettings';
+import { serializeGptImage2GenerationOptions } from '../../services/gptImage2RunSettings';
+import { serializeGptImage25GenerationOptions } from '../../services/gptImage25RunSettings';
 
 vi.mock('../../services/falService', async () => {
   const actual = await vi.importActual<typeof import('../../services/falService')>('../../services/falService');
@@ -3178,7 +3181,7 @@ describe('useGeneration (seedance 2)', () => {
     expect(vi.mocked(generateFalImage).mock.calls[0]?.[1]?.imageStyleReferences).toHaveLength(10);
   });
 
-  it.each([{ modelId: GPT_IMAGE_2_EDIT_MODEL_ID, limit: 8 }, { modelId: GPT_IMAGE_25_MODEL_ID, limit: 14 }])('caps $modelId annotate references at $limit', async ({ modelId, limit }) => {
+  it.each([{ modelId: GPT_IMAGE_2_EDIT_MODEL_ID, limit: 8 }, { modelId: GPT_IMAGE_25_MODEL_ID, limit: 14 }, { modelId: IDEOGRAM_45_MODEL_ID, limit: 3 }])('caps $modelId annotate references at $limit', async ({ modelId, limit }) => {
     const primary = buildCanvasMedia('primary', 'image') as CanvasImage & { element: HTMLImageElement };
     const references = Array.from({ length: limit + 1 }, (_, index) => buildCanvasMedia(`ref-${index + 1}`, 'image'));
     const fal = createFalStub();
@@ -3228,13 +3231,17 @@ describe('useGeneration (seedance 2)', () => {
   });
 
 
-  it.each((['text_to_image', 'image_edit'] as const).flatMap(kind =>
-    (['saved', 'missing', 'malformed'] as const).map(settings => ({ kind, settings })),
-  ))('replays GPT Image 2.5 $kind with $settings settings instead of live picker values', async ({ kind, settings }) => {
+  it.each((['2', '2.5'] as const).flatMap(model =>
+    (['text_to_image', 'image_edit'] as const).flatMap(kind =>
+      (['live', 'saved', 'missing', 'malformed', 'undefined'] as const).map(settings => ({ model, kind, settings })),
+    ),
+  ))('replays GPT Image $model $kind with $settings settings instead of unrelated live values', async ({ model, kind, settings }) => {
     const primary = buildCanvasMedia('gpt25-primary', 'image') as CanvasImage & { element: HTMLImageElement };
     const fal = createFalStub();
     fal.falModelMode = 'image';
-    fal.falImageModelId = GPT_IMAGE_25_MODEL_ID;
+    const modelId = model === '2' ? GPT_IMAGE_2_EDIT_MODEL_ID : GPT_IMAGE_25_MODEL_ID;
+    fal.falImageModelId = modelId;
+    fal.gptImage2Quality = 'low';
     fal.gptImage25Variant = settings === 'saved' ? 'sunburst' : 'flare';
     fal.gptImage25Background = settings === 'saved' ? 'auto' : 'opaque';
     fal.gptImage25Quality = settings === 'saved' ? 'high' : 'max';
@@ -3247,27 +3254,49 @@ describe('useGeneration (seedance 2)', () => {
     vi.mocked(generateFalImage).mockImplementation(() => new Promise(() => {}));
     vi.mocked(generateFalImageEdit).mockImplementation(() => new Promise(() => {}));
     const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: '', promptPrefix: '', apiProvider: 'fal', fal,
-      selection: createSelectionStub(), images: [primary], paths: [], videoNegativePrompt: '',
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'Replay image', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(kind === 'image_edit' && settings === 'live' ? {
+        primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
+        selectedImageIds: [primary.id], primarySelectionMediaType: 'image',
+      } : {}), images: [primary], paths: [], videoNegativePrompt: '',
       setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs, setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn(),
     }));
-    const expectedOptions = settings === 'saved'
-      ? { gptImage25Variant: 'flare' as const, gptImage25Background: 'transparent' as const, gptImage25Quality: 'max' as const, imageSizeSelection: '2048x2048' as const, numImages: 4 }
-      : { gptImage25Variant: 'sunburst' as const, gptImage25Background: 'auto' as const, gptImage25Quality: 'high' as const, imageSizeSelection: 'auto' as const, numImages: 1 };
+    const commonOptions = settings === 'live'
+      ? { imageSizeSelection: '2688x1152' as const, numImages: 3 }
+      : settings === 'saved' ? { imageSizeSelection: '2048x2048' as const, numImages: 4 }
+        : { imageSizeSelection: 'auto' as const, numImages: 1 };
+    const expectedOptions: GenerationFalOptions = {
+      ...commonOptions,
+      ...(model === '2'
+        ? { gptImage2Quality: settings === 'live' ? 'low' : settings === 'saved' ? 'high' : 'medium' }
+        : settings === 'live' ? { gptImage25Variant: 'flare', gptImage25Background: 'opaque', gptImage25Quality: 'max' }
+          : settings === 'saved' ? { gptImage25Variant: 'flare', gptImage25Background: 'transparent', gptImage25Quality: 'max' }
+            : { gptImage25Variant: 'sunburst', gptImage25Background: 'auto', gptImage25Quality: 'high' }),
+    };
     const falOptions = settings === 'saved' ? expectedOptions : settings === 'malformed'
-      ? { gptImage25Variant: 'bad', gptImage25Background: 'bad', gptImage25Quality: 'bad', imageSizeSelection: undefined, numImages: undefined } as unknown as typeof expectedOptions
-      : undefined;
+      ? { gptImage2Quality: 'bad', gptImage25Variant: 'bad', gptImage25Background: 'bad', gptImage25Quality: 'bad', imageSizeSelection: 'bad', numImages: NaN } as unknown as GenerationFalOptions
+      : settings === 'undefined'
+        ? { gptImage2Quality: undefined, gptImage25Variant: undefined, gptImage25Background: undefined, gptImage25Quality: undefined, imageSizeSelection: undefined, numImages: undefined }
+        : undefined;
     await act(async () => {
-      void result.current.handleGenerate({ kind, prompt: 'Replay image', provider: 'fal', modelId: GPT_IMAGE_25_MODEL_ID, modelMode: 'image', primaryImageId: kind === 'image_edit' ? primary.id : undefined, falOptions });
+      void result.current.handleGenerate(settings === 'live' ? undefined : { kind, prompt: 'Replay image', provider: 'fal', modelId, modelMode: 'image', primaryImageId: kind === 'image_edit' ? primary.id : undefined, falOptions });
       await Promise.resolve();
     });
     const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
-    const { imageSizeSelection, ...expectedRequestOptions } = expectedOptions;
-    expect(request).toMatchObject({ modelId: GPT_IMAGE_25_MODEL_ID, ...expectedRequestOptions, imageSize: imageSizeSelection });
+    const resolved = model === '2' ? request?.gptImage2RunSettings : request?.gptImage25RunSettings;
+    expect(resolved).toMatchObject({ kind, imageSizeSelection: expectedOptions.imageSizeSelection, numImages: expectedOptions.numImages });
+    const serialized = model === '2'
+      ? serializeGptImage2GenerationOptions(request!.gptImage2RunSettings!)
+      : serializeGptImage25GenerationOptions(request!.gptImage25RunSettings!);
+    expect(serialized).toEqual(expectedOptions);
+    expect(request).toMatchObject({ modelId: kind === 'text_to_image' ? resolved!.endpoint : modelId });
+    expect(request).not.toHaveProperty('gptImage2Quality');
+    expect(request).not.toHaveProperty('gptImage25Quality');
+    expect(request).not.toHaveProperty('numImages');
     expect(queuedJobs[0]?.retryInputs?.falOptions).toMatchObject(expectedOptions);
   });
   it.each((['text_to_image', 'image_edit'] as const).flatMap(kind =>
-    (['live', 'saved', 'missing', 'malformed'] as const).map(settings => ({ kind, settings })),
+    (['live', 'saved', 'missing', 'malformed', 'undefined'] as const).map(settings => ({ kind, settings })),
   ))('replays Ideogram 4.5 $kind with $settings settings instead of live picker values', async ({ kind, settings }) => {
     const primary = buildCanvasMedia('ideogram-primary', 'image') as CanvasImage & { element: HTMLImageElement };
     const reference = buildCanvasMedia('ideogram-reference', 'image') as CanvasImage & { element: HTMLImageElement };
@@ -3298,7 +3327,9 @@ describe('useGeneration (seedance 2)', () => {
       : { ideogram45Quality: 'medium' as const, ideogram45EditPrecision: 'regular' as const, imageSizeSelection: 'auto' as const, numImages: 1 };
     const falOptions = settings === 'saved' ? expectedOptions : settings === 'malformed'
       ? { ideogram45Quality: 'bad', ideogram45EditPrecision: 'bad', imageSizeSelection: 'auto_2K', numImages: NaN } as unknown as typeof expectedOptions
-      : undefined;
+      : settings === 'undefined'
+        ? { ideogram45Quality: undefined, ideogram45EditPrecision: undefined, imageSizeSelection: undefined, numImages: undefined }
+        : undefined;
     await act(async () => {
       void result.current.handleGenerate(settings === 'live' ? undefined : {
         kind, prompt: 'Replay image', provider: 'fal', modelId: IDEOGRAM_45_MODEL_ID, modelMode: 'image',
@@ -3309,10 +3340,19 @@ describe('useGeneration (seedance 2)', () => {
     });
     const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
     expect(request).toMatchObject({
-      modelId: IDEOGRAM_45_MODEL_ID, imageSize: expectedOptions.imageSizeSelection,
-      numImages: expectedOptions.numImages, ideogram45Quality: expectedOptions.ideogram45Quality,
-      ...(kind === 'image_edit' ? { ideogram45EditPrecision: expectedOptions.ideogram45EditPrecision } : {}),
+      modelId: IDEOGRAM_45_MODEL_ID,
+      ideogram45RunSettings: {
+        kind, imageSizeSelection: expectedOptions.imageSizeSelection,
+        numImages: expectedOptions.numImages, quality: expectedOptions.ideogram45Quality,
+        editPrecision: expectedOptions.ideogram45EditPrecision,
+      },
     });
+    const resolved = request?.ideogram45RunSettings;
+    expect(resolved).toBeDefined();
+    expect(queuedJobs[0]?.retryInputs?.falOptions).toMatchObject(serializeIdeogram45GenerationOptions(resolved!));
+    expect(request).not.toHaveProperty('ideogram45Quality');
+    expect(request).not.toHaveProperty('ideogram45EditPrecision');
+    expect(request).not.toHaveProperty('imageSize');
     if (kind === 'image_edit') expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0].referenceImages).toHaveLength(1);
     expect(queuedJobs[0]?.retryInputs?.falOptions).toMatchObject(expectedOptions);
   });
