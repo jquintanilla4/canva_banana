@@ -6,6 +6,7 @@ import {
   GROK_IMAGINE_IMAGE_MODEL_ID,
   isGptImage2EditModelId,
   isGptImage25Model,
+  isIdeogram45Model,
   isNanoBananaEditModelId,
   isSeedreamModelId,
 } from '../services/modelConfig';
@@ -335,7 +336,7 @@ export function useGenerationGuards({
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
-      && (isSeedreamModel || isNanoBananaModel || isGrokModel || isGptImage2Model); // Include GPT Image 2 validation.
+      && (isSeedreamModel || isNanoBananaModel || isGrokModel || isGptImage2Model || isIdeogram45Model(falModelId));
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||

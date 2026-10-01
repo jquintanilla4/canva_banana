@@ -1,3 +1,4 @@
+import { isIdeogram45Quality, isIdeogram45EditPrecision } from './ideogram45Config';
 import type {
   ApiProviderId,
   AppMode,
@@ -1743,6 +1744,12 @@ export const normalizeSnapshotImageMetadata = (
       }
       if (isGptImage25Quality(typed?.gptImage25Quality)) {
         normalizedOptions.gptImage25Quality = typed.gptImage25Quality;
+      }
+      if (isIdeogram45Quality(typed?.ideogram45Quality)) {
+        normalizedOptions.ideogram45Quality = typed.ideogram45Quality;
+      }
+      if (isIdeogram45EditPrecision(typed?.ideogram45EditPrecision)) {
+        normalizedOptions.ideogram45EditPrecision = typed.ideogram45EditPrecision;
       }
       if (isGptImage2QualitySelectionValue((typed as { gptImage2Quality?: unknown }).gptImage2Quality)) {
         normalizedOptions.gptImage2Quality = typed.gptImage2Quality;

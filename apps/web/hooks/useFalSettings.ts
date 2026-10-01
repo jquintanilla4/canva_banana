@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { IDEOGRAM_45_DEFAULTS, IDEOGRAM_45_IMAGE_SIZE_OPTIONS, isIdeogram45Model, isIdeogram45Quality, isIdeogram45EditPrecision, normalizeIdeogram45Quality } from '../services/ideogram45Config';
 import type {
   ApiProviderId,
+  Ideogram45Quality,
+  Ideogram45EditPrecision,
   GptImage25Variant,
   GptImage25Background,
   GptImage25Quality,
@@ -322,6 +325,8 @@ type FalHandlers = {
   handleRecraftRemoveColor: () => void;
   handleGptImage2QualityChange: (value: string) => void;
   handleGptImage25QualityChange: (value: string) => void;
+  handleIdeogram45QualityChange: (value: string) => void;
+  handleIdeogram45EditPrecisionChange: (value: string) => void;
   handleGptImage25BackgroundChange: (value: string) => void;
   handleGptImage25VariantChange: (value: string) => void;
   handleKrea2AspectRatioChange: (value: string) => void;
@@ -424,6 +429,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   recraftColors: RecraftRgbColor[];
   gptImage2Quality: FalGptImage2QualitySelectionValue;
   gptImage25Quality: GptImage25Quality;
+  ideogram45Quality: Ideogram45Quality;
+  ideogram45EditPrecision: Ideogram45EditPrecision;
   gptImage25Background: GptImage25Background;
   gptImage25Variant: GptImage25Variant;
   krea2AspectRatio: Krea2AspectRatioSelectionValue;
@@ -626,6 +633,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
   const [gptImage2Quality, setGptImage2Quality] = useState<FalGptImage2QualitySelectionValue>('medium');
   const [gptImage25Quality, setGptImage25Quality] = useState<GptImage25Quality>(GPT_IMAGE_25_DEFAULTS.gptImage25Quality);
+  const [ideogram45Settings, setIdeogram45Settings] = useState<{ quality: Ideogram45Quality; editPrecision: Ideogram45EditPrecision }>({
+    quality: IDEOGRAM_45_DEFAULTS.ideogram45Quality,
+    editPrecision: IDEOGRAM_45_DEFAULTS.ideogram45EditPrecision,
+  }); // Precision and its compatible quality change together.
+  const { quality: ideogram45Quality, editPrecision: ideogram45EditPrecision } = ideogram45Settings;
   const [gptImage25Background, setGptImage25Background] = useState<GptImage25Background>(GPT_IMAGE_25_DEFAULTS.gptImage25Background);
   const [gptImage25Variant, setGptImage25Variant] = useState<GptImage25Variant>(GPT_IMAGE_25_DEFAULTS.gptImage25Variant);
   const [krea2AspectRatio, setKrea2AspectRatio] = useState<Krea2AspectRatioSelectionValue>(KREA_2_DEFAULT_ASPECT_RATIO);
@@ -858,6 +870,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       const validImageSizeOptions = (isGptImage25Model(falModelId) ? GPT_IMAGE_25_IMAGE_SIZE_OPTIONS : GPT_IMAGE_2_IMAGE_SIZE_OPTIONS).map(option => option.value);
       if (!validImageSizeOptions.includes(falImageSizeSelection)) {
         setFalImageSizeSelection('auto'); // GPT Image 2 defaults to auto size in the UI.
+      }
+      return;
+    }
+    if (isIdeogram45Model(falModelId)) {
+      if (!IDEOGRAM_45_IMAGE_SIZE_OPTIONS.some(option => option.value === falImageSizeSelection)) {
+        setFalImageSizeSelection('auto');
       }
       return;
     }
@@ -1364,6 +1382,16 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const handleGptImage25QualityChange = useCallback((value: string) => {
     if (isGptImage25Quality(value)) setGptImage25Quality(value);
   }, []);
+  const handleIdeogram45QualityChange = useCallback((value: string) => {
+    if (isIdeogram45Quality(value)) {
+      setIdeogram45Settings(prev => ({ ...prev, quality: normalizeIdeogram45Quality(value, true, prev.editPrecision) }));
+    }
+  }, []);
+  const handleIdeogram45EditPrecisionChange = useCallback((value: string) => {
+    if (isIdeogram45EditPrecision(value)) {
+      setIdeogram45Settings(prev => ({ editPrecision: value, quality: normalizeIdeogram45Quality(prev.quality, true, value) }));
+    }
+  }, []);
 
   const handleGptImage2QualityChange = useCallback((value: string) => {
     if (isGptImage2QualitySelectionValue(value)) {
@@ -1478,6 +1506,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       flux2MaxImageSize: setFlux2MaxImageSize,
       gptImage2Quality: setGptImage2Quality,
       gptImage25Quality: setGptImage25Quality,
+      ideogram45Quality: value => setIdeogram45Settings(prev => ({ ...prev, quality: value })),
+      ideogram45EditPrecision: value => setIdeogram45Settings(prev => ({ ...prev, editPrecision: value })),
       gptImage25Background: setGptImage25Background,
       gptImage25Variant: setGptImage25Variant,
       krea2Creativity: setKrea2Creativity,
@@ -1664,6 +1694,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     recraftColors,
     gptImage2Quality,
     gptImage25Quality,
+    ideogram45Quality,
+    ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
     krea2AspectRatio,
@@ -1787,6 +1819,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleRecraftRemoveColor,
     handleGptImage2QualityChange,
     handleGptImage25QualityChange,
+    handleIdeogram45QualityChange,
+    handleIdeogram45EditPrecisionChange,
     handleGptImage25BackgroundChange,
     handleGptImage25VariantChange,
     handleKrea2AspectRatioChange,

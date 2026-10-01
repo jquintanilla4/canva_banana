@@ -65,7 +65,8 @@ import type {
   WanCreativity,
   WanTargetResolution,
 } from './modelConfig';
-import type { GptImage25Variant, GptImage25Background, GptImage25Quality, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
+import type { GptImage25Variant, GptImage25Background, GptImage25Quality, Ideogram45Quality, Ideogram45EditPrecision, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
+import { IDEOGRAM_45_DEFAULTS, IDEOGRAM_45_IMAGE_SIZE_OPTIONS, IDEOGRAM_45_EDIT_PRECISION_OPTIONS, isIdeogram45Model, getIdeogram45QualityOptions, normalizeIdeogram45Quality } from './ideogram45Config';
 import type {
   PromptBarControl as PromptBarModelControl,
   PromptBarSelectControl,
@@ -879,6 +880,9 @@ export type PromptBarControlsInput = {
   recraftColors: RecraftRgbColor[];
   gptImage2Quality?: FalGptImage2QualitySelectionValue;
   gptImage25Quality?: GptImage25Quality;
+  ideogram45Quality?: Ideogram45Quality;
+  ideogram45EditPrecision?: Ideogram45EditPrecision;
+  ideogram45IsEditing?: boolean;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
   krea2AspectRatio?: Krea2AspectRatioSelectionValue;
@@ -976,6 +980,8 @@ export type PromptBarControlsInput = {
   onRecraftRemoveColor: () => void;
   onGptImage2QualityChange?: (value: string) => void;
   onGptImage25QualityChange?: (value: string) => void;
+  onIdeogram45QualityChange?: (value: string) => void;
+  onIdeogram45EditPrecisionChange?: (value: string) => void;
   onGptImage25BackgroundChange?: (value: string) => void;
   onGptImage25VariantChange?: (value: string) => void;
   onKrea2AspectRatioChange?: (value: string) => void;
@@ -1114,6 +1120,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     recraftColors,
     gptImage2Quality = 'medium',
     gptImage25Quality = GPT_IMAGE_25_DEFAULTS.gptImage25Quality,
+    ideogram45Quality = IDEOGRAM_45_DEFAULTS.ideogram45Quality,
+    ideogram45EditPrecision = IDEOGRAM_45_DEFAULTS.ideogram45EditPrecision,
+    ideogram45IsEditing = false,
     gptImage25Background = GPT_IMAGE_25_DEFAULTS.gptImage25Background,
     gptImage25Variant = GPT_IMAGE_25_DEFAULTS.gptImage25Variant,
     krea2AspectRatio = '16:9',
@@ -1211,6 +1220,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onRecraftRemoveColor,
     onGptImage2QualityChange = () => undefined,
     onGptImage25QualityChange = () => undefined,
+    onIdeogram45QualityChange = () => undefined,
+    onIdeogram45EditPrecisionChange = () => undefined,
     onGptImage25BackgroundChange = () => undefined,
     onGptImage25VariantChange = () => undefined,
     onKrea2AspectRatioChange = () => undefined,
@@ -2015,6 +2026,37 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }
 
   const isGptImage25 = !isVideoMode && isGptImage25Model(falModelId);
+  const isIdeogram45 = !isVideoMode && isIdeogram45Model(falModelId);
+  if (apiProvider === 'fal' && isIdeogram45) {
+    const preserveSize = ideogram45IsEditing && ideogram45EditPrecision === 'high';
+    controls.push({
+      id: 'fal-ideogram-45-size-select',
+      prefixLabel: 'Size',
+      ariaLabel: 'Select Ideogram 4.5 size',
+      options: IDEOGRAM_45_IMAGE_SIZE_OPTIONS,
+      value: preserveSize ? 'auto' : falImageSizeSelection,
+      onChange: onFalImageSizeChange,
+      disabled: isLoading || preserveSize,
+      ...(preserveSize ? { tooltip: 'High-precision edits preserve the source size.' } : {}),
+    }, {
+      id: 'fal-ideogram-45-quality-select',
+      prefixLabel: 'Quality',
+      ariaLabel: 'Select Ideogram 4.5 quality',
+      options: getIdeogram45QualityOptions(ideogram45IsEditing, ideogram45EditPrecision),
+      value: normalizeIdeogram45Quality(ideogram45Quality, ideogram45IsEditing, ideogram45EditPrecision),
+      onChange: onIdeogram45QualityChange,
+      disabled: isLoading,
+    }, {
+      id: 'fal-ideogram-45-edit-precision-select',
+      prefixLabel: 'Edit precision',
+      ariaLabel: 'Select Ideogram 4.5 edit precision',
+      options: IDEOGRAM_45_EDIT_PRECISION_OPTIONS,
+      value: ideogram45EditPrecision,
+      onChange: onIdeogram45EditPrecisionChange,
+      disabled: isLoading || !ideogram45IsEditing,
+      tooltip: ideogram45IsEditing ? 'High precision restores unchanged pixels.' : 'Select an image to enable edit precision.',
+    });
+  }
   if (apiProvider === 'fal' && isGptImage25) {
     controls.push({
       id: 'fal-gpt-image-25-variant-select',
@@ -2133,7 +2175,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2Model || isGptImage25); // Include GPT Image 2 for Num control.
+    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2Model || isGptImage25 || isIdeogram45);
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.

@@ -1,4 +1,6 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
+import { IDEOGRAM_45_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
+import { resolveIdeogram45TextInput, type Ideogram45TextRequest } from './ideogram45';
 import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption, GptImage25Quality, GptImage25Background } from '../../types'; // Shared option types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
@@ -51,7 +53,7 @@ export const generateImage = async (
   const selectedModelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const modelId = selectedModelId === GPT_IMAGE_25_MODEL_ID
     ? getGptImage25Endpoint(isGptImage25Variant(options.gptImage25Variant) ? options.gptImage25Variant : GPT_IMAGE_25_DEFAULTS.gptImage25Variant, 'text-to-image')
-    : selectedModelId;
+    : isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_MODEL_ID : selectedModelId;
   const isGptImage25 = isGptImage25Model(modelId);
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
   const isSeedreamV5ProTextToImage = isSeedreamV5ProModelId(modelId);
@@ -154,7 +156,6 @@ export const generateImage = async (
   if (isGptImage25) {
     Object.assign(body, resolveGptImage25Input(options));
   }
-
   if (isGptImage2TextToImage) {
     body.quality = options.gptImage2Quality ?? 'medium'; // App default overrides Fal high default.
     body.image_size = resolveGptImage2SizeForFal(imageSizeOption); // Use one size control for t2i/edit.
@@ -193,13 +194,17 @@ export const generateImage = async (
 
   let latestRequestId: string | undefined;
 
+  const requestBody = isIdeogram45Model(modelId) ? {
+    prompt,
+    ...resolveIdeogram45TextInput(options),
+  } satisfies Ideogram45TextRequest : body;
   emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
-  logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', { input: body });
+  logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', { input: requestBody });
 
   let result: Awaited<ReturnType<typeof fal.subscribe>>;
   try {
     result = await fal.subscribe(modelId, {
-      input: body,
+      input: requestBody,
       logs: true,
       onQueueUpdate: update => {
         const queueUpdate = update as unknown as FalQueueUpdate;

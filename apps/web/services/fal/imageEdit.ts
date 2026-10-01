@@ -1,4 +1,6 @@
 import { fal } from '@fal-ai/client'; // Fal SDK client.
+import { IDEOGRAM_45_EDIT_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
+import { resolveIdeogram45EditInput, type Ideogram45EditRequest } from './ideogram45';
 import { Tool, type FalAspectRatioOption, type FalImageSizeOption, type FalResolutionOption, type GptImage25Quality, type GptImage25Background } from '../../types'; // Shared types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageEditOptions, GenerateImageEditParams } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
@@ -69,7 +71,12 @@ export const generateImageEdit = async (
   const selectedModelId = normalizeModelId(options.modelId) || FAL_MODEL_ID;
   const modelId = selectedModelId === GPT_IMAGE_25_MODEL_ID
     ? getGptImage25Endpoint(isGptImage25Variant(options.gptImage25Variant) ? options.gptImage25Variant : GPT_IMAGE_25_DEFAULTS.gptImage25Variant, 'edit')
-    : selectedModelId;
+    : isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_EDIT_MODEL_ID : selectedModelId;
+  const isIdeogram45 = isIdeogram45Model(modelId);
+  const ideogram45Input = isIdeogram45 ? resolveIdeogram45EditInput(options) : undefined;
+  if (isIdeogram45 && (referenceImages?.length ?? 0) + (tool === Tool.ANNOTATE ? 1 : 0) > 4) {
+    throw new Error('Ideogram 4.5 supports up to 4 reference images. The annotation image also counts as a reference.');
+  }
   const isGptImage25 = isGptImage25Model(modelId);
   const gptImage25Input = isGptImage25 ? resolveGptImage25Input(options) : undefined;
   if (isGptImage25 && 1 + (tool === Tool.ANNOTATE ? 1 : 0) + (referenceImages?.length ?? 0) > 16) {
@@ -534,7 +541,6 @@ export const generateImageEdit = async (
   if (gptImage25Input) {
     Object.assign(body, gptImage25Input);
   }
-
   if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
@@ -543,13 +549,19 @@ export const generateImageEdit = async (
     }
   }
 
+  const requestBody = ideogram45Input ? {
+    prompt,
+    ...ideogram45Input,
+    image_url: baseImageUrl,
+    ...(imageUrls.length > 1 ? { reference_image_urls: imageUrls.slice(1) } : {}),
+  } satisfies Ideogram45EditRequest : body;
   emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
-  logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', { input: body });
+  logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', { input: requestBody });
 
   let result: Awaited<ReturnType<typeof fal.subscribe>>;
   try {
     result = await fal.subscribe(modelId, {
-      input: body,
+      input: requestBody,
       logs: true,
       onQueueUpdate: update => {
         const queueUpdate = update as unknown as FalQueueUpdate;

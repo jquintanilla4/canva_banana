@@ -7,6 +7,8 @@ import type {
   GptImage25Variant,
   GptImage25Background,
   GptImage25Quality,
+  Ideogram45Quality,
+  Ideogram45EditPrecision,
   FalImageSizeOption,
   FalAspectRatioOption,
   FalKrea2CreativityOption,
@@ -103,6 +105,8 @@ export interface GenerateImageEditOptions {
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  ideogram45Quality?: Ideogram45Quality;
+  ideogram45EditPrecision?: Ideogram45EditPrecision;
   wan27ImageSize?: string;
   wan27ImageMaxImages?: string;
   negativePrompt?: string;
@@ -123,6 +127,8 @@ export interface GenerateImageOptions {
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  ideogram45Quality?: Ideogram45Quality;
+  ideogram45EditPrecision?: Ideogram45EditPrecision;
   krea2Creativity?: FalKrea2CreativityOption;
   imageStyleReferences?: Array<{ image: HTMLImageElement; strength: number }>;
   flux2MaxImageSize?: string;

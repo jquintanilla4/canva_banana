@@ -54,6 +54,7 @@ import {
   type FalModelId,
 } from '../services/modelConfig';
 import { resolveFlux3Settings } from './flux3';
+import { IDEOGRAM_45_DEFAULTS, IDEOGRAM_45_IMAGE_SIZE_OPTIONS, isIdeogram45Model, isIdeogram45EditPrecision, normalizeIdeogram45Quality } from '../services/ideogram45Config';
 
 export type GenerationTransferOptions = GenerationFalOptions & GenerationVolcengineOptions & GenerationJimengOptions; // Shared shape covers every provider-backed prompt control.
 
@@ -175,6 +176,7 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [SEEDVR_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, noiseScale: 0.1 } }, // SeedVR defaults.
   { matches: [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID], defaults: { flux2MaxImageSize: 'landscape_4_3' } }, // Flux defaults.
   { matches: (modelId) => isGptImage25Model(modelId), defaults: GPT_IMAGE_25_DEFAULTS },
+  { matches: (modelId) => isIdeogram45Model(modelId), defaults: IDEOGRAM_45_DEFAULTS },
   { matches: (modelId) => isGptImage2Model(modelId), defaults: { imageSizeSelection: 'auto', gptImage2Quality: 'medium' } }, // GPT Image defaults.
   { matches: (modelId) => isKrea2LargeModelId(modelId), defaults: { aspectRatioSelection: KREA_2_DEFAULT_ASPECT_RATIO, krea2Creativity: KREA_2_DEFAULT_CREATIVITY } }, // Krea defaults.
   { matches: [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID], defaults: { wan27ImageAspectRatio: 'landscape_16_9', wan27ImageMaxImages: '1' } }, // Wan image defaults.
@@ -253,6 +255,18 @@ export const resolveGenerationTransferOptions = (
       gptImage25Background: isGptImage25Background(resolvedOptions.gptImage25Background) ? resolvedOptions.gptImage25Background : GPT_IMAGE_25_DEFAULTS.gptImage25Background,
       gptImage25Quality: isGptImage25Quality(resolvedOptions.gptImage25Quality) ? resolvedOptions.gptImage25Quality : GPT_IMAGE_25_DEFAULTS.gptImage25Quality,
     }; // Restoring settings and retrying share the same defaults for missing or malformed controls.
+  }
+  if (isIdeogram45Model(normalizedModelId)) {
+    const precision = isIdeogram45EditPrecision(resolvedOptions.ideogram45EditPrecision)
+      ? resolvedOptions.ideogram45EditPrecision : IDEOGRAM_45_DEFAULTS.ideogram45EditPrecision;
+    return {
+      ...resolvedOptions,
+      ideogram45EditPrecision: precision,
+      ideogram45Quality: normalizeIdeogram45Quality(resolvedOptions.ideogram45Quality, generation.kind === 'image_edit', precision),
+      imageSizeSelection: IDEOGRAM_45_IMAGE_SIZE_OPTIONS.some(option => option.value === resolvedOptions.imageSizeSelection)
+        ? resolvedOptions.imageSizeSelection : IDEOGRAM_45_DEFAULTS.imageSizeSelection,
+      numImages: Number.isFinite(resolvedOptions.numImages) ? resolvedOptions.numImages : IDEOGRAM_45_DEFAULTS.numImages,
+    };
   }
   return normalizedModelId === FLUX_3_VIDEO_MODEL_ID
     ? { ...resolvedOptions, ...resolveFlux3Settings(resolvedOptions) }

@@ -6,6 +6,7 @@ import {
   FLUX_3_VIDEO_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
   GPT_IMAGE_25_MODEL_ID,
+  IDEOGRAM_45_MODEL_ID,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -3263,6 +3264,56 @@ describe('useGeneration (seedance 2)', () => {
     const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
     const { imageSizeSelection, ...expectedRequestOptions } = expectedOptions;
     expect(request).toMatchObject({ modelId: GPT_IMAGE_25_MODEL_ID, ...expectedRequestOptions, imageSize: imageSizeSelection });
+    expect(queuedJobs[0]?.retryInputs?.falOptions).toMatchObject(expectedOptions);
+  });
+  it.each((['text_to_image', 'image_edit'] as const).flatMap(kind =>
+    (['live', 'saved', 'missing', 'malformed'] as const).map(settings => ({ kind, settings })),
+  ))('replays Ideogram 4.5 $kind with $settings settings instead of live picker values', async ({ kind, settings }) => {
+    const primary = buildCanvasMedia('ideogram-primary', 'image') as CanvasImage & { element: HTMLImageElement };
+    const reference = buildCanvasMedia('ideogram-reference', 'image') as CanvasImage & { element: HTMLImageElement };
+    const fal = createFalStub();
+    fal.falModelMode = 'image';
+    fal.falImageModelId = IDEOGRAM_45_MODEL_ID;
+    fal.ideogram45Quality = 'low';
+    fal.ideogram45EditPrecision = 'regular';
+    fal.falImageSizeSelection = '2560x1440';
+    fal.falNumImages = 3;
+    let queuedJobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      queuedJobs = typeof value === 'function' ? value(queuedJobs) : value;
+    });
+    vi.mocked(generateFalImage).mockImplementation(() => new Promise(() => {}));
+    vi.mocked(generateFalImageEdit).mockImplementation(() => new Promise(() => {}));
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'Replay image', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(settings === 'live' && kind === 'image_edit' ? {
+        primaryImageId: primary.id, primaryImage: primary, referenceImageIds: [reference.id],
+      } : {}), images: [primary, reference], paths: [], videoNegativePrompt: '',
+      setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs, setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    const expectedOptions = settings === 'live'
+      ? { ideogram45Quality: 'low' as const, ideogram45EditPrecision: 'regular' as const, imageSizeSelection: '2560x1440' as const, numImages: 3 }
+      : settings === 'saved'
+      ? { ideogram45Quality: 'high' as const, ideogram45EditPrecision: 'high' as const, imageSizeSelection: 'auto' as const, numImages: 8 }
+      : { ideogram45Quality: 'medium' as const, ideogram45EditPrecision: 'regular' as const, imageSizeSelection: 'auto' as const, numImages: 1 };
+    const falOptions = settings === 'saved' ? expectedOptions : settings === 'malformed'
+      ? { ideogram45Quality: 'bad', ideogram45EditPrecision: 'bad', imageSizeSelection: 'auto_2K', numImages: NaN } as unknown as typeof expectedOptions
+      : undefined;
+    await act(async () => {
+      void result.current.handleGenerate(settings === 'live' ? undefined : {
+        kind, prompt: 'Replay image', provider: 'fal', modelId: IDEOGRAM_45_MODEL_ID, modelMode: 'image',
+        primaryImageId: kind === 'image_edit' ? primary.id : undefined,
+        referenceImageIds: kind === 'image_edit' ? [reference.id] : [], falOptions,
+      });
+      await Promise.resolve();
+    });
+    const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
+    expect(request).toMatchObject({
+      modelId: IDEOGRAM_45_MODEL_ID, imageSize: expectedOptions.imageSizeSelection,
+      numImages: expectedOptions.numImages, ideogram45Quality: expectedOptions.ideogram45Quality,
+      ...(kind === 'image_edit' ? { ideogram45EditPrecision: expectedOptions.ideogram45EditPrecision } : {}),
+    });
+    if (kind === 'image_edit') expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0].referenceImages).toHaveLength(1);
     expect(queuedJobs[0]?.retryInputs?.falOptions).toMatchObject(expectedOptions);
   });
   it('blocks Seedance reference submissions when reference videos total more than 15 seconds', async () => {

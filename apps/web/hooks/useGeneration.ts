@@ -1,4 +1,5 @@
 import { resolveGenerationTransferOptions } from '../utils/generationTransferSettings';
+import { isIdeogram45Model, isIdeogram45EditPrecision, normalizeIdeogram45Quality } from '../services/ideogram45Config';
 import { useCallback, useMemo, useRef } from 'react';
 import type { Dispatch, SetStateAction, SyntheticEvent } from 'react';
 import {
@@ -630,6 +631,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     recraftColors,
     gptImage2Quality,
     gptImage25Quality,
+    ideogram45Quality,
+    ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
     krea2AspectRatio,
@@ -704,7 +707,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : null; // Saved local-backend reruns may carry provider metadata without a model id.
     const falVideoModelIdForRun = providerForcedVideoModelId ?? (isFalVideoModelId(overrideModelId) ? overrideModelId : falVideoModelId);
     const falModelIdForRun: FalModelId = falModelModeForRun === 'video' ? falVideoModelIdForRun : falImageModelIdForRun;
-    const falOptionsOverride = generationOverride && isGptImage25Model(falModelIdForRun)
+    const falOptionsOverride = generationOverride && (isGptImage25Model(falModelIdForRun) || isIdeogram45Model(falModelIdForRun))
       ? resolveGenerationTransferOptions(generationOverride, falModelIdForRun)
       : generationOverride?.falOptions ?? {};
     const rawFalImageSizeSelection = falOptionsOverride.imageSizeSelection ?? falImageSizeSelection;
@@ -891,6 +894,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const gptImage25QualityForRun = isGptImage25Quality(falOptionsOverride.gptImage25Quality)
       ? falOptionsOverride.gptImage25Quality
       : gptImage25Quality;
+    const ideogram45EditPrecisionForRun = isIdeogram45EditPrecision(falOptionsOverride.ideogram45EditPrecision)
+      ? falOptionsOverride.ideogram45EditPrecision : ideogram45EditPrecision;
     const gptImage2QualityForRun: FalGptImage2QualitySelectionValue = isGptImage2QualitySelectionValue(falOptionsOverride.gptImage2Quality)
       ? falOptionsOverride.gptImage2Quality
       : gptImage2Quality; // Saved runs can override the active quality picker.
@@ -1054,6 +1059,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isNanoBananaModel = !isVideoMode && isNanoBananaEditModelId(falModelIdForRun);
     const isGptImage2ModelForRun = !isVideoMode && isGptImage2EditModelId(falModelIdForRun);
     const isGptImage25ModelForRun = !isVideoMode && isGptImage25Model(falModelIdForRun);
+    const isIdeogram45ModelForRun = !isVideoMode && isIdeogram45Model(falModelIdForRun);
     const isKrea2LargeModelForRun = usingFal && !isVideoMode && isKrea2LargeModel(falModelIdForRun);
     const isGrokImagineModel = !isVideoMode && falModelIdForRun === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
     const grokAspectRatioForRun = (isGrokImagineModel && falAspectRatioSelectionForRun === 'default')
@@ -2955,7 +2961,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
     const shouldValidateFalOptions = usingFal
-      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun); // Include image-count models.
+      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun);
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImagesForRun) ||
@@ -3007,6 +3013,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ...(isFlux2MaxModelForRun ? { flux2MaxImageSize: flux2MaxImageSizeForRun } : {}),
       ...(isGptImage2ModelForRun ? { gptImage2Quality: gptImage2QualityForRun } : {}),
       ...(isGptImage25ModelForRun ? { gptImage25Variant: gptImage25VariantForRun, gptImage25Background: gptImage25BackgroundForRun, gptImage25Quality: gptImage25QualityForRun } : {}),
+      ...(isIdeogram45ModelForRun ? {
+        ideogram45EditPrecision: ideogram45EditPrecisionForRun,
+        ideogram45Quality: normalizeIdeogram45Quality(falOptionsOverride.ideogram45Quality ?? ideogram45Quality, !isTextToImage, ideogram45EditPrecisionForRun),
+        imageSizeSelection: !isTextToImage && ideogram45EditPrecisionForRun === 'high' ? 'auto' : normalizedFalImageSizeSelectionForRun,
+      } : {}),
       ...(isKrea2LargeModelForRun ? {
         krea2Creativity: krea2CreativityForRun,
         krea2StyleReferenceStrengths: Object.fromEntries(referenceIdsForStrengths.map(id => [id, normalizeKrea2StyleStrength(krea2StrengthsForRun[id])])),
@@ -3125,7 +3136,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             throw new Error('Unable to create Fal job identifier.');
           }
 
-          const textToImageModelId = isGptImage25ModelForRun
+          const textToImageModelId = isGptImage25ModelForRun || isIdeogram45ModelForRun
             ? falModelIdForRun
             : isSeedreamModel
               ? getSeedreamTextToImageModelId(falModelIdForRun)
@@ -3181,6 +3192,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(isGptImage2ModelForRun ? { imageSize: normalizedFalImageSizeSelectionForRun, gptImage2Quality: gptImage2QualityForRun } : {}),
             ...(isGptImage25ModelForRun ? { gptImage25Variant: gptImage25VariantForRun, gptImage25Background: gptImage25BackgroundForRun, gptImage25Quality: gptImage25QualityForRun, imageSize: normalizedFalImageSizeSelectionForRun } : {}),
+            ...(isIdeogram45ModelForRun ? {
+              ideogram45Quality: normalizeIdeogram45Quality(falOptionsOverride.ideogram45Quality ?? ideogram45Quality, false, ideogram45EditPrecisionForRun),
+              imageSize: normalizedFalImageSizeSelectionForRun,
+            } : {}),
             ...(isKrea2LargeModelForRun ? { krea2Creativity: krea2CreativityForRun, imageStyleReferences: krea2StyleReferences } : {}),
             ...(isSeedreamModel ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
             ...(isFlux2MaxModelForRun ? { flux2MaxImageSize: flux2MaxImageSizeForRun } : {}),
@@ -3292,10 +3307,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
           } else {
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isFlux2MaxModelForRun || isWan27ImageModelForRun;
+            const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun || isFlux2MaxModelForRun || isWan27ImageModelForRun;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
-              const maxReferenceImages = Math.max(0, getMaxReferenceImages(falModelIdForRun) - ((isGptImage2ModelForRun || isGptImage25ModelForRun) && editToolForRun === Tool.ANNOTATE ? 1 : 0)); // Annotate uploads an extra canvas.
+              const maxReferenceImages = Math.max(0, getMaxReferenceImages(falModelIdForRun) - ((isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun) && editToolForRun === Tool.ANNOTATE ? 1 : 0)); // Annotate uploads an extra canvas.
               const referenceCanvasImages = referenceImageIdsForRun
                 .filter(id => id !== primaryImageIdForRun)
                 .map(id => images.find(img => img.id === id))
@@ -3332,6 +3347,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
               ...(isGptImage2ModelForRun ? { gptImage2Quality: gptImage2QualityForRun } : {}),
               ...(isGptImage25ModelForRun ? { gptImage25Variant: gptImage25VariantForRun, gptImage25Background: gptImage25BackgroundForRun, gptImage25Quality: gptImage25QualityForRun } : {}),
+              ...(isIdeogram45ModelForRun ? {
+                ideogram45EditPrecision: ideogram45EditPrecisionForRun,
+                ideogram45Quality: normalizeIdeogram45Quality(falOptionsOverride.ideogram45Quality ?? ideogram45Quality, true, ideogram45EditPrecisionForRun),
+              } : {}),
               ...(isWan27ImageModelForRun ? {
                 wan27ImageSize: wan27ImageAspectRatioForRun,
                 wan27ImageMaxImages: wan27ImageMaxImagesForRun,
@@ -3623,6 +3642,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     recraftColors,
     gptImage2Quality,
     gptImage25Quality,
+    ideogram45Quality,
+    ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
     krea2AspectRatio,

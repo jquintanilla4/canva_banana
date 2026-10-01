@@ -96,6 +96,8 @@ export type FalGptImage2QualityOption = 'low' | 'medium' | 'high';
 export type GptImage25Variant = 'flare' | 'sunburst';
 export type GptImage25Background = 'auto' | 'transparent' | 'opaque';
 export type GptImage25Quality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type Ideogram45Quality = 'very_low' | 'low' | 'medium' | 'high';
+export type Ideogram45EditPrecision = 'regular' | 'high';
 export type FalKrea2CreativityOption = 'raw' | 'low' | 'medium' | 'high';
 export type Flux2MaxImageSizeOption = Extract<FalImageSizePreset, 'landscape_4_3' | 'landscape_16_9' | 'portrait_4_3' | 'portrait_16_9' | 'square' | 'square_hd'>;
 
@@ -132,6 +134,8 @@ export type GenerationFalOptions = Partial<{
   gptImage25Variant: GptImage25Variant;
   gptImage25Background: GptImage25Background;
   gptImage25Quality: GptImage25Quality;
+  ideogram45Quality: Ideogram45Quality;
+  ideogram45EditPrecision: Ideogram45EditPrecision;
   krea2Creativity: FalKrea2CreativityOption;
   krea2StyleReferenceStrengths: Record<string, number>;
   numImages: number;

@@ -29,6 +29,7 @@ import {
   getMaxReferenceImages,
   isGptImage2EditModelId,
   isGptImage25Model,
+  isIdeogram45Model,
   isKlingO3VideoModelId,
   isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
@@ -170,6 +171,17 @@ const referencePlaceholder = (modelLabel: string, images: number, videos: number
   `${modelLabel} Reference: select or shift-click up to ${images} images, ${videos} videos, and ${audios} audio clips to label them as @Image1, @Video1, or @Audio1, then describe the scene... ${GENERATE_SUFFIX}`;
 
 const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
+  {
+    matches: (modelId) => isIdeogram45Model(modelId),
+    base: {
+      referenceLimitToast: (max) => ({
+        message: max < 4
+          ? 'Ideogram 4.5 annotate supports up to 3 references because the annotation image counts as a reference.'
+          : 'Ideogram 4.5 supports one source image plus up to 4 references.',
+        durationMs: 4000,
+      }),
+    },
+  },
   // ---- Image models -------------------------------------------------------------
   {
     matches: (modelId) => isSeedreamModelId(modelId as FalModelId) || isNanoBananaEditModelId(modelId),
