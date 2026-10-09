@@ -44,14 +44,6 @@ export default {
       name: '@electron-forge/maker-zip',
       platforms: ['darwin'],
     },
-    {
-      name: '@electron-forge/maker-dmg',
-      platforms: ['darwin'],
-      config: {
-        name: 'The Institute',
-        format: 'ULFO',
-      },
-    },
   ],
   plugins: [
     {

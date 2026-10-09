@@ -3,6 +3,7 @@ import { arch as getHostArch } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { notarize } from '@electron/notarize';
+import { createMacDmg } from './create-mac-dmg.mjs';
 import {
   assertPackagedPythonBackendTargetArch,
   getFlagValue,
@@ -134,4 +135,12 @@ for (const concreteTargetArch of concreteTargetArchs) {
 
 if (mode === 'make') {
   run('electron forge make', 'electron-forge', ['make', '--skip-package', ...makeArgs]);
+  if (targetPlatform === 'darwin') {
+    for (const concreteTargetArch of concreteTargetArchs) {
+      await createMacDmg(
+        getMacAppPath(repoRoot, targetPlatform, concreteTargetArch),
+        resolve(repoRoot, 'out/make/dmg', concreteTargetArch, 'The Institute.dmg'),
+      );
+    }
+  }
 }
