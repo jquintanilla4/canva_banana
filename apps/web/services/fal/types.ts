@@ -1,4 +1,5 @@
 import type {
+  NanoBananaThinkingLevel,
   FalJobPhase,
   Tool,
   Path,
@@ -42,6 +43,7 @@ import type {
   Wan27VideoVariant,
 } from '../modelConfig'; // Model-specific option types.
 import type { Ideogram45EditRunSettings, Ideogram45TextRunSettings } from '../ideogram45RunSettings';
+import type { NanoBananaRunSettings } from '../nanoBananaRunSettings';
 import type { GptImage2RunSettings } from '../gptImage2RunSettings';
 import type { GptImage25RunSettings } from '../gptImage25RunSettings';
 
@@ -107,6 +109,9 @@ export interface GenerateImageEditOptions {
   resolution?: FalResolutionOption;
   gptImage2Quality?: FalGptImage2QualityOption;
   gptImage2RunSettings?: GptImage2RunSettings<'image_edit'>;
+  nanoBananaRunSettings?: NanoBananaRunSettings<'image_edit'>;
+  nanoBananaWebSearch?: boolean;
+  nanoBananaThinkingLevel?: NanoBananaThinkingLevel;
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
@@ -132,6 +137,9 @@ export interface GenerateImageOptions {
   referenceImages?: HTMLImageElement[];
   gptImage2Quality?: FalGptImage2QualityOption;
   gptImage2RunSettings?: GptImage2RunSettings<'text_to_image'>;
+  nanoBananaRunSettings?: NanoBananaRunSettings<'text_to_image'>;
+  nanoBananaWebSearch?: boolean;
+  nanoBananaThinkingLevel?: NanoBananaThinkingLevel;
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;

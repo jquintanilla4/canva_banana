@@ -1,3 +1,5 @@
+import { getNanoBananaSelectorModelId } from '../nanoBananaConfig';
+import { resolveNanoBananaSettingsForRequest, serializeNanoBananaInput } from './nanoBanana';
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45TextInput, type Ideogram45TextRequest } from './ideogram45';
@@ -53,7 +55,9 @@ export const generateImage = async (
     ? resolveGptImage2SettingsForRequest('text_to_image', options) : undefined;
   const gptImage25Settings = isGptImage25Model(selectedModelId)
     ? resolveGptImage25SettingsForRequest('text_to_image', options) : undefined;
-  const modelId = gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
+  const nanoBananaSettings = getNanoBananaSelectorModelId(selectedModelId)
+    ? resolveNanoBananaSettingsForRequest('text_to_image', { ...options, modelId: selectedModelId }) : undefined;
+  const modelId = nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
     ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_MODEL_ID : selectedModelId);
   const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
     : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings) : undefined;
@@ -70,7 +74,6 @@ export const generateImage = async (
   const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
   const supportsAspectRatio = isNanoBananaTextToImage
     || isGrokImagineModel; // Enable Grok aspect ratios.
-  const supportsResolution = isNanoBananaTextToImage;
   const numImagesOption = options.numImages;
   const rawImageSizeOption: FalImageSizeOption = options.imageSize ?? 'default';
   const imageSizeOption: FalImageSizeOption = rawImageSizeOption;
@@ -79,7 +82,6 @@ export const generateImage = async (
     ? (resolveSeedreamCustomSizeForModel(modelId, imageSizeOption)
       ?? resolveSeedreamCustomSizeForModel(modelId, aspectRatioOption))
     : undefined;
-  const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
 
   const body: {
     prompt: string;
@@ -157,9 +159,10 @@ export const generateImage = async (
     delete wan27Body.sync_mode;
   }
 
+  if (nanoBananaSettings) Object.assign(body, serializeNanoBananaInput(nanoBananaSettings));
   if (gptImageInput) Object.assign(body, gptImageInput);
 
-  if (!ideogram45Input && !gptImageInput && !isKrea2TextToImage && !isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!nanoBananaSettings && !ideogram45Input && !gptImageInput && !isKrea2TextToImage && !isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {
@@ -177,14 +180,7 @@ export const generateImage = async (
     } else if (imageSizeOption !== 'default') {
       body.image_size = imageSizeOption;
     }
-  } else if (isNanoBananaTextToImage) {
-    if (aspectRatioOption !== 'default') {
-      body.aspect_ratio = aspectRatioOption;
-    }
-    if (supportsResolution) {
-      body.resolution = resolutionOption;
-    }
-  } else if (supportsAspectRatio && aspectRatioOption !== 'default') {
+  } else if (!nanoBananaSettings && supportsAspectRatio && aspectRatioOption !== 'default') {
     body.aspect_ratio = aspectRatioOption;
   }
 

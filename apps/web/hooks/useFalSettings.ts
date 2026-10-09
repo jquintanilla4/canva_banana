@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { IDEOGRAM_45_DEFAULTS, IDEOGRAM_45_IMAGE_SIZE_OPTIONS, isIdeogram45Model, isIdeogram45Quality, isIdeogram45EditPrecision, normalizeIdeogram45Quality } from '../services/ideogram45Config';
+import { NANO_BANANA_DEFAULTS, isNanoBananaThinkingLevel } from '../services/nanoBananaConfig';
+import { getNanoBananaAspectRatioOptionsForProvider } from '../services/nanoBananaAspectRatioPolicy';
 import { GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
 import { GPT_IMAGE_25_IMAGE_SIZE_OPTIONS } from '../services/gptImage25Config';
 import type {
+  NanoBananaThinkingLevel,
   ApiProviderId,
   Ideogram45Quality,
   Ideogram45EditPrecision,
@@ -24,7 +27,6 @@ import {
   CRYSTAL_UPSCALER_MODEL_ID,
   DEFAULT_FAL_IMAGE_MODEL_ID,
   DEFAULT_FAL_VIDEO_MODEL_ID,
-  FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   GPT_IMAGE_25_DEFAULTS,
   isGptImage25Model,
@@ -323,6 +325,8 @@ type FalHandlers = {
   handleRecraftColorChange: (index: number, value: string) => void;
   handleRecraftAddColor: () => void;
   handleRecraftRemoveColor: () => void;
+  handleNanoBananaWebSearchChange: (value: string) => void;
+  handleNanoBananaThinkingLevelChange: (value: string) => void;
   handleGptImage2QualityChange: (value: string) => void;
   handleGptImage25QualityChange: (value: string) => void;
   handleIdeogram45QualityChange: (value: string) => void;
@@ -427,6 +431,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
+  nanoBananaWebSearch: boolean;
+  nanoBananaThinkingLevel: NanoBananaThinkingLevel;
   gptImage2Quality: FalGptImage2QualitySelectionValue;
   gptImage25Quality: GptImage25Quality;
   ideogram45Quality: Ideogram45Quality;
@@ -631,6 +637,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [recraftImageSize, setRecraftImageSize] = useState<RecraftV4ProImageSizeSelectionValue>(RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE);
   const [recraftBackgroundColor, setRecraftBackgroundColor] = useState<RecraftRgbColor>(RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR);
   const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
+  const [nanoBananaWebSearch, setNanoBananaWebSearch] = useState<boolean>(NANO_BANANA_DEFAULTS.nanoBananaWebSearch);
+  const [nanoBananaThinkingLevel, setNanoBananaThinkingLevel] = useState<NanoBananaThinkingLevel>(NANO_BANANA_DEFAULTS.nanoBananaThinkingLevel);
   const [gptImage2Quality, setGptImage2Quality] = useState<FalGptImage2QualitySelectionValue>(GPT_IMAGE_2_DEFAULTS.gptImage2Quality);
   const [gptImage25Quality, setGptImage25Quality] = useState<GptImage25Quality>(GPT_IMAGE_25_DEFAULTS.gptImage25Quality);
   const [ideogram45Settings, setIdeogram45Settings] = useState<{ quality: Ideogram45Quality; editPrecision: Ideogram45EditPrecision }>({
@@ -644,7 +652,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [krea2Creativity, setKrea2Creativity] = useState<Krea2CreativitySelectionValue>(KREA_2_DEFAULT_CREATIVITY);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
-  const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>('1K');
+  const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>(NANO_BANANA_DEFAULTS.resolutionSelection);
   const [falNumImages, setFalNumImages] = useState(1);
   const [falScaleFactor, setFalScaleFactor] = useState(2);
   const [falNoiseScale, setFalNoiseScale] = useState(0.1);
@@ -847,20 +855,22 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   }, [falModelId]);
 
   useEffect(() => {
-    if (falModelMode === 'video') {
+    if (apiProvider !== 'google' && falModelMode === 'video') {
       return;
     }
-    const aspectRatioOptions = falModelId === GROK_IMAGINE_IMAGE_MODEL_ID // Grok model branch.
-      ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratios.
-      : isSeedreamModel
-        ? getSeedreamAspectRatioOptions(falModelId)
-        : FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS;
+    const aspectRatioOptions = apiProvider === 'google'
+      ? getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider)
+      : falModelId === GROK_IMAGINE_IMAGE_MODEL_ID // Grok model branch.
+        ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratios.
+        : isSeedreamModel
+          ? getSeedreamAspectRatioOptions(falModelId)
+          : getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider);
     const validOptions = aspectRatioOptions.map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
-      const fallbackAspectRatio = falModelId === GROK_IMAGINE_IMAGE_MODEL_ID ? '1:1' : 'default'; // Grok uses 1:1 fallback.
+      const fallbackAspectRatio = apiProvider === 'fal' && falModelId === GROK_IMAGINE_IMAGE_MODEL_ID ? '1:1' : 'default'; // Grok uses 1:1 fallback.
       setFalAspectRatioSelection(fallbackAspectRatio);
     }
-  }, [falModelId, falModelMode, falAspectRatioSelection, isSeedreamModel]);
+  }, [apiProvider, falModelId, falModelMode, falAspectRatioSelection, isSeedreamModel]);
 
   useEffect(() => {
     if (falModelMode === 'video') {
@@ -1393,6 +1403,13 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
+  const handleNanoBananaWebSearchChange = useCallback((value: string) => {
+    if (value === 'true' || value === 'false') setNanoBananaWebSearch(value === 'true');
+  }, []);
+  const handleNanoBananaThinkingLevelChange = useCallback((value: string) => {
+    if (isNanoBananaThinkingLevel(value)) setNanoBananaThinkingLevel(value);
+  }, []);
+
   const handleGptImage2QualityChange = useCallback((value: string) => {
     if (isGptImage2QualitySelectionValue(value)) {
       setGptImage2Quality(value);
@@ -1504,6 +1521,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       },
       resolutionSelection: setFalResolutionSelection,
       flux2MaxImageSize: setFlux2MaxImageSize,
+      nanoBananaWebSearch: setNanoBananaWebSearch,
+      nanoBananaThinkingLevel: setNanoBananaThinkingLevel,
       gptImage2Quality: setGptImage2Quality,
       gptImage25Quality: setGptImage25Quality,
       ideogram45Quality: value => setIdeogram45Settings(prev => ({ ...prev, quality: value })),
@@ -1692,6 +1711,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
+    nanoBananaWebSearch,
+    nanoBananaThinkingLevel,
     gptImage2Quality,
     gptImage25Quality,
     ideogram45Quality,
@@ -1817,6 +1838,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleRecraftColorChange,
     handleRecraftAddColor,
     handleRecraftRemoveColor,
+    handleNanoBananaWebSearchChange,
+    handleNanoBananaThinkingLevelChange,
     handleGptImage2QualityChange,
     handleGptImage25QualityChange,
     handleIdeogram45QualityChange,

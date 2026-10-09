@@ -1,4 +1,6 @@
+import { resolveNanoBananaRunSettings, serializeNanoBananaGenerationOptions, type NanoBananaRunSettings } from '../services/nanoBananaRunSettings';
 import { getGenerationTransferOptionDefaults } from '../utils/generationTransferSettings';
+import { getGoogleImageAspectRatio } from '../services/nanoBananaAspectRatioPolicy';
 import { IDEOGRAM_45_DEFAULTS, isIdeogram45Model } from '../services/ideogram45Config';
 import { resolveIdeogram45RunSettings, serializeIdeogram45GenerationOptions, type Ideogram45RunSettings } from '../services/ideogram45RunSettings';
 import { getModelReferenceCapabilities } from '../services/modelReferenceCapabilities';
@@ -48,7 +50,6 @@ import {
   getFalNumImageMaxForModel,
   getKlingActualModelId,
   getKlingO3VideoEndpoint,
-  getNanoBananaTextToImageModelId,
   getWanAnimateVideoEndpoint,
   getMaxReferenceImages,
   isGenerationProvider,
@@ -628,6 +629,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
+    nanoBananaWebSearch,
+    nanoBananaThinkingLevel,
     gptImage2Quality,
     gptImage25Quality,
     ideogram45Quality,
@@ -706,7 +709,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : null; // Saved local-backend reruns may carry provider metadata without a model id.
     const falVideoModelIdForRun = providerForcedVideoModelId ?? (isFalVideoModelId(overrideModelId) ? overrideModelId : falVideoModelId);
     const falModelIdForRun: FalModelId = falModelModeForRun === 'video' ? falVideoModelIdForRun : falImageModelIdForRun;
-    const falOptionsOverride = generationOverride && (isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun))
+    const falOptionsOverride = generationOverride && (isNanoBananaEditModelId(falModelIdForRun) || isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun))
       ? { ...getGenerationTransferOptionDefaults(falModelIdForRun, generationOverride.falOptions ?? {}), ...generationOverride.falOptions }
       : generationOverride?.falOptions ?? {};
     const rawFalImageSizeSelection = falOptionsOverride.imageSizeSelection ?? falImageSizeSelection;
@@ -1123,10 +1126,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
     const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun || isKrea2LargeModelForRun;
+    let nanoBananaSettingsForRun: NanoBananaRunSettings | undefined;
     let ideogram45SettingsForRun: Ideogram45RunSettings | undefined;
     let gptImage2SettingsForRun: GptImage2RunSettings | undefined;
     let gptImage25SettingsForRun: GptImage25RunSettings | undefined;
-    if (usingFal && (isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun)) {
+    if (usingFal && (isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun)) {
       try {
         const commonRunInput = {
           kind: isTextToImage ? 'text_to_image' : 'image_edit',
@@ -1134,7 +1138,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
           numImages: generationOverride ? falOptionsOverride.numImages : falNumImagesForRun,
         } as const;
         const validation = generationOverride ? 'restore' : 'strict';
-        if (isIdeogram45ModelForRun) {
+        if (isNanoBananaModel) {
+          nanoBananaSettingsForRun = resolveNanoBananaRunSettings({
+            ...commonRunInput, modelId: falModelIdForRun,
+            aspectRatioSelection: generationOverride ? falOptionsOverride.aspectRatioSelection : falAspectRatioSelectionForRun,
+            resolution: generationOverride ? falOptionsOverride.resolutionSelection : falResolutionSelectionForRun,
+            webSearch: generationOverride ? falOptionsOverride.nanoBananaWebSearch : nanoBananaWebSearch,
+            thinkingLevel: generationOverride ? falOptionsOverride.nanoBananaThinkingLevel : nanoBananaThinkingLevel,
+          }, validation);
+        } else if (isIdeogram45ModelForRun) {
           ideogram45SettingsForRun = resolveIdeogram45RunSettings({
             ...commonRunInput,
             quality: generationOverride ? falOptionsOverride.ideogram45Quality : ideogram45Quality,
@@ -2983,7 +2995,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const shouldValidateFalOptions = usingFal
       && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun);
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
-    const resolvedImageSettings = ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun;
+    const resolvedImageSettings = nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun;
     const numImagesForValidation = generationOverride && resolvedImageSettings
       ? resolvedImageSettings.numImages ?? 1 : falNumImagesForRun;
     const isNumImagesInvalid =
@@ -2992,8 +3004,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       numImagesForValidation > falNumImageMaxForRun;
     const normalizedFalNumImages = resolvedImageSettings?.numImages
       ?? Math.min(falNumImageMaxForRun, Math.max(1, Math.floor(Number.isFinite(falNumImagesForRun) ? falNumImagesForRun : 1)));
-    const googleAspectRatio = isNanoBananaModel && falAspectRatioSelectionForRun !== 'default'
-      ? falAspectRatioSelectionForRun
+    const googleAspectRatio = isNanoBananaModel
+      ? getGoogleImageAspectRatio(falAspectRatioSelectionForRun)
       : undefined;
 
     if (!isTextToImage) {
@@ -3035,6 +3047,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ...(normalizedFalImageSizeSelectionForRun ? { imageSizeSelection: normalizedFalImageSizeSelectionForRun } : {}),
       ...(falResolutionSelectionForRun ? { resolutionSelection: falResolutionSelectionForRun } : {}),
       ...(isFlux2MaxModelForRun ? { flux2MaxImageSize: flux2MaxImageSizeForRun } : {}),
+      ...(nanoBananaSettingsForRun ? serializeNanoBananaGenerationOptions(nanoBananaSettingsForRun) : {}),
       ...(gptImage2SettingsForRun ? serializeGptImage2GenerationOptions(gptImage2SettingsForRun) : {}),
       ...(gptImage25SettingsForRun ? serializeGptImage25GenerationOptions(gptImage25SettingsForRun) : {}),
       ...(ideogram45SettingsForRun ? serializeIdeogram45GenerationOptions(ideogram45SettingsForRun) : {}),
@@ -3156,7 +3169,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             throw new Error('Unable to create Fal job identifier.');
           }
 
-          const textToImageModelId = gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
+          const textToImageModelId = nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
             ? falModelIdForRun
             : isSeedreamModel
               ? getSeedreamTextToImageModelId(falModelIdForRun)
@@ -3170,9 +3183,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                       ? WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID
                       : isRecraftV4ProModelForRun
                         ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
-                        : isNanoBananaModel
-                          ? getNanoBananaTextToImageModelId(falModelIdForRun)
-                          : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID);
+                        : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID);
           const krea2AllReferenceCanvasImages = isKrea2LargeModelForRun
             ? referenceImageIdsForRun
               .map(id => images.find(img => img.id === id))
@@ -3208,6 +3219,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ? (isGrokImagineModel ? grokAspectRatioForRun : falAspectRatioSelectionForRun)
               : 'default', // Include Grok aspect ratios.
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
+            ...(nanoBananaSettingsForRun?.kind === 'text_to_image' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
             ...(gptImage2SettingsForRun?.kind === 'text_to_image' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
             ...(gptImage25SettingsForRun?.kind === 'text_to_image' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
             ...(ideogram45SettingsForRun?.kind === 'text_to_image' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
@@ -3360,6 +3372,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
               ...(!resolvedImageSettings && normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
               ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
+              ...(nanoBananaSettingsForRun?.kind === 'image_edit' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
               ...(gptImage2SettingsForRun?.kind === 'image_edit' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
               ...(gptImage25SettingsForRun?.kind === 'image_edit' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
               ...(ideogram45SettingsForRun?.kind === 'image_edit' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
@@ -3652,6 +3665,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
+    nanoBananaWebSearch,
+    nanoBananaThinkingLevel,
     gptImage2Quality,
     gptImage25Quality,
     ideogram45Quality,

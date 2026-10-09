@@ -1,7 +1,7 @@
+import { normalizeNanoBananaEndpoint } from '../nanoBananaConfig';
 import type { FalAspectRatioOption, FalImageSizeOption } from '../../types'; // UI option types.
 import {
   NANO_BANANA_PRO_EDIT_MODEL_ID,
-  NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
@@ -15,19 +15,11 @@ import {
 } from '../modelConfig'; // Canonical model IDs.
 import { getRuntimeConfig } from '../runtimeConfig'; // Shared web/desktop config.
 
-const LEGACY_NANO_BANANA_EDIT_MODEL_ID = 'fal-ai/nano-banana/edit'; // Legacy edit id.
-const LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/nano-banana'; // Legacy t2i id.
 const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image'; // Legacy Wan image t2i id.
 const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image'; // Legacy Wan image edit id.
 const REMOVED_KLING_O1_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1'; // Removed Kling image id.
 
 export const normalizeModelId = (modelId: string | undefined): string | undefined => { // Normalize legacy ids.
-  if (modelId === LEGACY_NANO_BANANA_EDIT_MODEL_ID) {
-    return NANO_BANANA_PRO_EDIT_MODEL_ID;
-  }
-  if (modelId === LEGACY_NANO_BANANA_TEXT_TO_IMAGE_MODEL_ID) {
-    return NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
-  }
   if (modelId === LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
     return WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   }
@@ -37,7 +29,7 @@ export const normalizeModelId = (modelId: string | undefined): string | undefine
   if (modelId === REMOVED_KLING_O1_IMAGE_MODEL_ID) {
     return undefined;
   }
-  return modelId;
+  return normalizeNanoBananaEndpoint(modelId);
 };
 
 export const FAL_MODEL_ID = normalizeModelId(getRuntimeConfig().falModelId) || NANO_BANANA_PRO_EDIT_MODEL_ID; // Default edit model.

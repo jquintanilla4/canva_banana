@@ -69,6 +69,7 @@ export type FalImageSizePreset =
 export type FalImageSizeOption = 'default' | FalImageSizePreset;
 
 export type FalAspectRatioPreset =
+  | '4:1' | '1:4' | '8:1' | '1:8'
   | '21:9'
   | '1:1'
   | '4:3'
@@ -91,6 +92,7 @@ export type FalAspectRatioPreset =
 
 export type FalAspectRatioOption = 'default' | FalAspectRatioPreset;
 
+export type NanoBananaThinkingLevel = 'minimal' | 'medium' | 'high';
 export type FalResolutionOption = '1K' | '2K' | '4K';
 export type FalGptImage2QualityOption = 'low' | 'medium' | 'high';
 export type GptImage25Variant = 'flare' | 'sunburst';
@@ -129,6 +131,8 @@ export type GenerationFalOptions = Partial<{
   imageSizeSelection: FalImageSizeOption;
   aspectRatioSelection: FalAspectRatioOption;
   resolutionSelection: FalResolutionOption;
+  nanoBananaWebSearch: boolean;
+  nanoBananaThinkingLevel: NanoBananaThinkingLevel;
   flux2MaxImageSize: Flux2MaxImageSizeOption; // Flux 2 Max output size replayed by retries.
   gptImage2Quality: FalGptImage2QualityOption;
   gptImage25Variant: GptImage25Variant;

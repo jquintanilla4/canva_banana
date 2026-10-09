@@ -52,6 +52,8 @@ import {
 import { resolveFlux3Settings } from './flux3';
 import { IDEOGRAM_45_DEFAULTS, isIdeogram45Model } from '../services/ideogram45Config';
 import { resolveIdeogram45RunSettings, serializeIdeogram45GenerationOptions } from '../services/ideogram45RunSettings';
+import { NANO_BANANA_DEFAULTS } from '../services/nanoBananaConfig';
+import { resolveNanoBananaRunSettings, serializeNanoBananaGenerationOptions } from '../services/nanoBananaRunSettings';
 import { GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
 import { GPT_IMAGE_25_DEFAULTS } from '../services/gptImage25Config';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions } from '../services/gptImage2RunSettings';
@@ -189,7 +191,7 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
     matches: (modelId) => isSeedreamModelId(modelId),
     defaults: (_restoredOptions, modelId) => ({ imageSizeSelection: isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 'auto_2K' : 'default' }), // Seedream defaults vary by generation.
   },
-  { matches: (modelId) => isNanoBananaEditModelId(modelId), defaults: { aspectRatioSelection: 'default', resolutionSelection: '1K' } }, // Nano Banana defaults.
+  { matches: (modelId) => isNanoBananaEditModelId(modelId), defaults: NANO_BANANA_DEFAULTS }, // Nano Banana defaults.
   { matches: [GROK_IMAGINE_IMAGE_MODEL_ID], defaults: { aspectRatioSelection: '1:1' } }, // Grok image default.
 ];
 
@@ -247,6 +249,15 @@ export const resolveGenerationTransferOptions = (
     ...getGenerationTransferOptionDefaults(normalizedModelId, restoredOptions),
     ...restoredOptions,
   };
+  if (isNanoBananaEditModelId(normalizedModelId)) {
+    const settings = resolveNanoBananaRunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image', modelId: normalizedModelId,
+      aspectRatioSelection: resolvedOptions.aspectRatioSelection, resolution: resolvedOptions.resolutionSelection,
+      webSearch: resolvedOptions.nanoBananaWebSearch, thinkingLevel: resolvedOptions.nanoBananaThinkingLevel,
+      numImages: resolvedOptions.numImages,
+    }, 'restore');
+    return { ...resolvedOptions, ...serializeNanoBananaGenerationOptions(settings) };
+  }
   if (isGptImage25Model(normalizedModelId)) {
     const settings = resolveGptImage25RunSettings({
       kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',

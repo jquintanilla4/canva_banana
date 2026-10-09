@@ -1,3 +1,6 @@
+import * as nanoBananaPolicy from '../../services/nanoBananaRunSettings';
+import { serializeNanoBananaInput } from '../../services/fal/nanoBanana';
+import { NANO_BANANA_21_EDIT_MODEL_ID } from '../../services/nanoBananaConfig';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -390,6 +393,85 @@ describe('useGeneration placement notifications', () => {
       expect(settings.variant).toBe(source === 'saved' ? 'flare' : 'sunburst');
     }
     expect(jobs[0]?.status).toBe('COMPLETED');
+  });
+
+  it.each((['2.1', 'Pro'] as const).flatMap(model =>
+    (['text_to_image', 'image_edit'] as const).flatMap(kind =>
+      (['live', 'saved'] as const).map(source => ({ model, kind, source })),
+    ),
+  ))('resolves Nano Banana $model $kind $source settings once for requests, retry, and completed metadata', async ({ model, kind, source }) => {
+    const primary = buildCanvasImage('gpt-source');
+    const stateHarness = createStateHarness();
+    const fal = createFalStub({
+      falImageModelId: model === '2.1' ? NANO_BANANA_21_EDIT_MODEL_ID : NANO_BANANA_PRO_EDIT_MODEL_ID,
+      nanoBananaWebSearch: true, nanoBananaThinkingLevel: 'high', falAspectRatioSelection: '16:9', falResolutionSelection: '4K',
+      falImageSizeSelection: '2560x1440', falNumImages: 3,
+    });
+    const resolver = vi.spyOn(nanoBananaPolicy, 'resolveNanoBananaRunSettings');
+    const setError = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      jobs = typeof value === 'function' ? value(jobs) : value;
+    });
+    const output = { imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '', requestId: 'gpt-complete' };
+    vi.mocked(generateFalImage).mockResolvedValue(output);
+    vi.mocked(generateFalImageEdit).mockResolvedValue(output);
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A poster', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(kind === 'image_edit' && source === 'live' ? {
+        primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
+        primarySelectionMediaType: 'image', selectedImageIds: [primary.id],
+      } : {}), images: [primary], paths: [], videoNegativePrompt: '',
+      setError, setIsLoading: vi.fn(), setFalJobs, setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => {
+      await result.current.handleGenerate(source === 'live' ? undefined : {
+        kind, prompt: 'A saved poster', provider: 'fal', modelMode: 'image',
+        modelId: model === '2.1' ? `fal-ai/nano-banana-2${kind === 'image_edit' ? '/edit' : ''}` : NANO_BANANA_PRO_EDIT_MODEL_ID,
+        primaryImageId: kind === 'image_edit' ? primary.id : undefined,
+      });
+    });
+    expect(setError).toHaveBeenLastCalledWith(null);
+    const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
+    expect(resolver).toHaveBeenCalledTimes(1);
+    const resolved = request?.nanoBananaRunSettings;
+    expect(resolved).toBe(resolver.mock.results[0]?.value);
+    expect(resolved).toMatchObject({ kind, numImages: source === 'live' ? 3 : 1, webSearch: source === 'live', thinkingLevel: source === 'live' ? 'high' : 'medium', resolution: source === 'live' ? '4K' : '1K', aspectRatioSelection: source === 'live' ? '16:9' : 'default' });
+    const metadata = stateHarness.state.images[0]?.metadata?.generation?.falOptions;
+    expect(metadata).toEqual(jobs[0]?.retryInputs?.falOptions);
+    expect(metadata).toMatchObject(nanoBananaPolicy.serializeNanoBananaGenerationOptions(resolved!));
+    expect(serializeNanoBananaInput(resolved!)).toMatchObject({ resolution: metadata!.resolutionSelection, num_images: metadata!.numImages });
+    expect(jobs[0]?.status).toBe('COMPLETED');
+  });
+
+  it.each((['live', 'saved'] as const).flatMap(source =>
+    (['4:1', '1:4', '8:1', '1:8', '16:9'] as const).map(aspectRatio => ({
+      source, aspectRatio, expectedAspectRatio: aspectRatio === '16:9' ? '16:9' as const : undefined,
+    })),
+  ))('filters $source $aspectRatio before sending a Google image request', async ({ source, aspectRatio, expectedAspectRatio }) => {
+    vi.mocked(generateGoogleImage).mockResolvedValue({ imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: 'done' });
+    const setError = vi.fn();
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.FREE_SELECTION, prompt: 'A vase', promptPrefix: '', apiProvider: 'google',
+      fal: createFalStub({ falImageModelId: NANO_BANANA_21_EDIT_MODEL_ID, falAspectRatioSelection: source === 'live' ? aspectRatio : '1:1' }),
+      selection: createSelectionStub(), images: [], paths: [], videoNegativePrompt: '',
+      setError, setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: createStateHarness().setState,
+      setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleGenerate(source === 'saved' ? {
+        kind: 'text_to_image', prompt: 'A saved vase', provider: 'google', modelId: NANO_BANANA_21_EDIT_MODEL_ID,
+        falOptions: { aspectRatioSelection: aspectRatio },
+      } : undefined);
+    });
+
+    expect(generateGoogleImage).toHaveBeenCalledTimes(1);
+    expect(generateGoogleImage).toHaveBeenCalledWith(source === 'saved' ? 'A saved vase' : 'A vase', expect.objectContaining({
+      aspectRatio: expectedAspectRatio,
+    }));
+    expect(generateFalImage).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenLastCalledWith(null);
   });
 
   it('notifies the app when generated image batches are placed', async () => {

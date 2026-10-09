@@ -1,3 +1,5 @@
+import { getNanoBananaSelectorModelId } from '../nanoBananaConfig';
+import { resolveNanoBananaSettingsForRequest, serializeNanoBananaInput } from './nanoBanana';
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_EDIT_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45EditInput, type Ideogram45EditRequest } from './ideogram45';
@@ -71,7 +73,9 @@ export const generateImageEdit = async (
     ? resolveGptImage2SettingsForRequest('image_edit', options) : undefined;
   const gptImage25Settings = isGptImage25Model(selectedModelId)
     ? resolveGptImage25SettingsForRequest('image_edit', options) : undefined;
-  const modelId = gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
+  const nanoBananaSettings = getNanoBananaSelectorModelId(selectedModelId)
+    ? resolveNanoBananaSettingsForRequest('image_edit', { ...options, modelId: selectedModelId }) : undefined;
+  const modelId = nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
     ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_EDIT_MODEL_ID : selectedModelId);
   const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
     : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings) : undefined;
@@ -478,7 +482,6 @@ export const generateImageEdit = async (
       ?? resolveSeedreamCustomSizeForModel(modelId, aspectRatioOption))
     : undefined;
   const numImagesOption = options.numImages;
-  const resolutionOption: FalResolutionOption = options.resolution ?? '1K';
   const isNanoBananaModel = isNanoBananaEditModelId(modelId);
   const isGptImage2Model = isGptImage2EditModelId(modelId);
 
@@ -529,15 +532,11 @@ export const generateImageEdit = async (
     } else {
       body.image_size = imageSizeOption;
     }
-  } else if (isNanoBananaModel) {
-    if (aspectRatioOption !== 'default') {
-      body.aspect_ratio = aspectRatioOption;
-    }
-    body.resolution = resolutionOption;
   }
 
+  if (nanoBananaSettings) Object.assign(body, serializeNanoBananaInput(nanoBananaSettings));
   if (gptImageInput) Object.assign(body, gptImageInput);
-  if (!ideogram45Input && !gptImageInput && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!nanoBananaSettings && !ideogram45Input && !gptImageInput && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {

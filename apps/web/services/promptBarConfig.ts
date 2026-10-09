@@ -1,3 +1,4 @@
+import { getNanoBananaAspectRatioOptionsForProvider } from './nanoBananaAspectRatioPolicy';
 import type {
   FalAspectRatioSelectionValue,
   FalGptImage2QualitySelectionValue,
@@ -65,9 +66,10 @@ import type {
   WanCreativity,
   WanTargetResolution,
 } from './modelConfig';
-import type { GptImage25Variant, GptImage25Background, GptImage25Quality, Ideogram45Quality, Ideogram45EditPrecision, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
+import type { NanoBananaThinkingLevel, GptImage25Variant, GptImage25Background, GptImage25Quality, Ideogram45Quality, Ideogram45EditPrecision, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
 import { isIdeogram45Model } from './ideogram45Config';
 import { buildIdeogram45Controls } from './promptBar/ideogram45Controls';
+import { buildNanoBananaControls } from './promptBar/nanoBananaControls';
 import { buildGptImage2Controls } from './promptBar/gptImage2Controls';
 import { buildGptImage25Controls } from './promptBar/gptImage25Controls';
 import { isGptImage25Model } from './gptImage25Config';
@@ -81,9 +83,7 @@ import {
   FAL_CRYSTAL_CREATIVITY_OPTIONS,
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
   FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
-  FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS,
   FAL_IMAGE_MODEL_OPTIONS,
-  FAL_RESOLUTION_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
   KREA_2_ASPECT_RATIO_OPTIONS,
   KREA_2_CREATIVITY_OPTIONS,
@@ -874,6 +874,8 @@ export type PromptBarControlsInput = {
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
+  nanoBananaWebSearch?: boolean;
+  nanoBananaThinkingLevel?: NanoBananaThinkingLevel;
   gptImage2Quality?: FalGptImage2QualitySelectionValue;
   gptImage25Quality?: GptImage25Quality;
   ideogram45Quality?: Ideogram45Quality;
@@ -974,6 +976,8 @@ export type PromptBarControlsInput = {
   onRecraftColorChange: (index: number, value: string) => void;
   onRecraftAddColor: () => void;
   onRecraftRemoveColor: () => void;
+  onNanoBananaWebSearchChange?: (value: string) => void;
+  onNanoBananaThinkingLevelChange?: (value: string) => void;
   onGptImage2QualityChange?: (value: string) => void;
   onGptImage25QualityChange?: (value: string) => void;
   onIdeogram45QualityChange?: (value: string) => void;
@@ -1114,6 +1118,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
+    nanoBananaWebSearch, nanoBananaThinkingLevel, onNanoBananaWebSearchChange, onNanoBananaThinkingLevelChange,
     gptImage2Quality,
     gptImage25Quality,
     ideogram45Quality,
@@ -2070,13 +2075,21 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
-  const supportsAspectRatioControl = isNanoBananaModel
+  if (apiProvider === 'fal' && isNanoBananaModel) controls.push(...buildNanoBananaControls({
+    modelId: falModelId, isLoading, aspectRatioSelection: falAspectRatioSelection, resolution: falResolutionSelection,
+    webSearch: nanoBananaWebSearch, thinkingLevel: nanoBananaThinkingLevel,
+    onAspectRatioChange: onFalAspectRatioChange, onResolutionChange: onFalResolutionChange,
+    onWebSearchChange: onNanoBananaWebSearchChange ?? (() => {}),
+    onThinkingLevelChange: onNanoBananaThinkingLevelChange ?? (() => {}),
+  }));
+
+  const supportsAspectRatioControl = (isNanoBananaModel && apiProvider !== 'fal')
     || isGrokImagineModel // Grok aspect ratio support.
     || (isSeedreamModel && !shouldShowSeedreamImageSizeControl); // Include Grok for AR control.
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || !isVideoMode);
   if (shouldShowAspectRatioControl) {
     const aspectRatioOptions = isNanoBananaModel
-      ? FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS
+      ? getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider)
       : isGrokImagineModel // Grok aspect ratio branch.
         ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratio options.
         : getSeedreamAspectRatioOptions(falModelId);
@@ -2087,18 +2100,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       options: aspectRatioOptions.map(option => ({ value: option.value, label: option.label })),
       value: falAspectRatioSelection,
       onChange: onFalAspectRatioChange,
-      disabled: isLoading,
-    });
-  }
-
-  const shouldShowResolutionControl = apiProvider === 'fal' && isNanoBananaModel;
-  if (shouldShowResolutionControl) {
-    controls.push({
-      id: 'fal-resolution-select',
-      ariaLabel: 'Select resolution',
-      options: FAL_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: falResolutionSelection,
-      onChange: onFalResolutionChange,
       disabled: isLoading,
     });
   }
