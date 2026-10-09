@@ -151,7 +151,7 @@ export const upscaleSeedvrImage = async (
 
   const inputPayload = { // Payload for SeedVR2 upscale.
     image_url: imageUrl,
-    upscale_mode: 'factor',
+    upscale_mode: 'factor' as const,
     upscale_factor: normalizedScale,
     noise_scale: normalizedNoise,
     output_format: 'png' as const,
