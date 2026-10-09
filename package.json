@@ -36,7 +36,7 @@
     "@typescript-eslint/eslint-plugin": "^8.48.1",
     "@typescript-eslint/parser": "^8.48.1",
     "@vitejs/plugin-react": "^5.0.0",
-    "baseline-browser-mapping": "^2.9.3",
+    "baseline-browser-mapping": "^2.11.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
@@ -46,14 +46,12 @@
     "jsdom": "^26.1.0",
     "typescript": "~5.8.2",
     "vite": "^6.4.3",
-    "vitest": "^3.2.6"
+    "vitest": "^5.0.3"
   },
   "allowScripts": {
     "esbuild@0.25.10": true,
     "fsevents@2.3.3": true,
-    "fs-xattr@0.3.1": true,
-    "macos-alias@0.2.12": true,
     "@google/genai@2.10.0": true,
-    "protobufjs@7.6.4": true
+    "protobufjs@7.6.6": true
   }
 }
