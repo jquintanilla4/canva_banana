@@ -49,8 +49,6 @@
   "allowScripts": {
     "esbuild@0.25.10": true,
     "fsevents@2.3.3": true,
-    "fs-xattr@0.3.1": true,
-    "macos-alias@0.2.12": true,
     "@google/genai@2.10.0": true,
     "protobufjs@7.6.6": true
   }
