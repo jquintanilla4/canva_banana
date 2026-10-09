@@ -184,7 +184,7 @@ const createDesktopSnapshotWritable = (writeId: string): { write: (data: Snapsho
     const writeBytes = async (bytes: Uint8Array) => {
       for (let offset = 0; offset < bytes.byteLength; offset += DESKTOP_SNAPSHOT_CHUNK_BYTES) {
         const chunk = bytes.subarray(offset, offset + DESKTOP_SNAPSHOT_CHUNK_BYTES);
-        await writeSnapshotChunk({ writeId, data: chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) }); // Keep non-Blob snapshot chunks bounded.
+        await writeSnapshotChunk({ writeId, data: chunk.slice().buffer }); // Keep non-Blob snapshot chunks bounded.
       }
     };
     if (isSnapshotMediaBlob(data)) {

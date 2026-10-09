@@ -30,7 +30,7 @@ const getManualChunk = (id: string): string | undefined => {
 };
 
 export default defineConfig(({ mode }) => {
-    const repoRoot = path.resolve(__dirname, '../..');
+    const repoRoot = path.resolve(import.meta.dirname, '../..');
     const env = loadEnv(mode, repoRoot, '');
     const isDesktopPackageBuild = process.env.CANVA_BANANA_DESKTOP_PACKAGE === '1'; // Desktop keys come from IPC settings.
     return {
@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
         'process.env.JIMENG_API_BASE_URL': JSON.stringify(env.JIMENG_API_BASE_URL),
       },
       build: {
-        rollupOptions: {
+        rolldownOptions: {
           output: {
             manualChunks: getManualChunk,
           },
@@ -63,7 +63,7 @@ export default defineConfig(({ mode }) => {
       },
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, '.'),
+          '@': path.resolve(import.meta.dirname, '.'),
         }
       }
     };
