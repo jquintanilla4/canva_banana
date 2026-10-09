@@ -125,19 +125,19 @@ const cloneArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   return buffer;
 }; // Returns an exact ArrayBuffer slice.
 
-const uint32Bytes = (value: number): Uint8Array => {
+const uint32Bytes = (value: number): Uint8Array<ArrayBuffer> => {
   const bytes = new Uint8Array(4);
   new DataView(bytes.buffer).setUint32(0, value, false);
   return bytes;
 }; // Encodes binary snapshot section lengths.
 
-const uint64Bytes = (value: number): Uint8Array => {
+const uint64Bytes = (value: number): Uint8Array<ArrayBuffer> => {
   const bytes = new Uint8Array(8);
   new DataView(bytes.buffer).setBigUint64(0, BigInt(value), false);
   return bytes;
 }; // Encodes binary snapshot media lengths.
 
-const buildBinarySnapshotFileBytes = (mediaBytes: Uint8Array): Uint8Array => {
+const buildBinarySnapshotFileBytes = (mediaBytes: Uint8Array): Uint8Array<ArrayBuffer> => {
   const imageManifest = {
     id: 'source-image-1',
     x: 0,
@@ -178,7 +178,7 @@ const buildBinarySnapshotFileBytes = (mediaBytes: Uint8Array): Uint8Array => {
   return bytes;
 }; // Creates a binary snapshot whose media can stay lazy in desktop tests.
 
-const buildEmptyBinarySnapshotFileBytes = (): Uint8Array => {
+const buildEmptyBinarySnapshotFileBytes = (): Uint8Array<ArrayBuffer> => {
   const encoder = new TextEncoder();
   const manifestBytes = encoder.encode(JSON.stringify({
     version: 2,

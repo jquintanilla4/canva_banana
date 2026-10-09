@@ -1009,9 +1009,9 @@ export const parseBinarySnapshotFile = async (file: SnapshotByteSource): Promise
 
 // Import enforces the same caps (isSnapshotMetadataLengthInvalid); encoding through this helper
 // makes exports fail loudly instead of producing a file that can never be re-imported.
-const encodeSnapshotMetadataSections = (binary: SnapshotBinary): { manifestBytes: Uint8Array; imageMetaBytes: Uint8Array[] } => {
+const encodeSnapshotMetadataSections = (binary: SnapshotBinary): { manifestBytes: Uint8Array<ArrayBuffer>; imageMetaBytes: Uint8Array<ArrayBuffer>[] } => {
   let totalMetadataBytes = 0;
-  const encodeSection = (value: unknown, label: string): Uint8Array => {
+  const encodeSection = (value: unknown, label: string): Uint8Array<ArrayBuffer> => {
     const bytes = snapshotEncoder.encode(JSON.stringify(value));
     totalMetadataBytes += bytes.byteLength;
     if (bytes.byteLength > SNAPSHOT_MAX_JSON_SECTION_BYTES || totalMetadataBytes > SNAPSHOT_MAX_TOTAL_JSON_BYTES) {

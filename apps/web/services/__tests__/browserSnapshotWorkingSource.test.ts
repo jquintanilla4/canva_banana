@@ -9,19 +9,19 @@ import {
   type SnapshotStreamingWritableData,
 } from '../snapshotService';
 
-const uint32Bytes = (value: number): Uint8Array => {
+const uint32Bytes = (value: number): Uint8Array<ArrayBuffer> => {
   const bytes = new Uint8Array(4);
   new DataView(bytes.buffer).setUint32(0, value, false);
   return bytes;
 };
 
-const uint64Bytes = (value: number): Uint8Array => {
+const uint64Bytes = (value: number): Uint8Array<ArrayBuffer> => {
   const bytes = new Uint8Array(8);
   new DataView(bytes.buffer).setBigUint64(0, BigInt(value), false);
   return bytes;
 };
 
-const buildSnapshotFile = (media: Uint8Array): File => {
+const buildSnapshotFile = (media: Uint8Array<ArrayBuffer>): File => {
   const image = {
     id: 'image-1',
     x: 0,
@@ -61,7 +61,7 @@ const writeSnapshotToFile = async (binary: SnapshotBinary, fileName: string): Pr
       } else if (isSnapshotMediaBlob(data)) {
         chunks.push(await readSnapshotBlobPartAsArrayBuffer(data, 0, data.size));
       } else {
-        chunks.push(data);
+        chunks.push(data.slice());
       }
     },
   });
