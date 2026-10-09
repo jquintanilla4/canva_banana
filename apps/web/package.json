@@ -12,7 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@fal-ai/client": "^1.6.2",
+    "@fal-ai/client": "^1.10.1",
     "@google/genai": "^2.10.0",
     "@tailwindcss/vite": "^4.3.0",
     "react": "^19.1.1",
