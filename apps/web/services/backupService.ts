@@ -103,7 +103,7 @@ const writeDesktopSnapshotData = async (
   }
   for (let offset = 0; offset < data.byteLength; offset += DESKTOP_BACKUP_CHUNK_BYTES) {
     const chunk = data.subarray(offset, offset + DESKTOP_BACKUP_CHUNK_BYTES);
-    await fileMenu.writeSnapshotChunk!({ writeId, data: chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) }); // Sends only the selected typed-array bytes.
+    await fileMenu.writeSnapshotChunk!({ writeId, data: chunk.slice().buffer }); // Sends only the selected typed-array bytes.
   }
 };
 
