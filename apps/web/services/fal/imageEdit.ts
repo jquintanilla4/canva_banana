@@ -37,6 +37,7 @@ import {
   isSeedreamV5ProModelId,
   WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
   WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  type Wan27ImageAspectRatioSelectionValue,
 } from '../modelConfig'; // Canonical model IDs.
 
 const emitImageEditQueuePhase = (
@@ -243,7 +244,7 @@ export const generateImageEdit = async (
     const flux2Body: {
       prompt: string;
       image_urls: string[];
-      image_size?: string;
+      image_size?: 'auto';
       output_format?: 'png' | 'jpeg';
       safety_tolerance?: '5';
       sync_mode?: boolean;
@@ -357,7 +358,7 @@ export const generateImageEdit = async (
     const wan27Body: {
       prompt: string;
       image_urls: string[];
-      image_size?: string;
+      image_size?: Wan27ImageAspectRatioSelectionValue;
       num_images?: number;
       negative_prompt?: string;
       enable_prompt_expansion?: boolean;

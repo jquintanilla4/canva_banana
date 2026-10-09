@@ -5,6 +5,9 @@ updates:
     schedule:
       interval: weekly
     groups:
+      maintenance:
+        patterns: ["*"]
+        update-types: [minor, patch]
       security-patches:
         applies-to: security-updates
         patterns: ["*"]
@@ -14,6 +17,9 @@ updates:
     schedule:
       interval: weekly
     groups:
+      maintenance:
+        patterns: ["*"]
+        update-types: [minor, patch]
       security-patches:
         applies-to: security-updates
         patterns: ["*"]
@@ -22,3 +28,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

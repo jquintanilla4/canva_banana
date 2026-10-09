@@ -1138,7 +1138,7 @@ export const generateImageToVideo = async (
       ? Math.min(4, Math.max(0, Math.round(options.creativity)))
       : undefined;
 
-    const inputPayload: Record<string, unknown> = {
+    const inputPayload = {
       video_url: options.sourceVideoUrl,
       ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
       ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
