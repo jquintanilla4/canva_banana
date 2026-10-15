@@ -1,0 +1,46 @@
+{
+  "name": "@canva-banana/workspace",
+  "version": "0.2.8",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "types": "./dist/index.d.ts",
+  "module": "./dist/workspace.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/workspace.js"
+    },
+    "./style.css": {
+      "types": "./dist/style.css.d.ts",
+      "default": "./dist/style.css"
+    }
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.0",
+    "postcss": "^8.5.29",
+    "@types/react": "^19.2.17",
+    "@fal-ai/client": "^1.10.1",
+    "@google/genai": "^2.28.0",
+    "@zip.js/zip.js": "^2.23.0",
+    "react-icons": "^5.7.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  }
+}

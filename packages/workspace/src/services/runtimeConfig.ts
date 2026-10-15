@@ -1,0 +1,290 @@
+import { beginWorkspaceSession } from './workspaceSession';
+export type RuntimeConfig = {
+  isDesktop: boolean;
+  apiKey?: string;
+  geminiApiKey?: string;
+  secureBackendApiBaseUrl?: string;
+  secureBackendMode?: SecureBackendMode;
+  secureBackendAuthToken?: string;
+  pythonBackendAuthToken?: string;
+  pythonBackendAuthOrigin?: string;
+  falApiUrl?: string;
+  falModelId?: string;
+  volcengineApiBaseUrl?: string;
+  jimengApiBaseUrl?: string;
+};
+
+export type SecureBackendMode = 'managed' | 'external' | 'devExternal';
+
+export type DesktopServiceState = 'stopped' | 'starting' | 'stopping' | 'ready' | 'external' | 'unavailable';
+
+export type DesktopServiceStatus = {
+  secureBackend: {
+    state: DesktopServiceState;
+    url?: string;
+    mode?: SecureBackendMode;
+    urlSource?: 'managed' | 'env' | 'default' | 'ignoredEnv';
+    authTokenActive?: boolean;
+    error?: string;
+    updatedAt?: string;
+  };
+  pythonBackend: {
+    state: DesktopServiceState;
+    url?: string;
+    error?: string;
+    updatedAt?: string;
+  };
+};
+
+export type DesktopSettingsKey =
+  | 'GEMINI_API_KEY'
+  | 'FAL_API_KEY'
+  | 'MOONSHOT_API_KEY'
+  | 'OPENROUTER_API_KEY'
+  | 'ARK_API_KEY'
+  | 'VOLCENGINE_ACCESS_KEY'
+  | 'VOLCENGINE_SECRET_KEY'
+  | 'TOS_BUCKET_NAME'
+  | 'TOS_REGION'
+  | 'JIMENG_CLI_PATH';
+
+export type DesktopSettingsFieldStatus = {
+  present: boolean;
+  required: boolean;
+  secret: boolean;
+};
+
+export type DesktopSettingsStatus = {
+  configPath: string;
+  fields: Record<DesktopSettingsKey, DesktopSettingsFieldStatus>;
+  missingKeys: DesktopSettingsKey[];
+  isPackaged: boolean;
+  serviceStatus: DesktopServiceStatus;
+};
+
+export type DesktopSettingsPayload = Partial<Record<DesktopSettingsKey, string>>;
+
+export type DesktopFileMenuCommand =
+  | 'importSnapshot'
+  | 'exportSnapshot'
+  | 'openBackups'
+  | 'toggleAutosave'
+  | 'toggleZoomLevelBadge'
+  | 'toggleFileName'
+  | 'toggleTrackpadMode'
+  | 'openDebugLog'
+  | 'openManageKeys'
+  | 'openChangeIcon'
+  | 'clearJimengCache';
+
+export type DesktopAppIconOption = {
+  id: string;
+  label: string;
+  description: string;
+  previewDataUrl: string;
+};
+
+export type DesktopAppIconState = {
+  selectedIconId: string;
+  options: DesktopAppIconOption[];
+  supportsDockIcon: boolean;
+};
+
+export type DesktopFileMenuState = {
+  autosaveEnabled: boolean;
+  showZoomLevelBadge: boolean;
+  showFileName: boolean;
+  trackpadMode: boolean;
+  isClearingJimengCache: boolean;
+};
+
+export type DesktopOpenSnapshotResult =
+  | { canceled: true }
+  | { canceled: false; sourceId: string; fileName: string; size: number; type: string; mediaUrlBase?: string; autosaveId?: string };
+
+export type DesktopBeginSaveSnapshotPayload = {
+  suggestedName: string;
+};
+
+export type DesktopBeginSnapshotWriteResult =
+  | { canceled: true }
+  | { canceled: false; writeId: string; fileName: string; autosaveId?: string };
+
+export type DesktopSnapshotWriteSession = {
+  writeId: string;
+  fileName: string;
+  autosaveId?: string;
+};
+
+export type DesktopBeginAutosaveSnapshotPayload = {
+  autosaveId: string;
+};
+
+export type DesktopBeginBackupSnapshotPayload = {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  fileName: string;
+  size: number;
+};
+
+export type DesktopSnapshotWritePayload = {
+  writeId: string;
+  data: ArrayBuffer;
+};
+
+export type DesktopSnapshotWriteIdPayload = {
+  writeId: string;
+};
+
+export type DesktopSnapshotReadRangePayload = {
+  sourceId: string;
+  offset: number;
+  length: number;
+};
+
+export type DesktopSnapshotReadSource = {
+  sourceId: string;
+  fileName: string;
+  size: number;
+  type: string;
+  mediaUrlBase?: string; // New desktop sources build lazy media URLs without per-item IPC.
+};
+
+export type DesktopSnapshotMediaUrlPayload = {
+  sourceId: string;
+  offset: number;
+  length: number;
+  type: string;
+  fileName: string;
+};
+
+export type DesktopSnapshotBackupSummary = {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  fileName: string;
+  size: number;
+};
+
+export type DesktopSnapshotWriteResult = {
+  saved: boolean;
+};
+
+export type DesktopBeginMediaArchiveWriteResult =
+  | { canceled: true }
+  | { canceled: false; writeId: string; fileName: string };
+
+export type DesktopMediaArchiveWritePayload = {
+  writeId: string;
+  data: ArrayBuffer;
+};
+
+export type DesktopMediaArchiveWriteIdPayload = {
+  writeId: string;
+};
+
+export type DesktopChatHistoryClearedPayload = {
+  revision?: number;
+};
+
+declare global {
+  interface Window {
+    canvaBananaDesktop?: {
+      getRuntimeConfig?: () => Partial<RuntimeConfig>;
+      getServiceStatus?: () => Promise<DesktopServiceStatus>;
+      getSettingsStatus?: () => Promise<DesktopSettingsStatus>;
+      saveSettings?: (payload: DesktopSettingsPayload) => Promise<DesktopSettingsStatus>;
+      clearSettings?: (keys: DesktopSettingsKey[]) => Promise<DesktopSettingsStatus>;
+      restartServices?: () => Promise<DesktopSettingsStatus>;
+      onOpenManageKeys?: (callback: () => void) => () => void;
+      clipboard?: {
+        writeText?: (text: string) => Promise<unknown>;
+      };
+      appIcon?: {
+        getState?: () => Promise<DesktopAppIconState>;
+        setSelected?: (iconId: string) => Promise<DesktopAppIconState>;
+      };
+      fileMenu?: {
+        onCommand?: (callback: (command: DesktopFileMenuCommand) => void) => () => void;
+        onMediaDownloadFinished?: (callback: (payload: { url: string; state: 'completed' | 'cancelled' | 'interrupted' }) => void) => () => void;
+        setState?: (state: DesktopFileMenuState) => Promise<unknown>;
+        openSnapshotFile?: () => Promise<DesktopOpenSnapshotResult>;
+        beginSaveSnapshot?: (payload: DesktopBeginSaveSnapshotPayload) => Promise<DesktopBeginSnapshotWriteResult>;
+        beginAutosaveSnapshot?: (payload: DesktopBeginAutosaveSnapshotPayload) => Promise<DesktopSnapshotWriteSession>;
+        beginBackupSnapshot?: (payload: DesktopBeginBackupSnapshotPayload) => Promise<DesktopSnapshotWriteSession>;
+        writeSnapshotChunk?: (payload: DesktopSnapshotWritePayload) => Promise<{ written: number }>;
+        finishSnapshotWrite?: (payload: DesktopSnapshotWriteIdPayload) => Promise<DesktopSnapshotWriteResult>;
+        abortSnapshotWrite?: (payload: DesktopSnapshotWriteIdPayload) => Promise<{ aborted: boolean }>;
+        readSnapshotRange?: (payload: DesktopSnapshotReadRangePayload) => Promise<ArrayBuffer>;
+        getSnapshotMediaUrl?: (payload: DesktopSnapshotMediaUrlPayload) => Promise<string>;
+        downloadSnapshotMedia?: (payload: { url: string }) => Promise<{ started: boolean }>;
+        beginMediaArchiveWrite?: (payload: { suggestedName: string }) => Promise<DesktopBeginMediaArchiveWriteResult>;
+        writeMediaArchiveChunk?: (payload: DesktopMediaArchiveWritePayload) => Promise<{ written: number }>;
+        finishMediaArchiveWrite?: (payload: DesktopMediaArchiveWriteIdPayload) => Promise<{ saved: boolean }>;
+        abortMediaArchiveWrite?: (payload: DesktopMediaArchiveWriteIdPayload) => Promise<{ aborted: boolean }>;
+        retainSnapshotRead?: (payload: { sourceId: string }) => Promise<{ retained: boolean }>;
+        closeSnapshotRead?: (payload: { sourceId: string }) => Promise<{ closed: boolean }>;
+        listSnapshotBackups?: () => Promise<DesktopSnapshotBackupSummary[]>;
+        openBackupSnapshot?: (payload: { id: string }) => Promise<DesktopSnapshotReadSource>;
+        deleteBackupSnapshot?: (payload: { id: string }) => Promise<{ deleted: boolean }>;
+      };
+      chatHistory?: {
+        load?: () => Promise<unknown>;
+        save?: (snapshot: unknown) => Promise<unknown>;
+        onCleared?: (callback: (payload?: DesktopChatHistoryClearedPayload) => void) => () => void;
+      };
+    };
+  }
+}
+
+export type DesktopBridge = NonNullable<Window['canvaBananaDesktop']>;
+
+export interface WorkspaceRuntimeOptions {
+  config?: Partial<RuntimeConfig>;
+  desktopBridge?: DesktopBridge;
+  storageNamespace?: string;
+  standalone?: boolean;
+}
+
+// shortcut: One workspace per window; introduce instance contexts when a host needs simultaneous editors.
+let activeRuntime: (WorkspaceRuntimeOptions & { root: HTMLElement; portal: HTMLElement }) | null = null;
+
+export const mountWorkspaceRuntime = (options: WorkspaceRuntimeOptions, root: HTMLElement, portal: HTMLElement): (() => void) => {
+  if (activeRuntime) throw new Error('Only one workspace can be mounted per browser window.');
+  const runtime = { ...options, root, portal };
+  const endSession = beginWorkspaceSession();
+  activeRuntime = runtime; // Separate Electron windows have separate renderer modules and ownership.
+  return () => {
+    endSession();
+    if (activeRuntime === runtime) activeRuntime = null;
+  };
+};
+
+export const getDesktopBridge = (): DesktopBridge | undefined => activeRuntime
+  ? activeRuntime.desktopBridge
+  : typeof window === 'undefined' ? undefined : window.canvaBananaDesktop;
+
+export const getRuntimeConfig = (): RuntimeConfig => ({
+  isDesktop: false,
+  ...activeRuntime?.config,
+  ...getDesktopBridge()?.getRuntimeConfig?.(),
+}); // Explicit host settings replace build-tool environment substitutions.
+
+export const workspaceStorageKey = (key: string): string => activeRuntime?.storageNamespace
+  ? `canva-banana:${activeRuntime.storageNamespace}:${key}`
+  : key; // Standalone keeps existing storage and backups; embedded hosts choose a project namespace.
+
+export const getWorkspaceRoot = (): HTMLElement | undefined => activeRuntime?.root;
+export const getWorkspacePortal = (): HTMLElement => activeRuntime?.portal ?? document.body;
+export const getWorkspaceSize = (): { width: number; height: number } => ({
+  width: activeRuntime?.root.clientWidth ?? window.innerWidth,
+  height: activeRuntime?.root.clientHeight ?? window.innerHeight,
+});
+
+export const isWorkspaceEventTarget = (target: EventTarget | null): boolean => !activeRuntime || activeRuntime.standalone === true || (
+  target instanceof Node && (activeRuntime.root.contains(target) || activeRuntime.portal.contains(target))
+); // Host controls outside the embedded editor retain their keyboard shortcuts.
+
+export const hasRuntimeConfigValue = (value: string | undefined): boolean =>
+  typeof value === 'string' && value.trim().length > 0;
