@@ -5,6 +5,8 @@ updates:
     schedule:
       interval: weekly
     ignore:
+      - dependency-name: eslint
+        versions: [">=10.0.0"] # Keep ESLint 9 until the plugins support ESLint 10.
       - dependency-name: typescript
         versions: [">=6.1.0"] # ESLint tooling currently supports TypeScript below 6.1.
       - dependency-name: "@types/node"
