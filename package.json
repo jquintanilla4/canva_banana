@@ -4,7 +4,8 @@
   "version": "0.2.8",
   "type": "module",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "dev": "npm run dev:web",
@@ -28,11 +29,19 @@
     "test:watch": "npm -w @canva-banana/web run test:watch",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint \"**/*.{ts,tsx,js,jsx}\" --max-warnings=0",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build:workspace": "npm -w @canva-banana/workspace run build",
+    "pack:workspace": "npm run build:workspace && npm pack -w @canva-banana/workspace --pack-destination /tmp",
+    "test:workspace": "npm -w @canva-banana/workspace run test",
+    "smoke:workspace": "node scripts/smoke-workspace-package.mjs",
+    "pack:runtime": "npm pack -w @canva-banana/runtime --pack-destination /tmp",
+    "pretypecheck": "npm run build:workspace",
+    "test:consumer": "node scripts/test-workspace-consumer.mjs"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
     "@types/node": "^24.19.2",
+    "@types/react-dom": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^8.71.1",
     "@typescript-eslint/parser": "^8.71.1",
     "@vitejs/plugin-react": "^6.1.2",
@@ -44,6 +53,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^30.1.2",
+    "playwright": "^1.64.1",
     "typescript": "~6.0.3",
     "vite": "^8.3.4",
     "vitest": "^5.0.3"

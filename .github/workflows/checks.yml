@@ -34,7 +34,10 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run smoke:workspace
+      - run: npx playwright install chromium
+      - run: npm run test:consumer
       - run: npm audit --audit-level=low
-      - run: uv export --project apps/python-backend/backend --frozen --no-dev --no-emit-project --no-hashes --output-file /tmp/backend-requirements.txt
+      - run: uv export --project packages/runtime/python --frozen --no-dev --no-emit-project --no-hashes --output-file /tmp/backend-requirements.txt
       - run: uvx pip-audit --requirement /tmp/backend-requirements.txt --no-deps --disable-pip
       - run: npm run make:mac

@@ -86,3 +86,10 @@ AGENTS.md
 # Agent tooling lockfiles
 skills-lock.json
 /.pi/
+
+# Shared provider runtime environments
+packages/runtime/python/.venv/
+packages/runtime/python/.uv-cache/
+packages/runtime/python/.jimeng-work/
+packages/runtime/python/.pytest_cache/
+**/__pycache__/

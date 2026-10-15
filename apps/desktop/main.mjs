@@ -1011,7 +1011,7 @@ const isExternalOpenUrl = (targetUrl) => {
 const getSecureBackendModuleUrl = () => (
   app.isPackaged
     ? pathToFileURL(join(app.getAppPath(), 'generated/secure-backend/server.mjs')).toString()
-    : pathToFileURL(resolve(repoRoot, 'apps/secure-backend/src/server.mjs')).toString()
+    : pathToFileURL(resolve(repoRoot, 'packages/runtime/node/server.mjs')).toString()
 );
 
 const startSecureBackend = async (signal) => {
@@ -1092,11 +1092,11 @@ const startPythonBackend = async (signal) => {
     : [
         'run',
         '--project',
-        resolve(repoRoot, 'apps/python-backend/backend'),
+        resolve(repoRoot, 'packages/runtime/python'),
         'uvicorn',
         'uvpython_service.main:app',
         '--app-dir',
-        resolve(repoRoot, 'apps/python-backend/backend/src'),
+        resolve(repoRoot, 'packages/runtime/python/src'),
         '--host',
         host,
         '--port',

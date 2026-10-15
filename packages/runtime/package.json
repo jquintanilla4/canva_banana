@@ -1,0 +1,25 @@
+{
+  "name": "@canva-banana/runtime",
+  "version": "0.2.8",
+  "private": true,
+  "type": "module",
+  "files": [
+    "index.mjs",
+    "index.d.ts",
+    "node/server.mjs",
+    "python/src/**/*.py",
+    "python/pyproject.toml",
+    "python/uv.lock",
+    "python/README.md",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
+  },
+  "scripts": {
+    "test": "node --test node/*.node-test.mjs"
+  }
+}
