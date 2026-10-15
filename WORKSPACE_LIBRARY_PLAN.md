@@ -1,6 +1,6 @@
 # Reusable workspace library extraction
 
-Status: library implementation and review complete; validated for a committed migration handoff. Storyboard migration remains deferred.
+Status: library implementation and review committed; ready for pull-request review against dev. Storyboard migration remains deferred.
 Last updated: 2026-10-15 (America/Los_Angeles).
 
 ## Resume here after a compaction
@@ -376,3 +376,9 @@ The migration prompt accompanies the commit confirmation in this conversation. I
 Validation evidence from the completed review pass above is unchanged; only this plan checkpoint and three whitespace-only staging corrections were added before committing. The complete staged patch passed git diff --cached --check. The private tarballs in `/tmp` are convenience artifacts and may disappear: regenerate from the committed library checkout with `npm ci`, `npm run pack:workspace`, and `npm run pack:runtime` if needed. Pin the final source revision and the artifacts/lockfile in the future host integration.
 
 Read-only handoff preflight confirmed Storyboard `feat/reforacle` is still `645f63538c52f101a4813ad7525a276e4c399f9f`; the original checkout has uncommitted work. The separate migration must use committed branch contents only and leave those edits intact.
+
+### Pull-request delivery checkpoint — 2026-10-15
+
+User authorized pushing the reviewed library branch and creating its GitHub PR. Repository: `jquintanilla4/canva_banana`; base: `dev`; head: `codex/reusable-workspace-library`. The implementation commit is `b9ea29e3cb44aceb8b7626e64b725307d8106664`; this additional delivery checkpoint changes documentation only. Locate the PR by that head branch; the PR link is attached to this Codex task and returned in the conversation after creation. Check the PR's actual CI status before merging rather than treating prior local passes as completed CI.
+
+The local worktree was clean after the implementation commit. Private artifacts were regenerated from that exact source revision. Storyboard's committed reference remains unchanged, its migration stays deferred, and no public npm publication is part of this PR.
