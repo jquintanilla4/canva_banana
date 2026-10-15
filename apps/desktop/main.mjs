@@ -30,6 +30,7 @@ import {
   writeSelectedAppIconId,
 } from './app-icon-store.mjs';
 import { createChatHistoryStore } from './chat-history-store.mjs';
+import { writeClipboardText } from './clipboard-service.mjs';
 import { createSnapshotBackupCoordinator } from './snapshot-backup-coordinator.mjs';
 import { openSnapshotBackupSource } from './snapshot-backup-open.mjs';
 import { reconcileSnapshotBackupDirectory } from './snapshot-backup-recovery.mjs';
@@ -86,7 +87,6 @@ const fileMenuCommandChannel = 'canva-banana:file-menu-command';
 const chatHistoryClearedChannel = 'canva-banana:chat-history-cleared';
 const canvasMediaDownloadFinishedChannel = 'canva-banana:canvas-media-download-finished';
 const desktopAuthToken = randomBytes(32).toString('base64url'); // Per-launch secret for desktop-only backend calls.
-const maxClipboardTextChars = 1_000_000; // Match preload's native clipboard IPC cap.
 const serviceStatus = {
   secureBackend: { state: 'stopped' },
   pythonBackend: { state: 'stopped' },
@@ -1780,16 +1780,7 @@ ipcMain.handle('canva-banana:save-chat-history', async (event, snapshot) => {
 
 ipcMain.handle('canva-banana:get-settings-status', () => buildSettingsStatus());
 
-ipcMain.handle('canva-banana:clipboard-write-text', (_event, text) => {
-  if (typeof text !== 'string') {
-    throw new Error('Clipboard text must be a string.');
-  }
-  if (text.length > maxClipboardTextChars) {
-    throw new Error('Clipboard text is too large to write safely.');
-  }
-  clipboard.writeText(text); // Main-process clipboard works in packaged macOS builds.
-  return true;
-});
+ipcMain.handle('canva-banana:clipboard-write-text', (_event, text) => writeClipboardText(clipboard, text));
 
 ipcMain.handle('canva-banana:app-icon-get-state', () => buildCurrentAppIconState());
 
