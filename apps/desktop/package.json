@@ -24,6 +24,6 @@
     "@electron-forge/plugin-auto-unpack-natives": "^8.0.1",
     "@electron/notarize": "^3.1.2",
     "@electron/packager": "^20.3.0",
-    "electron": "^44.7.0"
+    "electron": "^44.9.0"
   }
 }
