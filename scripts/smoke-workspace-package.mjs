@@ -17,7 +17,7 @@ run(['run', 'build:workspace']);
 const packages = {};
 const packedEntries = {};
 for (const name of ['workspace', 'runtime']) {
-  const [packed] = JSON.parse(run(['pack', '-w', `@canva-banana/${name}`, '--pack-destination', directory, '--json'], repoRoot, true));
+  const [packed] = Object.values(JSON.parse(run(['pack', '-w', `@canva-banana/${name}`, '--pack-destination', directory, '--json'], repoRoot, true))); // npm returns an array or a package-keyed object.
   assert(packed.files.length > 0);
   assert(!packed.files.some(file => /(?:^|\/)\.env(?:\.|$)|node_modules|\.venv|__pycache__/.test(file.path)));
   if (name === 'workspace') assert(packed.files.some(file => file.path === 'dist/style.css'));
@@ -58,7 +58,7 @@ const upgradeManifest = JSON.parse(await readFile(join(upgradeDirectory, 'packag
 upgradeManifest.version = `${upgradeManifest.version}-upgrade-smoke`;
 await writeFile(join(upgradeDirectory, 'package.json'), JSON.stringify(upgradeManifest));
 await writeFile(join(upgradeDirectory, 'dist/workspace.js'), `${await readFile(entry, 'utf8')}\nexport const packageUpgradeSmoke = 'new-artifact';\n`);
-const [upgrade] = JSON.parse(run(['pack', '--pack-destination', directory, '--json'], upgradeDirectory, true));
+const [upgrade] = Object.values(JSON.parse(run(['pack', '--pack-destination', directory, '--json'], upgradeDirectory, true)));
 run(['install', '--save-exact', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund', join(directory, upgrade.filename)], directory);
 const upgradedEntry = await readFile(entry, 'utf8');
 assert(upgradedEntry.includes("export const packageUpgradeSmoke = 'new-artifact'"));

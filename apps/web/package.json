@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.0",
     "@canva-banana/workspace": "0.2.8"
   }
