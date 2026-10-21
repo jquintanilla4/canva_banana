@@ -3,10 +3,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
-import { applyDefaultUiScale } from './utils/uiScale';
+import '@canva-banana/workspace/style.css';
 
 if (typeof document !== 'undefined') {
-  applyDefaultUiScale(document); // Set the shared UI scale before the first render.
+  document.documentElement.style.setProperty('--app-root-font-size', '12.8px'); // Set the shared UI scale before the first render.
 }
 
 const rootElement = document.getElementById('root');

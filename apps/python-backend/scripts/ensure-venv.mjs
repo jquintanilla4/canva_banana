@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 const pkgDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const projectDir = join(pkgDir, 'backend');
+const projectDir = resolve(pkgDir, '../../packages/runtime/python');
 const venvDir = join(projectDir, '.venv');
 const venvPython = join(venvDir, 'bin', 'python'); // POSIX layout (macOS/Linux dev).
 // A representative console script whose shebang reveals the path the venv was built for.

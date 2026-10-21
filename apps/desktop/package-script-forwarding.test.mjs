@@ -14,9 +14,11 @@ describe('mac package script forwarding', () => {
       encoding: 'utf8',
     });
 
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain(`node scripts/package-mac-app.mjs ${mode} --help`);
-    expect(result.stdout).toContain(`Usage: electron-forge-${mode}`);
-    expect(result.stdout).not.toContain('Run arbitrary package scripts');
+    const output = `${result.stdout}\n${result.stderr}`; // npm versions write script notices to different streams.
+
+    expect(result.status, output).toBe(0);
+    expect(output).toContain(`node scripts/package-mac-app.mjs ${mode} --help`);
+    expect(output).toContain(`Usage: electron-forge-${mode}`);
+    expect(output).not.toContain('Run arbitrary package scripts');
   });
 });

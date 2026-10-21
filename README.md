@@ -209,7 +209,7 @@ npm run preview
 - The secure Node backend runs on `127.0.0.1:8787` by default. It handles Fal.ai, Moonshot, and OpenRouter requests.
 - The Python backend runs on `127.0.0.1:8000` by default. It supports Volcengine and Jimeng workflows.
 - Both backends read `.env.local` first and fall back to `.env`. Exported shell variables take priority.
-- More Seedance backend details are available in [apps/python-backend/backend/README.md](apps/python-backend/backend/README.md).
+- More Seedance backend details are available in [packages/runtime/python/README.md](packages/runtime/python/README.md).
 
 Optional configuration:
 
@@ -266,3 +266,11 @@ xcrun stapler validate "out/The Institute-darwin-arm64/The Institute.app"
 ```
 
 Packaged desktop builds use the managed secure backend by default. QA can opt into an external backend by setting `SECURE_BACKEND_API_BASE_URL` and `CANVA_BANANA_ALLOW_EXTERNAL_SECURE_BACKEND=1`. If that backend requires desktop authentication, use the same secret for `CANVA_BANANA_EXTERNAL_SECURE_BACKEND_AUTH_TOKEN` in the app and `CANVA_BANANA_DESKTOP_AUTH_TOKEN` in the backend.
+
+## Reusable private library
+
+The editor now lives in `packages/workspace`, and shared Node/Python provider services live in `packages/runtime`. The existing web and Electron apps consume the extracted implementation. See [workspace integration](packages/workspace/README.md) and [provider runtime setup](packages/runtime/README.md).
+
+Build private artifacts with `npm run pack:workspace` and `npm run pack:runtime`; nothing is published. Run `npm run smoke:workspace` to install/typecheck/build the tarballs outside this monorepo, followed by `npm run test:consumer` for Playwright acceptance (install its browser once with `npx playwright install chromium`).
+
+Storyboard's committed `feat/reforacle` branch informed the host API and compatibility fixtures. Replacing Storyboard's editor is a separate task; this repository change does not modify that application.

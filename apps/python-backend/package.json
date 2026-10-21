@@ -4,12 +4,12 @@
   "version": "0.2.8",
   "type": "module",
   "scripts": {
-    "sync": "uv sync --project backend",
+    "sync": "uv sync --project ../../packages/runtime/python",
     "ensure-venv": "node scripts/ensure-venv.mjs",
     "predev": "node scripts/ensure-venv.mjs",
     "pretest": "node scripts/ensure-venv.mjs",
-    "dev": "uv run --project backend uvicorn uvpython_service.main:app --app-dir backend/src --reload --host 0.0.0.0 --port 8000",
-    "build:packaged-backend": "PYTHONWARNINGS='ignore:invalid escape sequence:SyntaxWarning' uv run --project backend --with pyinstaller pyinstaller --noconfirm --clean --onedir --name canva-banana-python-backend --paths backend/src --distpath dist --workpath build/pyinstaller --specpath build/pyinstaller --collect-submodules uvicorn --collect-submodules fastapi --collect-submodules starlette --collect-submodules websockets --collect-submodules httptools --collect-submodules watchfiles backend/src/uvpython_service/packaged_launcher.py",
-    "test": "uv run --project backend --with pytest python -m pytest backend/tests"
+    "dev": "CANVA_BANANA_ENV_DIR=../.. uv run --project ../../packages/runtime/python uvicorn uvpython_service.main:app --app-dir ../../packages/runtime/python/src --reload --host 0.0.0.0 --port 8000",
+    "build:packaged-backend": "PYTHONWARNINGS='ignore:invalid escape sequence:SyntaxWarning' uv run --project ../../packages/runtime/python --with pyinstaller pyinstaller --noconfirm --clean --onedir --name canva-banana-python-backend --paths ../../packages/runtime/python/src --distpath dist --workpath build/pyinstaller --specpath build/pyinstaller --collect-submodules uvicorn --collect-submodules fastapi --collect-submodules starlette --collect-submodules websockets --collect-submodules httptools --collect-submodules watchfiles ../../packages/runtime/python/src/uvpython_service/packaged_launcher.py",
+    "test": "uv run --project ../../packages/runtime/python --with pytest python -m pytest ../../packages/runtime/python/tests"
   }
 }
