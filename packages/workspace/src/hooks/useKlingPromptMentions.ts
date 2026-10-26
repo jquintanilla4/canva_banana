@@ -6,7 +6,7 @@ type UseKlingPromptMentionsArgs = {
   isKlingO3EditMode: boolean;
   isKlingV4VideoModel?: boolean;
   isMultimodalReferenceMode: boolean; // Seedance and H3 share one image/video/audio mention UX.
-  isFlux2MaxModel?: boolean;
+  isFlux3ImageModel?: boolean;
   referenceOrderLabels: Record<string, string> | null;
   elementOrderLabels: Record<string, string> | null;
   referenceImageIds: string[];
@@ -24,7 +24,7 @@ export const useKlingPromptMentions = ({
   isKlingO3EditMode,
   isKlingV4VideoModel = false,
   isMultimodalReferenceMode,
-  isFlux2MaxModel = false,
+  isFlux3ImageModel = false,
   referenceOrderLabels,
   elementOrderLabels,
   referenceImageIds,
@@ -33,7 +33,7 @@ export const useKlingPromptMentions = ({
 }: UseKlingPromptMentionsArgs): UseKlingPromptMentionsResult => {
   const isKlingO3VideoInputMode = isKlingO3EditMode; // Only Kling O3 edit uses a source video mention path.
   return useMemo(() => {
-    if (!isKlingO3VideoModel && !isKlingV4VideoModel && !isMultimodalReferenceMode && !isFlux2MaxModel) {
+    if (!isKlingO3VideoModel && !isKlingV4VideoModel && !isMultimodalReferenceMode && !isFlux3ImageModel) {
       return { klingPromptMentions: [], klingReferenceCount: 0 };
     }
 
@@ -78,7 +78,7 @@ export const useKlingPromptMentions = ({
     isKlingO3VideoInputMode,
     isKlingV4VideoModel,
     isMultimodalReferenceMode,
-    isFlux2MaxModel,
+    isFlux3ImageModel,
     referenceImageIds.length,
     referenceOrderLabels,
   ]);

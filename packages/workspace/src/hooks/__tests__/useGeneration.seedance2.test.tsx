@@ -15,7 +15,7 @@ import {
   KLING_VIDEO_STANDARD_MODEL_ID,
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
-  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+  KREA_3_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
@@ -151,8 +151,9 @@ const createFalStub = (): UseFalSettingsResult => ({
   isVolcengineSeedance2VideoModel: true,
   isJimengSeedance2VideoModel: false,
   isSeedance15VideoModel: false,
-  flux2MaxImageSize: 'landscape_16_9',
-  isFlux2MaxModel: false,
+  flux3ImageAspectRatio: 'auto',
+  flux3ImageResolution: '1k',
+  isFlux3ImageModel: false,
   recraftImageSize: 'square_hd',
   recraftBackgroundColor: { r: 255, g: 255, b: 255 },
   recraftColors: [],
@@ -2765,6 +2766,7 @@ describe('useGeneration (seedance 2)', () => {
   });
 
   it.each([
+    'krea/v2/large/text-to-image',
     'fal-ai/bytedance/seedream/v4/edit',
     'fal-ai/bytedance/seedream/v4/text-to-image',
     'fal-ai/bytedance/seedream/v4.5/edit',
@@ -3119,60 +3121,7 @@ describe('useGeneration (seedance 2)', () => {
     expect(vi.mocked(generateGoogleImage)).not.toHaveBeenCalled();
   });
 
-  it('caps saved Krea style references without rejecting valid still images', async () => {
-    const images = Array.from({ length: 11 }, (_, index) => buildCanvasMedia(`image-${index + 1}`, 'image'));
-    const setError = vi.fn();
-    const fal = createFalStub();
-    fal.falModelMode = 'image';
-    fal.falImageModelId = KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
-    vi.mocked(generateFalImage).mockImplementation(() => new Promise(() => {})); // Keep pending so request options can be inspected.
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: '',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal,
-      selection: createSelectionStub(),
-      images,
-      paths: [],
-      krea2StyleReferenceStrengths: {},
-      videoNegativePrompt: '',
-      setError,
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      void result.current.handleGenerate({
-        kind: 'text_to_image',
-        prompt: 'A styled editorial image',
-        provider: 'fal',
-        modelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
-        modelMode: 'image',
-        referenceImageIds: images.map(image => image.id),
-        falOptions: {
-          aspectRatioSelection: '16:9',
-          krea2Creativity: 'medium',
-          krea2StyleReferenceStrengths: Object.fromEntries(images.map(image => [image.id, 1])),
-        },
-      });
-      await Promise.resolve();
-    });
-
-    expect(setError).not.toHaveBeenCalledWith('Krea 2 Large style references must be still images.');
-    expect(vi.mocked(generateFalImage)).toHaveBeenCalledWith('A styled editorial image', expect.objectContaining({
-      modelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
-      imageStyleReferences: expect.arrayContaining(images.slice(0, 10).map(image => expect.objectContaining({ image: image.element }))),
-    }));
-    expect(vi.mocked(generateFalImage).mock.calls[0]?.[1]?.imageStyleReferences).toHaveLength(10);
-  });
-
-  it.each([{ modelId: GPT_IMAGE_2_EDIT_MODEL_ID, limit: 8 }, { modelId: GPT_IMAGE_25_MODEL_ID, limit: 14 }, { modelId: IDEOGRAM_45_MODEL_ID, limit: 3 }])('caps $modelId annotate references at $limit', async ({ modelId, limit }) => {
+  it.each([{ modelId: KREA_3_MODEL_ID, limit: 6 }, { modelId: GPT_IMAGE_2_EDIT_MODEL_ID, limit: 8 }, { modelId: GPT_IMAGE_25_MODEL_ID, limit: 14 }, { modelId: IDEOGRAM_45_MODEL_ID, limit: 3 }])('caps $modelId annotate references at $limit', async ({ modelId, limit }) => {
     const primary = buildCanvasMedia('primary', 'image') as CanvasImage & { element: HTMLImageElement };
     const references = Array.from({ length: limit + 1 }, (_, index) => buildCanvasMedia(`ref-${index + 1}`, 'image'));
     const fal = createFalStub();

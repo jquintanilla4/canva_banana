@@ -10,8 +10,6 @@ import {
   isFalVideoModelId,
   isFalModelId,
   getMaxReferenceImages,
-  isKrea2AspectRatioSelectionValue,
-  isKrea2CreativitySelectionValue,
   isRemovedHailuoModelId,
   isRetiredVideoModelId,
   KLING_O3_VIDEO_MODEL_ID,
@@ -19,7 +17,7 @@ import {
   KLING_V3_VIDEO_MODEL_ID,
   KLING_V4_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+  KREA_3_MODEL_ID,
   isRecraftV4ProModel,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
@@ -221,16 +219,13 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     });
   });
 
-  it('exposes Krea 2 Large with Krea-specific guards and reference cap', () => {
-    const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID);
+  it('replaces Krea 2 Large with one Krea 3 selector', () => {
+    const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === KREA_3_MODEL_ID);
 
-    expect(option?.label).toBe('Krea 2 Large');
-    expect(isFalModelId(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
-    expect(getMaxReferenceImages(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID)).toBe(10);
-    expect(isKrea2AspectRatioSelectionValue('16:9')).toBe(true);
-    expect(isKrea2AspectRatioSelectionValue('21:9')).toBe(false);
-    expect(isKrea2CreativitySelectionValue('medium')).toBe(true);
-    expect(isKrea2CreativitySelectionValue('maximum')).toBe(false);
+    expect(option?.label).toBe('Krea 3');
+    expect(isFalModelId('krea/v2/large/text-to-image')).toBe(false);
+    expect(normalizeFalModelId('krea/v2/large/text-to-image')).toBeUndefined();
+    expect(getMaxReferenceImages(KREA_3_MODEL_ID)).toBe(7);
   });
 
   it('reports Jimeng Seedance 2 reference image capacity', () => {

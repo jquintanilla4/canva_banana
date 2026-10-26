@@ -7,7 +7,7 @@ import {
   KLING_V3_VIDEO_MODEL_ID,
   KLING_V4_EDIT_VIDEO_MODEL_ID,
   KLING_V4_VIDEO_MODEL_ID,
-  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+  KREA_3_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -24,7 +24,7 @@ const buildGeneration = (overrides: Partial<GenerationInputs>): GenerationInputs
   kind: 'text_to_image',
   prompt: 'Saved prompt',
   provider: 'fal',
-  modelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+  modelId: KREA_3_MODEL_ID,
   modelMode: 'image',
   ...overrides,
 });
@@ -66,24 +66,20 @@ describe('useFalSettings generation transfer', () => {
     expect(result.current).toMatchObject({ recraftImageSize: 'square_hd', recraftBackgroundColor: { r: 255, g: 255, b: 255 }, recraftColors: [] });
   });
 
-  it('restores image model controls from saved metadata', () => {
+  it('rejects saved Krea 2 metadata without replacing the current model or controls', () => {
     const { result } = renderHook(() => useFalSettings({ apiProvider: 'fal' }));
+    act(() => result.current.handleFalModelChange(KREA_3_MODEL_ID));
+    act(() => result.current.handleKrea3VariantChange('jam'));
 
     act(() => {
       expect(result.current.applyGenerationSettings(buildGeneration({
-        falOptions: {
-          aspectRatioSelection: '2.35:1',
-          krea2Creativity: 'high',
-          numImages: 2,
-        },
-      }))).toBe(true);
+        modelId: 'krea/v2/large/text-to-image',
+      }))).toBe(false);
     });
 
     expect(result.current.falModelMode).toBe('image');
-    expect(result.current.falImageModelId).toBe(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID);
-    expect(result.current.krea2AspectRatio).toBe('2.35:1');
-    expect(result.current.krea2Creativity).toBe('high');
-    expect(result.current.falNumImages).toBe(2);
+    expect(result.current.falImageModelId).toBe(KREA_3_MODEL_ID);
+    expect(result.current.krea3Variant).toBe('jam');
   });
 
   it('restores explicit false video values', () => {

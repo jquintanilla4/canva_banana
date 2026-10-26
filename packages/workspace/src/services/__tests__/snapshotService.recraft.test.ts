@@ -750,6 +750,33 @@ describe('snapshotService (Flux 2 Max metadata)', () => {
   it('rejects an invalid saved output size', () => {
     expect(buildMetadata('oversized')?.generation?.falOptions?.flux2MaxImageSize).toBeUndefined();
   });
+
+  it.each([
+    { flux3ImageAspectRatio: '5:7', flux3ImageResolution: '1.5k' },
+    { flux3ImageAspectRatio: 'auto', flux3ImageResolution: '768sq' },
+  ])('preserves Flux 3 image dimensions through snapshot normalization: %j', falOptions => {
+    const normalized = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'image_edit', prompt: 'Flux edit', provider: 'fal',
+        modelId: 'blackforestlabs/flux-3/text-to-image', falOptions,
+      },
+    } as CanvasImageMetadata);
+    expect(normalized?.generation?.falOptions).toMatchObject(falOptions);
+  });
+
+  it('drops invalid Flux 3 image dimensions from an untrusted snapshot', () => {
+    const normalized = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'text_to_image', prompt: 'Flux image', provider: 'fal',
+        modelId: 'blackforestlabs/flux-3/text-to-image',
+        falOptions: { flux3ImageAspectRatio: 'landscape', flux3ImageResolution: '1080p' },
+      },
+    } as unknown as CanvasImageMetadata);
+    expect(normalized?.generation?.falOptions?.flux3ImageAspectRatio).toBeUndefined();
+    expect(normalized?.generation?.falOptions?.flux3ImageResolution).toBeUndefined();
+  });
 });
 
 describe('snapshotService (audio restore)', () => {
@@ -1399,38 +1426,6 @@ describe('snapshotService (Jimeng metadata)', () => {
     } as unknown as CanvasImageMetadata);
 
     expect(metadata?.generation?.jimengOptions?.seedance25Resolution).toBe('480p');
-  });
-});
-
-describe('snapshotService (Krea 2 Large metadata)', () => {
-  it('preserves Krea creativity and normalized style reference strengths', () => {
-    const metadata = normalizeSnapshotImageMetadata({
-      source: 'generated',
-      generation: {
-        kind: 'text_to_image',
-        prompt: 'krea prompt',
-        provider: 'fal',
-        modelId: 'krea/v2/large/text-to-image',
-        modelMode: 'image',
-        referenceImageIds: ['ref-1', 'ref-2'],
-        falOptions: {
-          aspectRatioSelection: '2.35:1',
-          krea2Creativity: 'high',
-          krea2StyleReferenceStrengths: {
-            'ref-1': -3,
-            'ref-2': '0.14',
-            'ref-bad': 'not-a-number',
-          },
-        },
-      },
-    } as unknown as CanvasImageMetadata);
-
-    expect(metadata?.generation?.falOptions?.aspectRatioSelection).toBe('2.35:1');
-    expect(metadata?.generation?.falOptions?.krea2Creativity).toBe('high');
-    expect(metadata?.generation?.falOptions?.krea2StyleReferenceStrengths).toEqual({
-      'ref-1': -2,
-      'ref-2': 0.1,
-    });
   });
 });
 

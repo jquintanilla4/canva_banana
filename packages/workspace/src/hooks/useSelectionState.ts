@@ -54,7 +54,6 @@ type SelectionFalSettings = Pick<
   flux3Variant?: UseFalSettingsResult['flux3Variant'];
   wan27VideoVariant?: UseFalSettingsResult['wan27VideoVariant']; // Missing values fall back to Smart.
   isKlingV3VideoModel?: UseFalSettingsResult['isKlingV3VideoModel']; // Older test stubs and snapshots do not carry this flag.
-  isKrea2LargeModel?: UseFalSettingsResult['isKrea2LargeModel']; // Older test stubs do not carry this image flag.
   isMiniMaxH3VideoModel?: UseFalSettingsResult['isMiniMaxH3VideoModel']; // Older test stubs predate H3.
   miniMaxH3Variant?: UseFalSettingsResult['miniMaxH3Variant']; // Missing H3 state defaults to Reference elsewhere.
   klingV4Variant?: 'generate' | 'edit';
@@ -130,7 +129,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     klingV4Variant = 'generate',
     isFlux3VideoModel = false,
     flux3Variant = 'smart',
-    isKrea2LargeModel,
     wan27VideoVariant,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
@@ -142,7 +140,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     veo31Variant,
   } = fal;
   const isFalProvider = apiProvider === 'fal'; // Fal-only caps should not affect Google selection.
-  const isActiveKrea2LargeModel = apiProvider === 'fal' && Boolean(isKrea2LargeModel); // Krea rules apply only while Fal is active.
   const isKlingV4 = isFalProvider && falModelMode === 'video' && isKlingV4VideoModel(falVideoModelId);
   const isKlingV4GenerateMode = isKlingV4 && klingV4Variant === 'generate';
   const isKlingV4EditMode = isKlingV4 && klingV4Variant === 'edit';
@@ -272,8 +269,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const activePrimaryImage = useMemo(() => (
     isImageCanvasMedia(primaryImage) ? primaryImage : null
   ), [primaryImage]);
-  const activePrimaryImageId = activePrimaryImage?.id ?? null; // Null means the primary cannot be a Krea style ref.
-  const hasActivePrimaryReference = activePrimaryImageId ? referenceImageIds.includes(activePrimaryImageId) : false; // Detect ref clears without primary changes.
 
   // Ensure selections stay valid when images are deleted or imported.
   useEffect(() => {
@@ -415,20 +410,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   }, [images, isFalSeedance2SmartMode, isSeedance25SmartMode, onReferenceLimit, selectedImageIds]);
 
   useEffect(() => {
-    if (isActiveKrea2LargeModel || !primaryImageId) {
+    if (!primaryImageId) {
       return;
     }
-    setReferenceImageIds(prevIds => prevIds.filter(id => id !== primaryImageId)); // Only Krea can reuse the primary as a style ref.
-  }, [isActiveKrea2LargeModel, primaryImageId]);
-
-  useEffect(() => {
-    if (!isActiveKrea2LargeModel || !activePrimaryImageId || hasActivePrimaryReference) {
-      return; // Only still images can be Krea style references.
-    }
-    setReferenceImageIds(prevIds =>
-      prevIds.includes(activePrimaryImageId) ? prevIds : [activePrimaryImageId, ...prevIds],
-    ); // Krea treats the primary image as a style reference like every other.
-  }, [activePrimaryImageId, hasActivePrimaryReference, isActiveKrea2LargeModel]);
+    setReferenceImageIds(prevIds => prevIds.filter(id => id !== primaryImageId)); // The primary occupies its own input slot.
+  }, [primaryImageId]);
 
   useEffect(() => {
     const effectiveSeedanceReferenceIds = isMultimodalReferenceMode
@@ -642,12 +628,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return;
     }
 
-    if (reference && isActiveKrea2LargeModel && targetImage?.mediaType !== 'image') {
-      onError('Krea 2 Large style references must be still images.');
-      return;
-    }
-
-    if (reference && targetImage?.mediaType === 'video') {
+    if (reference && imageId && !isImageCanvasMedia(targetImage)) {
       onError('Reference images must be still images.');
       return;
     }
@@ -719,7 +700,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (reference) {
-      if (primaryImageId && imageId === primaryImageId && !isMultimodalReferenceMode && !isWan27ReferenceMode && !isActiveKrea2LargeModel) {
+      if (primaryImageId && imageId === primaryImageId && !isMultimodalReferenceMode && !isWan27ReferenceMode) {
         return;
       }
       if (!imageId) {
@@ -929,7 +910,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     multimodalReferenceLabel,
     multimodalReferenceLimits,
     isWan27ReferenceMode,
-    isActiveKrea2LargeModel,
     tool,
   ]);
 

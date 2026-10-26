@@ -17,6 +17,7 @@ import * as runtimeConfig from '../runtimeConfig';
 import { generateImage, generateImageEdit } from '../falService';
 
 const retiredModelIds = [
+  'krea/v2/large/text-to-image',
   'fal-ai/bytedance/seedream/v4/edit',
   'fal-ai/bytedance/seedream/v4/text-to-image',
   'fal-ai/bytedance/seedream/v4.5/edit',
@@ -69,7 +70,6 @@ describe('falService retired image models', () => {
     await expect(generateImage('A scene', {
       modelId,
       referenceImages: [image],
-      imageStyleReferences: [{ image, strength: 1 }],
       onPhaseUpdate,
       onQueueUpdate,
     })).rejects.toThrow(retiredMessage);

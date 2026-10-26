@@ -358,7 +358,7 @@ test('Fal proxy rejects retired image endpoints and legacy aliases without conta
   }
 });
 
-test('Fal proxy still forwards supported video models, Seedream 5, and saved media', async () => {
+test('Fal proxy still forwards supported video models, Flux 3 images, Seedream 5, and saved media', async () => {
   const calls = [];
   const server = createSecureBackendServer({
     env: { FAL_API_KEY: 'fal-secret' },
@@ -372,6 +372,8 @@ test('Fal proxy still forwards supported video models, Seedream 5, and saved med
     'https://queue.fal.run/kling/v4/text-to-video',
     'https://queue.fal.run/minimax/h3/text-to-video',
     'https://queue.fal.run/blackforestlabs/flux-3/text-to-video',
+    'https://queue.fal.run/blackforestlabs/flux-3/text-to-image',
+    'https://queue.fal.run/blackforestlabs/flux-3/edit-image',
     'https://queue.fal.run/bytedance/seedance-2.5/reference-to-video',
     'https://queue.fal.run/fal-ai/bytedance/seedream/v5/lite/text-to-image',
     'https://queue.fal.run/fal-ai/bytedance/seedream/v5/lite/edit',

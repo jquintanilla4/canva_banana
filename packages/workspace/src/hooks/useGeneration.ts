@@ -1,5 +1,8 @@
 import { getWorkspaceSignal, workspaceFetch } from '../services/workspaceSession';
+import { isKrea3Model } from '../services/krea3Config';
+import { resolveKrea3RunSettings, serializeKrea3GenerationOptions, type Krea3RunSettings } from '../services/krea3RunSettings';
 import { isRetiredImageModelId } from '../services/fal/models';
+import { resolveFlux3ImageSettings } from '../services/flux3ImageConfig';
 import { resolveNanoBananaRunSettings, serializeNanoBananaGenerationOptions, type NanoBananaRunSettings } from '../services/nanoBananaRunSettings';
 import { getGenerationTransferOptionDefaults } from '../utils/generationTransferSettings';
 import { getGoogleImageAspectRatio } from '../services/nanoBananaAspectRatioPolicy';
@@ -30,7 +33,6 @@ import {
   JIMENG_MULTIFRAME_MAX_IMAGES,
   JIMENG_MULTIFRAME_MIN_IMAGES,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
-  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
@@ -44,7 +46,7 @@ import {
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_EDIT_VIDEO_MODEL_ID,
   WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
@@ -62,9 +64,6 @@ import {
   isGrokImagineVideoResolutionSelectionValue,
   isGptImage2EditModelId,
   isGptImage25Model,
-  isKrea2AspectRatioSelectionValue,
-  isKrea2CreativitySelectionValue,
-  isKrea2LargeModel,
   isKlingO3AspectRatioSelectionValue,
   isKlingO3DurationSelectionValue,
   isKlingO3VideoModelId,
@@ -114,7 +113,6 @@ import {
   isFalImageModelId,
   isFalModelMode,
   isFalVideoModelId,
-  isFlux2MaxImageSizeSelectionValue,
   isSeedreamModelId,
   isSeedreamV5LiteModelId,
   isSeedreamV5ProModelId,
@@ -134,8 +132,6 @@ import {
   type KlingV3DurationSelectionValue,
   type KlingV3ShotDurationSelectionValue,
   type KlingVariant,
-  type Krea2AspectRatioSelectionValue,
-  type Krea2CreativitySelectionValue,
   type WanAnimateQualitySelectionValue,
   type WanAnimateResolutionSelectionValue,
   type WanAnimateShiftSelectionValue,
@@ -199,7 +195,6 @@ import { generateSeedanceVideo, SEEDANCE2_VOLCENGINE_MODEL_IDS, type VolcengineQ
 import { generateJimengSeedanceVideo, type JimengQueueUpdate } from '../services/jimengService';
 import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
-import { normalizeKrea2StyleStrength } from '../utils/krea2StyleStrength';
 import {
   buildEffectiveSeedanceReferenceIds,
   getSeedance2VolcengineReferenceLimits,
@@ -255,7 +250,6 @@ type UseGenerationArgs = {
   selection: SelectionStateResult;
   images: CanvasImage[];
   paths: Path[];
-  krea2StyleReferenceStrengths?: Record<string, number>;
   videoNegativePrompt: string;
   setError: (message: string | null) => void;
   setIsLoading: (value: boolean) => void;
@@ -457,7 +451,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     selection,
     images,
     paths,
-    krea2StyleReferenceStrengths = {},
     videoNegativePrompt,
     setError,
     setIsLoading,
@@ -582,8 +575,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     jimengMultiframeResolution,
     jimengSessionId,
     isSeedance15VideoModel,
-    flux2MaxImageSize,
-    isFlux2MaxModel,
+    flux3ImageAspectRatio,
+    flux3ImageResolution,
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
@@ -595,10 +588,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
+    krea3Variant, krea3ReasoningLevel,
     grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
     grokImagePassthrough, grokImageEnableSafetyChecker,
-    krea2AspectRatio,
-    krea2Creativity,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
   } = fal;
@@ -700,9 +692,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const falImageSizeSelectionForRun = rawFalImageSizeSelection === 'placeholder' ? 'default' : rawFalImageSizeSelection;
     const falAspectRatioSelectionForRun = rawFalAspectRatioSelection === 'placeholder' ? 'default' : rawFalAspectRatioSelection;
     const falResolutionSelectionForRun = falOptionsOverride.resolutionSelection ?? falResolutionSelection;
-    const flux2MaxImageSizeForRun = isFlux2MaxImageSizeSelectionValue(falOptionsOverride.flux2MaxImageSize)
-      ? falOptionsOverride.flux2MaxImageSize
-      : flux2MaxImageSize; // Retry data overrides the current Flux size picker.
+    const flux3ImageSettingsForRun = resolveFlux3ImageSettings(generationOverride
+      ? falOptionsOverride
+      : { flux3ImageAspectRatio, flux3ImageResolution }); // Saved runs never inherit unrelated live Flux controls.
     const falNumImagesForRun = falOptionsOverride.numImages ?? falNumImages;
     const falScaleFactorForRun = falOptionsOverride.scaleFactor ?? falScaleFactor;
     const falNoiseScaleForRun = falOptionsOverride.noiseScale ?? falNoiseScale;
@@ -869,13 +861,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const seedance15AudioForRun = typeof falOptionsOverride.seedance15Audio === 'boolean'
       ? falOptionsOverride.seedance15Audio
       : seedance15Audio;
-    const krea2AspectRatioForRun: Krea2AspectRatioSelectionValue = isKrea2AspectRatioSelectionValue(falOptionsOverride.aspectRatioSelection)
-      ? falOptionsOverride.aspectRatioSelection
-      : krea2AspectRatio;
-    const krea2CreativityForRun: Krea2CreativitySelectionValue = isKrea2CreativitySelectionValue(falOptionsOverride.krea2Creativity)
-      ? falOptionsOverride.krea2Creativity
-      : krea2Creativity;
-    const krea2StrengthsForRun = falOptionsOverride.krea2StyleReferenceStrengths ?? krea2StyleReferenceStrengths;
     const klingV3ControlKeepSoundForRun = falOptionsOverride.klingV3ControlKeepSound ?? klingV3ControlKeepSound;
     const klingV3ControlOrientationForRun = falOptionsOverride.klingV3ControlOrientation === 'image'
       || falOptionsOverride.klingV3ControlOrientation === 'video'
@@ -1042,9 +1027,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isGptImage2ModelForRun = !isVideoMode && isGptImage2EditModelId(falModelIdForRun);
     const isGptImage25ModelForRun = !isVideoMode && isGptImage25Model(falModelIdForRun);
     const isIdeogram45ModelForRun = !isVideoMode && isIdeogram45Model(falModelIdForRun);
-    const isKrea2LargeModelForRun = usingFal && !isVideoMode && isKrea2LargeModel(falModelIdForRun);
+    const isKrea3ModelForRun = !isVideoMode && isKrea3Model(falModelIdForRun);
     const isGrokImagineModel = !isVideoMode && falModelIdForRun === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
-    const isFlux2MaxModelForRun = !isVideoMode && falModelIdForRun === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
+    const isFlux3ImageModelForRun = !isVideoMode && falModelIdForRun === FLUX_3_TEXT_TO_IMAGE_MODEL_ID;
     const isRecraftV4ProModelForRun = usingFal && !isVideoMode && isRecraftV4ProModel(falModelIdForRun);
     const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
     const isSeedvrUpscaleModel = !isVideoMode && falModelIdForRun === 'fal-ai/seedvr/upscale/image';
@@ -1116,14 +1101,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? videoNegativePromptForRun.trim()
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
-    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun || isKrea2LargeModelForRun;
+    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun;
     let nanoBananaSettingsForRun: NanoBananaRunSettings | undefined;
     let ideogram45SettingsForRun: Ideogram45RunSettings | undefined;
     let gptImage2SettingsForRun: GptImage2RunSettings | undefined;
     let gptImage25SettingsForRun: GptImage25RunSettings | undefined;
+    let krea3SettingsForRun: Krea3RunSettings | undefined;
     let grokImageSettingsForRun: GrokImageRunSettings | undefined;
     let recraftSettingsForRun: RecraftRunSettings | undefined;
-    if (usingFal && (isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun || isGrokImagineModel || isRecraftV4ProModelForRun)) {
+    if (usingFal && (isKrea3ModelForRun || isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun || isGrokImagineModel || isRecraftV4ProModelForRun)) {
       try {
         const commonRunInput = {
           kind: isTextToImage ? 'text_to_image' : 'image_edit',
@@ -1156,6 +1142,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
             variant: generationOverride ? generationOverride.falOptions?.gptImage25Variant : gptImage25Variant,
             quality: generationOverride ? falOptionsOverride.gptImage25Quality : gptImage25Quality,
             background: generationOverride ? falOptionsOverride.gptImage25Background : gptImage25Background,
+          }, validation);
+        } else if (isKrea3ModelForRun) {
+          krea3SettingsForRun = resolveKrea3RunSettings({
+            ...commonRunInput,
+            variant: generationOverride ? falOptionsOverride.krea3Variant : krea3Variant,
+            reasoningLevel: generationOverride ? falOptionsOverride.krea3ReasoningLevel : krea3ReasoningLevel,
           }, validation);
         } else if (isGrokImagineModel) {
           grokImageSettingsForRun = resolveGrokImageRunSettings({
@@ -3085,7 +3077,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const shouldValidateFalOptions = usingFal
       && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun);
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
-    const resolvedImageSettings = nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? grokImageSettingsForRun;
+    const resolvedImageSettings = krea3SettingsForRun ?? nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? grokImageSettingsForRun;
     const numImagesForValidation = generationOverride && resolvedImageSettings
       ? resolvedImageSettings.numImages ?? 1 : falNumImagesForRun;
     const isNumImagesInvalid =
@@ -3130,28 +3122,23 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const jobPromptDescription = usingFal && isUpscaleModel
       ? `${jobModelLabel} (${upscaleDetails})`
       : trimmedPrompt;
-    // Single source of truth for the per-model image options replayed on retry and saved in
-    // generation metadata. Krea2 style strengths depend on which reference ids the caller uses.
-    const buildImageFalOptionsForRun = (referenceIdsForStrengths: string[]): GenerationFalOptions => ({
-      ...(isKrea2LargeModelForRun ? { aspectRatioSelection: krea2AspectRatioForRun } : falAspectRatioSelectionForRun ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
+    const imageFalOptionsForRun: GenerationFalOptions = { // Retry and completed metadata share the resolved options.
+      ...(falAspectRatioSelectionForRun ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
       ...(normalizedFalImageSizeSelectionForRun ? { imageSizeSelection: normalizedFalImageSizeSelectionForRun } : {}),
       ...(falResolutionSelectionForRun ? { resolutionSelection: falResolutionSelectionForRun } : {}),
-      ...(isFlux2MaxModelForRun ? { flux2MaxImageSize: flux2MaxImageSizeForRun } : {}),
+      ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
       ...(nanoBananaSettingsForRun ? serializeNanoBananaGenerationOptions(nanoBananaSettingsForRun) : {}),
       ...(gptImage2SettingsForRun ? serializeGptImage2GenerationOptions(gptImage2SettingsForRun) : {}),
       ...(gptImage25SettingsForRun ? serializeGptImage25GenerationOptions(gptImage25SettingsForRun) : {}),
+      ...(krea3SettingsForRun ? serializeKrea3GenerationOptions(krea3SettingsForRun) : {}),
       ...(grokImageSettingsForRun ? serializeGrokImageGenerationOptions(grokImageSettingsForRun) : {}),
       ...(recraftSettingsForRun ? serializeRecraftGenerationOptions(recraftSettingsForRun) : {}),
       ...(ideogram45SettingsForRun ? serializeIdeogram45GenerationOptions(ideogram45SettingsForRun) : {}),
-      ...(isKrea2LargeModelForRun ? {
-        krea2Creativity: krea2CreativityForRun,
-        krea2StyleReferenceStrengths: Object.fromEntries(referenceIdsForStrengths.map(id => [id, normalizeKrea2StyleStrength(krea2StrengthsForRun[id])])),
-      } : {}),
       ...(generationKind === 'upscale' ? { scaleFactor: falScaleFactorForRun } : {}),
       ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
       ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
       ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
-    });
+    };
     const imageRetryInputs: GenerationInputs = {
       kind: generationKind,
       prompt: trimmedPrompt,
@@ -3168,7 +3155,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         editTool: editToolForRun,
         editPaths: clonePathsForRetry(editPathsForRun),
       } : {}),
-      falOptions: buildImageFalOptionsForRun(referenceImageIdsForRun),
+      falOptions: imageFalOptionsForRun,
     }; // Queue retry mirrors generated-image metadata before output exists.
     const retryableImageInputs = usingFal ? imageRetryInputs : undefined; // Fal image jobs can replay saved request inputs.
     const handleFalPhaseUpdate = (update: FalPhaseUpdate) => {
@@ -3251,35 +3238,17 @@ export const useGeneration = (args: UseGenerationArgs) => {
             throw new Error('Unable to create Fal job identifier.');
           }
 
-          const textToImageModelId = nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? grokImageSettingsForRun?.endpoint ?? recraftSettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
+          const textToImageModelId = krea3SettingsForRun?.endpoint ?? nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? grokImageSettingsForRun?.endpoint ?? recraftSettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
             ? falModelIdForRun
             : isSeedreamModel
               ? getSeedreamTextToImageModelId(falModelIdForRun)
               : isGrokImagineModel
                 ? GROK_IMAGINE_IMAGE_MODEL_ID // Grok text-to-image endpoint.
-                : isKrea2LargeModelForRun
-                  ? KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID
-                  : isFlux2MaxModelForRun
-                    ? FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID
-                    : isRecraftV4ProModelForRun
-                      ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
-                      : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID);
-          const krea2AllReferenceCanvasImages = isKrea2LargeModelForRun
-            ? referenceImageIdsForRun
-              .map(id => images.find(img => img.id === id))
-              .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
-            : [];
-          if (isKrea2LargeModelForRun && krea2AllReferenceCanvasImages.length !== referenceImageIdsForRun.length) {
-            throw new Error('Krea 2 Large style references must be still images.');
-          }
-          const krea2ReferenceCanvasImages = krea2AllReferenceCanvasImages.slice(0, getMaxReferenceImages(falModelIdForRun));
-          const krea2StyleReferences = krea2ReferenceCanvasImages.map(img => ({
-            image: img.element,
-            strength: normalizeKrea2StyleStrength(krea2StrengthsForRun[img.id]),
-          }));
-          if (isKrea2LargeModelForRun) {
-            referenceIdsUsed = krea2ReferenceCanvasImages.map(img => img.id);
-          }
+                : isFlux3ImageModelForRun
+                  ? FLUX_3_TEXT_TO_IMAGE_MODEL_ID
+                  : isRecraftV4ProModelForRun
+                    ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
+                    : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID);
 
           const falResult = await awaitActive(async () => generateFalImage(trimmedPrompt, {
             jobId: falJobId,
@@ -3293,22 +3262,20 @@ export const useGeneration = (args: UseGenerationArgs) => {
               }));
             },
             modelId: textToImageModelId,
-            aspectRatio: isKrea2LargeModelForRun
-              ? krea2AspectRatioForRun
-              : (isNanoBananaModel || isSeedreamModel)
+            aspectRatio: (isNanoBananaModel || isSeedreamModel)
               ? falAspectRatioSelectionForRun
               : 'default',
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(nanoBananaSettingsForRun?.kind === 'text_to_image' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
             ...(gptImage2SettingsForRun?.kind === 'text_to_image' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
             ...(gptImage25SettingsForRun?.kind === 'text_to_image' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
+            ...(krea3SettingsForRun?.kind === 'text_to_image' ? { krea3RunSettings: krea3SettingsForRun } : {}),
             ...(grokImageSettingsForRun?.kind === 'text_to_image' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
             ...(recraftSettingsForRun ? { recraftRunSettings: recraftSettingsForRun } : {}),
             ...(ideogram45SettingsForRun?.kind === 'text_to_image' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
-            ...(isKrea2LargeModelForRun ? { krea2Creativity: krea2CreativityForRun, imageStyleReferences: krea2StyleReferences } : {}),
             ...(isSeedreamModel ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
-            ...(isFlux2MaxModelForRun ? { flux2MaxImageSize: flux2MaxImageSizeForRun } : {}),
-            ...(!resolvedImageSettings && !isKrea2LargeModelForRun ? { numImages: normalizedFalNumImages } : {}),
+            ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
+            ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
           }));
 
           generationResult = falResult;
@@ -3406,7 +3373,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
           } else {
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun || isFlux2MaxModelForRun || isGrokImagineModel;
+            const supportsEditReferenceImages = isKrea3ModelForRun || isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun || isFlux3ImageModelForRun || isGrokImagineModel;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
               const maxReferenceImages = getModelReferenceCapabilities(falModelIdForRun, editToolForRun).availableReferenceSlots;
@@ -3447,8 +3414,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(nanoBananaSettingsForRun?.kind === 'image_edit' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
               ...(gptImage2SettingsForRun?.kind === 'image_edit' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
               ...(gptImage25SettingsForRun?.kind === 'image_edit' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
+              ...(krea3SettingsForRun?.kind === 'image_edit' ? { krea3RunSettings: krea3SettingsForRun } : {}),
               ...(grokImageSettingsForRun?.kind === 'image_edit' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
               ...(ideogram45SettingsForRun?.kind === 'image_edit' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
+              ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
               ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
               onQueueUpdate: (update) => {
                 setFalJobs(prev => prev.map(job => {
@@ -3557,7 +3526,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 ...(videoLastFrameImageIdForRun ? { videoLastFrameImageId: videoLastFrameImageIdForRun } : {}),
                 ...(primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 falOptions: {
-                  ...buildImageFalOptionsForRun(referenceIdsUsed),
+                  ...imageFalOptionsForRun,
                   // Saved metadata keeps video-model options too so legacy snapshot restores retain them.
                   ...(generationKind === 'video' ? { videoDuration: videoDurationForRun } : {}),
                   ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
@@ -3652,6 +3621,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
+    flux3ImageAspectRatio,
+    flux3ImageResolution,
     falNumImages,
     falScaleFactor,
     falNoiseScale,
@@ -3743,11 +3714,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
+    krea3Variant, krea3ReasoningLevel,
     grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
     grokImagePassthrough, grokImageEnableSafetyChecker,
-    krea2AspectRatio,
-    krea2Creativity,
-    krea2StyleReferenceStrengths,
     images,
     paths,
     referenceImageIds,

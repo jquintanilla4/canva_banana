@@ -1,3 +1,5 @@
+import { KREA_3_DEFAULTS, isKrea3Model } from '../services/krea3Config';
+import { resolveKrea3RunSettings, serializeKrea3GenerationOptions } from '../services/krea3RunSettings';
 import type {
   GenerationFalOptions,
   GenerationInputs,
@@ -6,7 +8,7 @@ import type {
 } from '../types';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
@@ -20,8 +22,6 @@ import {
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  KREA_2_DEFAULT_ASPECT_RATIO,
-  KREA_2_DEFAULT_CREATIVITY,
   MINIMAX_H3_VIDEO_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
@@ -37,7 +37,6 @@ import {
   isFalImageModelId,
   isGptImage2Model,
   isGptImage25Model,
-  isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
   isRecraftV4ProModel,
   isSeedance2VideoModel as isSeedance2VideoModelId,
@@ -47,6 +46,7 @@ import {
   type FalModelId,
 } from '../services/modelConfig';
 import { resolveFlux3Settings } from './flux3';
+import { resolveFlux3ImageSettings } from '../services/flux3ImageConfig';
 import { IDEOGRAM_45_DEFAULTS, isIdeogram45Model } from '../services/ideogram45Config';
 import { resolveIdeogram45RunSettings, serializeIdeogram45GenerationOptions } from '../services/ideogram45RunSettings';
 import { NANO_BANANA_DEFAULTS } from '../services/nanoBananaConfig';
@@ -182,11 +182,11 @@ const VIDEO_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
 const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [CRYSTAL_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, creativity: 0 } }, // Crystal defaults.
   { matches: [SEEDVR_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, noiseScale: 0.1 } }, // SeedVR defaults.
-  { matches: [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID], defaults: { flux2MaxImageSize: 'landscape_4_3' } }, // Flux defaults.
+  { matches: [FLUX_3_TEXT_TO_IMAGE_MODEL_ID], defaults: restoredOptions => resolveFlux3ImageSettings(restoredOptions) },
   { matches: (modelId) => isGptImage25Model(modelId), defaults: GPT_IMAGE_25_DEFAULTS },
+  { matches: (modelId) => isKrea3Model(modelId), defaults: KREA_3_DEFAULTS },
   { matches: (modelId) => isIdeogram45Model(modelId), defaults: IDEOGRAM_45_DEFAULTS },
   { matches: (modelId) => isGptImage2Model(modelId), defaults: GPT_IMAGE_2_DEFAULTS },
-  { matches: (modelId) => isKrea2LargeModelId(modelId), defaults: { aspectRatioSelection: KREA_2_DEFAULT_ASPECT_RATIO, krea2Creativity: KREA_2_DEFAULT_CREATIVITY } }, // Krea defaults.
   {
     matches: (modelId) => isRecraftV4ProModel(modelId),
     defaults: () => serializeRecraftGenerationOptions(resolveRecraftRunSettings({}, 'restore')),
@@ -255,6 +255,9 @@ export const resolveGenerationTransferOptions = (
     ...getGenerationTransferOptionDefaults(normalizedModelId, restoredOptions),
     ...restoredOptions,
   };
+  if (normalizedModelId === FLUX_3_TEXT_TO_IMAGE_MODEL_ID) {
+    return { ...resolvedOptions, ...resolveFlux3ImageSettings(restoredOptions), numImages: 1 };
+  }
   if (isRecraftV4ProModel(normalizedModelId)) {
     return { ...resolvedOptions, ...serializeRecraftGenerationOptions(resolveRecraftRunSettings({
       imageSize: resolvedOptions.recraftImageSize, backgroundColor: resolvedOptions.recraftBackgroundColor, colors: resolvedOptions.recraftColors,
@@ -292,6 +295,14 @@ export const resolveGenerationTransferOptions = (
       numImages: resolvedOptions.numImages,
     }, 'restore');
     return { ...resolvedOptions, ...serializeNanoBananaGenerationOptions(settings) };
+  }
+  if (isKrea3Model(normalizedModelId)) {
+    const settings = resolveKrea3RunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
+      variant: resolvedOptions.krea3Variant, reasoningLevel: resolvedOptions.krea3ReasoningLevel,
+      imageSizeSelection: resolvedOptions.imageSizeSelection,
+    }, 'restore');
+    return { ...resolvedOptions, ...serializeKrea3GenerationOptions(settings) };
   }
   if (isGptImage25Model(normalizedModelId)) {
     const settings = resolveGptImage25RunSettings({

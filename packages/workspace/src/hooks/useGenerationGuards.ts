@@ -55,7 +55,6 @@ type Args = {
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
   isGptImage2Model?: boolean;
-  isKrea2LargeModel?: boolean;
   isGrokModel: boolean; // Grok text-to-image flag.
   isGrokImagineVideoModel: boolean;
   isKlingVideoModel: boolean;
@@ -148,7 +147,6 @@ export const buildGenerationGuardArgs = ({
   isSeedreamModel: !fal.isVideoMode && isSeedreamModelId(fal.falModelId),
   isNanoBananaModel: !fal.isVideoMode && isNanoBananaEditModelId(fal.falModelId),
   isGptImage2Model: !fal.isVideoMode && (isGptImage2EditModelId(fal.falModelId) || isGptImage25Model(fal.falModelId)),
-  isKrea2LargeModel: apiProvider === 'fal' && fal.isKrea2LargeModel, // Krea behavior only applies while Fal is active.
   isGrokModel: !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID, // Grok text-to-image.
   isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
   isKlingVideoModel: fal.isKlingVideoModel,
@@ -207,7 +205,6 @@ export function useGenerationGuards({
   isSeedreamModel,
   isNanoBananaModel,
   isGptImage2Model = false,
-  isKrea2LargeModel = false,
   isGrokModel, // Grok text-to-image flag.
   isGrokImagineVideoModel,
   isKlingVideoModel,
@@ -336,8 +333,7 @@ export function useGenerationGuards({
     const hasScailStillImage = isScailVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const hasKlingV3ControlStillImage = isKlingV3ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const isRecraftTextToImage = usingFal && !isVideoMode && isRecraftV4ProModel(falModelId); // Recraft t2i is Fal-only.
-    const isKrea2TextToImage = usingFal && !isVideoMode && isKrea2LargeModel; // Krea refs are style inputs, not edits.
-    const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage || isKrea2TextToImage) && !(isVideoMode && (
+    const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage) && !(isVideoMode && (
       (isVideoInputMode && hasSourceVideo) || isGrokImagineVideoEditMode
     ));
     const promptEmpty = prompt.trim().length === 0;
@@ -564,9 +560,6 @@ export function useGenerationGuards({
       }
       if (usingFal && isUpscaleModel) {
         return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select an image and scale factor.`;
-      }
-      if (usingFal && isKrea2LargeModel) {
-        return 'Describe the image to create, or shift-click up to 10 canvas images as style references...';
       }
       return isTextToImage
         ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'

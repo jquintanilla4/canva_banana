@@ -1,3 +1,5 @@
+import type { Krea3RunSettings } from '../krea3RunSettings';
+import type { Krea3Variant, Krea3ReasoningLevel } from '../krea3Config';
 import type {
   GenerationFalOptions,
   NanoBananaThinkingLevel,
@@ -13,9 +15,10 @@ import type {
   Ideogram45EditPrecision,
   FalImageSizeOption,
   FalAspectRatioOption,
-  FalKrea2CreativityOption,
   FalResolutionOption,
   FalVideoDuration,
+  Flux3ImageAspectRatio,
+  Flux3ImageResolution,
   Flux3AspectRatio,
   Flux3Duration,
   Flux3Resolution,
@@ -115,6 +118,9 @@ export interface GenerateImageEditOptions extends FalPhaseOptions, Pick<Generati
   aspectRatio?: FalAspectRatioOption;
   numImages?: number;
   resolution?: FalResolutionOption;
+  flux3ImageAspectRatio?: Flux3ImageAspectRatio;
+  flux3ImageResolution?: Flux3ImageResolution;
+  flux2MaxImageSize?: string; // Legacy callers retain their aspect ratio when migrated.
   gptImage2Quality?: FalGptImage2QualityOption;
   gptImage2RunSettings?: GptImage2RunSettings<'image_edit'>;
   nanoBananaRunSettings?: NanoBananaRunSettings<'image_edit'>;
@@ -124,6 +130,9 @@ export interface GenerateImageEditOptions extends FalPhaseOptions, Pick<Generati
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
   gptImage25RunSettings?: GptImage25RunSettings<'image_edit'>;
+  krea3Variant?: Krea3Variant;
+  krea3ReasoningLevel?: Krea3ReasoningLevel;
+  krea3RunSettings?: Krea3RunSettings<'image_edit'>;
   grokImageRunSettings?: GrokImageRunSettings<'image_edit'>;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
@@ -151,14 +160,17 @@ export interface GenerateImageOptions extends FalPhaseOptions, Pick<GenerationFa
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
   gptImage25RunSettings?: GptImage25RunSettings<'text_to_image'>;
+  krea3Variant?: Krea3Variant;
+  krea3ReasoningLevel?: Krea3ReasoningLevel;
+  krea3RunSettings?: Krea3RunSettings<'text_to_image'>;
   grokImageRunSettings?: GrokImageRunSettings<'text_to_image'>;
   recraftRunSettings?: RecraftRunSettings;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
   ideogram45RunSettings?: Ideogram45TextRunSettings;
-  krea2Creativity?: FalKrea2CreativityOption;
-  imageStyleReferences?: Array<{ image: HTMLImageElement; strength: number }>;
   flux2MaxImageSize?: string;
+  flux3ImageAspectRatio?: Flux3ImageAspectRatio;
+  flux3ImageResolution?: Flux3ImageResolution;
   recraftImageSize?: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor?: RecraftRgbColor;
   recraftColors?: RecraftRgbColor[];

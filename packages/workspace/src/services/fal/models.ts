@@ -1,4 +1,6 @@
 import { normalizeNanoBananaEndpoint } from '../nanoBananaConfig';
+import { getFlux3ImageSelectorModelId } from '../flux3ImageConfig';
+import { getKrea3SelectorModelId } from '../krea3Config';
 import type { FalAspectRatioOption, FalImageSizeOption } from '../../types'; // UI option types.
 import {
   GROK_IMAGINE_IMAGE_MODEL_ID,
@@ -13,6 +15,7 @@ import {
 import { getRuntimeConfig } from '../runtimeConfig'; // Shared web/desktop config.
 
 const RETIRED_IMAGE_MODEL_IDS = new Set([
+  'krea/v2/large/text-to-image',
   'fal-ai/bytedance/seedream/v4/edit',
   'fal-ai/bytedance/seedream/v4/text-to-image',
   'fal-ai/bytedance/seedream/v4.5/edit',
@@ -39,7 +42,7 @@ export const normalizeModelId = (modelId: string | undefined): string | undefine
   }
   if (modelId === 'fal-ai/recraft/v4/pro/text-to-image') return RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID; // Upgrade legacy generation requests.
   if (normalizeFalModelId(modelId) === GROK_IMAGINE_IMAGE_MODEL_ID) return GROK_IMAGINE_IMAGE_MODEL_ID; // Share Grok selector aliases with the picker.
-  return normalizeNanoBananaEndpoint(modelId);
+  return getKrea3SelectorModelId(modelId) ?? getFlux3ImageSelectorModelId(modelId) ?? normalizeNanoBananaEndpoint(modelId);
 };
 
 export const getDefaultFalModelId = (): string => normalizeModelId(getRuntimeConfig().falModelId) || NANO_BANANA_PRO_EDIT_MODEL_ID; // Default edit model.

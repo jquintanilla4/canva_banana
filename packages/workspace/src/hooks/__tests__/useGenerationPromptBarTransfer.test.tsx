@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID } from '../../services/modelConfig';
+import { KREA_3_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage, GenerationInputs } from '../../types';
 import { useGenerationPromptBarTransfer } from '../useGenerationPromptBarTransfer';
 
@@ -40,7 +40,6 @@ const buildHookArgs = (displayedImages: CanvasImage[]) => ({
   setActiveEmbeddedPromptBarId: vi.fn(),
   setSelectedVideoPromptAreaId: vi.fn(),
   setVideoNegativePromptForModel: vi.fn(),
-  setKrea2StyleReferenceStrengths: vi.fn(),
   setToastMessage: vi.fn(),
   resetEditContext: vi.fn(),
 }); // Tests override only the transfer channels they need to observe.
@@ -56,7 +55,7 @@ describe('useGenerationPromptBarTransfer', () => {
       kind: 'text_to_image',
       prompt: 'Restore the old image prompt',
       provider: 'fal',
-      modelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+      modelId: KREA_3_MODEL_ID,
       modelMode: 'image',
     };
     const displayedImages = [buildImage('output-a', generation), buildImage('output-b', generation)];
@@ -86,7 +85,7 @@ describe('useGenerationPromptBarTransfer', () => {
       kind: 'text_to_image',
       prompt: 'Restore the old image prompt',
       provider: 'fal',
-      modelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+      modelId: KREA_3_MODEL_ID,
       modelMode: 'image',
       primaryImageId: 'source-image',
       falOptions: { negativePrompt: 'Old unsupported negative prompt' },
@@ -111,7 +110,7 @@ describe('useGenerationPromptBarTransfer', () => {
       kind: 'image_edit',
       prompt: 'Restore this edit prompt',
       provider: 'fal',
-      modelId: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+      modelId: KREA_3_MODEL_ID,
       modelMode: 'image',
       primaryImageId: 'source-image',
     };

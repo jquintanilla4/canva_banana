@@ -9,7 +9,6 @@ import {
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
-  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
@@ -123,11 +122,6 @@ describe('derivePromptBarModelFlags', () => {
     expect(flags.isJimengSeedance2VideoModel).toBe(true);
     expect(flags.isJimengMultiframeVideoModel).toBe(true);
     expect(flags.isSeedance2VideoModel).toBe(false);
-  });
-
-  it('gates Krea 2 Large on the active provider', () => {
-    expect(derivePromptBarModelFlags('fal', KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, 'image').isKrea2LargeModel).toBe(true);
-    expect(derivePromptBarModelFlags('google', KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, 'image').isKrea2LargeModel).toBe(false);
   });
 });
 

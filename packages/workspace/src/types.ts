@@ -102,8 +102,9 @@ export type GptImage25Background = 'auto' | 'transparent' | 'opaque';
 export type GptImage25Quality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type Ideogram45Quality = 'very_low' | 'low' | 'medium' | 'high';
 export type Ideogram45EditPrecision = 'regular' | 'high';
-export type FalKrea2CreativityOption = 'raw' | 'low' | 'medium' | 'high';
 export type Flux2MaxImageSizeOption = Extract<FalImageSizePreset, 'landscape_4_3' | 'landscape_16_9' | 'portrait_4_3' | 'portrait_16_9' | 'square' | 'square_hd'>;
+export type Flux3ImageAspectRatio = 'auto' | '21:9' | '2:1' | '16:9' | '3:2' | '7:5' | '4:3' | '5:4' | '1:1' | '4:5' | '3:4' | '5:7' | '2:3' | '9:16' | '1:2';
+export type Flux3ImageResolution = '768sq' | '1k' | '1.5k' | '2k' | '4k';
 
 export type FalVideoDuration = '5' | '6' | '10';
 
@@ -137,9 +138,13 @@ export type GenerationFalOptions = Partial<{
   imageSizeSelection: FalImageSizeOption;
   aspectRatioSelection: FalAspectRatioOption;
   resolutionSelection: FalResolutionOption;
+  krea3Variant: import('./services/krea3Config').Krea3Variant;
+  krea3ReasoningLevel: import('./services/krea3Config').Krea3ReasoningLevel;
   nanoBananaWebSearch: boolean;
   nanoBananaThinkingLevel: NanoBananaThinkingLevel;
-  flux2MaxImageSize: Flux2MaxImageSizeOption; // Flux 2 Max output size replayed by retries.
+  flux2MaxImageSize: Flux2MaxImageSizeOption; // Legacy Flux 2 Max size, migrated to a Flux 3 aspect ratio.
+  flux3ImageAspectRatio: Flux3ImageAspectRatio;
+  flux3ImageResolution: Flux3ImageResolution;
   gptImage2Quality: FalGptImage2QualityOption;
   gptImage25Variant: GptImage25Variant;
   gptImage25Background: GptImage25Background;
@@ -152,8 +157,6 @@ export type GenerationFalOptions = Partial<{
   grokImageEnableSafetyChecker: boolean;
   ideogram45Quality: Ideogram45Quality;
   ideogram45EditPrecision: Ideogram45EditPrecision;
-  krea2Creativity: FalKrea2CreativityOption;
-  krea2StyleReferenceStrengths: Record<string, number>;
   numImages: number;
   scaleFactor: number;
   noiseScale: number;

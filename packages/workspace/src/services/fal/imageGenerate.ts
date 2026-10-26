@@ -1,6 +1,9 @@
 import { getWorkspaceSignal } from '../workspaceSession';
+import { isKrea3Model } from '../krea3Config';
+import { resolveKrea3SettingsForRequest, serializeKrea3Input } from './krea3';
 import { getNanoBananaSelectorModelId } from '../nanoBananaConfig';
 import { resolveNanoBananaSettingsForRequest, serializeNanoBananaInput } from './nanoBanana';
+import { resolveFlux3ImageSettings } from '../flux3ImageConfig';
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45TextInput, type Ideogram45TextRequest } from './ideogram45';
@@ -8,7 +11,7 @@ import { resolveGptImage2SettingsForRequest, resolveGptImage25SettingsForRequest
 import { resolveRecraftSettingsForRequest, serializeRecraftInput } from './recraft';
 import { resolveGrokImageSettingsForRequest, serializeGrokImageInput } from './grokImage';
 import type { GrokImageOutputFormat, GrokImageQuality, GrokImageResolution } from '../grokImageConfig';
-import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption, GptImage25Quality, GptImage25Background } from '../../types'; // Shared option types.
+import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption, Flux3ImageResolution, GptImage25Quality, GptImage25Background } from '../../types'; // Shared option types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
 import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
@@ -17,31 +20,19 @@ import { logFalEvent } from './logging'; // Fal debug logging.
 import { emitFalPhase } from './phase'; // Phase update helper.
 import { extractInlineData, normalizeFalImageMetadata, runFalDownloadStep } from './responses'; // Response parsing helpers.
 import { createRandomSeed } from './random'; // Seed helper.
-import { uploadImageElementToFal } from './media'; // Media upload helper.
 import { assertSupportedImageModelId, isSeedreamTextToImageModelId, normalizeModelId, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
 import {
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   isGptImage25Model,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
   isGptImage2TextToImageModelId,
   isGptImage2EditModelId,
-  isKrea2AspectRatioSelectionValue,
-  isKrea2CreativitySelectionValue,
   isNanoBananaTextToImageModelId,
   isRecraftV4ProModel,
   isSeedreamV5ProModelId,
-  KREA_2_DEFAULT_ASPECT_RATIO,
-  KREA_2_DEFAULT_CREATIVITY,
-  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
-  KREA_2_MAX_STYLE_REFERENCES,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
-
-const normalizeKreaStyleReferenceStrength = (value: number): number => {
-  const rounded = Number.isFinite(value) ? Math.round(value * 10) / 10 : 1; // Fal accepts tenths in the UI.
-  return Math.min(2, Math.max(-2, rounded));
-};
 
 export const generateImage = async (
   prompt: string,
@@ -59,7 +50,8 @@ export const generateImage = async (
     ? resolveGptImage25SettingsForRequest('text_to_image', options) : undefined;
   const nanoBananaSettings = getNanoBananaSelectorModelId(selectedModelId)
     ? resolveNanoBananaSettingsForRequest('text_to_image', { ...options, modelId: selectedModelId }) : undefined;
-  const modelId = nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
+  const krea3Settings = isKrea3Model(selectedModelId) ? resolveKrea3SettingsForRequest('text_to_image', options) : undefined;
+  const modelId = krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
     ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_MODEL_ID : selectedModelId);
   const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
     : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings) : undefined;
@@ -69,8 +61,7 @@ export const generateImage = async (
   const isSeedreamV5ProTextToImage = isSeedreamV5ProModelId(modelId);
   const isNanoBananaTextToImage = isNanoBananaTextToImageModelId(modelId);
   const isGptImage2TextToImage = isGptImage2TextToImageModelId(modelId);
-  const isKrea2TextToImage = modelId === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
-  const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
+  const isFlux3TextToImage = modelId === FLUX_3_TEXT_TO_IMAGE_MODEL_ID;
   const isRecraftV4ProTextToImage = isRecraftV4ProModel(modelId);
   const recraftSettings = isRecraftV4ProTextToImage ? resolveRecraftSettingsForRequest(options) : undefined;
   const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
@@ -95,39 +86,19 @@ export const generateImage = async (
     image_size?: { width: number; height: number } | string;
     quality?: GptImage25Quality | GrokImageQuality;
     background?: GptImage25Background;
-    creativity?: 'raw' | 'low' | 'medium' | 'high';
-    image_style_references?: Array<{ image_url: string; strength: number }>;
     seed?: number;
-    resolution?: FalResolutionOption | GrokImageResolution;
+    resolution?: FalResolutionOption | Flux3ImageResolution | GrokImageResolution;
     image_passthrough?: boolean;
-    safety_tolerance?: '5';
+    safety_tolerance?: 4;
     colors?: Array<{ r: number; g: number; b: number }>;
     background_color?: { r: number; g: number; b: number };
     enable_safety_checker?: boolean;
   } = {
     prompt,
-    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isGptImage2TextToImage && !isGptImage25 && !isKrea2TextToImage && !isRecraftV4ProTextToImage, // Keep queue history visible for async models.
+    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isGptImage2TextToImage && !isGptImage25 && !isRecraftV4ProTextToImage, // Keep queue history visible for async models.
   };
 
-  if (isKrea2TextToImage) {
-    body.aspect_ratio = isKrea2AspectRatioSelectionValue(aspectRatioOption) ? aspectRatioOption : KREA_2_DEFAULT_ASPECT_RATIO;
-    body.creativity = isKrea2CreativitySelectionValue(options.krea2Creativity) ? options.krea2Creativity : KREA_2_DEFAULT_CREATIVITY;
-    const styleReferences = Array.isArray(options.imageStyleReferences)
-      ? options.imageStyleReferences.slice(0, KREA_2_MAX_STYLE_REFERENCES)
-      : [];
-    if (styleReferences.length > 0) {
-      body.image_style_references = await Promise.all(styleReferences.map(async reference => ({
-        image_url: await uploadImageElementToFal(reference.image, {
-          jobId: options.jobId,
-          onPhaseUpdate: options.onPhaseUpdate,
-      abortSignal: options.abortSignal,
-          label: 'style reference image',
-        }),
-        strength: normalizeKreaStyleReferenceStrength(reference.strength),
-      })));
-    }
-    delete body.sync_mode;
-  } else if (recraftSettings) {
+  if (recraftSettings) {
     Object.assign(body, serializeRecraftInput(recraftSettings));
     delete body.sync_mode;
   } else if (!isSeedreamTextToImage) {
@@ -139,18 +110,21 @@ export const generateImage = async (
     body.enable_safety_checker = false;
   }
 
-  if (isFlux2MaxTextToImage) { // Flux2 Max specific settings.
-    body.safety_tolerance = '5'; // Most permissive
+  if (isFlux3TextToImage) {
+    const settings = resolveFlux3ImageSettings(options);
+    body.safety_tolerance = 4; // Flux 3's most permissive supported value.
     body.output_format = 'png';
-    const flux2ImageSize = options.flux2MaxImageSize ?? 'landscape_4_3';
-    body.image_size = flux2ImageSize;
+    body.aspect_ratio = settings.flux3ImageAspectRatio;
+    body.resolution = settings.flux3ImageResolution;
+    body.sync_mode = false;
   }
 
   if (nanoBananaSettings) Object.assign(body, serializeNanoBananaInput(nanoBananaSettings));
   if (gptImageInput) Object.assign(body, gptImageInput);
+  if (krea3Settings) Object.assign(body, serializeKrea3Input(krea3Settings));
   if (grokSettings) Object.assign(body, serializeGrokImageInput(grokSettings));
 
-  if (!grokSettings && !nanoBananaSettings && !ideogram45Input && !gptImageInput && !isKrea2TextToImage && !isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!krea3Settings && !grokSettings && !nanoBananaSettings && !ideogram45Input && !gptImageInput && !isFlux3TextToImage && !isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {

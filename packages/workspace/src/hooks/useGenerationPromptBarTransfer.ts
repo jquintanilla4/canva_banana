@@ -8,7 +8,6 @@ import {
 import type { ApiProviderId, CanvasImage, GenerationInputs } from '../types';
 import { cloneCameraSelection, EMPTY_CAMERA_SELECTION, type CameraSettingsSelection } from '../utils/cameraSettings';
 import { getGenerationTransferBlockReason, resolveGenerationInputSelection } from '../utils/generationPromptBarTransfer';
-import { normalizeKrea2StyleStrength } from '../utils/krea2StyleStrength';
 import type { SelectionStateResult } from './useSelectionState';
 
 type TransferSelectionSetters = Pick<
@@ -35,7 +34,6 @@ interface UseGenerationPromptBarTransferArgs {
   setActiveEmbeddedPromptBarId: Dispatch<SetStateAction<string | null>>;
   setSelectedVideoPromptAreaId: Dispatch<SetStateAction<string | null>>;
   setVideoNegativePromptForModel: (modelId: FalVideoModelId, value: string) => void;
-  setKrea2StyleReferenceStrengths: Dispatch<SetStateAction<Record<string, number>>>;
   setToastMessage: Dispatch<SetStateAction<string | null>>;
   resetEditContext: () => void;
 }
@@ -70,7 +68,6 @@ export const useGenerationPromptBarTransfer = ({
   setActiveEmbeddedPromptBarId,
   setSelectedVideoPromptAreaId,
   setVideoNegativePromptForModel,
-  setKrea2StyleReferenceStrengths,
   setToastMessage,
   resetEditContext,
 }: UseGenerationPromptBarTransferArgs): UseGenerationPromptBarTransferResult => {
@@ -146,14 +143,6 @@ export const useGenerationPromptBarTransfer = ({
       skippedNegativePrompt = hasSavedNegativePrompt; // Other settings and inputs still load when this field cannot.
     }
 
-    const restoredReferenceIds = new Set(restoredSelection.referenceImageIds);
-    const restoredKreaStrengths = generation.falOptions?.krea2StyleReferenceStrengths ?? {};
-    setKrea2StyleReferenceStrengths(Object.fromEntries(
-      Object.entries(restoredKreaStrengths)
-        .filter(([referenceId]) => restoredReferenceIds.has(referenceId))
-        .map(([referenceId, strength]) => [referenceId, normalizeKrea2StyleStrength(strength)]),
-    )); // Only surviving Krea references keep their saved strength.
-
     showTransferToast(buildTransferToastMessage(
       restoredSelection.missingInputCount,
       Boolean(generation.editPaths?.length),
@@ -168,7 +157,6 @@ export const useGenerationPromptBarTransfer = ({
     setApiProvider,
     setCameraSettings,
     setElementImageIds,
-    setKrea2StyleReferenceStrengths,
     setPrompt,
     setReferenceAudioIds,
     setReferenceImageIds,

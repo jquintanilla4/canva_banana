@@ -40,7 +40,6 @@ import { GenerationCanvasNotifications } from './components/GenerationCanvasNoti
 import { SnapshotFileName } from './components/SnapshotFileName';
 import { useGeneration } from './hooks/useGeneration';
 import { useCanvasReferenceLabels } from './hooks/useCanvasReferenceLabels';
-import { useKrea2StyleStrengths } from './hooks/useKrea2StyleStrengths';
 import { useCanvasHistory } from './hooks/useCanvasHistory';
 import { useSelectionState } from './hooks/useSelectionState';
 import { useFalSettings } from './hooks/useFalSettings';
@@ -356,8 +355,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setTimeout(() => setToastMessage(null), 2000);
   }, [apiProvider, fal.falModelId, fal.klingO3Variant, fal.klingV4Variant, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
 
-  const isActiveKrea2LargeModel = apiProvider === 'fal' && fal.isKrea2LargeModel; // Krea behavior only applies while Fal is active.
-
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const selection = useSelectionState({
     images,
@@ -431,12 +428,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const isVeo31ExtendMode = capabilitySelection.veo31ExtendMode;
   const supportsTailFrameSelection = modelCapabilities.supportsTailFrame; // End-frame capable modes.
 
-  // Per-reference style strengths for Krea 2 Large.
-  const {
-    krea2StyleReferenceStrengths,
-    setKrea2StyleReferenceStrengths,
-    handleKrea2StyleReferenceStrengthChange,
-  } = useKrea2StyleStrengths({ isActive: isActiveKrea2LargeModel, referenceImageIds });
   const resetMetadataEditContext = useCallback(() => {
     setAppMode('CANVAS'); // Loaded edits use the normal canvas workflow.
     setTool(Tool.SELECTION); // A neutral selection avoids reusing the current brush tool.
@@ -452,7 +443,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setActiveEmbeddedPromptBarId,
     setSelectedVideoPromptAreaId,
     setVideoNegativePromptForModel,
-    setKrea2StyleReferenceStrengths,
     setToastMessage,
     resetEditContext: resetMetadataEditContext,
   }); // Transfer state and compatibility policy stay outside the root component.
@@ -874,7 +864,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     selection,
     images,
     paths,
-    krea2StyleReferenceStrengths,
     videoNegativePrompt,
     setError,
     setIsLoading,
@@ -1111,7 +1100,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     isKlingO3EditMode: fal.isKlingO3EditMode,
     isKlingV4VideoModel: fal.isKlingV4VideoModel,
     isMultimodalReferenceMode,
-    isFlux2MaxModel: fal.isFlux2MaxModel,
+    isFlux3ImageModel: fal.isFlux3ImageModel,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds: effectiveSeedanceReferenceImageIds,
@@ -1322,10 +1311,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
           referenceVideoIds={canvasReferenceVideoIds}
           referenceAudioIds={canvasReferenceAudioIds}
           referenceImageOrderLabels={canvasReferenceOrderLabels}
-          isKrea2StyleReferenceMode={isActiveKrea2LargeModel}
-          krea2StyleReferenceImageIds={referenceImageIds}
-          krea2StyleReferenceStrengths={krea2StyleReferenceStrengths}
-          onKrea2StyleReferenceStrengthChange={handleKrea2StyleReferenceStrengthChange}
           disabledMediaIds={ignoredVideoPromptMediaIds}
           elementImageIds={canvasElementImageIds}
           elementImageOrderLabels={canvasElementOrderLabels}

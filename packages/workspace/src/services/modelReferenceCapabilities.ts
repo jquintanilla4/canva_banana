@@ -7,6 +7,7 @@ import {
 } from './modelConfig';
 import { isIdeogram45Model } from './ideogram45Config';
 import { GROK_IMAGINE_IMAGE_MODEL_ID } from './grokImageConfig';
+import { isKrea3Model } from './krea3Config';
 
 export interface ModelReferenceCapabilities {
   referenceCapacity: number; // Source image is already excluded from this count.
@@ -22,6 +23,7 @@ export const getModelReferenceCapabilities = (
   const referenceCapacity = getMaxReferenceImages(normalizedModelId);
   const annotationUsesReferenceSlot = isGptImage2EditModelId(normalizedModelId)
     || isGptImage25Model(normalizedModelId)
+    || isKrea3Model(normalizedModelId)
     || isIdeogram45Model(normalizedModelId)
     || normalizedModelId === GROK_IMAGINE_IMAGE_MODEL_ID;
   const annotationSlots = annotationUsesReferenceSlot && tool === Tool.ANNOTATE ? 1 : 0;

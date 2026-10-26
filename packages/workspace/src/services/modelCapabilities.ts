@@ -1,6 +1,7 @@
 import {
   isFalVideoModelId as isVideoModelId,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  isKrea3Model,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   CRYSTAL_UPSCALER_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
@@ -17,7 +18,6 @@ import {
   KLING_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
-  KREA_2_MAX_STYLE_REFERENCES,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
@@ -29,7 +29,6 @@ import {
   isGptImage25Model,
   isIdeogram45Model,
   isKlingO3VideoModelId,
-  isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
   isSeedreamModelId,
   type FalModelId,
@@ -96,7 +95,6 @@ export type ModelUiCapabilityContext = {
 
 // Canvas selection affordances plus the multimodal-reference derivation flags.
 export type ModelUiSelectionFlags = {
-  krea2StyleReferenceMode: boolean;
   klingO3VideoInputMode: boolean; // Kling O3 Edit takes a source video.
   klingO3ReferenceMode: boolean;
   klingV4GenerateMode: boolean;
@@ -137,7 +135,6 @@ export type ModelUiCapabilities = {
 };
 
 const DEFAULT_SELECTION: ModelUiSelectionFlags = {
-  krea2StyleReferenceMode: false,
   klingO3VideoInputMode: false,
   klingO3ReferenceMode: false,
   klingV4GenerateMode: false,
@@ -194,6 +191,13 @@ const annotationReferenceToast = (
 
 const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
+    matches: (modelId) => isKrea3Model(modelId),
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: annotationReferenceToast(modelId, 'Krea 3'),
+    }),
+  },
+  {
     matches: (modelId) => isIdeogram45Model(modelId),
     resolve: (_ctx, modelId) => ({
       maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
@@ -226,17 +230,7 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
     }),
   },
   {
-    matches: (modelId) => isKrea2LargeModelId(modelId),
-    base: {
-      selection: { krea2StyleReferenceMode: true },
-      referenceLimitToast: () => ({
-        message: `Krea 2 Large supports up to ${KREA_2_MAX_STYLE_REFERENCES} style references.`,
-        durationMs: 4000,
-      }),
-    },
-  },
-  {
-    matches: [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID],
+    matches: [FLUX_3_TEXT_TO_IMAGE_MODEL_ID],
     base: {
       supportsAnnotate: false,
       klingSuggestionsEnabled: true,
