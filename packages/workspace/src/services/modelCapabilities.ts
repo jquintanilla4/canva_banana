@@ -208,10 +208,7 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
     matches: [GROK_IMAGINE_IMAGE_MODEL_ID],
     base: {
-      referenceLimitToast: () => ({
-        message: 'Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.',
-        durationMs: 4000,
-      }),
+      referenceLimitToast: annotationReferenceToast(GROK_IMAGINE_IMAGE_MODEL_ID, 'Grok Imagine 2.0'),
     },
   },
   {

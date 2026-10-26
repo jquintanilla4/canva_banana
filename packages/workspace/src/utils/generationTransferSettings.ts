@@ -24,8 +24,6 @@ import {
   KREA_2_DEFAULT_CREATIVITY,
   MINIMAX_H3_VIDEO_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
-  RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
-  RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
@@ -59,6 +57,8 @@ import { KLING_V4_DEFAULTS, KLING_V4_EDIT_VIDEO_MODEL_ID, isKlingV4VideoModel, i
 import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '../services/klingV4RunSettings';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions } from '../services/gptImage25RunSettings';
+import { resolveRecraftRunSettings, serializeRecraftGenerationOptions } from '../services/recraftRunSettings';
+import { resolveGrokImageRunSettings, serializeGrokImageGenerationOptions } from '../services/grokImageRunSettings';
 
 export type GenerationTransferOptions = GenerationFalOptions & GenerationVolcengineOptions & GenerationJimengOptions; // Shared shape covers every provider-backed prompt control.
 
@@ -189,14 +189,14 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: (modelId) => isKrea2LargeModelId(modelId), defaults: { aspectRatioSelection: KREA_2_DEFAULT_ASPECT_RATIO, krea2Creativity: KREA_2_DEFAULT_CREATIVITY } }, // Krea defaults.
   {
     matches: (modelId) => isRecraftV4ProModel(modelId),
-    defaults: () => ({ recraftImageSize: RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE, recraftBackgroundColor: { ...RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR }, recraftColors: [] }), // Recraft defaults.
+    defaults: () => serializeRecraftGenerationOptions(resolveRecraftRunSettings({}, 'restore')),
   },
   {
     matches: (modelId) => isSeedreamModelId(modelId),
     defaults: (_restoredOptions, modelId) => ({ imageSizeSelection: isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 'auto_2K' : 'default' }), // Seedream defaults vary by generation.
   },
   { matches: (modelId) => isNanoBananaEditModelId(modelId), defaults: NANO_BANANA_DEFAULTS }, // Nano Banana defaults.
-  { matches: [GROK_IMAGINE_IMAGE_MODEL_ID], defaults: { aspectRatioSelection: '1:1' } }, // Grok image default.
+  { matches: [GROK_IMAGINE_IMAGE_MODEL_ID], defaults: () => serializeGrokImageGenerationOptions(resolveGrokImageRunSettings({ kind: 'text_to_image' }, 'restore')) },
 ];
 
 const ruleMatches = (rule: TransferDefaultsRule, modelId: FalModelId): boolean => (
@@ -231,7 +231,7 @@ export const resolveGenerationTransferOptions = (
   generation: GenerationInputs,
   normalizedModelId: FalModelId,
 ): GenerationTransferOptions => {
-  const savedOptions = (generation.provider === 'jimeng'
+  const savedOptions: GenerationTransferOptions = (generation.provider === 'jimeng'
     ? generation.jimengOptions
     : generation.provider === 'volcengine'
       ? generation.volcengineOptions
@@ -255,6 +255,21 @@ export const resolveGenerationTransferOptions = (
     ...getGenerationTransferOptionDefaults(normalizedModelId, restoredOptions),
     ...restoredOptions,
   };
+  if (isRecraftV4ProModel(normalizedModelId)) {
+    return { ...resolvedOptions, ...serializeRecraftGenerationOptions(resolveRecraftRunSettings({
+      imageSize: resolvedOptions.recraftImageSize, backgroundColor: resolvedOptions.recraftBackgroundColor, colors: resolvedOptions.recraftColors,
+    }, 'restore')) };
+  }
+  if (normalizedModelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
+    return { ...resolvedOptions, ...serializeGrokImageGenerationOptions(resolveGrokImageRunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
+      aspectRatio: savedOptions.grokImageAspectRatio ?? savedOptions.aspectRatioSelection,
+      numImages: resolvedOptions.numImages,
+      resolution: resolvedOptions.grokImageResolution, quality: resolvedOptions.grokImageQuality,
+      outputFormat: resolvedOptions.grokImageOutputFormat, imagePassthrough: resolvedOptions.grokImagePassthrough,
+      enableSafetyChecker: resolvedOptions.grokImageEnableSafetyChecker,
+    }, 'restore')) };
+  }
   if (isKlingV4VideoModel(normalizedModelId)) {
     const settings = resolveKlingV4RunSettings({
       modelId: isKlingV4Variant(resolvedOptions.klingV4Variant) ? undefined : generation.modelId,

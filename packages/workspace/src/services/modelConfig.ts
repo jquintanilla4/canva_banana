@@ -25,6 +25,10 @@ import { IDEOGRAM_45_MODEL_ID, IDEOGRAM_45_EDIT_MODEL_ID, IDEOGRAM_45_MAX_OUTPUT
 import { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_MAX_OUTPUT_IMAGES, GPT_IMAGE_2_NUM_IMAGE_OPTIONS } from './gptImage2Config';
 import { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_MAX_OUTPUT_IMAGES, GPT_IMAGE_25_NUM_IMAGE_OPTIONS, isGptImage25Model } from './gptImage25Config';
 import { KLING_V4_VIDEO_MODEL_ID, isKlingV4VideoModel } from './klingV4Config';
+import { RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID } from './recraftConfig';
+export * from './recraftConfig';
+import { GROK_IMAGINE_IMAGE_MODEL_ID, GROK_IMAGE_MAX_INPUTS, GROK_IMAGE_MAX_OUTPUT_IMAGES, GROK_IMAGE_NUM_IMAGE_OPTIONS, FAL_GROK_ASPECT_RATIO_OPTIONS, getGrokImageSelectorModelId } from './grokImageConfig';
+export { GROK_IMAGINE_IMAGE_MODEL_ID, GROK_IMAGINE_IMAGE_EDIT_MODEL_ID, FAL_GROK_ASPECT_RATIO_OPTIONS } from './grokImageConfig';
 export { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_QUALITY_OPTIONS, GPT_IMAGE_2_DEFAULTS, isGptImage2QualitySelectionValue } from './gptImage2Config';
 export { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_DEFAULTS, GPT_IMAGE_25_VARIANT_OPTIONS, GPT_IMAGE_25_BACKGROUND_OPTIONS, GPT_IMAGE_25_QUALITY_OPTIONS, isGptImage25Model, isGptImage25Variant, isGptImage25Background, isGptImage25Quality, getGptImage25Endpoint } from './gptImage25Config';
 export { KLING_V4_VIDEO_MODEL_ID, KLING_V4_TEXT_TO_VIDEO_MODEL_ID, KLING_V4_IMAGE_TO_VIDEO_MODEL_ID, KLING_V4_REFERENCE_TO_VIDEO_MODEL_ID, KLING_V4_EDIT_VIDEO_MODEL_ID, isKlingV4VideoModel } from './klingV4Config';
@@ -38,9 +42,6 @@ export const SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedrea
 export const SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID = 'bytedance/seedream/v5/pro/text-to-image' as const; // Seedream 5 Pro t2i endpoint.
 export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
 export const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit' as const;
-export const RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/recraft/v4/pro/text-to-image' as const; // Recraft v4 Pro t2i endpoint.
-export const GROK_IMAGINE_IMAGE_MODEL_ID = 'xai/grok-imagine-image' as const; // Grok Imagine image model id.
-export const GROK_IMAGINE_IMAGE_EDIT_MODEL_ID = 'xai/grok-imagine-image/edit' as const; // Grok Imagine edit endpoint id.
 export const GROK_IMAGINE_VIDEO_MODEL_ID = 'xai/grok-imagine-video/image-to-video' as const; // Grok Imagine image-to-video endpoint id.
 export const GROK_IMAGINE_VIDEO_EDIT_MODEL_ID = 'xai/grok-imagine-video/edit-video' as const; // Grok Imagine video edit endpoint id.
 export const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
@@ -144,11 +145,11 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: GPT_IMAGE_2_EDIT_MODEL_ID, label: 'GPT Image 2' }, // Selector uses edit id.
   { value: GPT_IMAGE_25_MODEL_ID, label: 'GPT Image 2.5' },
   { value: IDEOGRAM_45_MODEL_ID, label: 'Ideogram 4.5' },
-  { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine' }, // Grok model option.
+  { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine 2.0' },
   { value: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Krea 2 Large' },
   { value: NANO_BANANA_21_EDIT_MODEL_ID, label: 'NanoBanana 2.1' }, // Selector uses edit id.
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
-  { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4 Pro' }, // Direct text-to-image endpoint.
+  { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4.1 Pro' }, // Direct text-to-image endpoint.
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
   { value: SEEDREAM_V5_PRO_MODEL_ID, label: 'Seedream 5 Pro' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
@@ -1025,13 +1026,6 @@ export const isFlux2MaxImageSizeSelectionValue = (value: unknown): value is Flux
 export const isFlux2MaxModel = (modelId: string | undefined): boolean =>
   modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
 
-export type RecraftV4ProImageSizeSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-export type RecraftRgbColor = { r: number; g: number; b: number };
-
-export const RECRAFT_V4_PRO_MAX_COLORS = 5; // UI cap for preferred colors.
-export const RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE: RecraftV4ProImageSizeSelectionValue = 'square_hd'; // Fal default.
-export const RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR: RecraftRgbColor = { r: 255, g: 255, b: 255 }; // Neutral background color.
-
 export type Krea2AspectRatioSelectionValue = '1:1' | '4:3' | '3:2' | '16:9' | '2.35:1' | '4:5' | '2:3' | '9:16';
 export type Krea2CreativitySelectionValue = FalKrea2CreativityOption;
 export const KREA_2_DEFAULT_ASPECT_RATIO: Krea2AspectRatioSelectionValue = '16:9';
@@ -1056,70 +1050,17 @@ export const KREA_2_CREATIVITY_OPTIONS: ReadonlyArray<{ value: Krea2CreativitySe
   { value: 'high', label: 'High' },
 ] as const;
 
-export const RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: RecraftV4ProImageSizeSelectionValue; label: string }> = [
-  { value: 'square_hd', label: 'Square HD' },
-  { value: 'square', label: 'Square' },
-  { value: 'portrait_4_3', label: 'Portrait 3:4' },
-  { value: 'portrait_16_9', label: 'Portrait 9:16' },
-  { value: 'landscape_4_3', label: 'Landscape 4:3' },
-  { value: 'landscape_16_9', label: 'Landscape 16:9' },
-] as const;
-
 export const isGptImage2Model = (modelId: string | undefined): boolean =>
   modelId === GPT_IMAGE_2_EDIT_MODEL_ID; // Selector id for GPT Image 2.
 
 export const isKrea2LargeModel = (modelId: string | undefined): boolean =>
   modelId === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
 
-export const isRecraftV4ProModel = (modelId: string | undefined): boolean =>
-  modelId === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID;
-
 export const isKrea2AspectRatioSelectionValue = (value: unknown): value is Krea2AspectRatioSelectionValue =>
   value === '1:1' || value === '4:3' || value === '3:2' || value === '16:9' || value === '2.35:1' || value === '4:5' || value === '2:3' || value === '9:16';
 
 export const isKrea2CreativitySelectionValue = (value: unknown): value is Krea2CreativitySelectionValue =>
   value === 'raw' || value === 'low' || value === 'medium' || value === 'high';
-
-export const isRecraftV4ProImageSizeSelectionValue = (value: unknown): value is RecraftV4ProImageSizeSelectionValue =>
-  value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
-
-export const clampRecraftRgbChannel = (value: unknown): number => {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(parsed)) {
-    return 0;
-  }
-  return Math.min(255, Math.max(0, Math.round(parsed)));
-};
-
-export const normalizeRecraftRgbColor = (value: unknown): RecraftRgbColor | undefined => {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-  const color = value as Partial<RecraftRgbColor>;
-  return {
-    r: clampRecraftRgbChannel(color.r),
-    g: clampRecraftRgbChannel(color.g),
-    b: clampRecraftRgbChannel(color.b),
-  };
-};
-
-const toHexPair = (value: number): string => value.toString(16).padStart(2, '0');
-
-export const recraftRgbToHex = (color: RecraftRgbColor): string =>
-  `#${toHexPair(clampRecraftRgbChannel(color.r))}${toHexPair(clampRecraftRgbChannel(color.g))}${toHexPair(clampRecraftRgbChannel(color.b))}`;
-
-export const recraftHexToRgb = (value: string): RecraftRgbColor | undefined => {
-  const match = /^#?([0-9a-f]{6})$/i.exec(value.trim());
-  if (!match) {
-    return undefined;
-  }
-  const hex = match[1];
-  return {
-    r: Number.parseInt(hex.slice(0, 2), 16),
-    g: Number.parseInt(hex.slice(2, 4), 16),
-    b: Number.parseInt(hex.slice(4, 6), 16),
-  };
-};
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS_BASE, ...FAL_VIDEO_MODEL_OPTIONS_BASE] as const;
 export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];
@@ -1300,6 +1241,9 @@ const VIDEO_NEGATIVE_PROMPT_MODEL_IDS = [
 export const isVideoNegativePromptModelId = (value: string | undefined): boolean =>
   typeof value === 'string' && (VIDEO_NEGATIVE_PROMPT_MODEL_IDS as readonly string[]).includes(value); // Other video models must never write into a shared bucket.
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
+  if (value === 'fal-ai/recraft/v4/pro/text-to-image') return RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID; // Upgrade saved Recraft selections.
+  const grokImageModelId = getGrokImageSelectorModelId(value);
+  if (grokImageModelId) return grokImageModelId;
   const nanoBananaModelId = getNanoBananaSelectorModelId(value);
   if (nanoBananaModelId) return nanoBananaModelId;
   if (isGptImage25Model(value)) return GPT_IMAGE_25_MODEL_ID;
@@ -1391,13 +1335,15 @@ export const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 export const FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE = [1, 2, 3, 4, 5, 6] as const;
 const IDEOGRAM_45_NUM_IMAGE_OPTIONS = Array.from({ length: IDEOGRAM_45_MAX_OUTPUT_IMAGES }, (_, index) => index + 1);
 export const getFalNumImageMaxForModel = (modelId: string | undefined): number =>
-  getNanoBananaSelectorModelId(modelId) ? NANO_BANANA_MAX_OUTPUT_IMAGES
+  getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_MAX_OUTPUT_IMAGES
+    : getNanoBananaSelectorModelId(modelId) ? NANO_BANANA_MAX_OUTPUT_IMAGES
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_MAX_OUTPUT_IMAGES
     : isGptImage25Model(modelId) ? GPT_IMAGE_25_MAX_OUTPUT_IMAGES
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_MAX_OUTPUT_IMAGES
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 6 : 4;
 export const getFalNumImageOptionsForModel = (modelId: string | undefined): ReadonlyArray<number> =>
-  isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
+  getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_NUM_IMAGE_OPTIONS
+    : isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
     : isGptImage25Model(modelId) ? GPT_IMAGE_25_NUM_IMAGE_OPTIONS
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_NUM_IMAGE_OPTIONS
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS;
@@ -1415,22 +1361,6 @@ export const FAL_SEEDVR_NOISE_SCALE_OPTIONS = Array.from({ length: 10 }, (_, ind
   return { value: value.toFixed(1), label: value.toFixed(1) } as const;
 });
 
-export const FAL_GROK_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
-  { value: '1:1', label: '1:1' }, // Grok ratio.
-  { value: '2:1', label: '2:1' }, // Grok ratio.
-  { value: '20:9', label: '20:9' }, // Grok ratio.
-  { value: '19.5:9', label: '19.5:9' }, // Grok ratio.
-  { value: '16:9', label: '16:9' }, // Grok ratio.
-  { value: '4:3', label: '4:3' }, // Grok ratio.
-  { value: '3:2', label: '3:2' }, // Grok ratio.
-  { value: '2:3', label: '2:3' }, // Grok ratio.
-  { value: '3:4', label: '3:4' }, // Grok ratio.
-  { value: '9:16', label: '9:16' }, // Grok ratio.
-  { value: '9:19.5', label: '9:19.5' }, // Grok ratio.
-  { value: '9:20', label: '9:20' }, // Grok ratio.
-  { value: '1:2', label: '1:2' }, // Grok ratio.
-] as const; // Grok aspect ratio options.
-
 export const FAL_SEEDREAM_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
   { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Default' },
@@ -1441,7 +1371,7 @@ export const getSeedreamAspectRatioOptions = (_modelId: string | undefined) => F
 
 export const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...NANO_BANANA_21_ASPECT_RATIO_OPTIONS.map(option => option.value),
-  ...FAL_GROK_ASPECT_RATIO_OPTIONS.map(option => option.value), // Grok ratio values.
+  ...FAL_GROK_ASPECT_RATIO_OPTIONS.map(option => option.value).filter(value => value !== 'auto' && value !== '5:2'), // Retain legacy shared ratios for saved runs.
   ...FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.map(option => option.value),
   ...KREA_2_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
@@ -1458,7 +1388,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.
   [SEEDREAM_V5_PRO_MODEL_ID]: 9, // Seedream 5 Pro supports 10 total input images.
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
-  [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
+  [GROK_IMAGINE_IMAGE_MODEL_ID]: GROK_IMAGE_MAX_INPUTS - 1, // Source image plus four references.
   [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,
   [KLING_O3_VIDEO_MODEL_ID]: 4,
   [KLING_O3_VIDEO_EDIT_MODEL_ID]: 4,

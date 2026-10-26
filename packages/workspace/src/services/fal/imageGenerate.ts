@@ -5,6 +5,9 @@ import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45TextInput, type Ideogram45TextRequest } from './ideogram45';
 import { resolveGptImage2SettingsForRequest, resolveGptImage25SettingsForRequest, serializeGptImage2Input, serializeGptImage25Input } from './gptImage';
+import { resolveRecraftSettingsForRequest, serializeRecraftInput } from './recraft';
+import { resolveGrokImageSettingsForRequest, serializeGrokImageInput } from './grokImage';
+import type { GrokImageOutputFormat, GrokImageQuality, GrokImageResolution } from '../grokImageConfig';
 import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption, GptImage25Quality, GptImage25Background } from '../../types'; // Shared option types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
@@ -33,10 +36,6 @@ import {
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   KREA_2_MAX_STYLE_REFERENCES,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
-  RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
-  RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
-  RECRAFT_V4_PRO_MAX_COLORS,
-  normalizeRecraftRgbColor,
 } from '../modelConfig'; // Canonical model IDs.
 
 const normalizeKreaStyleReferenceStrength = (value: number): number => {
@@ -73,7 +72,9 @@ export const generateImage = async (
   const isKrea2TextToImage = modelId === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
   const isRecraftV4ProTextToImage = isRecraftV4ProModel(modelId);
+  const recraftSettings = isRecraftV4ProTextToImage ? resolveRecraftSettingsForRequest(options) : undefined;
   const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
+  const grokSettings = isGrokImagineModel ? resolveGrokImageSettingsForRequest('text_to_image', options) : undefined;
   const supportsAspectRatio = isNanoBananaTextToImage
     || isGrokImagineModel; // Enable Grok aspect ratios.
   const numImagesOption = options.numImages;
@@ -88,16 +89,17 @@ export const generateImage = async (
   const body: {
     prompt: string;
     sync_mode?: boolean;
-    output_format?: 'png';
+    output_format?: GrokImageOutputFormat;
     num_images?: number;
     aspect_ratio?: string;
     image_size?: { width: number; height: number } | string;
-    quality?: GptImage25Quality;
+    quality?: GptImage25Quality | GrokImageQuality;
     background?: GptImage25Background;
     creativity?: 'raw' | 'low' | 'medium' | 'high';
     image_style_references?: Array<{ image_url: string; strength: number }>;
     seed?: number;
-    resolution?: FalResolutionOption;
+    resolution?: FalResolutionOption | GrokImageResolution;
+    image_passthrough?: boolean;
     safety_tolerance?: '5';
     colors?: Array<{ r: number; g: number; b: number }>;
     background_color?: { r: number; g: number; b: number };
@@ -125,13 +127,8 @@ export const generateImage = async (
       })));
     }
     delete body.sync_mode;
-  } else if (isRecraftV4ProTextToImage) {
-    body.image_size = options.recraftImageSize ?? RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE;
-    body.background_color = normalizeRecraftRgbColor(options.recraftBackgroundColor) ?? RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR;
-    body.colors = Array.isArray(options.recraftColors)
-      ? options.recraftColors.map(normalizeRecraftRgbColor).filter((color): color is NonNullable<typeof color> => Boolean(color)).slice(0, RECRAFT_V4_PRO_MAX_COLORS)
-      : [];
-    body.enable_safety_checker = true;
+  } else if (recraftSettings) {
+    Object.assign(body, serializeRecraftInput(recraftSettings));
     delete body.sync_mode;
   } else if (!isSeedreamTextToImage) {
     body.output_format = 'png';
@@ -151,8 +148,9 @@ export const generateImage = async (
 
   if (nanoBananaSettings) Object.assign(body, serializeNanoBananaInput(nanoBananaSettings));
   if (gptImageInput) Object.assign(body, gptImageInput);
+  if (grokSettings) Object.assign(body, serializeGrokImageInput(grokSettings));
 
-  if (!nanoBananaSettings && !ideogram45Input && !gptImageInput && !isKrea2TextToImage && !isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!grokSettings && !nanoBananaSettings && !ideogram45Input && !gptImageInput && !isKrea2TextToImage && !isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {
@@ -170,7 +168,7 @@ export const generateImage = async (
     } else if (imageSizeOption !== 'default') {
       body.image_size = imageSizeOption;
     }
-  } else if (!nanoBananaSettings && supportsAspectRatio && aspectRatioOption !== 'default') {
+  } else if (!grokSettings && !nanoBananaSettings && supportsAspectRatio && aspectRatioOption !== 'default') {
     body.aspect_ratio = aspectRatioOption;
   }
 

@@ -1,5 +1,6 @@
 import { normalizeStoryboardSnapshot } from './storyboardSnapshot';
 import { isIdeogram45Quality, isIdeogram45EditPrecision } from './ideogram45Config';
+import { isGrokImageAspectRatio, isGrokImageResolution, isGrokImageQuality, isGrokImageOutputFormat } from './grokImageConfig';
 import { isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from './klingV4Config';
 import type {
   ApiProviderId,
@@ -1765,6 +1766,12 @@ export const normalizeSnapshotImageMetadata = (
       if (isGptImage25Quality(typed?.gptImage25Quality)) {
         normalizedOptions.gptImage25Quality = typed.gptImage25Quality;
       }
+      if (isGrokImageAspectRatio(typed.grokImageAspectRatio)) normalizedOptions.grokImageAspectRatio = typed.grokImageAspectRatio;
+      if (isGrokImageResolution(typed.grokImageResolution)) normalizedOptions.grokImageResolution = typed.grokImageResolution;
+      if (isGrokImageQuality(typed.grokImageQuality)) normalizedOptions.grokImageQuality = typed.grokImageQuality;
+      if (isGrokImageOutputFormat(typed.grokImageOutputFormat)) normalizedOptions.grokImageOutputFormat = typed.grokImageOutputFormat;
+      if (typeof typed.grokImagePassthrough === 'boolean') normalizedOptions.grokImagePassthrough = typed.grokImagePassthrough;
+      if (typeof typed.grokImageEnableSafetyChecker === 'boolean') normalizedOptions.grokImageEnableSafetyChecker = typed.grokImageEnableSafetyChecker;
       if (isIdeogram45Quality(typed?.ideogram45Quality)) {
         normalizedOptions.ideogram45Quality = typed.ideogram45Quality;
       }

@@ -95,8 +95,8 @@ describe('getModelUiCapabilities', () => {
 
   describe('reference limit toasts', () => {
     it('keeps the model-specific toast copy', () => {
-      expect(getModelUiCapabilities(GROK_IMAGINE_IMAGE_MODEL_ID).referenceLimitToast?.(0)).toEqual({
-        message: 'Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.',
+      expect(getModelUiCapabilities(GROK_IMAGINE_IMAGE_MODEL_ID).referenceLimitToast?.(4)).toEqual({
+        message: 'Grok Imagine 2.0 supports up to 5 images total (1 primary + 4 references).',
         durationMs: 4000,
       });
       expect(getModelUiCapabilities(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID).referenceLimitToast?.(10)).toEqual({

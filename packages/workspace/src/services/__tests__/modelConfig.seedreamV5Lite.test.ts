@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
+  GROK_IMAGINE_IMAGE_MODEL_ID,
+  GROK_IMAGINE_VIDEO_MODEL_ID,
   getFalNumImageMaxForModel,
   getFalNumImageOptionsForModel,
   getSeedreamImageSizeOptions,
@@ -191,12 +193,32 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(normalizeFalModelId('fal-ai/kling-image/o1')).toBeUndefined();
   });
 
-  it('exposes Recraft v4 Pro as a Fal image model', () => {
+  it('replaces Recraft v4 Pro with v4.1 Pro and upgrades saved selections', () => {
     const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID);
 
-    expect(option?.label).toBe('Recraft v4 Pro');
+    expect(option).toEqual({ value: 'fal-ai/recraft/v4.1/pro/text-to-image', label: 'Recraft v4.1 Pro' });
+    expect(FAL_IMAGE_MODEL_OPTIONS.map(model => model.value)).not.toContain('fal-ai/recraft/v4/pro/text-to-image');
     expect(isFalModelId(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
     expect(isRecraftV4ProModel(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
+    expect(normalizeFalModelId('fal-ai/recraft/v4/pro/text-to-image')).toBe('fal-ai/recraft/v4.1/pro/text-to-image');
+    expect(normalizeFalModelId('fal-ai/recraft/v4.1/pro/text-to-image')).toBe('fal-ai/recraft/v4.1/pro/text-to-image');
+  });
+
+  it('upgrades Grok image selections to 2.0 without changing Grok video', () => {
+    expect(FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === GROK_IMAGINE_IMAGE_MODEL_ID)).toEqual({
+      value: 'xai/grok-imagine-image/v2.0/text-to-image', label: 'Grok Imagine 2.0',
+    });
+    for (const modelId of [
+      'xai/grok-imagine-image',
+      'xai/grok-imagine-image/edit',
+      'xai/grok-imagine-image/v2.0/text-to-image',
+      'xai/grok-imagine-image/v2.0/edit',
+    ]) {
+      expect(normalizeFalModelId(modelId)).toBe('xai/grok-imagine-image/v2.0/text-to-image');
+    }
+    expect(FAL_VIDEO_MODEL_OPTIONS.find(model => model.value === GROK_IMAGINE_VIDEO_MODEL_ID)).toEqual({
+      value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine',
+    });
   });
 
   it('exposes Krea 2 Large with Krea-specific guards and reference cap', () => {

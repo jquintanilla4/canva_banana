@@ -8,6 +8,8 @@ import {
   KLING_V4_EDIT_VIDEO_MODEL_ID,
   KLING_V4_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+  GROK_IMAGINE_IMAGE_MODEL_ID,
+  RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   WAN_27_EDIT_VIDEO_MODEL_ID,
@@ -16,6 +18,7 @@ import {
 } from '../../services/modelConfig';
 import type { GenerationInputs } from '../../types';
 import { useFalSettings } from '../useFalSettings';
+import { normalizeSnapshotImageMetadata } from '../../services/snapshotService';
 
 const buildGeneration = (overrides: Partial<GenerationInputs>): GenerationInputs => ({
   kind: 'text_to_image',
@@ -27,6 +30,42 @@ const buildGeneration = (overrides: Partial<GenerationInputs>): GenerationInputs
 });
 
 describe('useFalSettings generation transfer', () => {
+  it('restores new Grok controls from snapshot metadata, then resets missing legacy fields instead of leaking live values', () => {
+    const { result } = renderHook(() => useFalSettings({ apiProvider: 'fal' }));
+    const falOptions = {
+      grokImageAspectRatio: '5:2' as const, grokImageResolution: '1.5k' as const, grokImageQuality: 'auto' as const,
+      grokImageOutputFormat: 'webp' as const, grokImagePassthrough: true, grokImageEnableSafetyChecker: false, numImages: 10,
+    };
+    const restored = normalizeSnapshotImageMetadata({ source: 'generated', generation: buildGeneration({
+      modelId: GROK_IMAGINE_IMAGE_MODEL_ID, falOptions,
+    }) })!.generation!;
+    expect(restored.falOptions).toEqual(falOptions);
+    act(() => { expect(result.current.applyGenerationSettings(restored)).toBe(true); });
+    const { numImages, ...pickerOptions } = falOptions;
+    expect(result.current).toMatchObject({ ...pickerOptions, falNumImages: numImages });
+
+    act(() => { result.current.applyGenerationSettings(buildGeneration({
+      kind: 'image_edit', modelId: 'xai/grok-imagine-image/edit', falOptions: { aspectRatioSelection: '16:9', numImages: 7 },
+    })); });
+    expect(result.current).toMatchObject({
+      falImageModelId: GROK_IMAGINE_IMAGE_MODEL_ID, grokImageAspectRatio: '16:9', grokImageResolution: '1k',
+      grokImageQuality: 'medium', grokImageOutputFormat: 'png', grokImagePassthrough: false,
+      grokImageEnableSafetyChecker: true, falNumImages: 7,
+    });
+    act(() => { result.current.applyGenerationSettings(buildGeneration({ kind: 'image_edit', modelId: GROK_IMAGINE_IMAGE_MODEL_ID })); });
+    expect(result.current.grokImageAspectRatio).toBe('auto');
+    expect(result.current.falNumImages).toBe(1);
+  });
+
+  it('restores Recraft colors and size through the same defaults used for requests', () => {
+    const { result } = renderHook(() => useFalSettings({ apiProvider: 'fal' }));
+    const falOptions = { recraftImageSize: 'portrait_16_9' as const, recraftBackgroundColor: { r: 7, g: 130, b: 251 }, recraftColors: [{ r: 56, g: 78, b: 90 }] };
+    act(() => { result.current.applyGenerationSettings(buildGeneration({ modelId: 'fal-ai/recraft/v4/pro/text-to-image', falOptions })); });
+    expect(result.current).toMatchObject({ falImageModelId: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, ...falOptions });
+    act(() => { result.current.applyGenerationSettings(buildGeneration({ modelId: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID })); });
+    expect(result.current).toMatchObject({ recraftImageSize: 'square_hd', recraftBackgroundColor: { r: 255, g: 255, b: 255 }, recraftColors: [] });
+  });
+
   it('restores image model controls from saved metadata', () => {
     const { result } = renderHook(() => useFalSettings({ apiProvider: 'fal' }));
 

@@ -5,6 +5,7 @@ import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_EDIT_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45EditInput, type Ideogram45EditRequest } from './ideogram45';
 import { resolveGptImage2SettingsForRequest, resolveGptImage25SettingsForRequest, serializeGptImage2Input, serializeGptImage25Input } from './gptImage';
+import { resolveGrokImageSettingsForRequest, serializeGrokImageInput } from './grokImage';
 import { getModelReferenceCapabilities } from '../modelReferenceCapabilities';
 import { Tool, type FalAspectRatioOption, type FalImageSizeOption, type FalResolutionOption, type GptImage25Quality, type GptImage25Background } from '../../types'; // Shared types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageEditOptions, GenerateImageEditParams } from './types'; // Fal request types.
@@ -83,12 +84,13 @@ export const generateImageEdit = async (
   const isIdeogram45 = isIdeogram45Model(modelId);
   const ideogram45Input = isIdeogram45 ? resolveIdeogram45EditInput(options) : undefined;
   const isGptImage25 = isGptImage25Model(modelId);
-  if (isIdeogram45 || isGptImage25 || isGptImage2EditModelId(modelId)) {
+  const grokSettings = modelId === GROK_IMAGINE_IMAGE_MODEL_ID ? resolveGrokImageSettingsForRequest('image_edit', options) : undefined;
+  if (isIdeogram45 || isGptImage25 || isGptImage2EditModelId(modelId) || grokSettings) {
     const { referenceCapacity, availableReferenceSlots } = getModelReferenceCapabilities(modelId, tool);
     if ((referenceImages?.length ?? 0) > availableReferenceSlots) {
       throw new Error(isIdeogram45
         ? `Ideogram 4.5 supports up to ${referenceCapacity} reference images. The annotation image also counts as a reference.`
-        : `${isGptImage25 ? 'GPT Image 2.5' : 'GPT Image 2'} supports up to ${referenceCapacity + 1} total input images. Please reduce the number of selected images.`);
+        : `${grokSettings ? 'Grok Imagine 2.0' : isGptImage25 ? 'GPT Image 2.5' : 'GPT Image 2'} supports up to ${referenceCapacity + 1} total input images. Please reduce the number of selected images.`);
     }
   }
   const isSeedreamAnnotateSingle = tool === Tool.ANNOTATE && isSeedreamEditModelId(modelId);
@@ -102,27 +104,37 @@ export const generateImageEdit = async (
     label: 'source image',
   });
 
-  if (modelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
-    const numImagesOption = options.numImages; // Grok supports 1-4 outputs per request.
-    const grokBody: {
-      prompt: string;
-      image_url: string;
-      num_images?: number;
-      output_format?: 'png' | 'jpeg' | 'webp';
-      sync_mode?: boolean;
-    } = {
-      prompt,
-      image_url: baseImageUrl,
-      output_format: 'png',
-      sync_mode: false,
-    };
+  const isFlux2MaxModel = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID; // Flux2 Max edit routing.
+  if (!isSeedreamAnnotateSingle) {
+    imageUrls.push(baseImageUrl);
+  }
 
-    if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
-      const normalized = Math.min(4, Math.max(1, Math.floor(numImagesOption)));
-      if (normalized >= 1) {
-        grokBody.num_images = normalized;
-      }
-    }
+  if (tool === Tool.ANNOTATE) {
+    const annotationCanvas = buildAnnotationCanvas(image, paths, imageDimensions);
+    annotationImageUrl = await uploadCanvasToFal(annotationCanvas, {
+      jobId: options.jobId,
+      onPhaseUpdate: options.onPhaseUpdate,
+      abortSignal: options.abortSignal,
+      label: 'annotation image',
+    });
+    imageUrls.push(annotationImageUrl);
+  }
+
+  if (!isFlux2MaxModel && referenceImages && referenceImages.length > 0) {
+    const referenceUrls = await collectReferenceUploadUrls(referenceImages, {
+      jobId: options.jobId,
+      onPhaseUpdate: options.onPhaseUpdate,
+      abortSignal: options.abortSignal,
+    });
+    imageUrls.push(...referenceUrls);
+  }
+
+  if (grokSettings) {
+    const grokBody = {
+      prompt,
+      image_urls: imageUrls,
+      ...serializeGrokImageInput(grokSettings),
+    };
 
     let latestRequestId: string | undefined;
 
@@ -207,31 +219,6 @@ export const generateImageEdit = async (
     const revisedPrompt = typeof data?.revised_prompt === 'string' ? data.revised_prompt : ''; // Optional prompt rewrite.
     const requestId = result?.requestId || latestRequestId;
     return { imageBase64: primaryBase64, imagesBase64: base64List, imageDataUrls: inlineDataList, text: revisedPrompt, requestId };
-  }
-
-  if (!isSeedreamAnnotateSingle) {
-    imageUrls.push(baseImageUrl);
-  }
-
-  if (tool === Tool.ANNOTATE) {
-    const annotationCanvas = buildAnnotationCanvas(image, paths, imageDimensions);
-    annotationImageUrl = await uploadCanvasToFal(annotationCanvas, {
-      jobId: options.jobId,
-      onPhaseUpdate: options.onPhaseUpdate,
-      abortSignal: options.abortSignal,
-      label: 'annotation image',
-    });
-    imageUrls.push(annotationImageUrl);
-  }
-
-  const isFlux2MaxModel = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID; // Flux2 Max edit routing.
-  if (!isFlux2MaxModel && referenceImages && referenceImages.length > 0) {
-    const referenceUrls = await collectReferenceUploadUrls(referenceImages, {
-      jobId: options.jobId,
-      onPhaseUpdate: options.onPhaseUpdate,
-      abortSignal: options.abortSignal,
-    });
-    imageUrls.push(...referenceUrls);
   }
 
   if (isFlux2MaxModel) {

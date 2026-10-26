@@ -5,6 +5,7 @@ import { NANO_BANANA_DEFAULTS, isNanoBananaThinkingLevel } from '../services/nan
 import { getNanoBananaAspectRatioOptionsForProvider } from '../services/nanoBananaAspectRatioPolicy';
 import { GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
 import { GPT_IMAGE_25_IMAGE_SIZE_OPTIONS } from '../services/gptImage25Config';
+import { GROK_IMAGE_DEFAULTS, isGrokImageAspectRatio, isGrokImageResolution, isGrokImageQuality, isGrokImageOutputFormat, type GrokImageAspectRatio, type GrokImageResolution, type GrokImageQuality, type GrokImageOutputFormat } from '../services/grokImageConfig';
 import { KLING_V4_DEFAULTS, isKlingV4VideoModel as isKlingV4VideoModelId, isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from '../services/klingV4Config';
 import type {
   KlingV4Variant,
@@ -33,7 +34,6 @@ import {
   CRYSTAL_UPSCALER_MODEL_ID,
   DEFAULT_FAL_IMAGE_MODEL_ID,
   DEFAULT_FAL_VIDEO_MODEL_ID,
-  FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   GPT_IMAGE_25_DEFAULTS,
   isGptImage25Model,
   isGptImage25Variant,
@@ -41,7 +41,6 @@ import {
   isGptImage25Quality,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
-  GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
@@ -337,6 +336,12 @@ type FalHandlers = {
   handleIdeogram45EditPrecisionChange: (value: string) => void;
   handleGptImage25BackgroundChange: (value: string) => void;
   handleGptImage25VariantChange: (value: string) => void;
+  handleGrokImageAspectRatioChange: (value: string) => void;
+  handleGrokImageResolutionChange: (value: string) => void;
+  handleGrokImageQualityChange: (value: string) => void;
+  handleGrokImageOutputFormatChange: (value: string) => void;
+  handleGrokImagePassthroughChange: (value: boolean) => void;
+  handleGrokImageEnableSafetyCheckerChange: (value: boolean) => void;
   handleKrea2AspectRatioChange: (value: string) => void;
   handleKrea2CreativityChange: (value: string) => void;
   handleFalImageSizeChange: (value: string) => void;
@@ -449,6 +454,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   ideogram45EditPrecision: Ideogram45EditPrecision;
   gptImage25Background: GptImage25Background;
   gptImage25Variant: GptImage25Variant;
+  grokImageAspectRatio: GrokImageAspectRatio;
+  grokImageResolution: GrokImageResolution;
+  grokImageQuality: GrokImageQuality;
+  grokImageOutputFormat: GrokImageOutputFormat;
+  grokImagePassthrough: boolean;
+  grokImageEnableSafetyChecker: boolean;
   krea2AspectRatio: Krea2AspectRatioSelectionValue;
   krea2Creativity: Krea2CreativitySelectionValue;
   falImageSizeSelection: FalImageSizeSelectionValue;
@@ -661,6 +672,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const { quality: ideogram45Quality, editPrecision: ideogram45EditPrecision } = ideogram45Settings;
   const [gptImage25Background, setGptImage25Background] = useState<GptImage25Background>(GPT_IMAGE_25_DEFAULTS.gptImage25Background);
   const [gptImage25Variant, setGptImage25Variant] = useState<GptImage25Variant>(GPT_IMAGE_25_DEFAULTS.gptImage25Variant);
+  const [grokImageAspectRatio, setGrokImageAspectRatio] = useState<GrokImageAspectRatio>(GROK_IMAGE_DEFAULTS.aspectRatio);
+  const [grokImageResolution, setGrokImageResolution] = useState<GrokImageResolution>(GROK_IMAGE_DEFAULTS.resolution);
+  const [grokImageQuality, setGrokImageQuality] = useState<GrokImageQuality>(GROK_IMAGE_DEFAULTS.quality);
+  const [grokImageOutputFormat, setGrokImageOutputFormat] = useState<GrokImageOutputFormat>(GROK_IMAGE_DEFAULTS.outputFormat);
+  const [grokImagePassthrough, setGrokImagePassthrough] = useState<boolean>(GROK_IMAGE_DEFAULTS.imagePassthrough);
+  const [grokImageEnableSafetyChecker, setGrokImageEnableSafetyChecker] = useState<boolean>(GROK_IMAGE_DEFAULTS.enableSafetyChecker);
   const [krea2AspectRatio, setKrea2AspectRatio] = useState<Krea2AspectRatioSelectionValue>(KREA_2_DEFAULT_ASPECT_RATIO);
   const [krea2Creativity, setKrea2Creativity] = useState<Krea2CreativitySelectionValue>(KREA_2_DEFAULT_CREATIVITY);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
@@ -873,15 +890,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
     const aspectRatioOptions = apiProvider === 'google'
       ? getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider)
-      : falModelId === GROK_IMAGINE_IMAGE_MODEL_ID // Grok model branch.
-        ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratios.
-        : isSeedreamModel
-          ? getSeedreamAspectRatioOptions(falModelId)
-          : getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider);
+      : isSeedreamModel
+        ? getSeedreamAspectRatioOptions(falModelId)
+        : getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider);
     const validOptions = aspectRatioOptions.map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
-      const fallbackAspectRatio = apiProvider === 'fal' && falModelId === GROK_IMAGINE_IMAGE_MODEL_ID ? '1:1' : 'default'; // Grok uses 1:1 fallback.
-      setFalAspectRatioSelection(fallbackAspectRatio);
+      setFalAspectRatioSelection('default');
     }
   }, [apiProvider, falModelId, falModelMode, falAspectRatioSelection, isSeedreamModel]);
 
@@ -1411,6 +1425,18 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const handleGptImage25QualityChange = useCallback((value: string) => {
     if (isGptImage25Quality(value)) setGptImage25Quality(value);
   }, []);
+  const handleGrokImageAspectRatioChange = useCallback((value: string) => {
+    if (isGrokImageAspectRatio(value)) setGrokImageAspectRatio(value);
+  }, []);
+  const handleGrokImageResolutionChange = useCallback((value: string) => {
+    if (isGrokImageResolution(value)) setGrokImageResolution(value);
+  }, []);
+  const handleGrokImageQualityChange = useCallback((value: string) => {
+    if (isGrokImageQuality(value)) setGrokImageQuality(value);
+  }, []);
+  const handleGrokImageOutputFormatChange = useCallback((value: string) => {
+    if (isGrokImageOutputFormat(value)) setGrokImageOutputFormat(value);
+  }, []);
   const handleIdeogram45QualityChange = useCallback((value: string) => {
     if (isIdeogram45Quality(value)) {
       setIdeogram45Settings(prev => ({ ...prev, quality: normalizeIdeogram45Quality(value, true, prev.editPrecision) }));
@@ -1548,6 +1574,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       ideogram45EditPrecision: value => setIdeogram45Settings(prev => ({ ...prev, editPrecision: value })),
       gptImage25Background: setGptImage25Background,
       gptImage25Variant: setGptImage25Variant,
+      grokImageAspectRatio: setGrokImageAspectRatio,
+      grokImageResolution: setGrokImageResolution,
+      grokImageQuality: setGrokImageQuality,
+      grokImageOutputFormat: setGrokImageOutputFormat,
+      grokImagePassthrough: setGrokImagePassthrough,
+      grokImageEnableSafetyChecker: setGrokImageEnableSafetyChecker,
       krea2Creativity: setKrea2Creativity,
       numImages: value => setFalNumImages(
         Math.min(getFalNumImageMaxForModel(normalizedModelId), Math.max(1, Math.floor(value))),
@@ -1751,6 +1783,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
+    grokImageAspectRatio,
+    grokImageResolution,
+    grokImageQuality,
+    grokImageOutputFormat,
+    grokImagePassthrough,
+    grokImageEnableSafetyChecker,
     krea2AspectRatio,
     krea2Creativity,
     isFlux2MaxModel,
@@ -1875,6 +1913,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleIdeogram45EditPrecisionChange,
     handleGptImage25BackgroundChange,
     handleGptImage25VariantChange,
+    handleGrokImageAspectRatioChange,
+    handleGrokImageResolutionChange,
+    handleGrokImageQualityChange,
+    handleGrokImageOutputFormatChange,
+    handleGrokImagePassthroughChange: setGrokImagePassthrough,
+    handleGrokImageEnableSafetyCheckerChange: setGrokImageEnableSafetyChecker,
     handleKrea2AspectRatioChange,
     handleKrea2CreativityChange,
     handleFalImageSizeChange,

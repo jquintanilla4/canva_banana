@@ -1,4 +1,7 @@
 import { getNanoBananaAspectRatioOptionsForProvider } from './nanoBananaAspectRatioPolicy';
+import { buildRecraftControls } from './promptBar/recraftControls';
+import { buildGrokImageControls } from './promptBar/grokImageControls';
+import type { GrokImageAspectRatio, GrokImageResolution, GrokImageQuality, GrokImageOutputFormat } from './grokImageConfig';
 import type {
   FalAspectRatioSelectionValue,
   FalGptImage2QualitySelectionValue,
@@ -82,7 +85,6 @@ import { getFlux3ModePolicy } from '../utils/flux3';
 import {
   FAL_CRYSTAL_CREATIVITY_OPTIONS,
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
-  FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
   KREA_2_ASPECT_RATIO_OPTIONS,
@@ -132,9 +134,6 @@ import {
   isSeedreamV5LiteModelId,
   isSeedreamV5ProModelId,
   isRecraftV4ProModel,
-  RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS,
-  RECRAFT_V4_PRO_MAX_COLORS,
-  recraftRgbToHex,
   SYNC_LIPSYNC_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -882,6 +881,12 @@ export type PromptBarControlsInput = {
   ideogram45IsEditing?: boolean;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  grokImageAspectRatio?: GrokImageAspectRatio;
+  grokImageResolution?: GrokImageResolution;
+  grokImageQuality?: GrokImageQuality;
+  grokImageOutputFormat?: GrokImageOutputFormat;
+  grokImagePassthrough?: boolean;
+  grokImageEnableSafetyChecker?: boolean;
   krea2AspectRatio?: Krea2AspectRatioSelectionValue;
   krea2Creativity?: Krea2CreativitySelectionValue;
   falScaleFactor: number;
@@ -985,6 +990,12 @@ export type PromptBarControlsInput = {
   onIdeogram45EditPrecisionChange?: (value: string) => void;
   onGptImage25BackgroundChange?: (value: string) => void;
   onGptImage25VariantChange?: (value: string) => void;
+  onGrokImageAspectRatioChange?: (value: string) => void;
+  onGrokImageResolutionChange?: (value: string) => void;
+  onGrokImageQualityChange?: (value: string) => void;
+  onGrokImageOutputFormatChange?: (value: string) => void;
+  onGrokImagePassthroughChange?: (value: boolean) => void;
+  onGrokImageEnableSafetyCheckerChange?: (value: boolean) => void;
   onKrea2AspectRatioChange?: (value: string) => void;
   onKrea2CreativityChange?: (value: string) => void;
   onFalScaleFactorChange: (value: string) => void;
@@ -1124,6 +1135,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     ideogram45IsEditing = false,
     gptImage25Background,
     gptImage25Variant,
+    grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
+    grokImagePassthrough, grokImageEnableSafetyChecker,
+    onGrokImageAspectRatioChange, onGrokImageResolutionChange, onGrokImageQualityChange, onGrokImageOutputFormatChange,
+    onGrokImagePassthroughChange, onGrokImageEnableSafetyCheckerChange,
     krea2AspectRatio = '16:9',
     krea2Creativity = 'medium',
     falScaleFactor,
@@ -1942,62 +1957,28 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }
 
   if (!isVideoMode && usingFal && isRecraftV4ProModel(falModelId)) {
-    controls.push({
-      id: 'recraft-image-size-select',
-      prefixLabel: 'Image Size',
-      ariaLabel: 'Select Recraft image size',
-      options: RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: recraftImageSize,
-      onChange: onRecraftImageSizeChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      kind: 'color',
-      id: 'recraft-background-color-picker',
-      prefixLabel: 'BG',
-      ariaLabel: 'Select Recraft background color',
-      value: recraftRgbToHex(recraftBackgroundColor),
-      onChange: onRecraftBackgroundColorChange,
-      disabled: isLoading,
-    });
-
-    recraftColors.slice(0, RECRAFT_V4_PRO_MAX_COLORS).forEach((color, index) => {
-      controls.push({
-        kind: 'color',
-        id: `recraft-color-${index + 1}-picker`,
-        prefixLabel: `C${index + 1}`,
-        ariaLabel: `Select Recraft preferred color ${index + 1}`,
-        value: recraftRgbToHex(color),
-        onChange: (value: string) => onRecraftColorChange(index, value),
-        disabled: isLoading,
-      });
-    });
-
-    if (recraftColors.length < RECRAFT_V4_PRO_MAX_COLORS) {
-      controls.push({
-        kind: 'action',
-        id: 'recraft-add-color-button',
-        label: '+ Color',
-        ariaLabel: 'Add Recraft preferred color',
-        onClick: onRecraftAddColor,
-        disabled: isLoading,
-      });
-    }
-
-    if (recraftColors.length > 0) {
-      controls.push({
-        kind: 'action',
-        id: 'recraft-remove-color-button',
-        label: '- Color',
-        ariaLabel: 'Remove Recraft preferred color',
-        onClick: onRecraftRemoveColor,
-        disabled: isLoading,
-      });
-    }
+    controls.push(...buildRecraftControls({
+      isLoading, imageSize: recraftImageSize, backgroundColor: recraftBackgroundColor, colors: recraftColors,
+      onImageSizeChange: onRecraftImageSizeChange, onBackgroundColorChange: onRecraftBackgroundColorChange,
+      onColorChange: onRecraftColorChange, onAddColor: onRecraftAddColor, onRemoveColor: onRecraftRemoveColor,
+    }));
   }
 
   const isGrokImagineModel = !isVideoMode && falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
+  if (usingFal && isGrokImagineModel) {
+    controls.push(...buildGrokImageControls({
+      isLoading, aspectRatio: grokImageAspectRatio, resolution: grokImageResolution, quality: grokImageQuality,
+      outputFormat: grokImageOutputFormat, imagePassthrough: grokImagePassthrough,
+      enableSafetyChecker: grokImageEnableSafetyChecker, numImages: falNumImages,
+      onAspectRatioChange: onGrokImageAspectRatioChange ?? (() => {}),
+      onResolutionChange: onGrokImageResolutionChange ?? (() => {}),
+      onQualityChange: onGrokImageQualityChange ?? (() => {}),
+      onOutputFormatChange: onGrokImageOutputFormatChange ?? (() => {}),
+      onImagePassthroughChange: onGrokImagePassthroughChange ?? (() => {}),
+      onEnableSafetyCheckerChange: onGrokImageEnableSafetyCheckerChange ?? (() => {}),
+      onNumImagesChange: onFalNumImagesChange,
+    }));
+  }
   const isSeedreamV5Lite = isSeedreamV5LiteModelId(falModelId); // Seedream 5 Lite uses stricter controls.
   const isSeedreamV5Pro = isSeedreamV5ProModelId(falModelId); // Seedream 5 Pro uses Pro controls.
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel; // Show size picker for all Seedream models.
@@ -2072,18 +2053,14 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }));
 
   const supportsAspectRatioControl = (isNanoBananaModel && apiProvider !== 'fal')
-    || isGrokImagineModel // Grok aspect ratio support.
-    || (isSeedreamModel && !shouldShowSeedreamImageSizeControl); // Include Grok for AR control.
+    || (isSeedreamModel && !shouldShowSeedreamImageSizeControl);
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || !isVideoMode);
   if (shouldShowAspectRatioControl) {
     const aspectRatioOptions = isNanoBananaModel
       ? getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider)
-      : isGrokImagineModel // Grok aspect ratio branch.
-        ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratio options.
-        : getSeedreamAspectRatioOptions(falModelId);
+      : getSeedreamAspectRatioOptions(falModelId);
     controls.push({
       id: 'fal-aspect-ratio-select',
-      prefixLabel: isGrokImagineModel ? 'AR' : undefined, // Grok uses short label.
       ariaLabel: 'Select aspect ratio',
       options: aspectRatioOptions.map(option => ({ value: option.value, label: option.label })),
       value: falAspectRatioSelection,
@@ -2094,7 +2071,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2Model || isGptImage25 || isIdeogram45);
+    && (isSeedreamModel || isNanoBananaModel || isGptImage2Model || isGptImage25 || isIdeogram45);
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.

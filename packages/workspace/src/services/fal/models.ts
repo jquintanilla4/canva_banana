@@ -1,11 +1,14 @@
 import { normalizeNanoBananaEndpoint } from '../nanoBananaConfig';
 import type { FalAspectRatioOption, FalImageSizeOption } from '../../types'; // UI option types.
 import {
+  GROK_IMAGINE_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
+  normalizeFalModelId,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V5_PRO_MODEL_ID,
   SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
+  RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
 import { getRuntimeConfig } from '../runtimeConfig'; // Shared web/desktop config.
 
@@ -34,6 +37,8 @@ export const normalizeModelId = (modelId: string | undefined): string | undefine
   if (modelId === REMOVED_KLING_O1_IMAGE_MODEL_ID) {
     return undefined;
   }
+  if (modelId === 'fal-ai/recraft/v4/pro/text-to-image') return RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID; // Upgrade legacy generation requests.
+  if (normalizeFalModelId(modelId) === GROK_IMAGINE_IMAGE_MODEL_ID) return GROK_IMAGINE_IMAGE_MODEL_ID; // Share Grok selector aliases with the picker.
   return normalizeNanoBananaEndpoint(modelId);
 };
 

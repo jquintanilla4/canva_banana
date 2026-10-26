@@ -10,6 +10,8 @@ import { KLING_V4_REFERENCE_IMAGE_LIMIT, KLING_V4_REFERENCE_VIDEO_LIMIT, isKling
 import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '../services/klingV4RunSettings';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions, type GptImage2RunSettings } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions, type GptImage25RunSettings } from '../services/gptImage25RunSettings';
+import { resolveRecraftRunSettings, serializeRecraftGenerationOptions, type RecraftRunSettings } from '../services/recraftRunSettings';
+import { resolveGrokImageRunSettings, serializeGrokImageGenerationOptions, type GrokImageRunSettings } from '../services/grokImageRunSettings';
 import { useCallback, useMemo, useRef } from 'react';
 import type { Dispatch, SetStateAction, SyntheticEvent } from 'react';
 import {
@@ -33,7 +35,6 @@ import {
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  RECRAFT_V4_PRO_MAX_COLORS,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -77,8 +78,6 @@ import {
   isRemovedOneToAllAnimateModelId,
   isRetiredVideoModelId,
   isRecraftV4ProModel,
-  isRecraftV4ProImageSizeSelectionValue,
-  normalizeRecraftRgbColor,
   isSeedance2AspectRatioSelectionValue,
   isSeedance2DurationSelectionValue,
   isSeedance2OutputFormatSelectionValue,
@@ -192,7 +191,7 @@ import type {
 } from '../types';
 import { Tool } from '../types';
 import { getImageBounds, isOverlapping } from '../utils/canvasGeometry';
-import { getNaturalSize, getVideoFileExtension, isVideoFileType, loadMediaFromBlob, rasterizeImages, revokeVideoObjectUrl } from '../services/mediaService';
+import { getNaturalSize, getVideoFileExtension, isVideoFileType, loadMediaFromBlob, prepareGeneratedImage, rasterizeImages, revokeVideoObjectUrl } from '../services/mediaService';
 import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
@@ -291,51 +290,6 @@ const getDefaultImageEditTool = (editAppMode: AppMode, value: Tool): Tool =>
 
 const clonePathsForRetry = (sourcePaths: Path[]): Path[] =>
   sourcePaths.map(path => ({ ...path, points: path.points.map(point => ({ ...point })) })); // Detach saved paths from live canvas edits.
-
-const extractDataUrlBase64 = (dataUrl: string): string | null => {
-  const commaIndex = dataUrl.indexOf(',');
-  return commaIndex === -1 ? null : dataUrl.slice(commaIndex + 1); // Keep only payload bytes.
-};
-
-const loadGeneratedImageElement = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
-  const img = new Image();
-  img.onload = () => resolve(img);
-  img.onerror = () => reject(new Error('Failed to load generated image.'));
-  img.src = src;
-});
-
-const normalizeGeneratedImageToPng = async (
-  src: string,
-): Promise<{ image: HTMLImageElement; base64: string }> => {
-  const sourceImage = await loadGeneratedImageElement(src);
-  const sourceBase64 = extractDataUrlBase64(src);
-  if (src.startsWith(PNG_DATA_URL_PREFIX) && sourceBase64) {
-    return { image: sourceImage, base64: sourceBase64 }; // Existing PNG outputs skip canvas work.
-  }
-
-  const width = sourceImage.naturalWidth || sourceImage.width;
-  const height = sourceImage.naturalHeight || sourceImage.height;
-  if (width <= 0 || height <= 0) {
-    throw new Error('Generated image has invalid dimensions.');
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) {
-    throw new Error('Unable to prepare generated image.');
-  }
-
-  context.drawImage(sourceImage, 0, 0, width, height);
-  const pngDataUrl = canvas.toDataURL('image/png');
-  const pngBase64 = extractDataUrlBase64(pngDataUrl);
-  if (!pngBase64) {
-    throw new Error('Failed to convert generated image to PNG.');
-  }
-
-  return { image: await loadGeneratedImageElement(pngDataUrl), base64: pngBase64 };
-};
 
 const resolveSelectedStillImageId = (
   primaryImageId: string | null,
@@ -641,6 +595,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
+    grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
+    grokImagePassthrough, grokImageEnableSafetyChecker,
     krea2AspectRatio,
     krea2Creativity,
     setFalImageSizeSelection,
@@ -913,13 +869,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const seedance15AudioForRun = typeof falOptionsOverride.seedance15Audio === 'boolean'
       ? falOptionsOverride.seedance15Audio
       : seedance15Audio;
-    const recraftImageSizeForRun = isRecraftV4ProImageSizeSelectionValue(falOptionsOverride.recraftImageSize)
-      ? falOptionsOverride.recraftImageSize
-      : recraftImageSize;
-    const recraftBackgroundColorForRun = normalizeRecraftRgbColor(falOptionsOverride.recraftBackgroundColor) ?? recraftBackgroundColor;
-    const recraftColorsForRun = Array.isArray(falOptionsOverride.recraftColors)
-      ? falOptionsOverride.recraftColors.map(normalizeRecraftRgbColor).filter((color): color is NonNullable<typeof color> => Boolean(color)).slice(0, RECRAFT_V4_PRO_MAX_COLORS)
-      : recraftColors.slice(0, RECRAFT_V4_PRO_MAX_COLORS);
     const krea2AspectRatioForRun: Krea2AspectRatioSelectionValue = isKrea2AspectRatioSelectionValue(falOptionsOverride.aspectRatioSelection)
       ? falOptionsOverride.aspectRatioSelection
       : krea2AspectRatio;
@@ -1095,9 +1044,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isIdeogram45ModelForRun = !isVideoMode && isIdeogram45Model(falModelIdForRun);
     const isKrea2LargeModelForRun = usingFal && !isVideoMode && isKrea2LargeModel(falModelIdForRun);
     const isGrokImagineModel = !isVideoMode && falModelIdForRun === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image.
-    const grokAspectRatioForRun = (isGrokImagineModel && falAspectRatioSelectionForRun === 'default')
-      ? '1:1'
-      : falAspectRatioSelectionForRun; // Grok falls back to 1:1.
     const isFlux2MaxModelForRun = !isVideoMode && falModelIdForRun === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
     const isRecraftV4ProModelForRun = usingFal && !isVideoMode && isRecraftV4ProModel(falModelIdForRun);
     const isCrystalUpscaleModel = !isVideoMode && falModelIdForRun === CRYSTAL_UPSCALER_MODEL_ID;
@@ -1175,7 +1121,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     let ideogram45SettingsForRun: Ideogram45RunSettings | undefined;
     let gptImage2SettingsForRun: GptImage2RunSettings | undefined;
     let gptImage25SettingsForRun: GptImage25RunSettings | undefined;
-    if (usingFal && (isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun)) {
+    let grokImageSettingsForRun: GrokImageRunSettings | undefined;
+    let recraftSettingsForRun: RecraftRunSettings | undefined;
+    if (usingFal && (isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun || isGrokImagineModel || isRecraftV4ProModelForRun)) {
       try {
         const commonRunInput = {
           kind: isTextToImage ? 'text_to_image' : 'image_edit',
@@ -1201,13 +1149,29 @@ export const useGeneration = (args: UseGenerationArgs) => {
           gptImage2SettingsForRun = resolveGptImage2RunSettings({
             ...commonRunInput, quality: generationOverride ? falOptionsOverride.gptImage2Quality : gptImage2Quality,
           }, validation);
-        } else {
+        } else if (isGptImage25ModelForRun) {
           gptImage25SettingsForRun = resolveGptImage25RunSettings({
             ...commonRunInput,
             modelId: generationOverride?.modelId,
             variant: generationOverride ? generationOverride.falOptions?.gptImage25Variant : gptImage25Variant,
             quality: generationOverride ? falOptionsOverride.gptImage25Quality : gptImage25Quality,
             background: generationOverride ? falOptionsOverride.gptImage25Background : gptImage25Background,
+          }, validation);
+        } else if (isGrokImagineModel) {
+          grokImageSettingsForRun = resolveGrokImageRunSettings({
+            ...commonRunInput,
+            aspectRatio: generationOverride ? falOptionsOverride.grokImageAspectRatio ?? falOptionsOverride.aspectRatioSelection : grokImageAspectRatio,
+            resolution: generationOverride ? falOptionsOverride.grokImageResolution : grokImageResolution,
+            quality: generationOverride ? falOptionsOverride.grokImageQuality : grokImageQuality,
+            outputFormat: generationOverride ? falOptionsOverride.grokImageOutputFormat : grokImageOutputFormat,
+            imagePassthrough: generationOverride ? falOptionsOverride.grokImagePassthrough : grokImagePassthrough,
+            enableSafetyChecker: generationOverride ? falOptionsOverride.grokImageEnableSafetyChecker : grokImageEnableSafetyChecker,
+          }, validation);
+        } else {
+          recraftSettingsForRun = resolveRecraftRunSettings({
+            imageSize: generationOverride ? falOptionsOverride.recraftImageSize : recraftImageSize,
+            backgroundColor: generationOverride ? falOptionsOverride.recraftBackgroundColor : recraftBackgroundColor,
+            colors: generationOverride ? falOptionsOverride.recraftColors : recraftColors,
           }, validation);
         }
       } catch (error) {
@@ -3121,7 +3085,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const shouldValidateFalOptions = usingFal
       && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun);
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
-    const resolvedImageSettings = nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun;
+    const resolvedImageSettings = nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? grokImageSettingsForRun;
     const numImagesForValidation = generationOverride && resolvedImageSettings
       ? resolvedImageSettings.numImages ?? 1 : falNumImagesForRun;
     const isNumImagesInvalid =
@@ -3176,6 +3140,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ...(nanoBananaSettingsForRun ? serializeNanoBananaGenerationOptions(nanoBananaSettingsForRun) : {}),
       ...(gptImage2SettingsForRun ? serializeGptImage2GenerationOptions(gptImage2SettingsForRun) : {}),
       ...(gptImage25SettingsForRun ? serializeGptImage25GenerationOptions(gptImage25SettingsForRun) : {}),
+      ...(grokImageSettingsForRun ? serializeGrokImageGenerationOptions(grokImageSettingsForRun) : {}),
+      ...(recraftSettingsForRun ? serializeRecraftGenerationOptions(recraftSettingsForRun) : {}),
       ...(ideogram45SettingsForRun ? serializeIdeogram45GenerationOptions(ideogram45SettingsForRun) : {}),
       ...(isKrea2LargeModelForRun ? {
         krea2Creativity: krea2CreativityForRun,
@@ -3184,11 +3150,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ...(generationKind === 'upscale' ? { scaleFactor: falScaleFactorForRun } : {}),
       ...(isSeedvrUpscaleModel ? { noiseScale: falNoiseScaleForRun } : {}),
       ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
-      ...(isRecraftV4ProModelForRun ? {
-        recraftImageSize: recraftImageSizeForRun,
-        recraftBackgroundColor: recraftBackgroundColorForRun,
-        recraftColors: recraftColorsForRun,
-      } : {}),
       ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
     });
     const imageRetryInputs: GenerationInputs = {
@@ -3290,7 +3251,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             throw new Error('Unable to create Fal job identifier.');
           }
 
-          const textToImageModelId = nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
+          const textToImageModelId = nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? grokImageSettingsForRun?.endpoint ?? recraftSettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
             ? falModelIdForRun
             : isSeedreamModel
               ? getSeedreamTextToImageModelId(falModelIdForRun)
@@ -3334,22 +3295,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
             modelId: textToImageModelId,
             aspectRatio: isKrea2LargeModelForRun
               ? krea2AspectRatioForRun
-              : (isNanoBananaModel || isSeedreamModel || isGrokImagineModel)
-              ? (isGrokImagineModel ? grokAspectRatioForRun : falAspectRatioSelectionForRun)
-              : 'default', // Include Grok aspect ratios.
+              : (isNanoBananaModel || isSeedreamModel)
+              ? falAspectRatioSelectionForRun
+              : 'default',
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(nanoBananaSettingsForRun?.kind === 'text_to_image' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
             ...(gptImage2SettingsForRun?.kind === 'text_to_image' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
             ...(gptImage25SettingsForRun?.kind === 'text_to_image' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
+            ...(grokImageSettingsForRun?.kind === 'text_to_image' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
+            ...(recraftSettingsForRun ? { recraftRunSettings: recraftSettingsForRun } : {}),
             ...(ideogram45SettingsForRun?.kind === 'text_to_image' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
             ...(isKrea2LargeModelForRun ? { krea2Creativity: krea2CreativityForRun, imageStyleReferences: krea2StyleReferences } : {}),
             ...(isSeedreamModel ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
             ...(isFlux2MaxModelForRun ? { flux2MaxImageSize: flux2MaxImageSizeForRun } : {}),
-            ...(isRecraftV4ProModelForRun ? {
-              recraftImageSize: recraftImageSizeForRun,
-              recraftBackgroundColor: recraftBackgroundColorForRun,
-              recraftColors: recraftColorsForRun,
-            } : {}),
             ...(!resolvedImageSettings && !isKrea2LargeModelForRun ? { numImages: normalizedFalNumImages } : {}),
           }));
 
@@ -3448,7 +3406,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
           } else {
             const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun || isFlux2MaxModelForRun;
+            const supportsEditReferenceImages = isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun || isFlux2MaxModelForRun || isGrokImagineModel;
             let editReferenceImages: HTMLImageElement[] | undefined;
             if (supportsEditReferenceImages && hasEditReferences) {
               const maxReferenceImages = getModelReferenceCapabilities(falModelIdForRun, editToolForRun).availableReferenceSlots;
@@ -3489,6 +3447,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(nanoBananaSettingsForRun?.kind === 'image_edit' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
               ...(gptImage2SettingsForRun?.kind === 'image_edit' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
               ...(gptImage25SettingsForRun?.kind === 'image_edit' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
+              ...(grokImageSettingsForRun?.kind === 'image_edit' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
               ...(ideogram45SettingsForRun?.kind === 'image_edit' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
               ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
               onQueueUpdate: (update) => {
@@ -3543,17 +3502,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const generatedImageSources = generationResult.imageDataUrls?.length
         ? generationResult.imageDataUrls
         : generatedImages.map(base64 => `${PNG_DATA_URL_PREFIX}${base64}`); // Legacy providers still return raw PNG base64.
-      // Hydrate generated outputs back into PNG canvas images with generation metadata.
+      const outputImageFormatPolicy = grokImageSettingsForRun ? 'preserve-original' : 'png'; // Keep Grok originals; other models retain PNG canvas files.
       const addGeneratedImages = async () => {
         const newImages: CanvasImage[] = [];
         let lastBounds = images.length > 0 ? getImageBounds(images[images.length - 1]) : null;
         for (const source of generatedImageSources) {
-          const { image: img, base64 } = await awaitActive(async () => normalizeGeneratedImageToPng(source));
+          const { image: img, file } = await awaitActive(() => prepareGeneratedImage(source, outputImageFormatPolicy));
 
           const { naturalWidth, naturalHeight } = getNaturalSize(img);
           const displayWidth = naturalWidth || 512;
           const displayHeight = naturalHeight || 512;
-          const file = new File([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], 'generated.png', { type: 'image/png' });
           let newX = placementOrigin.x;
           let newY = placementOrigin.y;
           if (lastBounds) {
@@ -3785,6 +3743,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
+    grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
+    grokImagePassthrough, grokImageEnableSafetyChecker,
     krea2AspectRatio,
     krea2Creativity,
     krea2StyleReferenceStrengths,

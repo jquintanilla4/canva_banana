@@ -12,13 +12,16 @@ import { fal } from '@fal-ai/client';
 import { RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID } from '../modelConfig';
 import { generateImage } from '../falService';
 
-describe('falService (Recraft v4 Pro)', () => {
+describe('falService (Recraft v4.1 Pro)', () => {
   beforeEach(() => {
     process.env.FAL_API_KEY = 'test'; // Legacy env value; the browser SDK now uses the Node proxy.
     vi.clearAllMocks(); // Keep call assertions isolated per test.
   });
 
-  it('sends only the Recraft text-to-image payload shape', async () => {
+  it.each([
+    RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
+    'fal-ai/recraft/v4/pro/text-to-image',
+  ])('routes %s to v4.1 Pro with only the Recraft payload shape', async modelId => {
     vi.mocked(fal.subscribe).mockResolvedValue({
       data: {
         images: [{ url: 'data:image/webp;base64,Zm9v' }],
@@ -27,7 +30,7 @@ describe('falService (Recraft v4 Pro)', () => {
     } as unknown as Awaited<ReturnType<typeof fal.subscribe>>);
 
     const result = await generateImage('recraft prompt', {
-      modelId: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
+      modelId,
       recraftImageSize: 'landscape_16_9',
       recraftBackgroundColor: { r: 12, g: 34, b: 56 },
       recraftColors: [
@@ -45,7 +48,7 @@ describe('falService (Recraft v4 Pro)', () => {
 
     const subscribeInput = vi.mocked(fal.subscribe).mock.calls[0]?.[1]?.input as Record<string, unknown>;
 
-    expect(fal.subscribe).toHaveBeenCalledWith(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, expect.objectContaining({
+    expect(fal.subscribe).toHaveBeenCalledWith('fal-ai/recraft/v4.1/pro/text-to-image', expect.objectContaining({
       input: expect.objectContaining({
         prompt: 'recraft prompt',
         image_size: 'landscape_16_9',

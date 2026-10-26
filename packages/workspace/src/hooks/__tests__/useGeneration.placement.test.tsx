@@ -12,6 +12,8 @@ import {
   IDEOGRAM_45_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
   GPT_IMAGE_25_MODEL_ID,
+  GROK_IMAGINE_IMAGE_MODEL_ID,
+  RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   NANO_BANANA_PRO_EDIT_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -285,6 +287,74 @@ describe('useGeneration placement notifications', () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it.each((['text_to_image', 'image_edit'] as const).flatMap(kind =>
+    (['live', 'legacy'] as const).map(source => ({ kind, source })),
+  ))('keeps Grok $kind $source requests, retries, and saved outputs consistent without leaking live controls', async ({ kind, source }) => {
+    const primary = buildCanvasImage('grok-source');
+    const reference = buildCanvasImage('grok-ref');
+    const stateHarness = createStateHarness();
+    const fal = createFalStub({
+      falImageModelId: GROK_IMAGINE_IMAGE_MODEL_ID, grokImageAspectRatio: '5:2', grokImageResolution: '1.5k',
+      grokImageQuality: 'low', grokImageOutputFormat: 'webp', grokImagePassthrough: true,
+      grokImageEnableSafetyChecker: false, falNumImages: 10,
+    });
+    const setError = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      jobs = typeof value === 'function' ? value(jobs) : value;
+    });
+    const output = { imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], imageDataUrls: ['data:image/jpeg;base64,Zm9v'], text: '', requestId: 'grok-complete' };
+    vi.mocked(generateFalImage).mockResolvedValue(output);
+    vi.mocked(generateFalImageEdit).mockResolvedValue(output);
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A poster', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(kind === 'image_edit' ? {
+        primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
+        primarySelectionMediaType: 'image', selectedImageIds: [primary.id], referenceImageIds: [reference.id],
+      } : {}), images: [primary, reference], paths: [], videoNegativePrompt: '',
+      setError, setIsLoading: vi.fn(), setFalJobs, setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => { await result.current.handleGenerate(source === 'live' ? undefined : {
+      kind, prompt: 'A saved poster', provider: 'fal', modelId: 'xai/grok-imagine-image', modelMode: 'image',
+      primaryImageId: kind === 'image_edit' ? primary.id : undefined,
+    }); });
+    expect(setError).toHaveBeenLastCalledWith(null);
+    const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
+    expect(request?.grokImageRunSettings).toMatchObject(source === 'live'
+      ? { kind, aspectRatio: '5:2', resolution: '1.5k', quality: 'low', outputFormat: 'webp', imagePassthrough: true, enableSafetyChecker: false, numImages: 10 }
+      : { kind, aspectRatio: kind === 'image_edit' ? 'auto' : '1:1', resolution: '1k', quality: 'medium', outputFormat: 'png', imagePassthrough: false, enableSafetyChecker: true, numImages: 1 });
+    const saved = stateHarness.state.images[0]?.metadata?.generation;
+    expect(saved?.falOptions).toEqual(jobs[0]?.retryInputs?.falOptions);
+    expect(saved?.falOptions).toMatchObject(source === 'live'
+      ? { grokImageAspectRatio: '5:2', grokImageResolution: '1.5k', grokImageQuality: 'low', grokImageOutputFormat: 'webp', grokImagePassthrough: true, grokImageEnableSafetyChecker: false, numImages: 10 }
+      : { grokImageAspectRatio: kind === 'image_edit' ? 'auto' : '1:1', grokImageResolution: '1k', grokImageQuality: 'medium', grokImageOutputFormat: 'png', grokImagePassthrough: false, grokImageEnableSafetyChecker: true, numImages: 1 });
+    expect(stateHarness.state.images[0]?.file).toMatchObject({ name: 'generated.jpeg', type: 'image/jpeg', size: 3 });
+    if (kind === 'image_edit' && source === 'live') {
+      expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0].referenceImages).toEqual([reference.element]);
+      expect(saved?.referenceImageIds).toEqual([reference.id]);
+    }
+    expect(jobs[0]?.status).toBe('COMPLETED');
+  });
+
+  it('uses saved Recraft settings even when live size and colors differ', async () => {
+    const stateHarness = createStateHarness();
+    const fal = createFalStub({ falImageModelId: GROK_IMAGINE_IMAGE_MODEL_ID, recraftImageSize: 'square', recraftColors: [{ r: 1, g: 2, b: 3 }] });
+    vi.mocked(generateFalImage).mockResolvedValue({ imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '', requestId: 'recraft' });
+    const setError = vi.fn();
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A poster', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(), images: [], paths: [], videoNegativePrompt: '', setError,
+      setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => { await result.current.handleGenerate({
+      kind: 'text_to_image', prompt: 'A saved poster', provider: 'fal', modelId: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
+      falOptions: { recraftImageSize: 'landscape_16_9', recraftBackgroundColor: { r: 9, g: 70, b: 199 } },
+    }); });
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(vi.mocked(generateFalImage).mock.calls[0]?.[1]?.recraftRunSettings).toMatchObject({ imageSize: 'landscape_16_9', backgroundColor: { r: 9, g: 70, b: 199 }, colors: [] });
+    expect(stateHarness.state.images[0]?.metadata?.generation?.falOptions).toMatchObject({ recraftImageSize: 'landscape_16_9', recraftBackgroundColor: { r: 9, g: 70, b: 199 }, recraftColors: [] });
   });
 
   it.each(['text_to_image', 'image_edit'] as const)('uses one resolved Ideogram object for $kind requests, retries, and completed metadata', async kind => {

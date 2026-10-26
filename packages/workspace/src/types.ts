@@ -1,3 +1,5 @@
+import type { GrokImageAspectRatio, GrokImageResolution, GrokImageQuality, GrokImageOutputFormat } from './services/grokImageConfig';
+
 export enum Tool {
   SELECTION = 'SELECTION',
   PAN = 'PAN',
@@ -142,6 +144,12 @@ export type GenerationFalOptions = Partial<{
   gptImage25Variant: GptImage25Variant;
   gptImage25Background: GptImage25Background;
   gptImage25Quality: GptImage25Quality;
+  grokImageAspectRatio: GrokImageAspectRatio;
+  grokImageResolution: GrokImageResolution;
+  grokImageQuality: GrokImageQuality;
+  grokImageOutputFormat: GrokImageOutputFormat;
+  grokImagePassthrough: boolean;
+  grokImageEnableSafetyChecker: boolean;
   ideogram45Quality: Ideogram45Quality;
   ideogram45EditPrecision: Ideogram45EditPrecision;
   krea2Creativity: FalKrea2CreativityOption;

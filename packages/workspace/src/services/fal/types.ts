@@ -1,4 +1,5 @@
 import type {
+  GenerationFalOptions,
   NanoBananaThinkingLevel,
   FalJobPhase,
   Tool,
@@ -49,6 +50,8 @@ import type { Ideogram45EditRunSettings, Ideogram45TextRunSettings } from '../id
 import type { NanoBananaRunSettings } from '../nanoBananaRunSettings';
 import type { GptImage2RunSettings } from '../gptImage2RunSettings';
 import type { GptImage25RunSettings } from '../gptImage25RunSettings';
+import type { RecraftRunSettings } from '../recraftRunSettings';
+import type { GrokImageRunSettings } from '../grokImageRunSettings';
 
 export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED'; // Fal queue status enum.
 export type FalQueueLogs = Array<{ message?: string }> | Record<string, unknown> | string | undefined; // Fal log payload shapes.
@@ -102,7 +105,8 @@ export interface GenerateImageEditParams {
   referenceImages?: HTMLImageElement[];
 } // Inputs for image edit workflows.
 
-export interface GenerateImageEditOptions extends FalPhaseOptions {
+export interface GenerateImageEditOptions extends FalPhaseOptions, Pick<GenerationFalOptions,
+  'grokImageAspectRatio' | 'grokImageResolution' | 'grokImageQuality' | 'grokImageOutputFormat' | 'grokImagePassthrough' | 'grokImageEnableSafetyChecker'> {
   onQueueUpdate?: (update: FalQueueUpdate) => void; // Hook for queue updates.
   onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase updates.
   jobId?: string; // UI queue job id for debug correlation.
@@ -120,12 +124,14 @@ export interface GenerateImageEditOptions extends FalPhaseOptions {
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
   gptImage25RunSettings?: GptImage25RunSettings<'image_edit'>;
+  grokImageRunSettings?: GrokImageRunSettings<'image_edit'>;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
   ideogram45RunSettings?: Ideogram45EditRunSettings; // Resolved settings take precedence over raw picker options.
 } // Optional controls for image edits.
 
-export interface GenerateImageOptions extends FalPhaseOptions {
+export interface GenerateImageOptions extends FalPhaseOptions, Pick<GenerationFalOptions,
+  'grokImageAspectRatio' | 'grokImageResolution' | 'grokImageQuality' | 'grokImageOutputFormat' | 'grokImagePassthrough' | 'grokImageEnableSafetyChecker'> {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
   onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase updates.
   jobId?: string; // UI queue job id for debug correlation.
@@ -145,6 +151,8 @@ export interface GenerateImageOptions extends FalPhaseOptions {
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
   gptImage25RunSettings?: GptImage25RunSettings<'text_to_image'>;
+  grokImageRunSettings?: GrokImageRunSettings<'text_to_image'>;
+  recraftRunSettings?: RecraftRunSettings;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
   ideogram45RunSettings?: Ideogram45TextRunSettings;

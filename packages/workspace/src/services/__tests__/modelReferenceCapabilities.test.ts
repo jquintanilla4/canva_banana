@@ -6,6 +6,8 @@ import {
   GPT_IMAGE_2_EDIT_MODEL_ID,
   GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID,
   GPT_IMAGE_25_MODEL_ID,
+  GROK_IMAGINE_IMAGE_MODEL_ID,
+  GROK_IMAGINE_IMAGE_EDIT_MODEL_ID,
   IDEOGRAM_45_MODEL_ID,
   IDEOGRAM_45_EDIT_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
@@ -18,6 +20,8 @@ describe('model annotation reference capabilities', () => {
   it.each([
     { modelId: IDEOGRAM_45_MODEL_ID, capacity: 4 },
     { modelId: IDEOGRAM_45_EDIT_MODEL_ID, capacity: 4 },
+    { modelId: GROK_IMAGINE_IMAGE_MODEL_ID, capacity: 4 },
+    { modelId: GROK_IMAGINE_IMAGE_EDIT_MODEL_ID, capacity: 4 },
     { modelId: GPT_IMAGE_2_EDIT_MODEL_ID, capacity: 9 },
     { modelId: GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, capacity: 9 },
     { modelId: GPT_IMAGE_25_MODEL_ID, capacity: 15 },
@@ -30,7 +34,7 @@ describe('model annotation reference capabilities', () => {
     expect(getModelReferenceCapabilities(modelId, Tool.ANNOTATE)).toEqual({
       referenceCapacity: capacity, annotationSlots: 1, availableReferenceSlots: capacity - 1,
     });
-    if (modelId !== GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID) {
+    if (modelId !== GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID && modelId !== GROK_IMAGINE_IMAGE_EDIT_MODEL_ID) {
       const capabilities = getModelUiCapabilities(modelId);
       expect(capabilities.maxReferenceImages).toBe(capacity);
       expect(capabilities.referenceLimitToast?.(capacity - 1)?.message).toContain(`up to ${capacity - 1} references`);
