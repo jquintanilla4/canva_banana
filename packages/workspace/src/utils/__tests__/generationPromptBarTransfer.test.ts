@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JIMENG_MULTIFRAME_VIDEO_MODEL_ID, KLING_O3_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { JIMENG_MULTIFRAME_VIDEO_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage, CanvasMediaType, GenerationInputs } from '../../types';
 import { getGenerationTransferBlockReason, resolveGenerationInputSelection } from '../generationPromptBarTransfer';
 
@@ -126,7 +126,7 @@ describe('getGenerationTransferBlockReason', () => {
 
   it('allows a saved generation whose model and provider are still available', () => {
     expect(getGenerationTransferBlockReason(
-      buildGeneration({ modelId: KLING_O3_VIDEO_MODEL_ID }),
+      buildGeneration({ modelId: MINIMAX_H3_VIDEO_MODEL_ID }),
       allProviders,
     )).toBeNull();
   });
@@ -135,9 +135,20 @@ describe('getGenerationTransferBlockReason', () => {
     expect(getGenerationTransferBlockReason(undefined, allProviders)).toBe('No saved generation data');
   });
 
-  it('blocks retired model ids that would otherwise migrate into another paid model', () => {
+  it.each([
+    'fal-ai/kling-video/o1/image-to-video',
+    'fal-ai/kling-video/v2.5-turbo/image-to-video',
+    'fal-ai/kling-video/v3/pro',
+    'fal-ai/kling-video/v3/pro/motion-control',
+    'fal-ai/kling-video/o3/pro/reference-to-video',
+    'fal-ai/scail',
+    'fal-ai/wan/v2.7',
+    'fal-ai/wan/v2.2-14b/animate/replace',
+    'fal-ai/bytedance/seedance/v1.5/pro/image-to-video',
+    'fal-ai/veo3.1/image-to-video',
+  ])('blocks retired model %s before transfer', modelId => {
     expect(getGenerationTransferBlockReason(
-      buildGeneration({ modelId: 'fal-ai/kling-video/o1/image-to-video' }),
+      buildGeneration({ modelId }),
       allProviders,
     )).toBe('Saved model is no longer available');
   });

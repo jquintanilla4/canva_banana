@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID, WAN_27_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID } from '../../services/modelConfig';
 import type { CanvasImage, GenerationInputs } from '../../types';
 import { useGenerationPromptBarTransfer } from '../useGenerationPromptBarTransfer';
 
@@ -149,7 +149,7 @@ describe('useGenerationPromptBarTransfer', () => {
       kind: 'video',
       prompt: 'Restore this Wan prompt',
       provider: 'fal',
-      modelId: WAN_27_VIDEO_MODEL_ID,
+      modelId: WAN_VISION_ENHANCER_MODEL_ID,
       modelMode: 'video',
       falOptions: { negativePrompt: 'No camera shake' },
     };
@@ -159,6 +159,6 @@ describe('useGenerationPromptBarTransfer', () => {
 
     act(() => result.current.handleMetadataToPromptBar('output-image'));
 
-    expect(args.setVideoNegativePromptForModel).toHaveBeenCalledWith(WAN_27_VIDEO_MODEL_ID, 'No camera shake');
+    expect(args.setVideoNegativePromptForModel).toHaveBeenCalledWith(WAN_VISION_ENHANCER_MODEL_ID, 'No camera shake');
   });
 });

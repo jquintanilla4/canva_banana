@@ -4,6 +4,7 @@ import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
+  GROK_IMAGINE_VIDEO_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
   GPT_IMAGE_25_MODEL_ID,
   IDEOGRAM_45_MODEL_ID,
@@ -20,9 +21,10 @@ import {
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   WAN_27_EDIT_VIDEO_MODEL_ID,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
 } from '../../services/modelConfig';
-import { Tool, type CanvasImage, type FalQueueJob, type GenerationFalOptions } from '../../types';
+import { Tool, type CanvasImage, type FalQueueJob, type GenerationFalOptions, type GenerationInputs } from '../../types';
 import { generateImage as generateFalImage, generateImageEdit as generateFalImageEdit, generateImageToVideo, uploadVideoToFal } from '../../services/falService';
 import { generateImage as generateGoogleImage, generateImageEdit as generateGoogleImageEdit } from '../../services/geminiService';
 import { loadMediaFromBlob } from '../../services/mediaService';
@@ -2080,13 +2082,18 @@ describe('useGeneration (seedance 2)', () => {
     );
   });
 
-  it('honors saved Jimeng provider metadata when rerunning without a model id', async () => {
+  it.each([
+    { provider: 'jimeng' as const, currentModelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID },
+    { provider: 'jimeng' as const, currentModelId: KLING_V3_VIDEO_MODEL_ID },
+    { provider: 'volcengine' as const, currentModelId: WAN_27_VIDEO_MODEL_ID },
+  ])('honors saved $provider metadata without a model id while $currentModelId is selected', async ({ provider, currentModelId }) => {
     const fal = createFalStub();
-    fal.falVideoModelId = FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.falVideoModelId = currentModelId;
     fal.isFalSeedance2VideoModel = true;
     fal.isVolcengineSeedance2VideoModel = false;
     fal.isJimengSeedance2VideoModel = false;
     vi.mocked(generateJimengSeedanceVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
+    vi.mocked(generateSeedanceVideo).mockImplementation(() => new Promise(() => {}));
 
     const { result } = renderHook(() => useGeneration({
       appMode: 'CANVAS',
@@ -2110,7 +2117,7 @@ describe('useGeneration (seedance 2)', () => {
     await act(async () => {
       void result.current.handleGenerate({
         kind: 'video',
-        provider: 'jimeng',
+        provider,
         modelMode: 'video',
         prompt: 'Saved Jimeng rerun',
         jimengOptions: {
@@ -2126,8 +2133,15 @@ describe('useGeneration (seedance 2)', () => {
       await Promise.resolve();
     });
 
-    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
     expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+    if (provider === 'volcengine') {
+      expect(generateJimengSeedanceVideo).not.toHaveBeenCalled();
+      expect(generateSeedanceVideo).toHaveBeenCalledWith('Saved Jimeng rerun', expect.objectContaining({
+        modelId: 'doubao-seedance-2-0-260128', variant: 'smart', aspectRatio: '16:9', duration: '5', resolution: '1080p',
+      }));
+      return;
+    }
+    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
     expect(vi.mocked(generateJimengSeedanceVideo)).toHaveBeenCalledWith(
       'Saved Jimeng rerun',
       expect.objectContaining({
@@ -2141,7 +2155,7 @@ describe('useGeneration (seedance 2)', () => {
     );
   });
 
-  it('honors saved Jimeng provider metadata when a legacy Fal model id is present', async () => {
+  it('honors saved Jimeng provider metadata when a supported Fal Seedance model id is present', async () => {
     const fal = createFalStub();
     fal.falVideoModelId = FAL_SEEDANCE_2_VIDEO_MODEL_ID;
     fal.isFalSeedance2VideoModel = true;
@@ -2174,7 +2188,7 @@ describe('useGeneration (seedance 2)', () => {
         provider: 'jimeng',
         modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
         modelMode: 'video',
-        prompt: 'Legacy Jimeng rerun',
+        prompt: 'Supported Fal Seedance Jimeng rerun',
         jimengOptions: {
           seedance2Variant: 'smart',
           seedance2JimengModelVersion: 'seedance2.0fast',
@@ -2188,7 +2202,7 @@ describe('useGeneration (seedance 2)', () => {
 
     expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
     expect(vi.mocked(generateJimengSeedanceVideo)).toHaveBeenCalledWith(
-      'Legacy Jimeng rerun',
+      'Supported Fal Seedance Jimeng rerun',
       expect.objectContaining({ modelId: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID }),
     );
   });
@@ -2661,160 +2675,125 @@ describe('useGeneration (seedance 2)', () => {
     expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
   });
 
-  it('uses Seedance 1.5 Fal options from generation overrides', async () => {
+  it.each([
+    ...[
+      'fal-ai/kling-video/v2.5-turbo/image-to-video',
+      KLING_V3_VIDEO_MODEL_ID,
+      'fal-ai/kling-video/v3/pro/motion-control',
+      KLING_O3_VIDEO_MODEL_ID,
+      'fal-ai/scail',
+      WAN_27_VIDEO_MODEL_ID,
+      'fal-ai/wan/v2.2-14b/animate/replace',
+      SEEDANCE_15_VIDEO_MODEL_ID,
+      'fal-ai/veo3.1/image-to-video',
+    ].map(modelId => ({ modelId, source: 'current selection', provider: undefined })),
+    { modelId: KLING_VIDEO_STANDARD_MODEL_ID, source: 'kind-only Fal rerun', provider: 'fal' as const },
+    { modelId: KLING_O3_VIDEO_EDIT_MODEL_ID, source: 'kind-only Fal rerun', provider: 'fal' as const },
+    { modelId: WAN_27_EDIT_VIDEO_MODEL_ID, source: 'mode-only Jimeng rerun', provider: 'jimeng' as const },
+    { modelId: 'fal-ai/sora-2/image-to-video/pro', source: 'Volcengine rerun', provider: 'volcengine' as const },
+  ])('rejects retired $modelId from $source before uploads, provider calls or queueing', async ({ modelId, source, provider }) => {
     const image = buildCanvasMedia('image-1', 'image');
+    const video = buildCanvasMedia('video-1', 'video', 4);
+    const audio = buildCanvasMedia('audio-1', 'audio', 4);
     const fal = createFalStub();
-    fal.falVideoModelId = SEEDANCE_15_VIDEO_MODEL_ID;
-    fal.isSeedance15VideoModel = true;
-    fal.isVolcengineSeedance2VideoModel = false;
-    fal.seedance15AspectRatio = '16:9';
-    fal.seedance15Resolution = '720p';
-    fal.seedance15Duration = '5';
-    fal.seedance15CameraFixed = false;
-    fal.seedance15Audio = false;
-    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so options can be inspected.
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: '',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal,
-      selection: createSelectionStub(),
-      images: [image],
-      paths: [],
-      videoNegativePrompt: '',
-      setError: vi.fn(),
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      void result.current.handleGenerate({
-        kind: 'video',
-        prompt: 'A tailored Seedance 1.5 shot',
-        provider: 'fal',
-        modelId: SEEDANCE_15_VIDEO_MODEL_ID,
-        modelMode: 'video',
-        primaryImageId: image.id,
-        falOptions: {
-          seedance15AspectRatio: '9:16',
-          seedance15Resolution: '1080p',
-          seedance15Duration: '12',
-          seedance15CameraFixed: true,
-          seedance15Audio: true,
-        },
-      });
-      await Promise.resolve();
-    });
-
-    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
-      'A tailored Seedance 1.5 shot',
-      image.element,
-      expect.objectContaining({
-        modelId: SEEDANCE_15_VIDEO_MODEL_ID,
-        seedance15AspectRatio: '9:16',
-        seedance15Resolution: '1080p',
-        seedance15Duration: '12',
-        seedance15CameraFixed: true,
-        seedance15Audio: true,
-      }),
-    );
-  });
-
-  it('forwards Kling v3 smart promptbar settings to Fal video generation', async () => {
-    const fal = createFalStub();
-    fal.falVideoModelId = KLING_V3_VIDEO_MODEL_ID;
-    fal.falModelId = KLING_V3_VIDEO_MODEL_ID;
-    fal.isKlingV3VideoModel = true;
-    fal.klingV3Duration = '12';
-    fal.klingV3GenerateAudio = true;
-    fal.klingV3CfgScale = '0.75';
+    const usesCurrentModel = source === 'current selection';
+    fal.falVideoModelId = usesCurrentModel ? modelId as typeof fal.falVideoModelId : FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.falModelMode = source.startsWith('kind-only') || source.startsWith('mode-only') ? 'image' : 'video';
     fal.klingV3MultiPromptEnabled = true;
-    fal.klingV3MultiPrompt = 'Second shot pushes through clouds';
-    fal.klingV3Shot1Duration = '4';
-    fal.klingV3Shot2Duration = '6';
-    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: 'First shot rises over a neon harbor',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal,
-      selection: createSelectionStub(),
-      images: [],
-      paths: [],
-      videoNegativePrompt: 'avoid blur',
-      setError: vi.fn(),
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      void result.current.handleGenerate();
-      await Promise.resolve();
-    });
-
-    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
-      'First shot rises over a neon harbor',
-      null,
-      expect.objectContaining({
-        modelId: KLING_V3_VIDEO_MODEL_ID,
-        negativePrompt: 'avoid blur',
-        klingV3Duration: '12',
-        klingV3GenerateAudio: true,
-        klingV3CfgScale: '0.75',
-        klingV3MultiPromptEnabled: true,
-        klingV3MultiPrompt: 'Second shot pushes through clouds',
-        klingV3Shot1Duration: '4',
-        klingV3Shot2Duration: '6',
-      }),
-    );
-  });
-
-  it('rejects Kling v3 multi prompt runs when the second prompt is empty', async () => {
-    const fal = createFalStub();
-    fal.falVideoModelId = KLING_V3_VIDEO_MODEL_ID;
-    fal.falModelId = KLING_V3_VIDEO_MODEL_ID;
-    fal.isKlingV3VideoModel = true;
-    fal.klingV3MultiPromptEnabled = true;
-    fal.klingV3MultiPrompt = '   ';
+    fal.klingV3MultiPrompt = ''; // Retirement takes precedence over obsolete model-specific validation.
     const setError = vi.fn();
+    const setFalJobs = vi.fn();
+    const generationOverride: GenerationInputs | undefined = provider ? {
+      kind: source.startsWith('mode-only') ? 'upscale' : 'video',
+      prompt: 'Repeat the saved video',
+      provider,
+      ...(!usesCurrentModel ? { modelId } : {}),
+      ...(!source.startsWith('kind-only') ? { modelMode: 'video' as const } : {}),
+      primaryImageId: image.id,
+      sourceVideoId: video.id,
+      sourceAudioId: audio.id,
+      referenceImageIds: [image.id],
+      referenceVideoIds: [video.id],
+      referenceAudioIds: [audio.id],
+      ...(provider === 'jimeng' ? { jimengOptions: { seedance2Variant: 'reference' as const } } : {}),
+      ...(provider === 'volcengine' ? { volcengineOptions: { seedance2Variant: 'reference' as const } } : {}),
+    } : undefined;
 
     const { result } = renderHook(() => useGeneration({
       appMode: 'CANVAS',
       tool: Tool.FREE_SELECTION,
-      prompt: 'First shot',
+      prompt: 'Animate the selected media',
       promptPrefix: '',
       apiProvider: 'fal',
       fal,
-      selection: createSelectionStub(),
-      images: [],
+      selection: createSelectionStub({
+        selectedImageIds: [image.id],
+        primaryImageId: image.id,
+        primaryImage: image,
+        primarySelectionMediaType: 'image',
+        sourceVideoId: video.id,
+        sourceAudioId: audio.id,
+        referenceImageIds: [image.id],
+        referenceVideoIds: [video.id],
+        referenceAudioIds: [audio.id],
+      }),
+      images: [image, video, audio],
       paths: [],
       videoNegativePrompt: '',
       setError,
       setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
+      setFalJobs,
       setState: vi.fn(),
       setToastMessage: vi.fn(),
       setTool: vi.fn(),
     }));
 
     await act(async () => {
-      await result.current.handleGenerate();
+      void result.current.handleGenerate(generationOverride);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    expect(setError).toHaveBeenCalledWith('Kling 3.0 Pro multi prompt requires a second prompt.');
-    expect(vi.mocked(generateImageToVideo)).not.toHaveBeenCalled();
+    expect(setError.mock.calls).toEqual([['This video model is no longer supported. Select a supported video model and create a new generation.']]);
+    expect(uploadVideoToFal).not.toHaveBeenCalled();
+    expect(generateImageToVideo).not.toHaveBeenCalled();
+    expect(generateSeedanceVideo).not.toHaveBeenCalled();
+    expect(generateJimengSeedanceVideo).not.toHaveBeenCalled();
+    expect(generateFalImage).not.toHaveBeenCalled();
+    expect(generateFalImageEdit).not.toHaveBeenCalled();
+    expect(generateGoogleImage).not.toHaveBeenCalled();
+    expect(generateGoogleImageEdit).not.toHaveBeenCalled();
+    expect(setFalJobs).not.toHaveBeenCalled();
+  });
+
+  it.each(['text_to_image', 'image_edit'] as const)('keeps Wan image $kind reruns working with a stale retired video selection', async kind => {
+    const image = buildCanvasMedia('image-1', 'image');
+    const fal = createFalStub();
+    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
+    const setError = vi.fn();
+    vi.mocked(generateFalImage).mockImplementation(() => new Promise(() => {}));
+    vi.mocked(generateFalImageEdit).mockImplementation(() => new Promise(() => {}));
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.FREE_SELECTION, prompt: 'Current video prompt', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(), images: [image], paths: [], videoNegativePrompt: '',
+      setError, setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate({
+        kind, prompt: 'A watercolor landscape', provider: 'fal', modelId: WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID, modelMode: 'image',
+        ...(kind === 'image_edit' ? { primaryImageId: image.id } : {}),
+      });
+      await Promise.resolve();
+    });
+
+    const generationService = kind === 'text_to_image' ? generateFalImage : generateFalImageEdit;
+    expect(generationService).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(generationService).mock.calls[0]?.[1]).toMatchObject({ modelId: WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID });
+    expect(setError.mock.calls.every(([message]) => message === null)).toBe(true);
+    expect(generateImageToVideo).not.toHaveBeenCalled();
+    expect(generateSeedanceVideo).not.toHaveBeenCalled();
+    expect(generateJimengSeedanceVideo).not.toHaveBeenCalled();
   });
 
   it('routes Seedance 2 (FAL) Reference runs through Fal with reference media files', async () => {
@@ -2871,67 +2850,14 @@ describe('useGeneration (seedance 2)', () => {
     );
   });
 
-  it('uploads selected audio for Wan 2.7 text-to-video', async () => {
+  it('does not attach current audio when rerunning a Seedance reference generation without saved audio', async () => {
     const fal = createFalStub();
-    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
-    fal.isWan27VideoModel = true;
+    fal.falVideoModelId = FAL_SEEDANCE_2_VIDEO_MODEL_ID;
+    fal.isFalSeedance2VideoModel = true;
     fal.isVolcengineSeedance2VideoModel = false;
+    fal.seedance2Variant = 'reference';
+    const image1 = buildCanvasMedia('image-1', 'image');
     const audio1 = buildCanvasMedia('audio-1', 'audio', 4);
-    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/audio.wav');
-    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so routing can be inspected.
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: 'A neon dance sequence synced to the beat',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal,
-      selection: createSelectionStub({
-        selectedImageIds: [audio1.id],
-        primaryImageId: audio1.id,
-        primaryImage: audio1,
-        primarySelectionMediaType: 'audio',
-        sourceAudioId: audio1.id,
-      }),
-      images: [audio1],
-      paths: [],
-      videoNegativePrompt: '',
-      setError: vi.fn(),
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      void result.current.handleGenerate();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(uploadVideoToFal).toHaveBeenCalledWith(audio1.file, expect.objectContaining({ label: 'source audio' }));
-    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
-      'A neon dance sequence synced to the beat',
-      null,
-      expect.objectContaining({
-        modelId: WAN_27_VIDEO_MODEL_ID,
-        sourceAudioUrl: 'https://example.com/audio.wav',
-        wan27VideoResolution: '720p',
-        wan27VideoDuration: '5',
-        wan27VideoAspectRatio: '16:9',
-      }),
-    );
-  });
-
-  it('does not attach current audio when rerunning a Wan 2.7 generation without saved audio', async () => {
-    const fal = createFalStub();
-    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
-    fal.isWan27VideoModel = true;
-    fal.isVolcengineSeedance2VideoModel = false;
-    const audio1 = buildCanvasMedia('audio-1', 'audio', 4);
-    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/audio.wav');
     vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so rerun payload can be inspected.
 
     const { result } = renderHook(() => useGeneration({
@@ -2947,8 +2873,9 @@ describe('useGeneration (seedance 2)', () => {
         primaryImage: audio1,
         primarySelectionMediaType: 'audio',
         sourceAudioId: audio1.id,
+        referenceAudioIds: [audio1.id],
       }),
-      images: [audio1],
+      images: [image1, audio1],
       paths: [],
       videoNegativePrompt: '',
       setError: vi.fn(),
@@ -2962,174 +2889,30 @@ describe('useGeneration (seedance 2)', () => {
     await act(async () => {
       void result.current.handleGenerate({
         kind: 'video',
-        prompt: 'Repeat the saved silent Wan scene',
+        prompt: 'Repeat the saved scene using @Image1',
         provider: 'fal',
-        modelId: WAN_27_VIDEO_MODEL_ID,
+        modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
         modelMode: 'video',
+        referenceImageIds: [image1.id],
+        falOptions: { seedance2Variant: 'reference' },
       });
       await Promise.resolve();
     });
 
     const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
+    expect(generateImageToVideo).toHaveBeenCalledTimes(1);
+    expect(submittedOptions).toMatchObject({
+      modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+      referenceImages: [image1.element],
+      referenceAudios: [],
+    });
     expect(uploadVideoToFal).not.toHaveBeenCalled();
     expect(submittedOptions).not.toHaveProperty('sourceAudioUrl');
   });
 
-  it('preserves explicit Wan 2.7 edit auto audio rerun metadata', async () => {
+  it('does not merge selected media into references for Grok video runs', async () => {
     const fal = createFalStub();
-    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
-    fal.isWan27VideoModel = true;
-    fal.isVolcengineSeedance2VideoModel = false;
-    fal.wan27VideoAudioSetting = 'origin';
-    const video1 = buildCanvasMedia('video-1', 'video', 4);
-    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so rerun payload can be inspected.
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: '',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal,
-      selection: createSelectionStub(),
-      images: [video1],
-      paths: [],
-      videoNegativePrompt: '',
-      setError: vi.fn(),
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      void result.current.handleGenerate({
-        kind: 'video',
-        prompt: 'Repeat the saved edit',
-        provider: 'fal',
-        modelId: WAN_27_VIDEO_MODEL_ID,
-        modelMode: 'video',
-        sourceVideoId: video1.id,
-        falOptions: {
-          wan27VideoVariant: 'edit',
-          wan27VideoAudioSetting: 'auto',
-        },
-      });
-      await Promise.resolve();
-    });
-
-    const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
-    expect(submittedOptions?.wan27VideoVariant).toBe('edit');
-    expect(submittedOptions?.wan27VideoAudioSetting).toBe('auto');
-  });
-
-  it('infers Wan 2.7 edit reruns from the saved edit endpoint', async () => {
-    const fal = createFalStub();
-    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
-    fal.isWan27VideoModel = true;
-    fal.isVolcengineSeedance2VideoModel = false;
-    const video1 = buildCanvasMedia('video-1', 'video', 4);
-    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/wan-source.mp4');
-    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so rerun payload can be inspected.
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: '',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal,
-      selection: createSelectionStub(),
-      images: [video1],
-      paths: [],
-      videoNegativePrompt: '',
-      setError: vi.fn(),
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      void result.current.handleGenerate({
-        kind: 'video',
-        prompt: 'Repeat the saved Wan edit',
-        provider: 'fal',
-        modelId: WAN_27_EDIT_VIDEO_MODEL_ID,
-        modelMode: 'video',
-        sourceVideoId: video1.id,
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
-    expect(uploadVideoToFal).toHaveBeenCalledWith(video1.file, expect.objectContaining({ label: 'source video' }));
-    expect(submittedOptions?.modelId).toBe(WAN_27_VIDEO_MODEL_ID);
-    expect(submittedOptions?.wan27VideoVariant).toBe('edit');
-    expect(submittedOptions?.sourceVideoUrl).toBe('https://example.com/wan-source.mp4');
-  });
-
-  it('marks Wan 2.7 outputs generated with uploaded audio as audible', async () => {
-    const fal = createFalStub();
-    fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
-    fal.isWan27VideoModel = true;
-    fal.isVolcengineSeedance2VideoModel = false;
-    const audio1 = buildCanvasMedia('audio-1', 'audio', 4);
-    const setState = vi.fn();
-    const videoElement = document.createElement('video');
-    Object.defineProperty(videoElement, 'videoWidth', { configurable: true, value: 640 });
-    Object.defineProperty(videoElement, 'videoHeight', { configurable: true, value: 360 });
-    Object.defineProperty(videoElement, 'play', { configurable: true, value: vi.fn().mockResolvedValue(undefined) });
-    Object.defineProperty(videoElement, 'pause', { configurable: true, value: vi.fn() });
-    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/audio.wav');
-    vi.mocked(generateImageToVideo).mockResolvedValue({ videoUrl: 'https://example.com/wan.mp4', requestId: 'req-wan' });
-    vi.mocked(loadMediaFromBlob).mockResolvedValue(videoElement);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      blob: vi.fn().mockResolvedValue(new Blob(['video'], { type: 'video/mp4' })),
-    }));
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: 'A neon dance sequence synced to the beat',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal,
-      selection: createSelectionStub({
-        selectedImageIds: [audio1.id],
-        primaryImageId: audio1.id,
-        primaryImage: audio1,
-        primarySelectionMediaType: 'audio',
-        sourceAudioId: audio1.id,
-      }),
-      images: [audio1],
-      paths: [],
-      videoNegativePrompt: '',
-      setError: vi.fn(),
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState,
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      await result.current.handleGenerate();
-    });
-
-    const stateUpdater = setState.mock.calls.find(([value]) => typeof value === 'function')?.[0] as ((prev: { images: CanvasImage[] }) => { images: CanvasImage[] }) | undefined;
-    expect(stateUpdater).toBeTruthy();
-    const nextState = stateUpdater?.({ images: [] });
-    expect(nextState?.images[0]?.hasAudio).toBe(true);
-  });
-
-  it('does not merge selected media into references for non-Seedance video runs', async () => {
-    const fal = createFalStub();
-    fal.falVideoModelId = KLING_O3_VIDEO_MODEL_ID;
+    fal.falVideoModelId = GROK_IMAGINE_VIDEO_MODEL_ID;
     fal.seedance2Variant = 'reference';
     fal.isVolcengineSeedance2VideoModel = false;
     const image1 = buildCanvasMedia('image-1', 'image') as CanvasImage & { element: HTMLImageElement };
@@ -3165,47 +2948,8 @@ describe('useGeneration (seedance 2)', () => {
     });
 
     const submittedOptions = vi.mocked(generateImageToVideo).mock.calls[0]?.[2];
-    expect(submittedOptions?.modelId).toBe(KLING_O3_VIDEO_MODEL_ID);
-    expect(submittedOptions?.referenceImages).toEqual([]);
-  });
-
-  it('blocks legacy Kling O1 ref-v2v reruns without calling Fal', async () => {
-    const setError = vi.fn();
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: '',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal: createFalStub(),
-      selection: createSelectionStub(),
-      images: [],
-      paths: [],
-      videoNegativePrompt: '',
-      setError,
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      await result.current.handleGenerate({
-        kind: 'video',
-        prompt: 'legacy ref v2v',
-        provider: 'fal',
-        modelId: 'fal-ai/kling-video/o1/video-to-video/reference',
-        modelMode: 'video',
-        falOptions: {
-          klingO1Variant: 'refV2V',
-          videoDuration: '10',
-        },
-      });
-    });
-
-    expect(setError).toHaveBeenCalledWith('Kling O1 Ref-v2v is no longer available and cannot be regenerated. Create a new Kling O3 Reference or Edit generation instead.');
-    expect(generateImageToVideo).not.toHaveBeenCalled();
+    expect(generateImageToVideo).toHaveBeenCalledWith('Animate this still frame', image1.element, expect.objectContaining({ modelId: GROK_IMAGINE_VIDEO_MODEL_ID }));
+    expect(submittedOptions).not.toHaveProperty('referenceImages');
   });
 
   it('blocks removed Hailuo reruns without falling back to the selected video model', async () => {
@@ -3289,102 +3033,6 @@ describe('useGeneration (seedance 2)', () => {
     expect(generateImageToVideo).not.toHaveBeenCalled();
     expect(generateSeedanceVideo).not.toHaveBeenCalled();
     expect(generateJimengSeedanceVideo).not.toHaveBeenCalled();
-  });
-
-  it('infers Kling O3 edit reruns from the saved edit endpoint', async () => {
-    const video1 = buildCanvasMedia('video-1', 'video', 4);
-    vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/source.mp4');
-    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep pending so rerun routing can be inspected.
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: '',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal: createFalStub(),
-      selection: createSelectionStub(),
-      images: [video1],
-      paths: [],
-      videoNegativePrompt: '',
-      setError: vi.fn(),
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      void result.current.handleGenerate({
-        kind: 'video',
-        prompt: 'Repeat the saved O3 edit',
-        provider: 'fal',
-        modelId: KLING_O3_VIDEO_EDIT_MODEL_ID,
-        modelMode: 'video',
-        sourceVideoId: video1.id,
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(uploadVideoToFal).toHaveBeenCalledWith(video1.file, expect.objectContaining({ label: 'source video' }));
-    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
-      'Repeat the saved O3 edit',
-      null,
-      expect.objectContaining({
-        modelId: KLING_O3_VIDEO_EDIT_MODEL_ID,
-        sourceVideoUrl: 'https://example.com/source.mp4',
-        klingO3Variant: 'edit',
-      }),
-    );
-  });
-
-  it('normalizes legacy Sora video reruns to Kling Standard even when Kling Pro is selected', async () => {
-    const image1 = buildCanvasMedia('image-1', 'image') as CanvasImage & { element: HTMLImageElement };
-    const fal = createFalStub();
-    fal.klingVariant = 'pro'; // Live picker state must not change the migrated endpoint.
-    vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Keep the Fal request pending for payload inspection.
-
-    const { result } = renderHook(() => useGeneration({
-      appMode: 'CANVAS',
-      tool: Tool.FREE_SELECTION,
-      prompt: '',
-      promptPrefix: '',
-      apiProvider: 'fal',
-      fal,
-      selection: createSelectionStub(),
-      images: [image1],
-      paths: [],
-      videoNegativePrompt: '',
-      setError: vi.fn(),
-      setIsLoading: vi.fn(),
-      setFalJobs: vi.fn(),
-      setState: vi.fn(),
-      setToastMessage: vi.fn(),
-      setTool: vi.fn(),
-    }));
-
-    await act(async () => {
-      void result.current.handleGenerate({
-        kind: 'video',
-        prompt: 'A cinematic Sora rerun',
-        provider: 'fal',
-        modelId: 'fal-ai/sora-2/image-to-video/pro',
-        modelMode: 'video',
-        primaryImageId: image1.id,
-      });
-      await Promise.resolve();
-    });
-
-    expect(vi.mocked(generateSeedanceVideo)).not.toHaveBeenCalled();
-    expect(vi.mocked(generateImageToVideo)).toHaveBeenCalledWith(
-      'A cinematic Sora rerun',
-      image1.element,
-      expect.objectContaining({
-        modelId: KLING_VIDEO_STANDARD_MODEL_ID,
-      }),
-    );
   });
 
   it('routes Google edits to Gemini edit even when the stored Fal model is Recraft', async () => {

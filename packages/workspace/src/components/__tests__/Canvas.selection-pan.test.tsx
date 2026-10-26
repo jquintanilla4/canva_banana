@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
 import { Tool, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
 import { createLazyVideoFromUrl } from '../../services/mediaService';
+import { getGenerationTransferBlockReason } from '../../utils/generationPromptBarTransfer';
 import * as imageLodCache from '../canvas/render/imageLodCache';
 
 type CanvasProps = ComponentProps<typeof Canvas>;
@@ -313,7 +314,10 @@ describe('Canvas selection temporary pan', () => {
     expect((within(container).getByRole('button', { name: 'Metadata to Prompt Bar' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('disables metadata transfer and names the reason when the saved generation cannot load', () => {
+  it.each([
+    'fal-ai/kling-video/o1/image-to-video',
+    'fal-ai/kling-video/v3/pro',
+  ])('disables metadata transfer and names the reason for retired %s', modelId => {
     const generated = buildImage('generated-1');
     generated.metadata = {
       source: 'generated',
@@ -321,14 +325,14 @@ describe('Canvas selection temporary pan', () => {
         kind: 'video',
         prompt: 'Prompt from a retired model',
         provider: 'fal',
-        modelId: 'fal-ai/kling-video/o1/image-to-video',
+        modelId,
         modelMode: 'video',
       },
     };
     const { container } = render(<Canvas {...buildCanvasProps({
       images: [generated],
       selectedImageIds: ['generated-1'],
-      getMetadataTransferBlockReason: () => 'Saved model is no longer available',
+      getMetadataTransferBlockReason: () => getGenerationTransferBlockReason(generated.metadata?.generation, { google: true, fal: true }),
     })} />);
 
     const button = within(container).getByRole('button', { name: 'Metadata to Prompt Bar' }) as HTMLButtonElement;

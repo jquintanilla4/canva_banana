@@ -11,7 +11,11 @@ import {
   isKrea2AspectRatioSelectionValue,
   isKrea2CreativitySelectionValue,
   isRemovedHailuoModelId,
+  isRetiredVideoModelId,
+  KLING_O3_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
+  KLING_V4_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   isRecraftV4ProModel,
@@ -21,11 +25,18 @@ import {
   MINIMAX_H3_VIDEO_MODEL_ID,
   normalizeFalModelId,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
+  SCAIL_VIDEO_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDREAM_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V5_PRO_MODEL_ID,
   SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
+  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
+  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+  WAN_ANIMATE_MODEL_ID,
+  WAN_VISION_ENHANCER_MODEL_ID,
   isSeedreamV5ProModelId,
   getSeedreamTextToImageModelId,
 } from '../modelConfig';
@@ -105,14 +116,40 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(isRemovedHailuoModelId(MINIMAX_H3_VIDEO_MODEL_ID)).toBe(false);
   });
 
-  it('replaces Kling 2.6 Control with Kling 3.0 Control', () => {
+  it('hides retired video models while preserving saved model recognition', () => {
+    const videoModelIds = FAL_VIDEO_MODEL_OPTIONS.map(option => option.value);
+
+    for (const modelId of [
+      KLING_VIDEO_MODEL_ID,
+      KLING_V3_VIDEO_MODEL_ID,
+      KLING_V3_CONTROL_VIDEO_MODEL_ID,
+      KLING_O3_VIDEO_MODEL_ID,
+      SCAIL_VIDEO_MODEL_ID,
+      WAN_27_VIDEO_MODEL_ID,
+      WAN_ANIMATE_MODEL_ID,
+      SEEDANCE_15_VIDEO_MODEL_ID,
+      VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+    ]) {
+      expect(videoModelIds).not.toContain(modelId);
+      expect(isFalVideoModelId(modelId)).toBe(true);
+      expect(normalizeFalModelId(modelId)).toBe(modelId);
+      expect(isRetiredVideoModelId(modelId)).toBe(true);
+    }
+    expect(videoModelIds).toContain(KLING_V4_VIDEO_MODEL_ID);
+    expect(videoModelIds).toContain(MINIMAX_H3_VIDEO_MODEL_ID);
+    expect(videoModelIds).toContain(WAN_VISION_ENHANCER_MODEL_ID);
+    expect(FAL_IMAGE_MODEL_OPTIONS.map(option => option.value)).toContain(WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID);
+    expect(isRetiredVideoModelId(WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID)).toBe(false);
+  });
+
+  it('still recognizes legacy Kling Control snapshots after retiring the picker entries', () => {
     const videoModelIds = FAL_VIDEO_MODEL_OPTIONS.map(option => option.value);
     const videoModelLabels = FAL_VIDEO_MODEL_OPTIONS.map(option => option.label as string);
     const legacyKling26StandardControlModelId = 'fal-ai/kling-video/v2.6/standard/motion-control';
     const legacyKling26ProControlModelId = 'fal-ai/kling-video/v2.6/pro/motion-control';
 
-    expect(videoModelIds).toContain(KLING_V3_CONTROL_VIDEO_MODEL_ID);
-    expect(videoModelLabels).toContain('Kling 3.0 Control');
+    expect(videoModelIds).not.toContain(KLING_V3_CONTROL_VIDEO_MODEL_ID);
+    expect(videoModelLabels).not.toContain('Kling 3.0 Control');
     expect(videoModelLabels).not.toContain('Kling 2.6');
     expect(isFalVideoModelId(KLING_V3_CONTROL_VIDEO_MODEL_ID)).toBe(true);
     expect(isFalModelId(KLING_V3_CONTROL_VIDEO_MODEL_ID)).toBe(true);

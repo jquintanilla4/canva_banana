@@ -1371,7 +1371,7 @@ describe('App video prompt area gating', () => {
         kind: 'video',
         prompt: 'Restored generation prompt',
         provider: 'fal',
-        modelId: 'fal-ai/kling-video/v3/pro',
+        modelId: 'kling/v4',
         modelMode: 'video',
         primaryImageId: 'primary-image',
         referenceImageIds: ['reference-image'],
@@ -1383,8 +1383,7 @@ describe('App video prompt area gating', () => {
         sourceAudioId: 'source-audio',
         falOptions: {
           negativePrompt: 'No camera shake',
-          klingV3MultiPromptEnabled: false,
-          klingV3MultiPrompt: '',
+          klingV4Duration: '8',
         },
       },
     };
@@ -1526,9 +1525,13 @@ describe('App video prompt area gating', () => {
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual(expect.arrayContaining([
       { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
       { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
-      { value: 'fal-ai/kling-video/v3/pro', label: 'Kling 3.0 Pro' },
+      { value: 'kling/v4', label: 'Kling v4' },
       { value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine' },
     ]));
+    expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).not.toContainEqual({
+      value: 'fal-ai/kling-video/v3/pro',
+      label: 'Kling 3.0 Pro',
+    });
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).not.toContainEqual({
       value: 'fal-ai/wan-vision-enhancer',
       label: 'Wan Vision Enhancer',

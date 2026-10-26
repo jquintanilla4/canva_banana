@@ -82,6 +82,7 @@ import {
   isKlingV3ShotDurationSelectionValue,
   isFalImageModelId,
   isFalVideoModelId,
+  isRetiredVideoModelId,
   isSeedreamModelId,
   isSeedreamV5LiteModelId,
   isSeedreamV5ProModelId,
@@ -1531,8 +1532,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (generation.provider === 'google') {
       return true; // Google has no Fal controls to restore.
     }
-    if (isUnavailableLegacyTransferModelId(generation.modelId)) {
-      return false; // Removed Kling and Wan models require an explicit new model choice.
+    if (isUnavailableLegacyTransferModelId(generation.modelId) || isRetiredVideoModelId(generation.modelId)) {
+      return false; // Retired models require an explicit new model choice.
     }
 
     const normalizedModelId = normalizeFalModelId(resolveGenerationTransferModelId(generation));

@@ -30,21 +30,13 @@ import {
 import {
   GROK_IMAGINE_VIDEO_EDIT_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
-  KLING_V3_CONTROL_VIDEO_MODEL_ID,
-  SCAIL_VIDEO_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
-  WAN_ANIMATE_MOVE_MODEL_ID,
   INFINITALK_DURATION_TO_NUM_FRAMES,
-  isKlingO3DurationSelectionValue,
   isRemovedOneToAllAnimateModelId,
+  isRetiredVideoModelId,
 } from '../modelConfig'; // Canonical model IDs.
 import {
   INFINITALK_VIDEO_MODEL_ID,
-  KLING_V3_IMAGE_TO_VIDEO_MODEL_ID,
-  KLING_V3_TEXT_TO_VIDEO_MODEL_ID,
-  KLING_V3_VIDEO_MODEL_ID,
-  KLING_O3_REFERENCE_TO_VIDEO_MODEL_ID,
-  KLING_O3_VIDEO_EDIT_MODEL_ID,
   FAL_SEEDANCE_2_IMAGE_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_REFERENCE_TO_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_TEXT_TO_VIDEO_MODEL_ID,
@@ -64,16 +56,6 @@ import {
   FLUX_3_KEYFRAMES_VIDEO_MODEL_ID,
   FLUX_3_EXTEND_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
-  SEEDANCE_15_VIDEO_MODEL_ID,
-  VEO_31_EXTEND_VIDEO_MODEL_ID,
-  VEO_31_FFLF_VIDEO_MODEL_ID,
-  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_EDIT_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
-  WAN_27_TEXT_TO_VIDEO_MODEL_ID,
-  WAN_27_VIDEO_MODEL_ID,
-  WAN_ANIMATE_REPLACE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
 } from './modelIds'; // Fal service model IDs.
 
@@ -159,15 +141,18 @@ export const generateImageToVideo = async (
   image: HTMLImageElement | null,
   options: GenerateVideoOptions = {},
 ): Promise<{ videoUrl: string; requestId?: string }> => { // Generate video from image + prompt.
+  if (isRetiredVideoModelId(options.modelId)) {
+    throw new Error('This video model is no longer supported. Select a supported video model and create a new generation.');
+  }
+  if (isRemovedOneToAllAnimateModelId(options.modelId)) {
+    throw new Error('1-to-All Animate is no longer supported.'); // Reject direct calls before any upload or provider request.
+  }
   options = { ...options, abortSignal: options.abortSignal ?? getWorkspaceSignal() };
   options.abortSignal?.throwIfAborted();
   ensureFalClientConfigured(); // Ensure SDK is configured before requests.
 
   const isImplicitDefaultModel = !options.modelId; // Missing ids use H3 Standard so default calls remain usable.
   const modelId = options.modelId || MINIMAX_H3_VIDEO_MODEL_ID; // Default to the supported MiniMax family.
-  if (isRemovedOneToAllAnimateModelId(modelId)) {
-    throw new Error('1-to-All Animate is no longer supported.'); // Reject direct calls before any upload or provider request.
-  }
 
   if (isKlingV4VideoModel(modelId)) {
     return generateKlingV4Video(prompt, image, options, subscribeForVideoUrl);
@@ -237,87 +222,7 @@ export const generateImageToVideo = async (
     }
     return subscribeForVideoUrl(FLUX_3_TEXT_TO_VIDEO_MODEL_ID, sharedPayload, options);
   }
-  const duration = options.duration; // Optional duration override.
-  const isVeo31ImageToVideoModel = modelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID; // Veo 3.1 i2v route.
-  const isVeo31FflfModel = modelId === VEO_31_FFLF_VIDEO_MODEL_ID; // Veo 3.1 fflf route.
-  const isVeo31ExtendModel = modelId === VEO_31_EXTEND_VIDEO_MODEL_ID; // Veo 3.1 extend route.
-  const isKlingO3VideoModel = modelId === KLING_O3_REFERENCE_TO_VIDEO_MODEL_ID || modelId === KLING_O3_VIDEO_EDIT_MODEL_ID; // Kling O3 family.
   const referenceImages = Array.isArray(options.referenceImages) ? options.referenceImages : []; // Optional references list.
-  const elementImages = Array.isArray(options.elementImages) ? options.elementImages : []; // Optional elements list.
-  const isKlingO3EditVariant = modelId === KLING_O3_VIDEO_EDIT_MODEL_ID || options.klingO3Variant === 'edit'; // Kling O3 edit endpoint or variant.
-
-  if (isKlingO3VideoModel && isKlingO3EditVariant) { // Kling O3 edit requires video_url + optional images.
-    if (!options.sourceVideoUrl) {
-      throw new Error('Kling O3 Video Edit requires a source video.');
-    }
-
-    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages, options) : [];
-    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img, options)));
-    const elementsPayload = elementUrls.map(url => ({
-      frontal_image_url: url,
-      reference_image_urls: [url],
-    }));
-
-    const totalImageCount = referenceUrls.length + elementsPayload.length;
-    if (totalImageCount > 4) { // Max 4 total when using video.
-      throw new Error('Kling O3 Video Edit supports up to 4 images total (references + elements).');
-    }
-
-    const inputPayload: Record<string, unknown> = {
-      prompt,
-      video_url: options.sourceVideoUrl,
-      ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
-      ...(elementsPayload.length ? { elements: elementsPayload } : {}),
-      keep_audio: typeof options.klingO3KeepAudio === 'boolean'
-        ? options.klingO3KeepAudio
-        : typeof options.keepAudio === 'boolean'
-          ? options.keepAudio
-          : true,
-    };
-
-    return subscribeForVideoUrl(KLING_O3_VIDEO_EDIT_MODEL_ID, inputPayload, options);
-  }
-
-  if (isKlingO3VideoModel) { // Kling O3 reference mode uses a still image plus optional end frame.
-    if (!image) {
-      throw new Error('Kling O3 Reference requires an image.');
-    }
-
-    const imageUrl = await uploadImageElementToFal(image, options);
-    const referenceUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages, options) : [];
-    const elementUrls = await Promise.all(elementImages.map(img => uploadImageElementToFal(img, options)));
-    const elementsPayload = elementUrls.map(url => ({
-      frontal_image_url: url,
-      reference_image_urls: [url],
-    }));
-
-    const totalImageCount = referenceUrls.length + elementsPayload.length;
-    if (totalImageCount > 4) { // Max 4 total beyond the primary start image.
-      throw new Error('Kling O3 Video Reference supports up to 4 images total (references + elements).');
-    }
-
-    const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage, options) : undefined;
-    const aspectRatioValue = options.aspectRatio === '9:16' || options.aspectRatio === '1:1' ? options.aspectRatio : '16:9';
-    const referenceDuration = options.klingO3Duration ?? (isKlingO3DurationSelectionValue(duration) ? duration : '5');
-    const generateAudio = typeof options.klingO3GenerateAudio === 'boolean'
-      ? options.klingO3GenerateAudio
-      : typeof options.generateAudio === 'boolean'
-        ? options.generateAudio
-        : false;
-
-    const inputPayload: Record<string, unknown> = {
-      prompt,
-      start_image_url: imageUrl,
-      ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
-      ...(referenceUrls.length ? { image_urls: referenceUrls } : {}),
-      ...(elementsPayload.length ? { elements: elementsPayload } : {}),
-      duration: referenceDuration,
-      generate_audio: generateAudio,
-      aspect_ratio: aspectRatioValue,
-    };
-
-    return subscribeForVideoUrl(KLING_O3_REFERENCE_TO_VIDEO_MODEL_ID, inputPayload, options);
-  }
 
   if (modelId === GROK_IMAGINE_VIDEO_EDIT_MODEL_ID) {
     if (!options.sourceVideoUrl) {
@@ -378,330 +283,6 @@ export const generateImageToVideo = async (
       aspect_ratio: aspectRatio,
       resolution,
       image_url: imageUrl,
-    };
-
-    return subscribeForVideoUrl(modelId, inputPayload, options);
-  }
-
-  if (isVeo31ExtendModel) {
-    if (!options.sourceVideoUrl) {
-      throw new Error('Veo 3.1 Extend requires a source video.');
-    }
-
-    const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) {
-      throw new Error('Veo 3.1 Extend requires a prompt.');
-    }
-
-    const aspectRatio = options.veo31AspectRatio === 'auto' || options.veo31AspectRatio === '16:9' || options.veo31AspectRatio === '9:16'
-      ? options.veo31AspectRatio
-      : undefined;
-    const durationValue = options.veo31Duration === '7s' ? options.veo31Duration : undefined;
-    const resolutionValue = options.veo31Resolution === '720p' ? options.veo31Resolution : undefined;
-    const generateAudio = typeof options.veo31GenerateAudio === 'boolean' ? options.veo31GenerateAudio : undefined;
-    const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
-
-    const inputPayload: Record<string, unknown> = {
-      prompt: trimmedPrompt,
-      video_url: options.sourceVideoUrl,
-      ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-      ...(durationValue ? { duration: durationValue } : {}),
-      ...(resolutionValue ? { resolution: resolutionValue } : {}),
-      ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
-      ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
-    };
-
-    return subscribeForVideoUrl(modelId, inputPayload, options);
-  }
-
-  if (isVeo31ImageToVideoModel || isVeo31FflfModel) {
-    if (!image) {
-      throw new Error('Veo 3.1 requires an image.');
-    }
-
-    const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) {
-      throw new Error('Veo 3.1 requires a prompt.');
-    }
-
-    const imageUrl = await uploadImageElementToFal(image, options);
-    const aspectRatio = options.veo31AspectRatio === 'auto' || options.veo31AspectRatio === '16:9' || options.veo31AspectRatio === '9:16'
-      ? options.veo31AspectRatio
-      : undefined;
-    const durationValue = options.veo31Duration === '4s' || options.veo31Duration === '6s' || options.veo31Duration === '8s'
-      ? options.veo31Duration
-      : undefined;
-    const resolutionValue = options.veo31Resolution === '720p' || options.veo31Resolution === '1080p' || options.veo31Resolution === '4k'
-      ? options.veo31Resolution
-      : undefined;
-    const generateAudio = typeof options.veo31GenerateAudio === 'boolean' ? options.veo31GenerateAudio : undefined;
-    const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
-
-    if (isVeo31FflfModel) {
-      const tailImage = options.tailImage;
-      if (!tailImage) {
-        throw new Error('Veo 3.1 FFLF requires a first and last frame.');
-      }
-      const lastFrameUrl = await uploadImageElementToFal(tailImage, options);
-
-      const inputPayload: Record<string, unknown> = {
-        prompt: trimmedPrompt,
-        first_frame_url: imageUrl,
-        last_frame_url: lastFrameUrl,
-        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-        ...(durationValue ? { duration: durationValue } : {}),
-        ...(resolutionValue ? { resolution: resolutionValue } : {}),
-        ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
-        ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
-      };
-
-      return subscribeForVideoUrl(modelId, inputPayload, options);
-    }
-
-    const inputPayload: Record<string, unknown> = {
-      prompt: trimmedPrompt,
-      image_url: imageUrl,
-      ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-      ...(durationValue ? { duration: durationValue } : {}),
-      ...(resolutionValue ? { resolution: resolutionValue } : {}),
-      ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
-      ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
-    };
-
-    return subscribeForVideoUrl(modelId, inputPayload, options);
-  }
-
-  if (modelId === KLING_V3_VIDEO_MODEL_ID) {
-    const trimmedPrompt = prompt.trim();
-    const useMultiPrompt = options.klingV3MultiPromptEnabled === true;
-    const multiPrompt = typeof options.klingV3MultiPrompt === 'string' ? options.klingV3MultiPrompt.trim() : '';
-    const duration = options.klingV3Duration === '3' || options.klingV3Duration === '4' || options.klingV3Duration === '5'
-      || options.klingV3Duration === '6' || options.klingV3Duration === '7' || options.klingV3Duration === '8'
-      || options.klingV3Duration === '9' || options.klingV3Duration === '10' || options.klingV3Duration === '11'
-      || options.klingV3Duration === '12' || options.klingV3Duration === '13' || options.klingV3Duration === '14'
-      || options.klingV3Duration === '15'
-      ? options.klingV3Duration
-      : '5';
-    const shot1Duration = options.klingV3Shot1Duration === '1' || options.klingV3Shot1Duration === '2'
-      || options.klingV3Shot1Duration === '3' || options.klingV3Shot1Duration === '4' || options.klingV3Shot1Duration === '5'
-      || options.klingV3Shot1Duration === '6' || options.klingV3Shot1Duration === '7' || options.klingV3Shot1Duration === '8'
-      || options.klingV3Shot1Duration === '9' || options.klingV3Shot1Duration === '10' || options.klingV3Shot1Duration === '11'
-      || options.klingV3Shot1Duration === '12' || options.klingV3Shot1Duration === '13' || options.klingV3Shot1Duration === '14'
-      || options.klingV3Shot1Duration === '15'
-      ? options.klingV3Shot1Duration
-      : '5';
-    const shot2Duration = options.klingV3Shot2Duration === '1' || options.klingV3Shot2Duration === '2'
-      || options.klingV3Shot2Duration === '3' || options.klingV3Shot2Duration === '4' || options.klingV3Shot2Duration === '5'
-      || options.klingV3Shot2Duration === '6' || options.klingV3Shot2Duration === '7' || options.klingV3Shot2Duration === '8'
-      || options.klingV3Shot2Duration === '9' || options.klingV3Shot2Duration === '10' || options.klingV3Shot2Duration === '11'
-      || options.klingV3Shot2Duration === '12' || options.klingV3Shot2Duration === '13' || options.klingV3Shot2Duration === '14'
-      || options.klingV3Shot2Duration === '15'
-      ? options.klingV3Shot2Duration
-      : '5';
-    const cfgScale = options.klingV3CfgScale === '0' || options.klingV3CfgScale === '0.25'
-      || options.klingV3CfgScale === '0.5' || options.klingV3CfgScale === '0.75' || options.klingV3CfgScale === '1'
-      ? Number(options.klingV3CfgScale)
-      : 0.5;
-    const negativePrompt = typeof options.negativePrompt === 'string' && options.negativePrompt.trim()
-      ? options.negativePrompt.trim()
-      : 'blur, distort, and low quality';
-    const sharedPayload: Record<string, unknown> = {
-      generate_audio: options.klingV3GenerateAudio ?? true,
-      negative_prompt: negativePrompt,
-      cfg_scale: cfgScale,
-    };
-
-    if (useMultiPrompt) {
-      if (!trimmedPrompt || !multiPrompt) {
-        throw new Error('Kling 3.0 Pro multi prompt requires both prompts.');
-      }
-      sharedPayload.multi_prompt = [
-        { prompt: trimmedPrompt, duration: shot1Duration },
-        { prompt: multiPrompt, duration: shot2Duration },
-      ];
-      sharedPayload.shot_type = 'customize';
-    } else {
-      if (!trimmedPrompt) {
-        throw new Error('Kling 3.0 Pro requires a prompt.');
-      }
-      sharedPayload.prompt = trimmedPrompt;
-      sharedPayload.duration = duration;
-    }
-
-    if (image) {
-      const imageUrl = await uploadImageElementToFal(image, options);
-      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage, options) : undefined;
-      const inputPayload: Record<string, unknown> = {
-        ...sharedPayload,
-        start_image_url: imageUrl,
-        ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
-      };
-
-      return subscribeForVideoUrl(KLING_V3_IMAGE_TO_VIDEO_MODEL_ID, inputPayload, options);
-    }
-
-    return subscribeForVideoUrl(KLING_V3_TEXT_TO_VIDEO_MODEL_ID, sharedPayload, options);
-  }
-
-  const isWan27VideoModel = modelId === WAN_27_VIDEO_MODEL_ID;
-  if (isWan27VideoModel) {
-    const trimmedPrompt = prompt.trim();
-    const wan27Variant = options.wan27VideoVariant === 'reference'
-      ? 'reference'
-      : options.wan27VideoVariant === 'edit'
-        ? 'edit'
-        : 'smart';
-    const resolution = options.wan27VideoResolution === '720p' || options.wan27VideoResolution === '1080p'
-      ? options.wan27VideoResolution
-      : '1080p';
-    const smartDurationValue = options.wan27VideoDuration === '2' || options.wan27VideoDuration === '3' || options.wan27VideoDuration === '4'
-      || options.wan27VideoDuration === '5' || options.wan27VideoDuration === '6' || options.wan27VideoDuration === '7'
-      || options.wan27VideoDuration === '8' || options.wan27VideoDuration === '9' || options.wan27VideoDuration === '10'
-      || options.wan27VideoDuration === '11' || options.wan27VideoDuration === '12' || options.wan27VideoDuration === '13'
-      || options.wan27VideoDuration === '14' || options.wan27VideoDuration === '15'
-      ? Number(options.wan27VideoDuration)
-      : 5;
-    const editDurationValue = options.wan27VideoDuration === '0' || options.wan27VideoDuration === '2' || options.wan27VideoDuration === '3'
-      || options.wan27VideoDuration === '4' || options.wan27VideoDuration === '5' || options.wan27VideoDuration === '6'
-      || options.wan27VideoDuration === '7' || options.wan27VideoDuration === '8' || options.wan27VideoDuration === '9'
-      || options.wan27VideoDuration === '10'
-      ? Number(options.wan27VideoDuration)
-      : 0;
-    const aspectRatio = options.wan27VideoAspectRatio === '16:9' || options.wan27VideoAspectRatio === '9:16'
-      || options.wan27VideoAspectRatio === '1:1' || options.wan27VideoAspectRatio === '4:3' || options.wan27VideoAspectRatio === '3:4'
-      ? options.wan27VideoAspectRatio
-      : '16:9';
-    const editAspectRatio = options.wan27VideoAspectRatio === 'source'
-      ? undefined
-      : aspectRatio;
-    const audioSetting = options.wan27VideoAudioSetting === 'origin' ? 'origin' : 'auto';
-    const enablePromptExpansion = typeof options.wan27VideoPromptExpansion === 'boolean'
-      ? options.wan27VideoPromptExpansion
-      : true;
-    const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
-    const seed = typeof options.seed === 'number' && Number.isFinite(options.seed)
-      ? Math.max(0, Math.min(2147483647, Math.floor(options.seed)))
-      : undefined;
-    const sharedPayload: Record<string, unknown> = {
-      resolution,
-      duration: smartDurationValue,
-      enable_prompt_expansion: enablePromptExpansion,
-      enable_safety_checker: false,
-      ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
-      ...(seed !== undefined ? { seed } : {}),
-    };
-
-    if (wan27Variant === 'edit') {
-      if (!trimmedPrompt) {
-        throw new Error('Wan 2.7 Edit requires a prompt.');
-      }
-      if (!options.sourceVideoUrl) {
-        throw new Error('Wan 2.7 Edit requires a source video.');
-      }
-      if (referenceImages.length > 1) {
-        throw new Error('Wan 2.7 Edit supports one reference image.');
-      }
-      const referenceImageUrl = referenceImages[0] ? await uploadImageElementToFal(referenceImages[0], options) : undefined;
-      const inputPayload: Record<string, unknown> = {
-        prompt: trimmedPrompt,
-        video_url: options.sourceVideoUrl,
-        resolution,
-        duration: editDurationValue,
-        audio_setting: audioSetting,
-        enable_safety_checker: false,
-        ...(editAspectRatio ? { aspect_ratio: editAspectRatio } : {}),
-        ...(referenceImageUrl ? { reference_image_url: referenceImageUrl } : {}),
-        ...(seed !== undefined ? { seed } : {}),
-      };
-
-      return subscribeForVideoUrl(WAN_27_EDIT_VIDEO_MODEL_ID, inputPayload, options);
-    }
-
-    if (wan27Variant === 'reference') {
-      if (!trimmedPrompt) {
-        throw new Error('Wan 2.7 Reference requires a prompt.');
-      }
-      const imageUrls = referenceImages.length > 0 ? await collectReferenceUploadUrls(referenceImages, options) : [];
-      const videoUrls = options.referenceVideos?.length
-        ? await Promise.all(options.referenceVideos.map(file => uploadVideoToFal(file, options)))
-        : [];
-      if (imageUrls.length + videoUrls.length === 0) {
-        throw new Error('Wan 2.7 Reference requires at least one reference image or video.');
-      }
-      const referenceDuration = smartDurationValue > 10 ? 10 : smartDurationValue;
-      const inputPayload: Record<string, unknown> = {
-        prompt: trimmedPrompt,
-        resolution,
-        duration: referenceDuration,
-        aspect_ratio: aspectRatio,
-        enable_safety_checker: false,
-        ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
-        ...(seed !== undefined ? { seed } : {}),
-        ...(imageUrls.length ? { reference_image_urls: imageUrls } : {}),
-        ...(videoUrls.length ? { reference_video_urls: videoUrls } : {}),
-      };
-
-      return subscribeForVideoUrl(WAN_27_REFERENCE_TO_VIDEO_MODEL_ID, inputPayload, options);
-    }
-
-    if (image) {
-      const imageUrl = await uploadImageElementToFal(image, options);
-      const tailImageUrl = options.tailImage ? await uploadImageElementToFal(options.tailImage, options) : undefined;
-      const inputPayload: Record<string, unknown> = {
-        ...sharedPayload,
-        image_url: imageUrl,
-        ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
-        ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
-        ...(options.sourceAudioUrl ? { audio_url: options.sourceAudioUrl } : {}),
-      };
-
-      return subscribeForVideoUrl(WAN_27_IMAGE_TO_VIDEO_MODEL_ID, inputPayload, options);
-    }
-
-    if (!trimmedPrompt) {
-      throw new Error('Wan 2.7 text-to-video requires a prompt.');
-    }
-
-    const inputPayload: Record<string, unknown> = {
-      ...sharedPayload,
-      prompt: trimmedPrompt,
-      aspect_ratio: aspectRatio,
-      ...(options.sourceAudioUrl ? { audio_url: options.sourceAudioUrl } : {}),
-    };
-
-    return subscribeForVideoUrl(WAN_27_TEXT_TO_VIDEO_MODEL_ID, inputPayload, options);
-  }
-
-  const isSeedance15Model = modelId === SEEDANCE_15_VIDEO_MODEL_ID;
-  if (isSeedance15Model) {
-    if (!image) {
-      throw new Error('Seedance 1.5 requires an image.');
-    }
-
-    const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) {
-      throw new Error('Seedance 1.5 requires a prompt.');
-    }
-
-    const imageUrl = await uploadImageElementToFal(image, options);
-    const tailImage = options.tailImage;
-    const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage, options) : undefined;
-
-    const aspectRatio = options.seedance15AspectRatio ?? '16:9';
-    const resolution = options.seedance15Resolution ?? '720p';
-    const videoDuration = options.seedance15Duration ?? '5';
-    const cameraFixed = options.seedance15CameraFixed ?? false;
-    const generateAudio = options.seedance15Audio ?? false;
-
-    const inputPayload: Record<string, unknown> = {
-      prompt: trimmedPrompt,
-      image_url: imageUrl,
-      aspect_ratio: aspectRatio,
-      resolution,
-      duration: videoDuration,
-      camera_fixed: cameraFixed,
-      generate_audio: generateAudio,
-      ...(tailImageUrl ? { end_image_url: tailImageUrl } : {}),
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);
@@ -1018,31 +599,6 @@ export const generateImageToVideo = async (
     return subscribeForVideoUrl(modelId, inputPayload, options);
   }
 
-  const isScailModel = modelId === SCAIL_VIDEO_MODEL_ID;
-  if (isScailModel) {
-    if (!options.sourceVideoUrl) {
-      throw new Error('Scail requires a source video.');
-    }
-    if (!image) {
-      throw new Error('Scail requires a reference image.');
-    }
-
-    const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt) {
-      throw new Error('Scail requires a prompt.');
-    }
-
-    const imageUrl = await uploadImageElementToFal(image, options);
-
-    const inputPayload: Record<string, unknown> = {
-      prompt: trimmedPrompt,
-      image_url: imageUrl,
-      video_url: options.sourceVideoUrl,
-    };
-
-    return subscribeForVideoUrl(modelId, inputPayload, options);
-  }
-
   const isLipsyncModel = modelId === SYNC_LIPSYNC_MODEL_ID; // Lip Sync requires video_url + audio_url.
   if (isLipsyncModel) {
     if (!options.sourceVideoUrl) {
@@ -1088,50 +644,6 @@ export const generateImageToVideo = async (
       enable_speech_enhancement: options.heygenEnableSpeechEnhancement ?? false,
       ...(startTime !== undefined ? { start_time: startTime } : {}),
       ...(endTime !== undefined && (startTime === undefined || endTime > startTime) ? { end_time: endTime } : {}),
-    };
-
-    return subscribeForVideoUrl(modelId, inputPayload, options);
-  }
-
-  const isWanAnimateEndpoint = modelId === WAN_ANIMATE_REPLACE_MODEL_ID || modelId === WAN_ANIMATE_MOVE_MODEL_ID;
-  if (isWanAnimateEndpoint) {
-    if (!options.sourceVideoUrl) {
-      throw new Error('Wan Animate requires a source video.');
-    }
-    if (!image) {
-      throw new Error('Wan Animate requires a still image.');
-    }
-
-    const imageUrl = await uploadImageElementToFal(image, options);
-
-    const numInferenceStepsRaw = typeof options.numInferenceSteps === 'number'
-      ? options.numInferenceSteps
-      : Number(options.numInferenceSteps);
-    const numInferenceSteps = Number.isFinite(numInferenceStepsRaw)
-      ? Math.min(40, Math.max(2, Math.round(numInferenceStepsRaw)))
-      : undefined;
-
-    const resolution = options.resolution === '480p' || options.resolution === '580p' || options.resolution === '720p'
-      ? options.resolution
-      : undefined;
-
-    const shiftRaw = typeof options.shift === 'number' ? options.shift : Number(options.shift);
-    const shift = Number.isFinite(shiftRaw)
-      ? Math.min(10, Math.max(1, Math.round(shiftRaw * 10) / 10))
-      : undefined;
-
-    const videoQuality = options.videoQuality === 'maximum' ? 'maximum' : options.videoQuality === 'high' ? 'high' : undefined;
-    const useTurbo = typeof options.useTurbo === 'boolean' ? options.useTurbo : undefined;
-
-    const inputPayload: Record<string, unknown> = {
-      video_url: options.sourceVideoUrl,
-      image_url: imageUrl,
-      enable_safety_checker: false,
-      ...(numInferenceSteps !== undefined ? { num_inference_steps: numInferenceSteps } : {}),
-      ...(resolution ? { resolution } : {}),
-      ...(shift !== undefined ? { shift } : {}),
-      ...(videoQuality ? { video_quality: videoQuality } : {}),
-      ...(useTurbo !== undefined ? { use_turbo: useTurbo } : {}),
     };
 
     return subscribeForVideoUrl(modelId, inputPayload, options);
@@ -1231,124 +743,5 @@ export const generateImageToVideo = async (
     return { videoUrl, requestId };
   }
 
-  const isKlingV3ControlModel = modelId === KLING_V3_CONTROL_VIDEO_MODEL_ID;
-  if (isKlingV3ControlModel) {
-    if (!options.sourceVideoUrl) {
-      throw new Error('Kling 3.0 Control requires a source video.');
-    }
-    if (!image) {
-      throw new Error('Kling 3.0 Control requires a character image.');
-    }
-
-    const trimmedPrompt = prompt.trim();
-    const imageUrl = await uploadImageElementToFal(image, options);
-    const characterOrientation = options.characterOrientation === 'image' ? 'image' : 'video';
-    const keepOriginalSound = typeof options.keepOriginalSound === 'boolean' ? options.keepOriginalSound : undefined;
-
-    const inputPayload: Record<string, unknown> = {
-      image_url: imageUrl,
-      video_url: options.sourceVideoUrl,
-      character_orientation: characterOrientation,
-      ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
-      ...(keepOriginalSound !== undefined ? { keep_original_sound: keepOriginalSound } : {}),
-    };
-
-    return subscribeForVideoUrl(modelId, inputPayload, options);
-  }
-
-  if (!image) { // Remaining image-first video models require an image.
-    throw new Error('Image is required for video generation.');
-  }
-  const imageUrl = await uploadImageElementToFal(image, options);
-
-  const promptOptimizer = options.promptOptimizer;
-  const negativePrompt = typeof options.negativePrompt === 'string' ? options.negativePrompt.trim() : undefined;
-  const cfgScale = typeof options.cfgScale === 'number' && Number.isFinite(options.cfgScale)
-    ? options.cfgScale
-    : undefined;
-  const tailImage = options.tailImage;
-  const tailImageUrl = tailImage ? await uploadImageElementToFal(tailImage, options) : undefined;
-  const generateAudio = typeof options.generateAudio === 'boolean' ? options.generateAudio : undefined;
-  let latestRequestId: string | undefined;
-
-  const inputPayload: Record<string, unknown> = {
-    prompt,
-    image_url: imageUrl,
-    ...(promptOptimizer !== undefined ? { prompt_optimizer: promptOptimizer } : {}),
-    ...(duration ? { duration } : {}),
-    ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
-    ...(cfgScale !== undefined ? { cfg_scale: cfgScale } : {}),
-    ...(tailImageUrl ? { tail_image_url: tailImageUrl } : {}),
-    ...(generateAudio !== undefined ? { generate_audio: generateAudio } : {}),
-  };
-
-  emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
-  options.abortSignal?.throwIfAborted();
-  logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', {
-    input: inputPayload,
-  });
-
-  let result: Awaited<ReturnType<typeof fal.subscribe>>;
-  try {
-    options.abortSignal?.throwIfAborted();
-    result = await fal.subscribe(modelId, {
-      ...options.abortSignal ? { abortSignal: options.abortSignal } : {},
-      input: inputPayload,
-      logs: true,
-      onQueueUpdate: update => {
-        if (options.abortSignal?.aborted) return;
-        const queueUpdate = update as unknown as FalQueueUpdate;
-        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-        if (resolvedRequestId) {
-          latestRequestId = resolvedRequestId;
-        }
-        emitFalPhase(options, modelId, {
-          phase: queueUpdate.status === 'IN_PROGRESS' ? 'processing' : 'queued',
-          message: queueUpdate.status === 'IN_PROGRESS' ? 'Processing on provider...' : 'Waiting in Fal queue...',
-          requestId: resolvedRequestId,
-        });
-        logFalEvent('inbound', modelId, 'Queue update', {
-          status: queueUpdate.status,
-          position: queueUpdate.position,
-          eta: queueUpdate.eta,
-          requestId: resolvedRequestId,
-          logs: normalizedLogs.map(log => log?.message ?? ''),
-        });
-        options.onQueueUpdate?.({
-          ...queueUpdate,
-          requestId: resolvedRequestId || '',
-          logs: normalizedLogs,
-        });
-      },
-    });
-  } catch (error) {
-    options.abortSignal?.throwIfAborted();
-    logFalEvent('error', modelId, 'Request failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
-  }
-
-  options.abortSignal?.throwIfAborted();
-  logFalEvent('inbound', modelId, 'Result received', {
-    requestId: result?.requestId || latestRequestId,
-    data: (result?.data as Record<string, unknown>) ?? undefined,
-  });
-
-  const data = result?.data as { video?: string | { url?: string } } | undefined;
-  const videoEntry = data?.video;
-  const videoUrl = typeof videoEntry === 'string'
-    ? videoEntry
-    : videoEntry && typeof videoEntry.url === 'string'
-      ? videoEntry.url
-      : null;
-
-  if (!videoUrl) {
-    throw new Error('Fal.ai API did not return a video.');
-  }
-
-  const requestId = result?.requestId || latestRequestId;
-
-  return { videoUrl, requestId };
+  throw new Error(`Unsupported video model: ${modelId}`);
 };

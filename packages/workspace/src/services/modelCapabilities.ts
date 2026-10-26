@@ -1,5 +1,5 @@
 import {
-  FAL_VIDEO_MODEL_OPTIONS,
+  isFalVideoModelId as isVideoModelId,
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   CRYSTAL_UPSCALER_MODEL_ID,
@@ -467,9 +467,6 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
     },
   },
 ];
-
-const isVideoModelId = (modelId: string): boolean =>
-  FAL_VIDEO_MODEL_OPTIONS.some(option => option.value === modelId);
 
 const ruleMatches = (rule: ModelUiCapabilityRule, modelId: string): boolean => (
   typeof rule.matches === 'function' ? rule.matches(modelId) : rule.matches.includes(modelId)

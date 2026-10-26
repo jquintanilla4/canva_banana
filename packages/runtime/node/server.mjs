@@ -326,6 +326,17 @@ const isAllowedFalTarget = (url) => (
   )
 );
 
+const RETIRED_FAL_VIDEO_PATHS = [
+  /^\/fal-ai\/kling-video\/(?:v2\.5-turbo|v2\.6|v3|o1|o3)(?:\/|$)/,
+  /^\/fal-ai\/scail(?:\/|$)/,
+  /^\/fal-ai\/wan\/v2\.7(?:\/?$|\/(?:text-to-video|image-to-video|reference-to-video|edit-video)(?:\/|$))/,
+  /^\/fal-ai\/wan\/v2\.2-14b\/animate(?:\/|$)/,
+  /^\/fal-ai\/bytedance\/seedance\/v1\.5(?:\/|$)/,
+  /^\/fal-ai\/veo3\.1(?:\/|$)/,
+  /^\/fal-ai\/sora-2\/image-to-video\/pro(?:\/|$)/,
+  /^\/wan\/v2\.6\/image-to-video(?:\/|$)/,
+]; // Retire video endpoints without blocking Wan image models or saved media downloads.
+
 const copyRequestHeaders = (requestHeaders) => {
   const headers = new Headers();
   for (const [name, value] of Object.entries(requestHeaders)) {
@@ -643,8 +654,10 @@ const handleFalProxy = async (request, response, env, fetchImpl, corsHeaders) =>
     return;
   }
   let targetUrl;
+  let targetPath;
   try {
     targetUrl = new URL(targetUrlValue);
+    targetPath = decodeURIComponent(targetUrl.pathname);
   } catch {
     sendJson(response, 400, { detail: 'Fal target URL is invalid.' }, corsHeaders);
     return;
@@ -652,6 +665,10 @@ const handleFalProxy = async (request, response, env, fetchImpl, corsHeaders) =>
   if (!isAllowedFalTarget(targetUrl)) {
     sendJson(response, 400, { detail: 'Fal target URL is not allowed.' }, corsHeaders);
     return;
+  }
+  if (RETIRED_FAL_VIDEO_PATHS.some(pattern => pattern.test(targetPath))) {
+    sendJson(response, 410, { detail: 'This video model is no longer supported. Select a supported video model and create a new generation.' }, corsHeaders);
+    return; // Reject direct proxy requests before attaching the server key or contacting Fal.
   }
   let body;
   try {

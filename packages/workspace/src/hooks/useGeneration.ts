@@ -75,6 +75,7 @@ import {
   isNanoBananaEditModelId,
   isRemovedHailuoModelId,
   isRemovedOneToAllAnimateModelId,
+  isRetiredVideoModelId,
   isRecraftV4ProModel,
   isRecraftV4ProImageSizeSelectionValue,
   normalizeRecraftRgbColor,
@@ -730,6 +731,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
         : requestedProviderForRun === 'volcengine' ? SEEDANCE_2_VIDEO_MODEL_ID : null
       : null; // Saved local-backend reruns may carry provider metadata without a model id.
     const falVideoModelIdForRun = providerForcedVideoModelId ?? (isFalVideoModelId(overrideModelId) ? overrideModelId : falVideoModelId);
+    const isVideoRun = generationOverride
+      ? generationOverride.kind === 'video' || generationOverride.modelMode === 'video'
+      : falModelMode === 'video';
+    if (isVideoRun && isRetiredVideoModelId(rawOverrideModelId ?? falVideoModelIdForRun)) {
+      setError('This video model is no longer supported. Select a supported video model and create a new generation.');
+      return; // Check explicit saved ids before substitution, or the resolved model for provider-only reruns.
+    }
     const falModelIdForRun: FalModelId = falModelModeForRun === 'video' ? falVideoModelIdForRun : falImageModelIdForRun;
     const falOptionsOverride = generationOverride && (isNanoBananaEditModelId(falModelIdForRun) || isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun))
       ? { ...getGenerationTransferOptionDefaults(falModelIdForRun, generationOverride.falOptions ?? {}), ...generationOverride.falOptions }
@@ -1228,7 +1236,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
 
     if (isUnsupportedLegacyKlingO1RefV2VRerun) {
-      setError('Kling O1 Ref-v2v is no longer available and cannot be regenerated. Create a new Kling O3 Reference or Edit generation instead.');
+      setError('This video model is no longer supported. Select a supported video model and create a new generation.');
       return;
     }
 

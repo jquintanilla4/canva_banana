@@ -192,9 +192,34 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
+const RETIRED_VIDEO_MODEL_IDS: ReadonlySet<string> = new Set([
+  KLING_VIDEO_MODEL_ID,
+  KLING_VIDEO_STANDARD_MODEL_ID,
+  KLING_VIDEO_PRO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
+  KLING_V3_TEXT_TO_VIDEO_MODEL_ID,
+  KLING_V3_IMAGE_TO_VIDEO_MODEL_ID,
+  KLING_V3_CONTROL_VIDEO_MODEL_ID,
+  ...KLING_O3_VIDEO_MODEL_IDS,
+  SCAIL_VIDEO_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
+  WAN_27_TEXT_TO_VIDEO_MODEL_ID,
+  WAN_27_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
+  WAN_27_EDIT_VIDEO_MODEL_ID,
+  WAN_ANIMATE_REPLACE_MODEL_ID,
+  WAN_ANIMATE_MOVE_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
+  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+  VEO_31_FFLF_VIDEO_MODEL_ID,
+  VEO_31_EXTEND_VIDEO_MODEL_ID,
+]); // Keep endpoint ids detectable so old saved requests cannot bypass retirement.
+
 export const FAL_VIDEO_MODEL_OPTIONS = sortModelOptionsByLabel(
-  FAL_VIDEO_MODEL_OPTIONS_BASE.filter(option => option.value !== JIMENG_MULTIFRAME_VIDEO_MODEL_ID),
-); // Hide Multi-frame from UI selection while retaining its metadata and backend contracts.
+  FAL_VIDEO_MODEL_OPTIONS_BASE.filter(option =>
+    option.value !== JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+    && !RETIRED_VIDEO_MODEL_IDS.has(option.value)),
+); // Hide retired models from pickers while retaining saved metadata.
 
 export const FLUX3_VARIANT_OPTIONS: ReadonlyArray<{ value: Flux3Variant; label: string }> = [
   { value: 'smart', label: 'Smart Mode' },
@@ -1177,7 +1202,8 @@ export type FalModelId = FalImageModelId | FalVideoModelId;
 export const isFalImageModelId = (value: string | undefined): value is FalImageModelId =>
   typeof value === 'string' && FAL_IMAGE_MODEL_OPTIONS.some(option => option.value === value);
 export const isFalVideoModelId = (value: string | undefined): value is FalVideoModelId =>
-  typeof value === 'string' && FAL_VIDEO_MODEL_OPTIONS.some(option => option.value === value);
+  typeof value === 'string' && value !== JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+  && FAL_VIDEO_MODEL_OPTIONS_BASE.some(option => option.value === value); // Recognize saved models independently of whether they can still generate.
 export const isFalModelId = (value: string | undefined): value is FalModelId =>
   isFalImageModelId(value) || isFalVideoModelId(value);
 export const isSeedreamModelId = (value: FalModelId | undefined): value is SeedreamModelId =>
@@ -1356,6 +1382,12 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   }
   return isFalModelId(value) ? value : undefined;
 };
+
+export const isRetiredVideoModelId = (value: string | undefined): boolean =>
+  typeof value === 'string' && (
+    RETIRED_VIDEO_MODEL_IDS.has(value)
+    || RETIRED_VIDEO_MODEL_IDS.has(normalizeFalModelId(value) ?? value)
+  ); // Check legacy aliases before provider routing can replace a saved model id.
 
 export const DEFAULT_FAL_IMAGE_MODEL_ID: FalImageModelId = NANO_BANANA_PRO_EDIT_MODEL_ID;
 export const DEFAULT_FAL_VIDEO_MODEL_ID: FalVideoModelId = MINIMAX_H3_VIDEO_MODEL_ID;
