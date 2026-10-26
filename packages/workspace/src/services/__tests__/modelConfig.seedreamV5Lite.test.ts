@@ -15,6 +15,8 @@ import {
   KLING_VIDEO_MODEL_ID,
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   isRecraftV4ProModel,
+  JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   normalizeFalModelId,
@@ -79,6 +81,15 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
 
   it('maps legacy Sora 2 Pro video snapshots to the default video model', () => {
     expect(normalizeFalModelId('fal-ai/sora-2/image-to-video/pro')).toBe(KLING_VIDEO_MODEL_ID);
+  });
+
+  it('hides Jimeng Multi-frame without removing the Jimeng Seedance choices', () => {
+    const videoModelIds = FAL_VIDEO_MODEL_OPTIONS.map(option => option.value);
+
+    expect(videoModelIds).not.toContain(JIMENG_MULTIFRAME_VIDEO_MODEL_ID);
+    expect(normalizeFalModelId(JIMENG_MULTIFRAME_VIDEO_MODEL_ID)).toBeUndefined();
+    expect(videoModelIds).toContain(JIMENG_SEEDANCE_2_VIDEO_MODEL_ID);
+    expect(videoModelIds).toContain(JIMENG_SEEDANCE_25_VIDEO_MODEL_ID);
   });
 
   it('removes Hailuo 2.3 without migrating saved selections', () => {

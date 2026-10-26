@@ -189,7 +189,9 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
-export const FAL_VIDEO_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_VIDEO_MODEL_OPTIONS_BASE);
+export const FAL_VIDEO_MODEL_OPTIONS = sortModelOptionsByLabel(
+  FAL_VIDEO_MODEL_OPTIONS_BASE.filter(option => option.value !== JIMENG_MULTIFRAME_VIDEO_MODEL_ID),
+); // Hide Multi-frame from UI selection while retaining its metadata and backend contracts.
 
 export const FLUX3_VARIANT_OPTIONS: ReadonlyArray<{ value: Flux3Variant; label: string }> = [
   { value: 'smart', label: 'Smart Mode' },

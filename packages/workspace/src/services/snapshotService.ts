@@ -30,6 +30,7 @@ import {
   isGenerationProvider,
   isJimengMultiframeDurationSelectionValue,
   isJimengMultiframeResolutionSelectionValue,
+  isJimengMultiframeVideoModel,
   isJimengSeedance2ModelVersion,
   isGptImage2QualitySelectionValue,
   isGptImage25Quality,
@@ -1593,7 +1594,7 @@ export const restoreSnapshotFromFile = async (
   });
   const sanitizedVideoPromptBars: CanvasVideoPromptBar[] = snapshotVideoPromptBars.map(bar => {
     const rawModelId = typeof bar?.modelId === 'string' ? bar.modelId : undefined;
-    const modelId = rawModelId && (isFalVideoModelId(rawModelId) || isRemovedHailuoModelId(rawModelId) || isRemovedOneToAllAnimateModelId(rawModelId))
+    const modelId = rawModelId && (isFalVideoModelId(rawModelId) || isRemovedHailuoModelId(rawModelId) || isRemovedOneToAllAnimateModelId(rawModelId) || isJimengMultiframeVideoModel(rawModelId))
       ? rawModelId
       : SEEDANCE_2_VIDEO_MODEL_ID; // Keep removed model ids so generation can block them safely.
     const isJimengBar = modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;

@@ -1692,7 +1692,9 @@ export const Canvas: React.FC<CanvasProps> = ({
           ? '1-to-All Animate (Unavailable)'
           : isRemovedHailuoModelId(selectedEmbeddedModelId)
             ? 'Hailuo 2.3 (Unavailable)'
-            : null; // Restored retired bars must remain identifiable but cannot run.
+            : selectedEmbeddedModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+              ? 'Jimeng Multi-frame (Unavailable)'
+              : null; // Restored retired bars must remain identifiable but cannot run.
         const isRemovedEmbeddedModel = removedEmbeddedModelLabel !== null;
         const removedEmbeddedModelOption = removedEmbeddedModelLabel
           ? { value: selectedEmbeddedModelId, label: removedEmbeddedModelLabel, disabled: true }

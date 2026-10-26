@@ -2953,7 +2953,18 @@ describe('useGeneration (seedance 2)', () => {
     expect(generateImageToVideo).not.toHaveBeenCalled();
   });
 
-  it('blocks removed 1-to-All Animate reruns without falling back to the selected video model', async () => {
+  it.each([
+    {
+      modelId: 'fal-ai/one-to-all-animation/14b',
+      provider: 'fal' as const,
+      error: '1-to-All Animate is no longer available and cannot be regenerated. Select a supported video model and create a new generation instead.',
+    },
+    {
+      modelId: JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
+      provider: 'jimeng' as const,
+      error: 'Jimeng Multi-frame is unavailable in the UI. Select a supported video model and create a new generation instead.',
+    },
+  ])('blocks unavailable $modelId reruns without falling back to another model', async ({ modelId, provider, error }) => {
     const setError = vi.fn();
     const { result } = renderHook(() => useGeneration({
       appMode: 'CANVAS',
@@ -2977,15 +2988,17 @@ describe('useGeneration (seedance 2)', () => {
     await act(async () => {
       await result.current.handleGenerate({
         kind: 'video',
-        prompt: 'legacy 1-to-All rerun',
-        provider: 'fal',
-        modelId: 'fal-ai/one-to-all-animation/14b',
+        prompt: 'legacy video rerun',
+        provider,
+        modelId,
         modelMode: 'video',
       });
     });
 
-    expect(setError).toHaveBeenCalledWith('1-to-All Animate is no longer available and cannot be regenerated. Select a supported video model and create a new generation instead.');
+    expect(setError).toHaveBeenCalledWith(error);
     expect(generateImageToVideo).not.toHaveBeenCalled();
+    expect(generateSeedanceVideo).not.toHaveBeenCalled();
+    expect(generateJimengSeedanceVideo).not.toHaveBeenCalled();
   });
 
   it('infers Kling O3 edit reruns from the saved edit endpoint', async () => {

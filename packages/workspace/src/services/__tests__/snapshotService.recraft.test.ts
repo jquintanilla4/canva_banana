@@ -1206,8 +1206,10 @@ describe('snapshotService (Jimeng metadata)', () => {
     expect(restored.videoPromptBars[0]?.modelId).toBe(hailuoModelId);
   });
 
-  it('preserves the removed 1-to-All id on restored embedded prompt bars', async () => {
-    const oneToAllModelId = 'fal-ai/one-to-all-animation/14b';
+  it.each([
+    'fal-ai/one-to-all-animation/14b',
+    'jimeng-cli/multiframe',
+  ])('preserves unavailable model %s on restored embedded prompt bars', async modelId => {
     const snapshot = {
       version: 1,
       createdAt: new Date().toISOString(),
@@ -1217,14 +1219,14 @@ describe('snapshotService (Jimeng metadata)', () => {
         paths: [],
         videoPromptAreas: [],
         videoPromptBars: [{
-          id: 'bar-one-to-all',
+          id: 'bar-unavailable',
           assignedAreaId: 'area-1',
           x: 0,
           y: 0,
           width: 320,
           height: 72,
-          prompt: 'legacy 1-to-All prompt',
-          modelId: oneToAllModelId,
+          prompt: 'legacy video prompt',
+          modelId,
           seedance2Variant: 'reference',
           seedance2AspectRatio: '16:9',
           seedance2Resolution: '720p',
@@ -1244,7 +1246,7 @@ describe('snapshotService (Jimeng metadata)', () => {
       brushColor: '#ff0000',
     });
 
-    expect(restored.videoPromptBars[0]?.modelId).toBe(oneToAllModelId);
+    expect(restored.videoPromptBars[0]?.modelId).toBe(modelId);
   });
 
   it('restores legacy embedded Jimeng prompt bar channel values from fal options', async () => {

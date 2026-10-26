@@ -388,6 +388,7 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
     matches: [JIMENG_MULTIFRAME_VIDEO_MODEL_ID],
     base: {
+      supportsAnnotate: false, // Saved Multi-frame bars remain video workflows even while hidden from pickers.
       promptPlaceholder: `Jimeng Multi-frame: select ${JIMENG_MULTIFRAME_MIN_IMAGES}–${JIMENG_MULTIFRAME_MAX_IMAGES} still images in story order. For 2 images, describe the transition; for 3+, separate each transition prompt with ||. ${GENERATE_SUFFIX}`,
     },
   },

@@ -433,7 +433,10 @@ describe('Canvas video prompt area tool', () => {
   });
 
 
-  it('labels restored 1-to-All prompt bars as unavailable and blocks submission', () => {
+  it.each([
+    ['fal-ai/one-to-all-animation/14b', '1-to-All Animate (Unavailable)'],
+    ['jimeng-cli/multiframe', 'Jimeng Multi-frame (Unavailable)'],
+  ])('labels restored %s prompt bars as unavailable and blocks submission', (modelId, label) => {
     const videoPromptArea: CanvasVideoPromptArea = {
       id: 'area-1',
       sequence: 1,
@@ -448,7 +451,7 @@ describe('Canvas video prompt area tool', () => {
     const videoPromptBar: CanvasVideoPromptBar = {
       id: 'bar-1',
       assignedAreaId: 'area-1',
-      modelId: 'fal-ai/one-to-all-animation/14b',
+      modelId,
       x: 0,
       y: 0,
       width: 720,
@@ -492,13 +495,13 @@ describe('Canvas video prompt area tool', () => {
     );
 
     const modelPicker = screen.getByRole('combobox', { name: 'Select video model' }) as HTMLButtonElement;
-    expect(modelPicker.textContent).toContain('1-to-All Animate (Unavailable)');
+    expect(modelPicker.textContent).toContain(label);
     expect(modelPicker.disabled).toBe(false); // Users must still be able to choose a supported replacement.
     expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(modelPicker);
 
-    expect((screen.getByRole('option', { name: '1-to-All Animate (Unavailable)' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('option', { name: label }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole('option', { name: 'Seedance 2' })).toBeTruthy();
   });
 
@@ -1947,7 +1950,7 @@ describe('Canvas video prompt area tool', () => {
     [2, false],
     [20, false],
     [21, true],
-  ])('gates embedded Jimeng Multi-frame submit with %i staged still images', (imageCount, submitDisabled) => {
+  ])('keeps unavailable Jimeng Multi-frame blocked with %i staged still images', (imageCount, invalidCount) => {
     const orderedImageIds = Array.from({ length: imageCount }, (_, index) => `image-${index + 1}`);
     const acceptedImageIds = orderedImageIds.slice(0, 20);
 
@@ -1998,8 +2001,8 @@ describe('Canvas video prompt area tool', () => {
       embeddedVideoPromptBarModelOptions: [{ value: 'jimeng-cli/multiframe', label: 'Jimeng Multi-frame' }],
     })} />);
 
-    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(submitDisabled);
-    expect(Boolean(screen.queryByText('Jimeng Multi-frame requires between 2 and 20 selected still images.'))).toBe(submitDisabled);
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
+    expect(Boolean(screen.queryByText('Jimeng Multi-frame requires between 2 and 20 selected still images.'))).toBe(invalidCount);
   });
 
   it('rejects unsupported media staged with embedded Jimeng Multi-frame images', () => {
@@ -2057,7 +2060,7 @@ describe('Canvas video prompt area tool', () => {
     expect(screen.getByText('Jimeng Multi-frame only accepts still images.')).toBeTruthy();
   });
 
-  it('requires one embedded Jimeng Multi-frame prompt per transition', () => {
+  it('keeps unavailable Jimeng Multi-frame blocked after correcting transition prompts', () => {
     const acceptedImageIds = ['image-1', 'image-2', 'image-3'];
     const buildProps = (prompt: string) => buildCanvasProps({
       images: acceptedImageIds.map(id => buildCanvasMedia(id, 'image')),
@@ -2110,7 +2113,7 @@ describe('Canvas video prompt area tool', () => {
 
     rerender(<Canvas {...buildProps('First transition || Second transition')} />);
 
-    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Generate' }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByText('Jimeng Multi-frame requires 2 transition prompts separated by ||.')).toBeNull();
   });
 

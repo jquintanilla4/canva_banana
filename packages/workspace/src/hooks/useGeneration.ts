@@ -1210,6 +1210,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
+    if (rawOverrideModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID) {
+      setError('Jimeng Multi-frame is unavailable in the UI. Select a supported video model and create a new generation instead.');
+      return; // Saved requests must not silently switch to a different paid model.
+    }
+
     if (requiresPrompt && !trimmedUserPrompt) {
       setError(isVideoMode
         ? 'Please describe the video you want to create.'
