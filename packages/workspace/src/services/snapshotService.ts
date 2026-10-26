@@ -1,5 +1,6 @@
 import { normalizeStoryboardSnapshot } from './storyboardSnapshot';
 import { isIdeogram45Quality, isIdeogram45EditPrecision } from './ideogram45Config';
+import { isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from './klingV4Config';
 import type {
   ApiProviderId,
   AppMode,
@@ -113,6 +114,10 @@ const normalizeSnapshotPromptBarFalOptions = (value: unknown): GenerationInputs[
   if (!value || typeof value !== 'object') return undefined;
   const raw = value as Record<string, unknown>;
   const normalized = { ...raw } as GenerationInputs['falOptions'];
+  if ('klingV4Variant' in raw && !isKlingV4Variant(raw.klingV4Variant)) delete normalized.klingV4Variant;
+  if ('klingV4Resolution' in raw && !isKlingV4Resolution(raw.klingV4Resolution)) delete normalized.klingV4Resolution;
+  if ('klingV4AspectRatio' in raw && !isKlingV4AspectRatio(raw.klingV4AspectRatio)) delete normalized.klingV4AspectRatio;
+  if ('klingV4Duration' in raw && !isKlingV4Duration(raw.klingV4Duration)) delete normalized.klingV4Duration;
   if ('flux3Variant' in raw && !isFlux3Variant(raw.flux3Variant)) delete normalized.flux3Variant;
   if ('flux3AspectRatio' in raw && !isFlux3AspectRatio(raw.flux3AspectRatio)) delete normalized.flux3AspectRatio;
   if ('flux3Resolution' in raw && !isFlux3Resolution(raw.flux3Resolution)) delete normalized.flux3Resolution;
@@ -410,6 +415,10 @@ export type SnapshotMetaState = {
   jimengMultiframeDuration?: string;
   jimengMultiframeResolution?: string;
   jimengSessionId?: number;
+  klingV4Variant?: string;
+  klingV4Resolution?: string;
+  klingV4AspectRatio?: string;
+  klingV4Duration?: string;
   klingV3Duration?: string;
   klingV3GenerateAudio?: boolean;
   klingV3CfgScale?: string;
@@ -1646,7 +1655,14 @@ export const restoreSnapshotFromFile = async (
   });
 
   const normalizedMeta = meta && typeof meta === 'object'
-    ? { ...meta, flux3KeyframeTimings: parseFlux3KeyframeTimings((meta as { flux3KeyframeTimings?: unknown }).flux3KeyframeTimings) }
+    ? {
+        ...meta,
+        klingV4Variant: isKlingV4Variant(meta.klingV4Variant) ? meta.klingV4Variant : undefined,
+        klingV4Resolution: isKlingV4Resolution(meta.klingV4Resolution) ? meta.klingV4Resolution : undefined,
+        klingV4AspectRatio: isKlingV4AspectRatio(meta.klingV4AspectRatio) ? meta.klingV4AspectRatio : undefined,
+        klingV4Duration: isKlingV4Duration(meta.klingV4Duration) ? meta.klingV4Duration : undefined,
+        flux3KeyframeTimings: parseFlux3KeyframeTimings((meta as { flux3KeyframeTimings?: unknown }).flux3KeyframeTimings),
+      }
     : meta;
   return {
     images: restoredImages,
@@ -1726,6 +1742,10 @@ export const normalizeSnapshotImageMetadata = (
     if (falOptionsRaw && typeof falOptionsRaw === 'object') {
       const typed = falOptionsRaw as GenerationInputs['falOptions'];
       const normalizedOptions: GenerationInputs['falOptions'] = {};
+      if (isKlingV4Variant(typed.klingV4Variant)) normalizedOptions.klingV4Variant = typed.klingV4Variant;
+      if (isKlingV4Resolution(typed.klingV4Resolution)) normalizedOptions.klingV4Resolution = typed.klingV4Resolution;
+      if (isKlingV4AspectRatio(typed.klingV4AspectRatio)) normalizedOptions.klingV4AspectRatio = typed.klingV4AspectRatio;
+      if (isKlingV4Duration(typed.klingV4Duration)) normalizedOptions.klingV4Duration = typed.klingV4Duration;
       if (isFalImageSizeSelectionValue((typed as { imageSizeSelection?: unknown }).imageSizeSelection)) {
         normalizedOptions.imageSizeSelection = typed.imageSizeSelection;
       }

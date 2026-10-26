@@ -13,6 +13,8 @@ import { ensureRealSnapshotFile } from '../snapshotService';
 import { convertAudioBlobToWav } from '../audioService';
 import { readIsoBmffVideoFrameRate } from '../../utils/isoBmffVideoFrameRate';
 import { FLUX3_FPS, FLUX3_MAX_KEYFRAMES, getFlux3ModePolicy, normalizeFlux3PromptMentions } from '../../utils/flux3';
+import { isKlingV4VideoModel } from '../klingV4Config';
+import { generateKlingV4Video } from './klingV4';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
   SEEDANCE25_REFERENCE_AUDIO_MAX_BYTES,
@@ -165,6 +167,10 @@ export const generateImageToVideo = async (
   const modelId = options.modelId || MINIMAX_H3_VIDEO_MODEL_ID; // Default to the supported MiniMax family.
   if (isRemovedOneToAllAnimateModelId(modelId)) {
     throw new Error('1-to-All Animate is no longer supported.'); // Reject direct calls before any upload or provider request.
+  }
+
+  if (isKlingV4VideoModel(modelId)) {
+    return generateKlingV4Video(prompt, image, options, subscribeForVideoUrl);
   }
 
   if (modelId === FLUX_3_VIDEO_MODEL_ID) {

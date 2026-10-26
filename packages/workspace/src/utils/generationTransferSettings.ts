@@ -56,6 +56,8 @@ import { NANO_BANANA_DEFAULTS } from '../services/nanoBananaConfig';
 import { resolveNanoBananaRunSettings, serializeNanoBananaGenerationOptions } from '../services/nanoBananaRunSettings';
 import { GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
 import { GPT_IMAGE_25_DEFAULTS } from '../services/gptImage25Config';
+import { KLING_V4_DEFAULTS, KLING_V4_EDIT_VIDEO_MODEL_ID, isKlingV4VideoModel, isKlingV4Duration, isKlingV4Variant } from '../services/klingV4Config';
+import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '../services/klingV4RunSettings';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions } from '../services/gptImage25RunSettings';
 
@@ -74,6 +76,10 @@ type TransferDefaultsRule = {
 // One rule per model (family); the first match wins. Video rules return complete
 // option sets; image rules are layered on top of the shared { numImages: 1 } base.
 const VIDEO_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
+  {
+    matches: isKlingV4VideoModel,
+    defaults: restoredOptions => ({ ...KLING_V4_DEFAULTS, klingV4Duration: restoredOptions.klingV4Variant === 'edit' ? 'source' : KLING_V4_DEFAULTS.klingV4Duration }),
+  },
   { matches: [KLING_VIDEO_MODEL_ID], defaults: { videoDuration: '5', klingVariant: 'standard' } }, // Kling 2.5 defaults.
   {
     matches: [KLING_V3_VIDEO_MODEL_ID],
@@ -232,7 +238,9 @@ export const resolveGenerationTransferOptions = (
     : generation.provider === 'volcengine'
       ? generation.volcengineOptions
       : generation.falOptions) ?? {}; // Legacy generations may only contain provider and model metadata.
-  const inferredVariantOptions: GenerationTransferOptions = normalizedModelId === KLING_O3_VIDEO_MODEL_ID
+  const inferredVariantOptions: GenerationTransferOptions = isKlingV4VideoModel(normalizedModelId)
+    ? { klingV4Variant: generation.modelId === KLING_V4_EDIT_VIDEO_MODEL_ID ? 'edit' : 'generate' }
+    : normalizedModelId === KLING_O3_VIDEO_MODEL_ID
     ? { klingO3Variant: generation.modelId === KLING_O3_VIDEO_EDIT_MODEL_ID ? 'edit' : 'reference' }
     : normalizedModelId === WAN_27_VIDEO_MODEL_ID
       ? {
@@ -249,6 +257,20 @@ export const resolveGenerationTransferOptions = (
     ...getGenerationTransferOptionDefaults(normalizedModelId, restoredOptions),
     ...restoredOptions,
   };
+  if (isKlingV4VideoModel(normalizedModelId)) {
+    const settings = resolveKlingV4RunSettings({
+      modelId: isKlingV4Variant(resolvedOptions.klingV4Variant) ? undefined : generation.modelId,
+      variant: resolvedOptions.klingV4Variant,
+      resolution: resolvedOptions.klingV4Resolution,
+      aspectRatio: resolvedOptions.klingV4AspectRatio,
+      duration: isKlingV4Duration(resolvedOptions.klingV4Duration) ? resolvedOptions.klingV4Duration
+        : generation.modelId === KLING_V4_EDIT_VIDEO_MODEL_ID || resolvedOptions.klingV4Variant === 'edit' ? 'source' : KLING_V4_DEFAULTS.klingV4Duration,
+    });
+    return {
+      ...resolvedOptions,
+      ...serializeKlingV4GenerationOptions(settings),
+    }; // Replays cannot inherit live controls or restore Source duration into Generate.
+  }
   if (isNanoBananaEditModelId(normalizedModelId)) {
     const settings = resolveNanoBananaRunSettings({
       kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image', modelId: normalizedModelId,

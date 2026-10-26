@@ -34,6 +34,7 @@ import { useGeneration } from '../useGeneration';
 import { serializeIdeogram45GenerationOptions } from '../../services/ideogram45RunSettings';
 import { serializeGptImage2GenerationOptions } from '../../services/gptImage2RunSettings';
 import { serializeGptImage25GenerationOptions } from '../../services/gptImage25RunSettings';
+import { KLING_V4_DEFAULTS, KLING_V4_EDIT_VIDEO_MODEL_ID, KLING_V4_VIDEO_MODEL_ID } from '../../services/klingV4Config';
 
 vi.mock('../../services/falService', async () => {
   const actual = await vi.importActual<typeof import('../../services/falService')>('../../services/falService');
@@ -251,6 +252,295 @@ describe('useGeneration (seedance 2)', () => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  describe('Kling 4 orchestration', () => {
+    const setupKling = (input: {
+      images?: CanvasImage[];
+      selection?: Partial<SelectionStateResult>;
+      fal?: Partial<UseFalSettingsResult>;
+      prompt?: string;
+    } = {}) => {
+      const fal = { ...createFalStub(), falVideoModelId: KLING_V4_VIDEO_MODEL_ID, ...KLING_V4_DEFAULTS, ...input.fal };
+      let jobs: FalQueueJob[] = [];
+      const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+        jobs = typeof value === 'function' ? value(jobs) : value;
+      });
+      const setError = vi.fn();
+      const setState = vi.fn();
+      vi.mocked(generateImageToVideo).mockImplementation(() => new Promise(() => {})); // Inspect the real hook's request without calling a paid provider.
+      const hook = renderHook(() => useGeneration({
+        appMode: 'CANVAS', tool: Tool.FREE_SELECTION, prompt: input.prompt ?? 'A fox crossing a snowy field', apiProvider: 'fal',
+        fal, selection: createSelectionStub(input.selection), images: input.images ?? [], paths: [], videoNegativePrompt: '',
+        setError, setState, setFalJobs, setIsLoading: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn(),
+      }));
+      return { ...hook, fal, setError, setState, getJobs: () => jobs };
+    };
+
+    it('submits text-only Generate with four default settings, callbacks and replay metadata', async () => {
+      const { result, getJobs, setError } = setupKling();
+      await act(async () => { void result.current.handleGenerate(); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(generateImageToVideo).toHaveBeenCalledWith('A fox crossing a snowy field', null, expect.objectContaining({
+        modelId: KLING_V4_VIDEO_MODEL_ID, ...KLING_V4_DEFAULTS,
+        onPhaseUpdate: expect.any(Function), onQueueUpdate: expect.any(Function),
+      }));
+      const options = vi.mocked(generateImageToVideo).mock.calls[0][2];
+      expect(options).toHaveProperty('abortSignal');
+      expect(options).not.toHaveProperty('sourceVideoUrl');
+      expect(options).not.toHaveProperty('referenceImages');
+      expect(options).not.toHaveProperty('referenceAudios');
+      expect(getJobs()[0]).toMatchObject({ modelLabel: 'Kling v4 Generate', retryInputs: { falOptions: KLING_V4_DEFAULTS } });
+      expect(setError.mock.calls.every(([message]) => message === null)).toBe(true);
+    });
+
+    it('keeps one selected still and its end frame out of reference inputs and retry references', async () => {
+      const start = buildCanvasMedia('start', 'image');
+      const end = buildCanvasMedia('end', 'image');
+      const { result, getJobs } = setupKling({ images: [start, end], selection: {
+        selectedImageIds: [start.id], primaryImageId: start.id, videoLastFrameImageId: end.id,
+        elementImageIds: [end.id], sourceVideoId: 'stale-source',
+      } });
+      await act(async () => { void result.current.handleGenerate(); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(generateImageToVideo).toHaveBeenCalledWith(expect.any(String), start.element, expect.objectContaining({ tailImage: end.element }));
+      const options = vi.mocked(generateImageToVideo).mock.calls[0][2];
+      expect(options).not.toHaveProperty('referenceImages');
+      expect(options).not.toHaveProperty('sourceVideoUrl');
+      expect(options).not.toHaveProperty('elementImages');
+      expect(getJobs()[0].retryInputs).toMatchObject({ primaryImageId: start.id, videoLastFrameImageId: end.id });
+      expect(getJobs()[0].retryInputs).not.toHaveProperty('referenceImageIds');
+      expect(getJobs()[0].retryInputs).not.toHaveProperty('sourceVideoId');
+      expect(getJobs()[0].retryInputs).not.toHaveProperty('elementImageIds');
+    });
+
+    it.each(['@Image1 runs', '@ image 1 runs'])('routes a single primary to references when the prompt says %s', async prompt => {
+      const image = buildCanvasMedia('image', 'image');
+      const { result, getJobs } = setupKling({ prompt, images: [image], selection: { selectedImageIds: [image.id], primaryImageId: image.id } });
+      await act(async () => { void result.current.handleGenerate(); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(generateImageToVideo).toHaveBeenCalledWith('@Image1 runs', null, expect.objectContaining({ referenceImages: [image.element] }));
+      expect(getJobs()[0].retryInputs).toMatchObject({ referenceImageIds: [image.id] });
+      expect(getJobs()[0].retryInputs?.primaryImageId).toBeUndefined();
+      expect(getJobs()[0].retryInputs).not.toHaveProperty('originalSourceImageId');
+    });
+
+    it('merges mixed selected and tagged references once, in the autocomplete order, without eagerly reading snapshot videos', async () => {
+      const image1 = buildCanvasMedia('image-1', 'image');
+      const image2 = buildCanvasMedia('image-2', 'image');
+      const image3 = buildCanvasMedia('image-3', 'image');
+      const video1 = buildCanvasMedia('video-1', 'video', 1);
+      const video2 = buildCanvasMedia('video-2', 'video', 90);
+      const lazyFile = buildLazySnapshotVideoFile();
+      video2.file = lazyFile;
+      const { result, getJobs } = setupKling({
+        prompt: '@Image1 and @Image3 follow @Video2', images: [image1, image2, image3, video1, video2],
+        selection: {
+          selectedImageIds: [image1.id, video1.id, image2.id], primaryImageId: image1.id,
+          referenceImageIds: [image1.id, image3.id], referenceVideoIds: [video2.id, video1.id],
+          seedanceReferenceOrderIds: [video2.id, image3.id, image2.id, video1.id, image1.id],
+        },
+      });
+      await act(async () => { void result.current.handleGenerate(); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(generateImageToVideo).toHaveBeenCalledWith('@Image1 and @Image3 follow @Video2', null, expect.objectContaining({
+        referenceImages: [image3.element, image2.element, image1.element], referenceVideos: [lazyFile, video1.file],
+      }));
+      expect(lazyFile.slice).not.toHaveBeenCalled();
+      expect(getJobs()[0].retryInputs).toMatchObject({
+        referenceImageIds: [image3.id, image2.id, image1.id], referenceVideoIds: [video2.id, video1.id],
+      });
+      expect(getJobs()[0].retryInputs?.primaryImageId).toBeUndefined();
+    });
+
+    it('accepts a single normally selected video as a reference', async () => {
+      const video = buildCanvasMedia('video', 'video', 1);
+      const { result } = setupKling({ images: [video], selection: { selectedImageIds: [video.id], primaryImageId: video.id } });
+      await act(async () => { void result.current.handleGenerate(); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(generateImageToVideo).toHaveBeenCalledWith(expect.any(String), null, expect.objectContaining({ referenceImages: [], referenceVideos: [video.file] }));
+    });
+
+    it.each([false, true])('submits Edit source video with optional tagged images (%s)', async withReference => {
+      const source = buildCanvasMedia('source', 'video', 20);
+      const reference = buildCanvasMedia('reference', 'image');
+      vi.mocked(uploadVideoToFal).mockResolvedValue('https://example.com/source.mp4');
+      const { result, getJobs } = setupKling({ prompt: withReference ? 'Restyle @Video1 using @Image1' : 'Restyle @Video1', images: [source, reference], fal: { klingV4Variant: 'edit', klingV4Duration: 'source', klingV4Resolution: '720p' }, selection: {
+        selectedImageIds: [source.id], primaryImageId: source.id, sourceVideoId: source.id,
+        referenceImageIds: withReference ? [reference.id] : [], videoLastFrameImageId: reference.id, elementImageIds: [reference.id],
+      } });
+      await act(async () => { void result.current.handleGenerate(); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(uploadVideoToFal).toHaveBeenCalledWith(source.file, expect.objectContaining({ label: 'source video', onPhaseUpdate: expect.any(Function) }));
+      expect(generateImageToVideo).toHaveBeenCalledWith(expect.any(String), null, expect.objectContaining({
+        klingV4Variant: 'edit', klingV4Duration: 'source', klingV4Resolution: '720p', klingV4AspectRatio: '16:9',
+        sourceVideoUrl: 'https://example.com/source.mp4', referenceImages: withReference ? [reference.element] : [],
+      }));
+      expect(vi.mocked(generateImageToVideo).mock.calls[0][2]).not.toHaveProperty('tailImage');
+      expect(getJobs()[0].retryInputs).toMatchObject({ sourceVideoId: source.id, falOptions: { klingV4Duration: 'source' } });
+      expect(getJobs()[0].retryInputs).not.toHaveProperty('videoLastFrameImageId');
+      expect(getJobs()[0].retryInputs?.primaryImageId).toBeUndefined();
+      expect(getJobs()[0].retryInputs).not.toHaveProperty('elementImageIds');
+    });
+
+    it.each(['primary', 'references', 'videoReferences'] as const)('restores saved %s runs with model defaults, independent of current global settings and media', async inputKind => {
+      const image1 = buildCanvasMedia('saved-image-1', 'image');
+      const image2 = buildCanvasMedia('saved-image-2', 'image');
+      const video = buildCanvasMedia('saved-video', 'video', 15);
+      const audio = buildCanvasMedia('global-audio', 'audio');
+      const { result, getJobs } = setupKling({ images: [image1, image2, video, audio], fal: {
+        falModelMode: 'image', klingV4Variant: 'edit', klingV4Resolution: '720p', klingV4AspectRatio: '21:9', klingV4Duration: '30',
+      }, selection: { selectedImageIds: [audio.id], referenceAudioIds: [audio.id], sourceAudioId: audio.id, videoLastFrameImageId: image2.id, sourceVideoId: 'global-video' } });
+      await act(async () => { void result.current.handleGenerate({
+        kind: 'video', provider: 'fal', modelId: KLING_V4_VIDEO_MODEL_ID, prompt: 'Saved prompt',
+        ...(inputKind === 'primary' ? { primaryImageId: image1.id } : inputKind === 'references' ? { referenceImageIds: [image2.id, image1.id] } : { referenceVideoIds: [video.id] }),
+      }); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(generateImageToVideo).toHaveBeenCalledWith('Saved prompt', inputKind === 'primary' ? image1.element : null, expect.objectContaining(KLING_V4_DEFAULTS));
+      const options = vi.mocked(generateImageToVideo).mock.calls[0][2];
+      if (inputKind === 'references') expect(options?.referenceImages).toEqual([image2.element, image1.element]);
+      else if (inputKind === 'videoReferences') expect(options?.referenceVideos).toEqual([video.file]);
+      else expect(options).not.toHaveProperty('referenceImages');
+      expect(options).not.toHaveProperty('sourceVideoUrl');
+      expect(options).not.toHaveProperty('tailImage');
+      expect(getJobs()[0].retryInputs).not.toHaveProperty('sourceAudioId');
+      expect(getJobs()[0].retryInputs?.falOptions).toEqual(KLING_V4_DEFAULTS);
+    });
+
+    it.each([KLING_V4_EDIT_VIDEO_MODEL_ID, KLING_V4_VIDEO_MODEL_ID])('restores partial Edit settings for %s with source duration and a generated source URL', async modelId => {
+      const source = buildCanvasMedia('source', 'video', 10);
+      source.metadata = { source: 'generated', generation: { kind: 'video', provider: 'fal', prompt: 'original', url: 'https://example.com/existing.mp4' } };
+      const { result, getJobs } = setupKling({ images: [source], fal: { klingV4Duration: '30' } });
+      await act(async () => { void result.current.handleGenerate({
+        kind: 'video', provider: 'fal', modelMode: 'video', modelId, prompt: 'Change the weather', sourceVideoId: source.id,
+        ...(modelId === KLING_V4_VIDEO_MODEL_ID ? { falOptions: { klingV4Variant: 'edit' } } : {}),
+      }); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(generateImageToVideo).toHaveBeenCalledWith('Change the weather', null, expect.objectContaining({
+        modelId: KLING_V4_VIDEO_MODEL_ID, klingV4Variant: 'edit', klingV4Duration: 'source', sourceVideoUrl: 'https://example.com/existing.mp4',
+      }));
+      expect(uploadVideoToFal).not.toHaveBeenCalled();
+      expect(getJobs()[0].modelLabel).toBe('Kling v4 Edit');
+    });
+
+    it('lets an explicit Generate variant override the raw edit alias', async () => {
+      const { result } = setupKling();
+      await act(async () => { void result.current.handleGenerate({
+        kind: 'video', provider: 'fal', modelId: KLING_V4_EDIT_VIDEO_MODEL_ID, prompt: 'A new scene', falOptions: { klingV4Variant: 'generate' },
+      }); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(generateImageToVideo).toHaveBeenCalledWith('A new scene', null, expect.objectContaining({ modelId: KLING_V4_VIDEO_MODEL_ID, klingV4Variant: 'generate' }));
+      expect(vi.mocked(generateImageToVideo).mock.calls[0][2]).not.toHaveProperty('sourceVideoUrl');
+    });
+
+    it('replays captured reference settings and order after the global bar changes', async () => {
+      const image1 = buildCanvasMedia('image-1', 'image');
+      const image2 = buildCanvasMedia('image-2', 'image');
+      const { result, fal, rerender, getJobs } = setupKling({ images: [image1, image2], fal: {
+        klingV4Resolution: '720p', klingV4AspectRatio: '9:16', klingV4Duration: '12',
+      }, selection: { selectedImageIds: [image1.id, image2.id], primaryImageId: image1.id, seedanceReferenceOrderIds: [image2.id, image1.id] } });
+      await act(async () => { void result.current.handleGenerate(); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalledTimes(1));
+      const retryInputs = getJobs()[0].retryInputs!;
+      fal.klingV4Variant = 'edit'; fal.klingV4Resolution = '1080p'; fal.klingV4AspectRatio = '21:9'; fal.klingV4Duration = 'source';
+      rerender();
+      await act(async () => { void result.current.handleGenerate(retryInputs); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(generateImageToVideo).mock.calls[1]).toEqual([
+        expect.any(String), null, expect.objectContaining({
+          klingV4Variant: 'generate', klingV4Resolution: '720p', klingV4AspectRatio: '9:16', klingV4Duration: '12',
+          referenceImages: [image2.element, image1.element],
+        }),
+      ]);
+    });
+
+    it.each(['selected', 'tagged', 'source', 'saved'] as const)('rejects unsupported %s audio before any provider request', async mode => {
+      const audio = buildCanvasMedia('audio', 'audio', 5);
+      const { result, setError } = setupKling({ images: [audio], selection: {
+        ...(mode === 'selected' ? { selectedImageIds: [audio.id] } : mode === 'tagged' ? { referenceAudioIds: [audio.id] } : mode === 'source' ? { sourceAudioId: audio.id } : {}),
+      } });
+      await act(async () => { await result.current.handleGenerate(mode === 'saved' ? {
+        kind: 'video', provider: 'fal', modelMode: 'video', modelId: KLING_V4_VIDEO_MODEL_ID, prompt: 'Saved run', referenceAudioIds: [audio.id],
+      } : undefined); });
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining('does not support audio references'));
+      expect(generateImageToVideo).not.toHaveBeenCalled();
+      expect(uploadVideoToFal).not.toHaveBeenCalled();
+    });
+
+    it.each(['tagged', 'multiple', 'mention'] as const)('rejects an end frame combined with %s references', async mode => {
+      const image1 = buildCanvasMedia('image-1', 'image');
+      const image2 = buildCanvasMedia('image-2', 'image');
+      const { result, setError } = setupKling({ images: [image1, image2], prompt: mode === 'mention' ? '@Image1 walks' : 'A fox walks', selection: {
+        selectedImageIds: mode === 'multiple' ? [image1.id, image2.id] : [image1.id], primaryImageId: image1.id,
+        referenceImageIds: mode === 'tagged' ? [image2.id] : [], videoLastFrameImageId: image2.id,
+      } });
+      await act(async () => { await result.current.handleGenerate(); });
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining('cannot combine an end frame with references'));
+      expect(generateImageToVideo).not.toHaveBeenCalled();
+    });
+
+    it('rejects Edit without a source video before upload', async () => {
+      const { result, setError } = setupKling({ fal: { klingV4Variant: 'edit' } });
+      await act(async () => { await result.current.handleGenerate(); });
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining('Edit requires a source video'));
+      expect(generateImageToVideo).not.toHaveBeenCalled();
+      expect(uploadVideoToFal).not.toHaveBeenCalled();
+    });
+
+    it('rejects tagged video references in Edit before source upload', async () => {
+      const source = buildCanvasMedia('source', 'video', 15);
+      const reference = buildCanvasMedia('reference', 'video', 15);
+      const { result, setError } = setupKling({ images: [source, reference], fal: { klingV4Variant: 'edit' }, selection: { sourceVideoId: source.id, referenceVideoIds: [reference.id] } });
+      await act(async () => { await result.current.handleGenerate(); });
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining('Edit supports image references only'));
+      expect(generateImageToVideo).not.toHaveBeenCalled();
+      expect(uploadVideoToFal).not.toHaveBeenCalled();
+    });
+
+    it.each(['@Image2', '@Video2'])('rejects unmatched %s prompt labels', async mention => {
+      const image = buildCanvasMedia('image', 'image');
+      const { result, setError } = setupKling({ images: [image], prompt: `Follow ${mention}`, selection: { selectedImageIds: [image.id], primaryImageId: image.id } });
+      await act(async () => { await result.current.handleGenerate(); });
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining(`${mention} does not match any selected Kling 4 reference`));
+      expect(generateImageToVideo).not.toHaveBeenCalled();
+    });
+
+    it.each([['image', 11], ['video', 6]] as const)('enforces the %s reference limit through handleGenerate', async (mediaType, count) => {
+      const media = Array.from({ length: count }, (_, index) => buildCanvasMedia(`ref-${index}`, mediaType, 5));
+      const { result, setError } = setupKling({ images: media, selection: { selectedImageIds: media.map(item => item.id) } });
+      await act(async () => { await result.current.handleGenerate(); });
+      expect(setError).toHaveBeenCalledWith('Kling 4 supports up to 10 image references and 5 video references.');
+      expect(generateImageToVideo).not.toHaveBeenCalled();
+    });
+
+    it('accepts all ten image and five video references together', async () => {
+      const stills = Array.from({ length: 10 }, (_, index) => buildCanvasMedia(`image-${index}`, 'image'));
+      const videos = Array.from({ length: 5 }, (_, index) => buildCanvasMedia(`video-${index}`, 'video', 90));
+      const { result } = setupKling({ images: [...stills, ...videos], selection: { selectedImageIds: [...stills, ...videos].map(item => item.id) } });
+      await act(async () => { void result.current.handleGenerate(); });
+      await vi.waitFor(() => expect(generateImageToVideo).toHaveBeenCalled());
+      expect(vi.mocked(generateImageToVideo).mock.calls[0][2]).toMatchObject({ referenceImages: stills.map(image => image.element), referenceVideos: videos.map(video => video.file) });
+    });
+
+    it('downloads the result with matching request metadata and marks generated audio without browser probes', async () => {
+      const image = buildCanvasMedia('image', 'image');
+      const { result, setState, getJobs } = setupKling({ images: [image], prompt: '@Image1 walks', selection: { selectedImageIds: [image.id], primaryImageId: image.id } });
+      const videoElement = document.createElement('video');
+      Object.defineProperty(videoElement, 'play', { configurable: true, value: vi.fn().mockResolvedValue(undefined) });
+      Object.defineProperty(videoElement, 'pause', { configurable: true, value: vi.fn() });
+      vi.mocked(generateImageToVideo).mockResolvedValue({ videoUrl: 'https://example.com/kling.mp4', requestId: 'kling-request' });
+      vi.mocked(loadMediaFromBlob).mockResolvedValue(videoElement);
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: vi.fn().mockResolvedValue(new Blob(['video'], { type: 'video/mp4' })) }));
+      await act(async () => { await result.current.handleGenerate(); });
+      const updater = setState.mock.calls.find(([value]) => typeof value === 'function')?.[0];
+      const video = updater?.({ images: [] }).images[0] as CanvasImage | undefined;
+      expect(video?.hasAudio).toBe(true);
+      expect(video?.metadata?.generation).toMatchObject({
+        ...getJobs()[0].retryInputs, url: 'https://example.com/kling.mp4', referenceImageIds: [image.id], falOptions: KLING_V4_DEFAULTS,
+      });
+      expect(video?.metadata?.generation?.primaryImageId).toBeUndefined();
+      expect(getJobs()[0].status).toBe('COMPLETED');
+    });
   });
 
   it('allows repeated Seedance runs and asks before every sixth identical request', async () => {

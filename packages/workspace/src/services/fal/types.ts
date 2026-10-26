@@ -19,6 +19,10 @@ import type {
   Flux3Duration,
   Flux3Resolution,
   Flux3Variant,
+  KlingV4Variant,
+  KlingV4Resolution,
+  KlingV4AspectRatio,
+  KlingV4Duration,
 } from '../../types'; // Shared app types.
 import type {
   GrokImagineVideoAspectRatioSelectionValue,
@@ -197,6 +201,10 @@ export interface GenerateVideoOptions extends FalPhaseOptions {
   klingV3MultiPrompt?: string;
   klingV3Shot1Duration?: KlingV3ShotDurationSelectionValue;
   klingV3Shot2Duration?: KlingV3ShotDurationSelectionValue;
+  klingV4Variant?: KlingV4Variant;
+  klingV4Resolution?: KlingV4Resolution;
+  klingV4AspectRatio?: KlingV4AspectRatio;
+  klingV4Duration?: KlingV4Duration;
   sourceVideoUrl?: string;
   sourceAudioUrl?: string;
   keepAudio?: boolean;

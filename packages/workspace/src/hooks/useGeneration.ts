@@ -5,6 +5,8 @@ import { getGoogleImageAspectRatio } from '../services/nanoBananaAspectRatioPoli
 import { IDEOGRAM_45_DEFAULTS, isIdeogram45Model } from '../services/ideogram45Config';
 import { resolveIdeogram45RunSettings, serializeIdeogram45GenerationOptions, type Ideogram45RunSettings } from '../services/ideogram45RunSettings';
 import { getModelReferenceCapabilities } from '../services/modelReferenceCapabilities';
+import { KLING_V4_REFERENCE_IMAGE_LIMIT, KLING_V4_REFERENCE_VIDEO_LIMIT, isKlingV4Variant, isKlingV4VideoModel } from '../services/klingV4Config';
+import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '../services/klingV4RunSettings';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions, type GptImage2RunSettings } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions, type GptImage25RunSettings } from '../services/gptImage25RunSettings';
 import { useCallback, useMemo, useRef } from 'react';
@@ -554,6 +556,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     klingV3MultiPrompt,
     klingV3Shot1Duration,
     klingV3Shot2Duration,
+    klingV4Variant,
+    klingV4Resolution,
+    klingV4AspectRatio,
+    klingV4Duration,
     klingO3Variant,
     klingO3Duration,
     klingO3GenerateAudio,
@@ -712,7 +718,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isUnsupportedRemovedHailuoRun = isRemovedHailuoModelId(rawOverrideModelId); // Saved Hailuo requests must not fall back to another paid model.
     const isUnsupportedRemovedOneToAllRun = isRemovedOneToAllAnimateModelId(rawOverrideModelId); // Retired 1-to-All reruns must not fall back to another paid model.
     const overrideModelId = normalizeFalModelId(rawOverrideModelId); // Accept legacy saved model ids.
-    const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode : falModelMode;
+    const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode
+      : isKlingV4VideoModel(rawOverrideModelId) ? 'video' : falModelMode;
     const falImageModelIdForRun = isFalImageModelId(overrideModelId) ? overrideModelId : falImageModelId;
     const isJimengOverrideModelId = overrideModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
       || overrideModelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID
@@ -833,6 +840,18 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const miniMaxH3DurationForRun: MiniMaxH3DurationSelectionValue = isMiniMaxH3DurationSelectionValue(falOptionsOverride.miniMaxH3Duration)
       ? falOptionsOverride.miniMaxH3Duration
       : hasMiniMaxH3GenerationOverride ? '5' : miniMaxH3Duration; // Embedded and saved overrides use the model default.
+    const klingV4SettingsInput = generationOverride ? falOptionsOverride : { klingV4Variant, klingV4Resolution, klingV4AspectRatio, klingV4Duration };
+    const klingV4SettingsForRun = resolveKlingV4RunSettings({
+      modelId: isKlingV4Variant(klingV4SettingsInput.klingV4Variant) ? undefined : rawOverrideModelId,
+      variant: klingV4SettingsInput.klingV4Variant,
+      resolution: klingV4SettingsInput.klingV4Resolution,
+      aspectRatio: klingV4SettingsInput.klingV4AspectRatio,
+      duration: klingV4SettingsInput.klingV4Duration ?? 'source', // Generate clamps this sentinel to 5s; Edit keeps the source duration.
+    }); // Overrides use model defaults, never settings from the live global bar.
+    const klingV4VariantForRun = klingV4SettingsForRun.variant;
+    const isKlingV4VideoModelForRun = apiProviderForRun === 'fal' && falModelModeForRun === 'video' && isKlingV4VideoModel(falVideoModelIdForRun);
+    const isKlingV4GenerateModeForRun = isKlingV4VideoModelForRun && klingV4VariantForRun === 'generate';
+    const isKlingV4EditModeForRun = isKlingV4VideoModelForRun && klingV4VariantForRun === 'edit';
     const wanTargetResolutionForRun = falOptionsOverride.wanTargetResolution ?? wanTargetResolution;
     const wanCreativityForRun = falOptionsOverride.wanCreativity ?? wanCreativity;
     const wanAnimateVariantForRun = falOptionsOverride.wanAnimateVariant ?? wanAnimateVariant;
@@ -985,6 +1004,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         || ((falVideoModelIdForRun === FAL_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID) && seedance25VariantForRun === 'reference')
         || (falVideoModelIdForRun === MINIMAX_H3_VIDEO_MODEL_ID && miniMaxH3VariantForRun === 'reference')
         || (falVideoModelIdForRun === FLUX_3_VIDEO_MODEL_ID && flux3ModePolicyForRun.inputKind === 'keyframe-images')
+        || isKlingV4GenerateModeForRun
       )
       && !generationOverride; // Multimodal reference models merge selected media into ordered labels.
     const infinitalkSeedValue = infinitalkSeedForRun === 'random'
@@ -1009,22 +1029,33 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const baseReferenceImageIdsForRun = generationOverride ? generationOverride.referenceImageIds ?? [] : referenceImageIds;
     const baseReferenceVideoIdsForRun = generationOverride ? generationOverride.referenceVideoIds ?? [] : referenceVideoIds;
     const baseReferenceAudioIdsForRun = generationOverride ? generationOverride.referenceAudioIds ?? [] : referenceAudioIds;
+    const normalizedKlingV4Prompt = normalizeSeedanceReferencePromptMentions(trimmedPrompt);
+    const hasKlingV4ReferenceMentions = /(?<![A-Za-z0-9_@])@(Image|Video)\d+(?![A-Za-z0-9_])/.test(normalizedKlingV4Prompt);
+    const isKlingV4ReferenceModeForRun = isKlingV4GenerateModeForRun && (
+      baseReferenceImageIdsForRun.length > 0 || baseReferenceVideoIdsForRun.length > 0 || hasKlingV4ReferenceMentions
+      || (!generationOverride && (selectedImageIds.length > 1 || selectedImageIds.some(id => images.find(image => image.id === id)?.mediaType === 'video')))
+    ); // A lone still stays a first frame unless references or prompt labels require the reference endpoint.
+    const shouldMergeSavedKlingV4Primary = Boolean(generationOverride) && isKlingV4ReferenceModeForRun
+      && baseReferenceImageIdsForRun.length + baseReferenceVideoIdsForRun.length === 0 && Boolean(primaryImageIdForRun);
     const {
-      referenceImageIds: referenceImageIdsForRun,
-      referenceVideoIds: referenceVideoIdsForRun,
+      referenceImageIds: mergedReferenceImageIdsForRun,
+      referenceVideoIds: mergedReferenceVideoIdsForRun,
       referenceAudioIds: referenceAudioIdsForRun,
     } = buildEffectiveSeedanceReferenceIds({
-      enabled: shouldMergeSeedanceReferenceIdsForRun,
+      enabled: shouldMergeSeedanceReferenceIdsForRun || shouldMergeSavedKlingV4Primary,
       images,
-      selectedImageIds,
+      selectedImageIds: shouldMergeSavedKlingV4Primary ? [primaryImageIdForRun!] : selectedImageIds,
       referenceImageIds: baseReferenceImageIdsForRun,
       referenceVideoIds: baseReferenceVideoIdsForRun,
       referenceAudioIds: baseReferenceAudioIdsForRun,
-      orderedReferenceIds: seedanceReferenceOrderIds,
+      orderedReferenceIds: generationOverride ? [] : seedanceReferenceOrderIds,
     });
-    const elementImageIdsForRun = generationOverride ? generationOverride.elementImageIds ?? [] : elementImageIds;
-    const videoLastFrameImageIdForRun = generationOverride ? generationOverride.videoLastFrameImageId ?? null : videoLastFrameImageId;
-    const sourceVideoIdForRun = generationOverride ? generationOverride.sourceVideoId ?? null : sourceVideoId;
+    const referenceImageIdsForRun = isKlingV4GenerateModeForRun && !isKlingV4ReferenceModeForRun ? [] : mergedReferenceImageIdsForRun;
+    const referenceVideoIdsForRun = isKlingV4GenerateModeForRun && !isKlingV4ReferenceModeForRun ? [] : mergedReferenceVideoIdsForRun;
+    const elementImageIdsForRun = isKlingV4VideoModelForRun ? [] : generationOverride ? generationOverride.elementImageIds ?? [] : elementImageIds;
+    const videoLastFrameImageIdForRun = isKlingV4EditModeForRun ? null : generationOverride ? generationOverride.videoLastFrameImageId ?? null : videoLastFrameImageId;
+    const sourceVideoIdForRun = isKlingV4GenerateModeForRun ? null : generationOverride ? generationOverride.sourceVideoId ?? null : sourceVideoId
+      ?? (isKlingV4EditModeForRun && primaryImageForRun?.mediaType === 'video' ? primaryImageForRun.id : null);
     const sourceAudioIdForRun = generationOverride ? generationOverride.sourceAudioId ?? null : sourceAudioId;
     const flux3RunPlan = buildFlux3RunPlan({
       prompt: trimmedPrompt,
@@ -1113,7 +1144,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       || isVeo31ExtendMode
       || isScailVideoModel
       || isWan27EditModeForRun
-      || isFlux3ExtendModeForRun;
+      || isFlux3ExtendModeForRun
+      || isKlingV4EditModeForRun;
     const actualKlingModelId = isKlingVideoModel ? getKlingActualModelId(klingVariantForRun) : null;
     const actualKlingO3ModelId = isKlingO3VideoModel ? getKlingO3VideoEndpoint(klingO3VariantForRun) : null;
     const actualKlingV3ControlModelId = isKlingV3ControlVideoModel ? KLING_V3_CONTROL_VIDEO_MODEL_ID : null;
@@ -1129,7 +1161,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isSeedance2ReferenceModeForRun = isAnySeedance2VideoModelForRun && seedance2VariantForRun === 'reference';
     const isSeedance25ReferenceModeForRun = (isFalSeedance25VideoModelForRun || isJimengSeedance25VideoModelForRun) && seedance25VariantForRun === 'reference';
     const isMiniMaxH3ReferenceModeForRun = isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'reference';
-    const isMultimodalReferenceModeForRun = isSeedance2ReferenceModeForRun || isSeedance25ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun || isFlux3KeyframesModeForRun;
+    const isMultimodalReferenceModeForRun = isSeedance2ReferenceModeForRun || isSeedance25ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun || isFlux3KeyframesModeForRun || isKlingV4ReferenceModeForRun;
     const shouldPersistReferenceInputsForRun = !isMiniMaxH3VideoModelForRun || isMiniMaxH3ReferenceModeForRun; // H3 Standard ignores references retained from Reference mode.
     const wan27AudioIdForRun = isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun ? sourceAudioIdForRun : null; // Wan 2.7 Smart supports optional audio.
     const videoDurationForRun: FalVideoDuration | undefined = isKlingVideoModel
@@ -1190,7 +1222,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional))
       && !(usingJimeng && isMultimodalReferenceModeForRun); // Dreamina multimodal prompts are optional.
-    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV3VideoModel && !isMiniMaxH3VideoModelForRun && !isFlux3VideoModelForRun && !isAnySeedance2VideoModelForRun && !isFalSeedance25VideoModelForRun && !isWan27VideoModelForRun && !isKlingO3VideoInputMode && !isFalVideoInputMode
+    const requiresVideoSourceImage = usingFal && isVideoMode && !isKlingV4VideoModelForRun && !isKlingV3VideoModel && !isMiniMaxH3VideoModelForRun && !isFlux3VideoModelForRun && !isAnySeedance2VideoModelForRun && !isFalSeedance25VideoModelForRun && !isWan27VideoModelForRun && !isKlingO3VideoInputMode && !isFalVideoInputMode
       && !(isGrokImagineVideoModel && isGrokImagineVideoEditMode);
     const generationKind: GenerationKind = overrideKind
       ?? (isVideoMode ? 'video' : isTextToImage ? 'text_to_image' : isUpscaleModel ? 'upscale' : 'image_edit');
@@ -1237,6 +1269,56 @@ export const useGeneration = (args: UseGenerationArgs) => {
     if (requiresVideoSourceImage && !activePrimary) {
       setError('Select an image to use as the first frame for your video.');
       return;
+    }
+
+    if (isKlingV4VideoModelForRun) {
+      const hasUnsupportedAudio = baseReferenceAudioIdsForRun.length > 0 || referenceAudioIdsForRun.length > 0 || sourceAudioIdForRun
+        || primaryImageForRun?.mediaType === 'audio'
+        || (!generationOverride && selectedImageIds.some(id => images.find(image => image.id === id)?.mediaType === 'audio'))
+        || /(?<![A-Za-z0-9_@])@Audio\d+(?![A-Za-z0-9_])/.test(normalizedKlingV4Prompt);
+      if (hasUnsupportedAudio) {
+        setError('Kling 4 does not support audio references. Remove selected or tagged audio and audio prompt mentions.');
+        return;
+      }
+      if (referenceImageIdsForRun.length > KLING_V4_REFERENCE_IMAGE_LIMIT || referenceVideoIdsForRun.length > KLING_V4_REFERENCE_VIDEO_LIMIT) {
+        setError(`Kling 4 supports up to ${KLING_V4_REFERENCE_IMAGE_LIMIT} image references and ${KLING_V4_REFERENCE_VIDEO_LIMIT} video references.`);
+        return;
+      }
+      if (baseReferenceImageIdsForRun.some(id => !isImageCanvasMedia(images.find(image => image.id === id)))
+        || referenceImageIdsForRun.some(id => !isImageCanvasMedia(images.find(image => image.id === id)))
+        || baseReferenceVideoIdsForRun.some(id => images.find(image => image.id === id)?.mediaType !== 'video')
+        || referenceVideoIdsForRun.some(id => images.find(image => image.id === id)?.mediaType !== 'video')) {
+        setError('Kling 4 could not find its image or video references on the canvas. Select the references again.');
+        return;
+      }
+      if (isKlingV4EditModeForRun) {
+        if (!sourceVideoIdForRun || !images.some(image => image.id === sourceVideoIdForRun && image.mediaType === 'video')) {
+          setError('Kling 4 Edit requires a source video. Select a video on the canvas to edit.');
+          return;
+        }
+        if (referenceVideoIdsForRun.length > 0) {
+          setError('Kling 4 Edit supports image references only. Remove tagged video references.');
+          return;
+        }
+      } else if (videoLastFrameImageIdForRun && isKlingV4ReferenceModeForRun) {
+        setError('Kling 4 cannot combine an end frame with references. Clear the end frame or remove the references and prompt labels.');
+        return;
+      } else if (videoLastFrameImageIdForRun && !activePrimary) {
+        setError('Kling 4 requires a starting still image when using an end frame.');
+        return;
+      } else if (!isKlingV4ReferenceModeForRun && primaryImageIdForRun && !activePrimary) {
+        setError('Kling 4 could not find its starting image. Select a still image or use video references.');
+        return;
+      }
+      const promptMentionError = getSeedanceReferencePromptMentionError(normalizedKlingV4Prompt, {
+        imageCount: referenceImageIdsForRun.length,
+        videoCount: isKlingV4EditModeForRun ? 1 : referenceVideoIdsForRun.length,
+        audioCount: 0,
+      }, 'Kling 4');
+      if (promptMentionError) {
+        setError(promptMentionError);
+        return;
+      }
     }
 
     if (usingFal && isVideoMode && isWanAnimateVideoModel && !activePrimary) {
@@ -1303,7 +1385,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const baseModelLabel = getFalModelLabel(falModelIdForRun);
       const klingO3VariantLabel = klingO3VariantForRun === 'edit' ? 'Edit' : 'Reference';
       const veo31VariantLabel = veo31VariantForRun === 'extend' ? 'Extend' : 'i2v/FFLF';
-      const jobModelLabel = isKlingVideoModel
+      const jobModelLabel = isKlingV4VideoModelForRun
+        ? `${baseModelLabel} ${isKlingV4EditModeForRun ? 'Edit' : 'Generate'}`
+        : isKlingVideoModel
           ? `${baseModelLabel} ${klingVariantForRun === 'pro' ? 'Pro' : 'Standard'}`
         : isKlingV3VideoModel
           ? `${baseModelLabel}${klingV3MultiPromptEnabledForRun ? ' Multi' : ' Smart'}`
@@ -1924,7 +2008,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
       const falJobId = retryJobId ?? crypto.randomUUID();
 
-      let videoPromptForRequest = trimmedPrompt;
+      let videoPromptForRequest = isKlingV4VideoModelForRun ? normalizedKlingV4Prompt : trimmedPrompt;
       // Start from the retry overrides; refined below by HeyGen clip-intent extraction so retry
       // inputs and saved metadata always reflect the timing the request actually used.
       let heygenStartTimeForRequest = heygenStartTimeOverride;
@@ -1940,6 +2024,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const buildVideoFalOptionsForRun = (): GenerationFalOptions => ({
         ...(videoDurationForRun ? { videoDuration: videoDurationForRun } : {}),
         ...(isKlingVideoModel ? { klingVariant: klingVariantForRun } : {}),
+        ...(isKlingV4VideoModelForRun ? serializeKlingV4GenerationOptions(klingV4SettingsForRun) : {}),
         ...(isKlingV3VideoModel ? {
           klingV3Duration: klingV3DurationForRun,
           klingV3GenerateAudio: klingV3GenerateAudioForRun,
@@ -2053,15 +2138,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
         modelId: falModelIdForRun,
         modelLabel: jobModelLabel,
         modelMode: falModelModeForRun,
-        primaryImageId: isWan27ReferenceModeForRun || isMultimodalReferenceModeForRun ? undefined : primaryImageIdForRun ?? undefined,
+        primaryImageId: isWan27ReferenceModeForRun || isMultimodalReferenceModeForRun || isKlingV4EditModeForRun ? undefined : primaryImageIdForRun ?? undefined,
         ...(shouldPersistReferenceInputsForRun && referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
         ...(shouldPersistReferenceInputsForRun && referenceVideoIdsForRun.length ? { referenceVideoIds: referenceVideoIdsForRun } : {}),
         ...(shouldPersistReferenceInputsForRun && referenceAudioIdsForRun.length ? { referenceAudioIds: referenceAudioIdsForRun } : {}),
         ...(elementImageIdsForRun.length ? { elementImageIds: elementImageIdsForRun } : {}),
-        ...(activePrimary?.metadata?.generation?.originalSourceImageId
+        ...(!(isKlingV4VideoModelForRun && (isKlingV4ReferenceModeForRun || isKlingV4EditModeForRun)) && activePrimary?.metadata?.generation?.originalSourceImageId
           ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
-          : primaryImageIdForRun && !isWan27ReferenceModeForRun && !isMultimodalReferenceModeForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
-        videoLastFrameImageId: videoLastFrameImageIdForRun,
+          : primaryImageIdForRun && !isWan27ReferenceModeForRun && !isMultimodalReferenceModeForRun && !isKlingV4EditModeForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
+        ...(!isKlingV4VideoModelForRun || videoLastFrameImageIdForRun ? { videoLastFrameImageId: videoLastFrameImageIdForRun } : {}),
         ...((isKlingO3VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
         ...(sourceAudioIdForRun || wan27AudioIdForRun ? { sourceAudioId: sourceAudioIdForRun ?? wan27AudioIdForRun ?? undefined } : {}),
         falOptions: buildVideoFalOptionsForRun(),
@@ -2446,11 +2531,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
             sourceVideoUrlForRequest = await awaitActive(async () => uploadVideoToFal(await awaitActive(async () => ensureRealSnapshotFile(sourceVideo.file)), {
               jobId: falJobId,
               onPhaseUpdate: handleFalPhaseUpdate,
+              abortSignal: workspaceSignal,
               label: 'source video',
             }));
             setToastMessage(null);
           }
-        } else if (!activePrimary && !isKlingV3VideoModel && !isWan27VideoModelForRun && !isMiniMaxH3VideoModelForRun && !isFlux3VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun)) && !isFalSeedance25VideoModelForRun) {
+        } else if (!activePrimary && !isKlingV4VideoModelForRun && !isKlingV3VideoModel && !isWan27VideoModelForRun && !isMiniMaxH3VideoModelForRun && !isFlux3VideoModelForRun && !(isFalSeedance2VideoModelForRun && (seedance2VariantForRun === 'smart' || isSeedance2ReferenceModeForRun)) && !isFalSeedance25VideoModelForRun) {
           throw new Error('Unable to find the starting frame for this video.');
         }
 
@@ -2501,7 +2587,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
 
-        const videoSourceImage = ((isFalSeedance2VideoModelForRun || isFalSeedance25VideoModelForRun || isMiniMaxH3VideoModelForRun || isFlux3KeyframesModeForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
+        const videoSourceImage = ((isFalSeedance2VideoModelForRun || isFalSeedance25VideoModelForRun || isMiniMaxH3VideoModelForRun || isFlux3KeyframesModeForRun || isKlingV4VideoModelForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
           ? null
           : (isWanAnimateVideoModel || isKlingV3ControlVideoModel || isScailVideoModel)
             ? activePrimary?.element as HTMLImageElement
@@ -2510,6 +2596,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia)
           .map(img => img.element as HTMLImageElement);
+        const klingV4ReferenceVideoFilesForRun = isKlingV4ReferenceModeForRun
+          ? referenceVideoIdsForRun.map(id => images.find(image => image.id === id)!.file)
+          : []; // Fal materializes restored files inside its bounded reference upload pool.
         const seedanceReferenceVideoFilesForRun = isMultimodalReferenceModeForRun
           ? isFalSeedance25VideoModelForRun
             ? seedanceReferenceVideoCanvasItems.map(img => img.file) // Fal materializes these lazily inside its bounded upload pool.
@@ -2595,7 +2684,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
         let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || isFlux3FflfModeForRun || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart') || (isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'smart') || (isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'standard'); // Allow end-frame input for tail-capable variants.
+        const supportsTailFrame = (isKlingV4GenerateModeForRun && !isKlingV4ReferenceModeForRun) || (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || isFlux3FflfModeForRun || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart') || (isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'smart') || (isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'standard'); // Allow end-frame input for tail-capable variants.
         if (supportsTailFrame && videoLastFrameImageIdForRun) {
           const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
           if (!isImageCanvasMedia(tailFrame)) {
@@ -2639,9 +2728,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const videoResult = await awaitActive(async () => generateFalImageToVideo(videoPromptForRequest, videoSourceImage, {
           jobId: falJobId,
           onPhaseUpdate: handleFalPhaseUpdate,
+          abortSignal: workspaceSignal,
           modelId: videoModelIdForRequest,
           duration: durationForRequest,
           negativePrompt: negativePromptForRequest,
+          ...(isKlingV4VideoModelForRun ? {
+            klingV4Variant: klingV4SettingsForRun.variant,
+            klingV4Resolution: klingV4SettingsForRun.resolution,
+            klingV4AspectRatio: klingV4SettingsForRun.aspectRatio,
+            klingV4Duration: klingV4SettingsForRun.duration,
+            ...(isKlingV4ReferenceModeForRun || isKlingV4EditModeForRun ? { referenceImages: referenceImagesForRun } : {}),
+            ...(isKlingV4ReferenceModeForRun ? { referenceVideos: klingV4ReferenceVideoFilesForRun } : {}),
+            ...(isKlingV4EditModeForRun ? { sourceVideoUrl: sourceVideoUrlForRequest } : {}),
+          } : {}),
           ...(isScailVideoModel ? {
             sourceVideoUrl: sourceVideoUrlForRequest,
           } : {}),
@@ -2892,6 +2991,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             || (isFalSeedance2VideoModelForRun && seedance2GenerateAudioForRun)
             || (isFalSeedance25VideoModelForRun && seedance25GenerateAudioForRun)
             || isMiniMaxH3VideoModelForRun
+            || isKlingV4VideoModelForRun
             || (isFlux3VideoModelForRun && flux3GenerateAudioForRun); // Saved audio settings cover browsers without track introspection.
 
           const newVideo: CanvasImage = {
@@ -2920,14 +3020,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 modelLabel: jobModelLabel,
                 modelMode: falModelModeForRun,
                 url: videoResult.videoUrl,
-                primaryImageId: isWan27ReferenceModeForRun || isMultimodalReferenceModeForRun ? undefined : primaryImageIdForRun ?? undefined,
+                primaryImageId: isWan27ReferenceModeForRun || isMultimodalReferenceModeForRun || isKlingV4EditModeForRun ? undefined : primaryImageIdForRun ?? undefined,
                 ...(shouldPersistReferenceInputsForRun && referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
                 ...(shouldPersistReferenceInputsForRun && referenceVideoIdsForRun.length ? { referenceVideoIds: referenceVideoIdsForRun } : {}),
                 ...(shouldPersistReferenceInputsForRun && referenceAudioIdsForRun.length ? { referenceAudioIds: referenceAudioIdsForRun } : {}),
                 ...(elementImageIdsForRun.length ? { elementImageIds: elementImageIdsForRun } : {}),
-                ...(activePrimary?.metadata?.generation?.originalSourceImageId
+                ...(!(isKlingV4VideoModelForRun && (isKlingV4ReferenceModeForRun || isKlingV4EditModeForRun)) && activePrimary?.metadata?.generation?.originalSourceImageId
                   ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
-                  : primaryImageIdForRun && !isWan27ReferenceModeForRun && !isMultimodalReferenceModeForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
+                  : primaryImageIdForRun && !isWan27ReferenceModeForRun && !isMultimodalReferenceModeForRun && !isKlingV4EditModeForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
                 ...(videoLastFrameIdForMetadata ? { videoLastFrameImageId: videoLastFrameIdForMetadata } : {}),
                 ...((isKlingO3VideoInputMode || isFalVideoInputMode) && sourceVideoIdForRun ? { sourceVideoId: sourceVideoIdForRun } : {}),
                 ...(sourceAudioIdForMetadata ? { sourceAudioId: sourceAudioIdForMetadata } : {}),
@@ -3626,6 +3726,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     klingV3MultiPrompt,
     klingV3Shot1Duration,
     klingV3Shot2Duration,
+    klingV4Variant,
+    klingV4Resolution,
+    klingV4AspectRatio,
+    klingV4Duration,
     klingO3Variant,
     klingO3Duration,
     klingO3GenerateAudio,

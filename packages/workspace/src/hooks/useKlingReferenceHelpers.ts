@@ -13,6 +13,7 @@ type KlingReferenceHelpersInput = {
   elementImageIds?: string[];
   isEditMode?: boolean;
   sourceVideoId?: string | null;
+  sourceVideoLabel?: string;
   includeTailFrame?: boolean;
   tailImageId?: string | null;
 };
@@ -30,6 +31,7 @@ export const useKlingReferenceHelpers = ({
   elementImageIds = [],
   isEditMode = false,
   sourceVideoId = null,
+  sourceVideoLabel = 'Video',
   includeTailFrame = false,
   tailImageId = null,
 }: KlingReferenceHelpersInput) => {
@@ -57,13 +59,13 @@ export const useKlingReferenceHelpers = ({
       labels[id] = `@Audio${index + 1}`; // Seedance can mix audio references into the same prompt.
     });
     if (isEditMode && sourceVideoId) {
-      labels[sourceVideoId] = 'Video'; // Kling edit flows keep the source video mention stable.
+      labels[sourceVideoId] = sourceVideoLabel; // Each model keeps its native source-video token.
     }
     if (Object.keys(labels).length === 0) {
       return null;
     }
     return labels;
-  }, [includePrimaryImageAsReference, includeTailFrame, isEditMode, labelReferences, primaryImageId, primaryImageMediaType, referenceAudioIds, referenceImageIds, referenceVideoIds, sourceVideoId, tailImageId]);
+  }, [includePrimaryImageAsReference, includeTailFrame, isEditMode, labelReferences, primaryImageId, primaryImageMediaType, referenceAudioIds, referenceImageIds, referenceVideoIds, sourceVideoId, sourceVideoLabel, tailImageId]);
 
   const elementOrderLabels = useMemo(() => {
     if (!labelElements || elementImageIds.length === 0) {

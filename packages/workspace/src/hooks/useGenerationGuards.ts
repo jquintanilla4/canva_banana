@@ -35,6 +35,7 @@ import {
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from '../utils/seedanceReferences';
 import { getJimengMultiframeDisabledReason } from '../utils/jimengMultiframe';
+import { isKlingV4VideoModel } from '../services/klingV4Config';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
   SEEDANCE25_REFERENCE_IMAGE_LIMIT,
@@ -68,6 +69,7 @@ type Args = {
   flux3ValidationError?: string | null;
   miniMaxH3Variant?: 'standard' | 'reference';
   miniMaxH3ReferenceAssetCount?: number;
+  klingV4Variant?: 'generate' | 'edit';
   isSeedance2VideoModel: boolean;
   seedance2Variant: Seedance2Variant;
   seedance2ReferenceAssetCount: number;
@@ -160,6 +162,7 @@ export const buildGenerationGuardArgs = ({
   flux3ValidationError: flux3RunPlan.error,
   miniMaxH3Variant: fal.miniMaxH3Variant,
   miniMaxH3ReferenceAssetCount: capabilities.selection.miniMaxH3ReferenceMode ? seedance2ReferenceAssetCount : 0,
+  klingV4Variant: fal.klingV4Variant,
   isSeedance2VideoModel: fal.isSeedance2VideoModel,
   seedance2Variant: fal.seedance2Variant,
   seedance2ReferenceAssetCount,
@@ -218,6 +221,7 @@ export function useGenerationGuards({
   flux3ValidationError = null,
   miniMaxH3Variant = 'reference',
   miniMaxH3ReferenceAssetCount = 0,
+  klingV4Variant = 'generate',
   isSeedance2VideoModel,
   seedance2Variant,
   seedance2ReferenceAssetCount,
@@ -238,6 +242,8 @@ export function useGenerationGuards({
   selectedStillImageCount,
 }: Args): GenerationGuardsResult {
   const isKlingO3VideoInputMode = isKlingO3EditMode;
+  const isKlingV4 = isVideoMode && isKlingV4VideoModel(falModelId);
+  const isKlingV4EditMode = isKlingV4 && klingV4Variant === 'edit';
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
   const isFlux3ExtendMode = isVideoMode && isFlux3VideoModel && flux3InputKind === 'source-video';
@@ -268,6 +274,7 @@ export function useGenerationGuards({
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
   const isFalVideoInputMode = isWanVideoInputMode
+    || isKlingV4EditMode
     || isAudioInputMode
     || isKlingV3ControlVideoModel
     || isVeo31ExtendMode
@@ -352,7 +359,7 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional || isJimengReferenceMode));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isFlux3VideoModel && !isSeedance2VideoModel && !isSeedance25VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV4 && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isFlux3VideoModel && !isSeedance2VideoModel && !isSeedance25VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKlingV3Control = usingFal && isKlingV3ControlVideoModel && !hasKlingV3ControlStillImage;
     const requiresSelectedImageForScail = usingFal && isScailVideoModel && !hasScailStillImage;
@@ -389,6 +396,11 @@ export function useGenerationGuards({
 
     const promptPlaceholderText = (() => {
       if (isVideoMode) {
+        if (isKlingV4) {
+          return isKlingV4EditMode
+            ? 'Select a source video (@Video1), optionally shift-click image references, then describe the edit...'
+            : 'Describe a video, select a first frame (Shift-click an end frame), or Alt/Option+Shift-click references and use @Image1 or @Video1...';
+        }
         if (flux3SmartUnsupportedSelectionReason) {
           return selectedMediaCount > 1
             ? flux3SmartUnsupportedSelectionReason
@@ -565,6 +577,7 @@ export function useGenerationGuards({
     return {
       submitDisabled,
       submitDisabledReason: flux3SmartUnsupportedSelectionReason
+        ?? (usingFal && isKlingV4EditMode && !hasSourceVideo ? 'Select a source video for Kling v4 Edit.' : null)
         ?? (usingFal && isFlux3VideoModel ? flux3ValidationError : null)
         ?? jimengMultiframeDisabledReason,
       promptPlaceholderText,

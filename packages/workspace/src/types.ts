@@ -106,6 +106,10 @@ export type Flux2MaxImageSizeOption = Extract<FalImageSizePreset, 'landscape_4_3
 export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
+export type KlingV4Variant = 'generate' | 'edit';
+export type KlingV4Resolution = '720p' | '1080p';
+export type KlingV4AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '21:9';
+export type KlingV4Duration = 'source' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
 export type Flux3Variant = 'smart' | 'first-last-frame' | 'keyframes' | 'extend';
 export type Flux3AspectRatio = 'auto' | '21:9' | '2:1' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
 export type Flux3Resolution = '720p' | '1080p';
@@ -161,6 +165,10 @@ export type GenerationFalOptions = Partial<{
   klingV3MultiPrompt: string;
   klingV3Shot1Duration: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   klingV3Shot2Duration: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  klingV4Variant: KlingV4Variant;
+  klingV4Resolution: KlingV4Resolution;
+  klingV4AspectRatio: KlingV4AspectRatio;
+  klingV4Duration: KlingV4Duration;
   negativePrompt: string;
   wanTargetResolution: '720p' | '1080p';
   wanCreativity: 0 | 1 | 2 | 3 | 4;

@@ -49,6 +49,7 @@ import type {
   Wan27VideoVariant,
 } from '../types';
 import { getFlux3ModePolicy } from '../utils/flux3';
+import { isKlingV4VideoModel } from './klingV4Config';
 import { Tool } from '../types';
 import { getModelReferenceCapabilities } from './modelReferenceCapabilities';
 import { getEmbeddedVideoProvider } from '../utils/embeddedVideoRouting';
@@ -83,6 +84,7 @@ import {
 export type ModelUiCapabilityContext = {
   klingVariant?: KlingVariant;
   klingO3Variant?: KlingO3Variant;
+  klingV4Variant?: 'generate' | 'edit';
   veo31Variant?: Veo31Variant;
   wan27VideoVariant?: Wan27VideoVariant;
   miniMaxH3Variant?: MiniMaxH3Variant;
@@ -99,6 +101,8 @@ export type ModelUiSelectionFlags = {
   krea2StyleReferenceMode: boolean;
   klingO3VideoInputMode: boolean; // Kling O3 Edit takes a source video.
   klingO3ReferenceMode: boolean;
+  klingV4GenerateMode: boolean;
+  klingV4EditMode: boolean;
   seedance15FflfMode: boolean;
   klingV3ControlVideoInputMode: boolean;
   veo31ExtendMode: boolean;
@@ -138,6 +142,8 @@ const DEFAULT_SELECTION: ModelUiSelectionFlags = {
   krea2StyleReferenceMode: false,
   klingO3VideoInputMode: false,
   klingO3ReferenceMode: false,
+  klingV4GenerateMode: false,
+  klingV4EditMode: false,
   seedance15FflfMode: false,
   klingV3ControlVideoInputMode: false,
   veo31ExtendMode: false,
@@ -276,6 +282,21 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
     matches: [KLING_V3_VIDEO_MODEL_ID],
     base: { supportsTailFrame: true, showNegativePrompt: true },
+  },
+  {
+    matches: isKlingV4VideoModel,
+    base: { klingSuggestionsEnabled: true },
+    resolve: (ctx) => ({
+      supportsTailFrame: ctx.klingV4Variant !== 'edit',
+      promptPlaceholder: ctx.klingV4Variant === 'edit'
+        ? `Kling v4 Edit: select a source video (@Video1), shift-click optional image references (@Image1), then describe the edit... ${GENERATE_SUFFIX}`
+        : `Kling v4: describe a video, select a first frame (Shift-click an end frame), or Alt/Option+Shift-click references and use @Image1 or @Video1... ${GENERATE_SUFFIX}`,
+      referenceLimitToast: () => ({ message: 'Kling v4 supports up to 10 image references and 5 video references. Audio references are not supported.', durationMs: 4000 }),
+      selection: {
+        klingV4GenerateMode: ctx.klingV4Variant !== 'edit',
+        klingV4EditMode: ctx.klingV4Variant === 'edit',
+      },
+    }),
   },
   {
     matches: (modelId) => isKlingO3VideoModelId(modelId),
@@ -469,6 +490,7 @@ export const getModelUiCapabilities = (
   selection.multimodalReferenceMode = selection.seedance2ReferenceMode
     || selection.seedance25ReferenceMode
     || selection.miniMaxH3ReferenceMode
+    || selection.klingV4GenerateMode
     || selection.flux3KeyframesMode;
   const merged = {
     id: modelId,

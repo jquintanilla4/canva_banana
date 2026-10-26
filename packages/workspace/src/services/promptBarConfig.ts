@@ -66,13 +66,15 @@ import type {
   WanCreativity,
   WanTargetResolution,
 } from './modelConfig';
-import type { NanoBananaThinkingLevel, GptImage25Variant, GptImage25Background, GptImage25Quality, Ideogram45Quality, Ideogram45EditPrecision, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
+import type { NanoBananaThinkingLevel, GptImage25Variant, GptImage25Background, GptImage25Quality, Ideogram45Quality, Ideogram45EditPrecision, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant, KlingV4Variant, KlingV4Resolution, KlingV4AspectRatio, KlingV4Duration } from '../types';
 import { isIdeogram45Model } from './ideogram45Config';
 import { buildIdeogram45Controls } from './promptBar/ideogram45Controls';
 import { buildNanoBananaControls } from './promptBar/nanoBananaControls';
 import { buildGptImage2Controls } from './promptBar/gptImage2Controls';
 import { buildGptImage25Controls } from './promptBar/gptImage25Controls';
 import { isGptImage25Model } from './gptImage25Config';
+import { buildKlingV4Controls } from './promptBar/klingV4Controls';
+import { isKlingV4VideoModel } from './klingV4Config';
 import type {
   PromptBarControl as PromptBarModelControl,
   PromptBarSelectControl,
@@ -770,6 +772,7 @@ export type PromptBarControlsInput = {
   isGptImage2Model?: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
+  isKlingV4VideoModel?: boolean;
   isKlingV3VideoModel: boolean;
   isKlingO3VideoModel: boolean;
   isKlingV3ControlVideoModel: boolean;
@@ -791,6 +794,10 @@ export type PromptBarControlsInput = {
   isJimengMultiframeVideoModel?: boolean;
   falVideoDuration: string;
   klingVariant: KlingVariant;
+  klingV4Variant?: KlingV4Variant;
+  klingV4Resolution?: KlingV4Resolution;
+  klingV4AspectRatio?: KlingV4AspectRatio;
+  klingV4Duration?: KlingV4Duration;
   klingV3Duration: KlingV3DurationSelectionValue;
   klingV3GenerateAudio: boolean;
   klingV3CfgScale: KlingV3CfgScaleSelectionValue;
@@ -895,6 +902,10 @@ export type PromptBarControlsInput = {
   isLoading: boolean;
   onFalVideoDurationChange: (value: string) => void;
   onKlingVariantChange: (value: string) => void;
+  onKlingV4VariantChange: (value: string) => void;
+  onKlingV4ResolutionChange: (value: string) => void;
+  onKlingV4AspectRatioChange: (value: string) => void;
+  onKlingV4DurationChange: (value: string) => void;
   onKlingV3DurationChange: (value: string) => void;
   onKlingV3GenerateAudioChange: (value: boolean) => void;
   onKlingV3CfgScaleChange: (value: string) => void;
@@ -1239,6 +1250,21 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   } = input;
 
   const controls: PromptBarModelControl[] = [];
+
+  if (usingFal && isVideoMode && isKlingV4VideoModel(input.falModelId)) {
+    controls.push(...buildKlingV4Controls({
+      idPrefix: controlIdPrefix,
+      isLoading,
+      variant: input.klingV4Variant,
+      resolution: input.klingV4Resolution,
+      aspectRatio: input.klingV4AspectRatio,
+      duration: input.klingV4Duration,
+      onVariantChange: input.onKlingV4VariantChange,
+      onResolutionChange: input.onKlingV4ResolutionChange,
+      onAspectRatioChange: input.onKlingV4AspectRatioChange,
+      onDurationChange: input.onKlingV4DurationChange,
+    }));
+  }
 
   if (isKlingVideoModel) {
     controls.push({

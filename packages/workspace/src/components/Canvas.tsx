@@ -100,6 +100,7 @@ interface CanvasProps {
   videoLastFrameImageId: string | null;
   sourceVideoId: string | null;
   tailSelectionEnabled: boolean;
+  frameRoleLabelsEnabled?: boolean; // Frame badges can differ from the available selection gestures.
   isKlingO3VideoInputMode: boolean;
   isKlingO3ReferenceMode: boolean;
   isSeedance15FflfMode: boolean;
@@ -292,6 +293,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   videoLastFrameImageId,
   sourceVideoId,
   tailSelectionEnabled,
+  frameRoleLabelsEnabled = tailSelectionEnabled,
   isKlingO3VideoInputMode,
   isKlingO3ReferenceMode,
   isSeedance15FflfMode,
@@ -700,6 +702,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       elementImageOrderLabels,
       videoLastFrameImageId,
       tailSelectionEnabled,
+      frameRoleLabelsEnabled,
       sourceVideoId,
       isKlingO3VideoInputMode,
       isKlingO3ReferenceMode,
@@ -722,7 +725,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (perfHudEnabled) {
       recordCanvasDraw(performance.now() - drawStart);
     }
-  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
+  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, frameRoleLabelsEnabled, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
 
   useEffect(() => {
     drawRef.current = draw;

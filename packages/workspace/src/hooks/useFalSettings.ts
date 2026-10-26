@@ -5,7 +5,12 @@ import { NANO_BANANA_DEFAULTS, isNanoBananaThinkingLevel } from '../services/nan
 import { getNanoBananaAspectRatioOptionsForProvider } from '../services/nanoBananaAspectRatioPolicy';
 import { GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
 import { GPT_IMAGE_25_IMAGE_SIZE_OPTIONS } from '../services/gptImage25Config';
+import { KLING_V4_DEFAULTS, isKlingV4VideoModel as isKlingV4VideoModelId, isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from '../services/klingV4Config';
 import type {
+  KlingV4Variant,
+  KlingV4Resolution,
+  KlingV4AspectRatio,
+  KlingV4Duration,
   NanoBananaThinkingLevel,
   ApiProviderId,
   Ideogram45Quality,
@@ -214,6 +219,7 @@ type UseFalSettingsArgs = {
 type FalDerivedState = {
   falModelId: FalModelId;
   isVideoMode: boolean;
+  isKlingV4VideoModel: boolean;
   isKlingVideoModel: boolean;
   isKlingV3VideoModel: boolean;
   isKlingO3VideoModel: boolean;
@@ -246,6 +252,10 @@ type FalHandlers = {
   handleModelModeChange: (mode: FalModelMode) => void;
   handleFalModelChange: (modelId: string) => void;
   handleFalVideoDurationChange: (value: string) => void;
+  handleKlingV4VariantChange: (value: string) => void;
+  handleKlingV4ResolutionChange: (value: string) => void;
+  handleKlingV4AspectRatioChange: (value: string) => void;
+  handleKlingV4DurationChange: (value: string) => void;
   handleKlingVariantChange: (value: string) => void;
   handleKlingV3DurationChange: (value: string) => void;
   handleKlingV3GenerateAudioChange: (value: boolean) => void;
@@ -350,6 +360,14 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   falImageModelId: FalImageModelId;
   falVideoModelId: FalVideoModelId;
   falVideoDuration: FalVideoDuration;
+  klingV4Variant: KlingV4Variant;
+  klingV4Resolution: KlingV4Resolution;
+  klingV4AspectRatio: KlingV4AspectRatio;
+  klingV4Duration: KlingV4Duration;
+  setKlingV4Variant: Dispatch<SetStateAction<KlingV4Variant>>;
+  setKlingV4Resolution: Dispatch<SetStateAction<KlingV4Resolution>>;
+  setKlingV4AspectRatio: Dispatch<SetStateAction<KlingV4AspectRatio>>;
+  setKlingV4Duration: Dispatch<SetStateAction<KlingV4Duration>>;
   klingVariant: KlingVariant;
   klingV3Duration: KlingV3DurationSelectionValue;
   klingV3GenerateAudio: boolean;
@@ -560,6 +578,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [falVideoModelId, setFalVideoModelId] = useState<FalVideoModelId>(DEFAULT_FAL_VIDEO_MODEL_ID);
   const [falVideoDuration, setFalVideoDuration] = useState<FalVideoDuration>('6');
   const [klingVariant, setKlingVariant] = useState<KlingVariant>('standard');
+  const [klingV4Variant, setKlingV4Variant] = useState<KlingV4Variant>(KLING_V4_DEFAULTS.klingV4Variant);
+  const [klingV4Resolution, setKlingV4Resolution] = useState<KlingV4Resolution>(KLING_V4_DEFAULTS.klingV4Resolution);
+  const [klingV4AspectRatio, setKlingV4AspectRatio] = useState<KlingV4AspectRatio>(KLING_V4_DEFAULTS.klingV4AspectRatio);
+  const [klingV4Duration, setKlingV4Duration] = useState<KlingV4Duration>(KLING_V4_DEFAULTS.klingV4Duration);
   const [klingV3Duration, setKlingV3Duration] = useState<KlingV3DurationSelectionValue>('5');
   const [klingV3GenerateAudio, setKlingV3GenerateAudio] = useState<boolean>(true);
   const [klingV3CfgScale, setKlingV3CfgScale] = useState<KlingV3CfgScaleSelectionValue>('0.5');
@@ -668,6 +690,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     [falModelMode, falImageModelId, falVideoModelId],
   );
   const isVideoMode = falModelMode === 'video';
+  const isKlingV4VideoModel = isVideoMode && isKlingV4VideoModelId(falVideoModelId);
   const isKlingVideoModel = isVideoMode && falVideoModelId === KLING_VIDEO_MODEL_ID;
   const isKlingV3VideoModel = isVideoMode && falVideoModelId === KLING_V3_VIDEO_MODEL_ID;
   const isKlingO3VideoModel = isVideoMode && isKlingO3VideoModelId(falVideoModelId);
@@ -937,6 +960,24 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     const variant = value === 'pro' ? 'pro' : 'standard';
     setKlingVariant(variant);
   }, []);
+
+  const handleKlingV4VariantChange = useCallback((value: string) => {
+    if (!isKlingV4Variant(value)) return;
+    setKlingV4Variant(value);
+    setKlingV4Duration(current => value === 'edit' ? 'source' : current === 'source' ? KLING_V4_DEFAULTS.klingV4Duration : current);
+  }, []);
+
+  const handleKlingV4ResolutionChange = useCallback((value: string) => {
+    if (isKlingV4Resolution(value)) setKlingV4Resolution(value);
+  }, []);
+
+  const handleKlingV4AspectRatioChange = useCallback((value: string) => {
+    if (isKlingV4AspectRatio(value)) setKlingV4AspectRatio(value);
+  }, []);
+
+  const handleKlingV4DurationChange = useCallback((value: string) => {
+    if (isKlingV4Duration(value) && (value !== 'source' || klingV4Variant === 'edit')) setKlingV4Duration(value);
+  }, [klingV4Variant]);
 
   const handleKlingV3DurationChange = useCallback((value: string) => {
     if (isKlingV3DurationSelectionValue(value)) {
@@ -1542,6 +1583,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       creativity: value => setFalCreativity(Math.min(10, Math.max(0, value))),
       videoDuration: setFalVideoDuration,
       klingVariant: setKlingVariant,
+      klingV4Variant: setKlingV4Variant,
+      klingV4Resolution: setKlingV4Resolution,
+      klingV4AspectRatio: setKlingV4AspectRatio,
+      klingV4Duration: setKlingV4Duration,
       klingV3Duration: setKlingV3Duration,
       klingV3GenerateAudio: setKlingV3GenerateAudio,
       klingV3CfgScale: setKlingV3CfgScale,
@@ -1633,6 +1678,19 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     falImageModelId,
     falVideoModelId,
     falVideoDuration,
+    klingV4Variant,
+    klingV4Resolution,
+    klingV4AspectRatio,
+    klingV4Duration,
+    setKlingV4Variant,
+    setKlingV4Resolution,
+    setKlingV4AspectRatio,
+    setKlingV4Duration,
+    handleKlingV4VariantChange,
+    handleKlingV4ResolutionChange,
+    handleKlingV4AspectRatioChange,
+    handleKlingV4DurationChange,
+    isKlingV4VideoModel,
     klingVariant,
     klingV3Duration,
     klingV3GenerateAudio,

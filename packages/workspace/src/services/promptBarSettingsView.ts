@@ -46,6 +46,7 @@ import {
 } from '../utils/embeddedFlux3';
 import { getEmbeddedVideoPromptBarModelId } from '../utils/videoPromptAreas';
 import { getJimengSafeSeedance2Resolution } from '../utils/embeddedVideoRouting';
+import { KLING_V4_DEFAULTS, isKlingV4VideoModel, isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from './klingV4Config';
 
 // -----------------------------------------------------------------------------------
 // Single source for assembling PromptBarControlsInput.
@@ -60,7 +61,7 @@ import { getJimengSafeSeedance2Resolution } from '../utils/embeddedVideoRouting'
 type PromptBarModelFlagKey =
   | 'isVideoMode' | 'usingFal' | 'isSeedreamModel' | 'isNanoBananaModel' | 'isKrea2LargeModel'
   | 'isFlux2MaxModel' | 'isWan27ImageModel' | 'isGptImage2Model' | 'isUpscaleModel'
-  | 'isKlingVideoModel' | 'isKlingV3VideoModel' | 'isKlingO3VideoModel' | 'isKlingV3ControlVideoModel'
+  | 'isKlingVideoModel' | 'isKlingV4VideoModel' | 'isKlingV3VideoModel' | 'isKlingO3VideoModel' | 'isKlingV3ControlVideoModel'
   | 'isWanAnimateVideoModel' | 'isLipsyncVideoModel' | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel' | 'isGrokImagineVideoModel' | 'isVeo31VideoModel' | 'isWan27VideoModel'
   | 'isMiniMaxH3VideoModel' | 'isFlux3VideoModel' | 'isSeedance15VideoModel' | 'isSeedance2VideoModel'
@@ -89,6 +90,7 @@ export const derivePromptBarModelFlags = (
     isWan27ImageModel: !isVideoMode && modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
     isUpscaleModel: !isVideoMode && (modelId === CRYSTAL_UPSCALER_MODEL_ID || modelId === SEEDVR_UPSCALER_MODEL_ID),
     isKlingVideoModel: isVideoMode && modelId === KLING_VIDEO_MODEL_ID,
+    isKlingV4VideoModel: isVideoMode && isKlingV4VideoModel(modelId),
     isKlingV3VideoModel: isVideoMode && modelId === KLING_V3_VIDEO_MODEL_ID,
     isKlingO3VideoModel: isVideoMode && isKlingO3VideoModelId(modelId),
     isKlingV3ControlVideoModel: isVideoMode && modelId === KLING_V3_CONTROL_VIDEO_MODEL_ID,
@@ -117,6 +119,7 @@ export const derivePromptBarModelFlags = (
 
 const PROMPT_BAR_VALUE_KEYS = [
   'falVideoDuration', 'klingVariant',
+  'klingV4Variant', 'klingV4Resolution', 'klingV4AspectRatio', 'klingV4Duration',
   'klingV3Duration', 'klingV3GenerateAudio', 'klingV3CfgScale', 'klingV3MultiPromptEnabled', 'klingV3Shot1Duration', 'klingV3Shot2Duration',
   'klingO3Variant', 'klingO3Duration', 'klingO3GenerateAudio', 'klingO3KeepAudio',
   'klingV3ControlKeepSound', 'klingV3ControlOrientation',
@@ -172,6 +175,11 @@ const buildEmbeddedPromptBarValues = (
   return {
     falVideoDuration: options.videoDuration ?? fal.falVideoDuration,
     klingVariant: options.klingVariant ?? fal.klingVariant,
+    klingV4Variant: isKlingV4Variant(options.klingV4Variant) ? options.klingV4Variant : KLING_V4_DEFAULTS.klingV4Variant,
+    klingV4Resolution: isKlingV4Resolution(options.klingV4Resolution) ? options.klingV4Resolution : KLING_V4_DEFAULTS.klingV4Resolution,
+    klingV4AspectRatio: isKlingV4AspectRatio(options.klingV4AspectRatio) ? options.klingV4AspectRatio : KLING_V4_DEFAULTS.klingV4AspectRatio,
+    klingV4Duration: isKlingV4Duration(options.klingV4Duration) && (options.klingV4Duration !== 'source' || options.klingV4Variant === 'edit')
+      ? options.klingV4Duration : options.klingV4Variant === 'edit' ? 'source' : KLING_V4_DEFAULTS.klingV4Duration,
     klingV3Duration: bar.klingV3Duration ?? options.klingV3Duration ?? '5',
     klingV3GenerateAudio: bar.klingV3GenerateAudio ?? options.klingV3GenerateAudio ?? true,
     klingV3CfgScale: bar.klingV3CfgScale ?? options.klingV3CfgScale ?? '0.5',
@@ -284,6 +292,10 @@ const createFooterPromptBarHandlers = (
 ): PromptBarHandlerSet => ({
   onFalVideoDurationChange: fal.handleFalVideoDurationChange,
   onKlingVariantChange: fal.handleKlingVariantChange,
+  onKlingV4VariantChange: fal.handleKlingV4VariantChange,
+  onKlingV4ResolutionChange: fal.handleKlingV4ResolutionChange,
+  onKlingV4AspectRatioChange: fal.handleKlingV4AspectRatioChange,
+  onKlingV4DurationChange: fal.handleKlingV4DurationChange,
   onKlingV3DurationChange: fal.handleKlingV3DurationChange,
   onKlingV3GenerateAudioChange: fal.handleKlingV3GenerateAudioChange,
   onKlingV3CfgScaleChange: fal.handleKlingV3CfgScaleChange,
@@ -416,6 +428,31 @@ const createEmbeddedPromptBarHandlers = (
   return {
     onFalVideoDurationChange: value => updateFalOption('videoDuration', value),
     onKlingVariantChange: value => updateFalOption('klingVariant', value),
+    onKlingV4VariantChange: value => {
+      if (!isKlingV4Variant(value)) return;
+      updateBar(bar.id, currentBar => ({
+        ...currentBar,
+        falOptions: {
+          ...(currentBar.falOptions ?? {}),
+          klingV4Variant: value,
+          klingV4Duration: value === 'edit' ? 'source'
+            : currentBar.falOptions?.klingV4Duration === 'source' ? KLING_V4_DEFAULTS.klingV4Duration
+              : currentBar.falOptions?.klingV4Duration ?? KLING_V4_DEFAULTS.klingV4Duration,
+        },
+      }));
+    },
+    onKlingV4ResolutionChange: value => {
+      if (isKlingV4Resolution(value)) updateFalOption('klingV4Resolution', value);
+    },
+    onKlingV4AspectRatioChange: value => {
+      if (isKlingV4AspectRatio(value)) updateFalOption('klingV4AspectRatio', value);
+    },
+    onKlingV4DurationChange: value => {
+      if (!isKlingV4Duration(value)) return;
+      updateBar(bar.id, currentBar => value === 'source' && currentBar.falOptions?.klingV4Variant !== 'edit'
+        ? currentBar
+        : { ...currentBar, falOptions: { ...(currentBar.falOptions ?? {}), klingV4Duration: value } });
+    },
     onKlingV3DurationChange: value => updateLegacyAndFal({ klingV3Duration: value as CanvasVideoPromptBar['klingV3Duration'] }, 'klingV3Duration', value),
     onKlingV3GenerateAudioChange: value => updateLegacyAndFal({ klingV3GenerateAudio: value }, 'klingV3GenerateAudio', value),
     onKlingV3CfgScaleChange: value => updateLegacyAndFal({ klingV3CfgScale: value as CanvasVideoPromptBar['klingV3CfgScale'] }, 'klingV3CfgScale', value),

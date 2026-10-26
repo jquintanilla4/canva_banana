@@ -344,6 +344,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     if (usingFalProvider) {
       const toast = getModelUiCapabilities(fal.falModelId, {
         klingO3Variant: fal.klingO3Variant,
+        klingV4Variant: fal.klingV4Variant,
         miniMaxH3Variant: fal.miniMaxH3Variant,
         seedance2Variant: fal.seedance2Variant,
         seedance25Variant: fal.seedance25Variant,
@@ -358,7 +359,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     const referenceLimitLabel = usingFalProvider ? getFalModelLabel(fal.falModelId) : PROVIDER_LABELS.google; // Match label to active provider.
     setToastMessage(`${referenceLimitLabel} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [apiProvider, fal.falModelId, fal.klingO3Variant, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
+  }, [apiProvider, fal.falModelId, fal.klingO3Variant, fal.klingV4Variant, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
 
   const isActiveKrea2LargeModel = apiProvider === 'fal' && fal.isKrea2LargeModel; // Krea behavior only applies while Fal is active.
 
@@ -404,6 +405,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const modelCapabilities = useMemo(() => getModelUiCapabilities(fal.falModelId, {
     klingVariant: fal.klingVariant,
     klingO3Variant: fal.klingO3Variant,
+    klingV4Variant: fal.klingV4Variant,
     veo31Variant: fal.veo31Variant,
     wan27VideoVariant: fal.wan27VideoVariant,
     miniMaxH3Variant: fal.miniMaxH3Variant,
@@ -418,6 +420,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     fal.falModelId,
     fal.flux3Variant,
     fal.klingO3Variant,
+    fal.klingV4Variant,
     fal.klingVariant,
     fal.miniMaxH3Variant,
     fal.seedance25Variant,
@@ -1028,6 +1031,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const {
     klingReferenceOrderLabels,
     klingElementOrderLabels,
+    hasKlingV4ReferenceInputs,
     seedance2ReferenceAssetCount,
     canvasElementImageIds,
     canvasReferenceOrderLabels,
@@ -1039,6 +1043,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     capabilitySelection,
     klingSuggestionsEnabled: modelCapabilities.klingSuggestionsEnabled,
     isKlingO3VideoModel: fal.isKlingO3VideoModel,
+    prompt,
     effectiveSeedanceReferenceImageIds,
     effectiveSeedanceReferenceVideoIds,
     effectiveSeedanceReferenceAudioIds,
@@ -1110,6 +1115,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
     isKlingO3VideoModel: fal.isKlingO3VideoModel,
     isKlingO3EditMode: fal.isKlingO3EditMode,
+    isKlingV4VideoModel: fal.isKlingV4VideoModel,
     isMultimodalReferenceMode,
     isFlux2MaxModel: fal.isFlux2MaxModel,
     isWan27ImageModel: fal.isWan27ImageModel,
@@ -1333,6 +1339,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
           tailSelectionEnabled={supportsTailFrameSelection}
+          frameRoleLabelsEnabled={supportsTailFrameSelection && !hasKlingV4ReferenceInputs}
           isKlingO3VideoInputMode={isKlingO3VideoInputMode}
           isKlingO3ReferenceMode={isKlingO3ReferenceMode}
           isSeedance15FflfMode={capabilitySelection.seedance15FflfMode}

@@ -488,6 +488,7 @@ type DrawCanvasArgs = {
   elementImageOrderLabels?: Record<string, string> | null;
   videoLastFrameImageId: string | null;
   tailSelectionEnabled: boolean;
+  frameRoleLabelsEnabled?: boolean;
   sourceVideoId: string | null;
   isKlingO3VideoInputMode: boolean;
   isKlingO3ReferenceMode: boolean;
@@ -528,6 +529,7 @@ export function drawCanvas({
   elementImageOrderLabels,
   videoLastFrameImageId,
   tailSelectionEnabled,
+  frameRoleLabelsEnabled = tailSelectionEnabled,
   sourceVideoId,
   isKlingO3VideoInputMode,
   isKlingO3ReferenceMode,
@@ -798,7 +800,7 @@ export function drawCanvas({
     }
 
     const isKlingSourceVideo = isKlingO3VideoInputMode && sourceVideoId === image.id;
-    const frameRoleLabel = tailSelectionEnabled && image.mediaType === 'image'
+    const frameRoleLabel = frameRoleLabelsEnabled && image.mediaType === 'image'
       ? selectedImageIds[0] === image.id
         ? 'First frame'
         : videoLastFrameImageId === image.id

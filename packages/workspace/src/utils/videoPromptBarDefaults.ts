@@ -1,4 +1,5 @@
 import { JIMENG_MULTIFRAME_VIDEO_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID } from '../services/modelConfig';
+import { KLING_V4_DEFAULTS, isKlingV4VideoModel } from '../services/klingV4Config';
 import type { UseFalSettingsResult } from '../hooks/useFalSettings';
 import type { CanvasVideoPromptBar } from '../types';
 
@@ -21,16 +22,18 @@ type NewVideoPromptBarSettingsSource = Pick<UseFalSettingsResult,
 export type NewVideoPromptBarDefaults = Omit<CanvasVideoPromptBar, 'id' | 'assignedAreaId' | 'x' | 'y' | 'width' | 'height'>;
 
 // Seed values for a freshly created embedded prompt bar. Bars adopt the footer's
-// model only when it is embeddable (Seedance families + Jimeng multiframe); anything
+// model only when it is embeddable (Seedance families, Kling v4, Jimeng multiframe); anything
 // else falls back to the Volcengine Seedance 2 selector. Legacy Seedance 2 / Kling V3
 // fields are always present because older snapshots and tests read them directly.
 export const getNewVideoPromptBarDefaults = (fal: NewVideoPromptBarSettingsSource): NewVideoPromptBarDefaults => ({
   prompt: '',
   negativePrompt: '',
-  modelId: fal.isSeedance2VideoModel || fal.isSeedance25VideoModel || fal.falVideoModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+  modelId: fal.isSeedance2VideoModel || fal.isSeedance25VideoModel || isKlingV4VideoModel(fal.falVideoModelId) || fal.falVideoModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
     ? fal.falVideoModelId
     : SEEDANCE_2_VIDEO_MODEL_ID,
-  ...(fal.falVideoModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID ? {
+  ...(isKlingV4VideoModel(fal.falVideoModelId) ? {
+    falOptions: { ...KLING_V4_DEFAULTS }, // New Kling bars start independently of the footer's live settings.
+  } : fal.falVideoModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID ? {
     falOptions: {
       multiframeDuration: fal.jimengMultiframeDuration,
       multiframeResolution: fal.jimengMultiframeResolution,

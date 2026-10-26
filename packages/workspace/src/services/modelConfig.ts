@@ -24,8 +24,10 @@ import type {
 import { IDEOGRAM_45_MODEL_ID, IDEOGRAM_45_EDIT_MODEL_ID, IDEOGRAM_45_MAX_OUTPUT_IMAGES, isIdeogram45Model } from './ideogram45Config';
 import { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_MAX_OUTPUT_IMAGES, GPT_IMAGE_2_NUM_IMAGE_OPTIONS } from './gptImage2Config';
 import { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_MAX_OUTPUT_IMAGES, GPT_IMAGE_25_NUM_IMAGE_OPTIONS, isGptImage25Model } from './gptImage25Config';
+import { KLING_V4_VIDEO_MODEL_ID, isKlingV4VideoModel } from './klingV4Config';
 export { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_QUALITY_OPTIONS, GPT_IMAGE_2_DEFAULTS, isGptImage2QualitySelectionValue } from './gptImage2Config';
 export { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_DEFAULTS, GPT_IMAGE_25_VARIANT_OPTIONS, GPT_IMAGE_25_BACKGROUND_OPTIONS, GPT_IMAGE_25_QUALITY_OPTIONS, isGptImage25Model, isGptImage25Variant, isGptImage25Background, isGptImage25Quality, getGptImage25Endpoint } from './gptImage25Config';
+export { KLING_V4_VIDEO_MODEL_ID, KLING_V4_TEXT_TO_VIDEO_MODEL_ID, KLING_V4_IMAGE_TO_VIDEO_MODEL_ID, KLING_V4_REFERENCE_TO_VIDEO_MODEL_ID, KLING_V4_EDIT_VIDEO_MODEL_ID, isKlingV4VideoModel } from './klingV4Config';
 export * from './ideogram45Config';
 
 // Central registry of supported model IDs plus helpers for validation/labeling in the UI.
@@ -172,6 +174,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
   { value: KLING_V3_CONTROL_VIDEO_MODEL_ID, label: 'Kling 3.0 Control' },
   { value: KLING_V3_VIDEO_MODEL_ID, label: 'Kling 3.0 Pro' },
+  { value: KLING_V4_VIDEO_MODEL_ID, label: 'Kling v4' },
   { value: KLING_O3_VIDEO_MODEL_ID, label: 'Kling O3 Video' },
   { value: MINIMAX_H3_VIDEO_MODEL_ID, label: 'MiniMax H3' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
@@ -1317,6 +1320,7 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   const nanoBananaModelId = getNanoBananaSelectorModelId(value);
   if (nanoBananaModelId) return nanoBananaModelId;
   if (isGptImage25Model(value)) return GPT_IMAGE_25_MODEL_ID;
+  if (isKlingV4VideoModel(value)) return KLING_V4_VIDEO_MODEL_ID;
   if (value === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID) return GPT_IMAGE_2_EDIT_MODEL_ID;
   if (value === IDEOGRAM_45_EDIT_MODEL_ID) {
     return IDEOGRAM_45_MODEL_ID;
@@ -1476,6 +1480,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [KLING_O3_VIDEO_MODEL_ID]: 4,
   [KLING_O3_VIDEO_EDIT_MODEL_ID]: 4,
   [KLING_VIDEO_MODEL_ID]: 0,
+  [KLING_V4_VIDEO_MODEL_ID]: 10, // Reference generation accepts ten images total.
   [KLING_V3_CONTROL_VIDEO_MODEL_ID]: 0,
   [WAN_ANIMATE_MODEL_ID]: 0,
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,
