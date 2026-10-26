@@ -27,14 +27,12 @@ import {
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
-  SEEDREAM_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V5_PRO_MODEL_ID,
   SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   isSeedreamV5ProModelId,
@@ -47,13 +45,33 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(getFalNumImageMaxForModel(SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID)).toBe(6);
     expect(getFalNumImageMaxForModel(SEEDREAM_V5_PRO_MODEL_ID)).toBe(6);
     expect(getFalNumImageMaxForModel(SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(6);
-    expect(getFalNumImageMaxForModel(SEEDREAM_MODEL_ID)).toBe(4);
   });
 
   it('returns Seedream 5 Lite num image picker values as 1..6', () => {
     expect(getFalNumImageOptionsForModel(SEEDREAM_V5_LITE_MODEL_ID)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(getFalNumImageOptionsForModel(SEEDREAM_V5_PRO_MODEL_ID)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(getFalNumImageOptionsForModel(SEEDREAM_MODEL_ID)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('removes Seedream 4, Seedream 4.5, and Wan Pro Image without migrating saved selections', () => {
+    const imageModelLabels = FAL_IMAGE_MODEL_OPTIONS.map(option => option.label);
+    expect(imageModelLabels).not.toContain('Seedream 4');
+    expect(imageModelLabels).not.toContain('Seedream 4.5');
+    expect(imageModelLabels).not.toContain('Wan 2.7 Pro Image');
+    for (const modelId of [
+      'fal-ai/bytedance/seedream/v4/edit',
+      'fal-ai/bytedance/seedream/v4/text-to-image',
+      'fal-ai/bytedance/seedream/v4.5/edit',
+      'fal-ai/bytedance/seedream/v4.5/text-to-image',
+      'fal-ai/wan/v2.7/pro/text-to-image',
+      'fal-ai/wan/v2.7/pro/edit',
+      'wan/v2.6/text-to-image',
+      'wan/v2.6/image-to-image',
+    ]) {
+      expect(isFalModelId(modelId)).toBe(false);
+      expect(normalizeFalModelId(modelId)).toBeUndefined();
+    }
+    expect(imageModelLabels).toContain('Seedream 5 Lite');
+    expect(imageModelLabels).toContain('Seedream 5 Pro');
   });
 
   it('returns strict Seedream 5 Lite image sizes', () => {
@@ -138,8 +156,8 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(videoModelIds).toContain(KLING_V4_VIDEO_MODEL_ID);
     expect(videoModelIds).toContain(MINIMAX_H3_VIDEO_MODEL_ID);
     expect(videoModelIds).toContain(WAN_VISION_ENHANCER_MODEL_ID);
-    expect(FAL_IMAGE_MODEL_OPTIONS.map(option => option.value)).toContain(WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID);
-    expect(isRetiredVideoModelId(WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID)).toBe(false);
+    expect(FAL_IMAGE_MODEL_OPTIONS.map(option => option.value)).toContain(SEEDREAM_V5_LITE_MODEL_ID);
+    expect(isRetiredVideoModelId(SEEDREAM_V5_LITE_MODEL_ID)).toBe(false);
   });
 
   it('still recognizes legacy Kling Control snapshots after retiring the picker entries', () => {

@@ -238,8 +238,6 @@ export type GenerationFalOptions = Partial<{
   recraftImageSize: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
-  wan27ImageAspectRatio: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-  wan27ImageMaxImages: '1' | '2' | '3' | '4' | '5';
 }>;
 
 export type GenerationVolcengineOptions = Partial<{

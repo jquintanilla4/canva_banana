@@ -335,7 +335,13 @@ const RETIRED_FAL_VIDEO_PATHS = [
   /^\/fal-ai\/veo3\.1(?:\/|$)/,
   /^\/fal-ai\/sora-2\/image-to-video\/pro(?:\/|$)/,
   /^\/wan\/v2\.6\/image-to-video(?:\/|$)/,
-]; // Retire video endpoints without blocking Wan image models or saved media downloads.
+]; // Retire video endpoints without blocking unrelated image models or saved media downloads.
+
+const RETIRED_FAL_IMAGE_PATHS = [
+  /^\/fal-ai\/bytedance\/seedream\/(?:v4|v4\.5)(?:\/|$)/,
+  /^\/fal-ai\/wan\/v2\.7\/pro\/(?:text-to-image|edit)(?:\/|$)/,
+  /^\/wan\/v2\.6\/(?:text-to-image|image-to-image)(?:\/|$)/,
+]; // Match retired image endpoints and their queue request paths, not Seedream 5.
 
 const copyRequestHeaders = (requestHeaders) => {
   const headers = new Headers();
@@ -669,6 +675,11 @@ const handleFalProxy = async (request, response, env, fetchImpl, corsHeaders) =>
   if (RETIRED_FAL_VIDEO_PATHS.some(pattern => pattern.test(targetPath))) {
     sendJson(response, 410, { detail: 'This video model is no longer supported. Select a supported video model and create a new generation.' }, corsHeaders);
     return; // Reject direct proxy requests before attaching the server key or contacting Fal.
+  }
+  const isMediaTarget = targetUrl.hostname === 'fal.media' || targetUrl.hostname.endsWith('.fal.media');
+  if (!isMediaTarget && RETIRED_FAL_IMAGE_PATHS.some(pattern => pattern.test(targetPath))) {
+    sendJson(response, 410, { detail: 'This image model is no longer supported. Select a supported image model and create a new generation.' }, corsHeaders);
+    return; // Saved media stays accessible even when its originating model has been retired.
   }
   let body;
   try {

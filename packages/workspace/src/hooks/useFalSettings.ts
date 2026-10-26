@@ -53,7 +53,6 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -117,8 +116,6 @@ import {
   isRecraftV4ProModel,
   KREA_2_DEFAULT_ASPECT_RATIO,
   KREA_2_DEFAULT_CREATIVITY,
-  isWan27ImageAspectRatioSelectionValue,
-  isWan27ImageMaxImagesSelectionValue,
   isWan27VideoAspectRatioSelectionValue,
   isWan27VideoDurationSelectionValue,
   isWan27VideoResolutionSelectionValue,
@@ -196,8 +193,6 @@ import type {
   MiniMaxH3AspectRatioSelectionValue,
   MiniMaxH3DurationSelectionValue,
   MiniMaxH3Variant,
-  Wan27ImageAspectRatioSelectionValue,
-  Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -241,7 +236,6 @@ type FalDerivedState = {
   isJimengSeedance2VideoModel: boolean;
   isVeo31VideoModel: boolean;
   isFlux2MaxModel: boolean;
-  isWan27ImageModel: boolean;
   isGptImage2Model: boolean;
   isKrea2LargeModel: boolean;
   isUpscaleModel: boolean;
@@ -330,8 +324,6 @@ type FalHandlers = {
   handleSeedance25DurationChange: (value: string) => void;
   handleSeedance25GenerateAudioChange: (value: boolean) => void;
   handleFlux2MaxImageSizeChange: (value: string) => void;
-  handleWan27ImageAspectRatioChange: (value: string) => void;
-  handleWan27ImageMaxImagesChange: (value: string) => void;
   handleRecraftImageSizeChange: (value: string) => void;
   handleRecraftBackgroundColorChange: (value: string) => void;
   handleRecraftColorChange: (index: number, value: string) => void;
@@ -446,8 +438,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   jimengMultiframeResolution: JimengMultiframeResolutionSelectionValue;
   jimengSessionId: number;
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
-  wan27ImageAspectRatio: Wan27ImageAspectRatioSelectionValue;
-  wan27ImageMaxImages: Wan27ImageMaxImagesSelectionValue;
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
@@ -548,8 +538,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setJimengMultiframeResolution: Dispatch<SetStateAction<JimengMultiframeResolutionSelectionValue>>;
   setJimengSessionId: Dispatch<SetStateAction<number>>;
   setFlux2MaxImageSize: Dispatch<SetStateAction<Flux2MaxImageSizeSelectionValue>>;
-  setWan27ImageAspectRatio: Dispatch<SetStateAction<Wan27ImageAspectRatioSelectionValue>>;
-  setWan27ImageMaxImages: Dispatch<SetStateAction<Wan27ImageMaxImagesSelectionValue>>;
   setRecraftImageSize: Dispatch<SetStateAction<RecraftV4ProImageSizeSelectionValue>>;
   setRecraftBackgroundColor: Dispatch<SetStateAction<RecraftRgbColor>>;
   setRecraftColors: Dispatch<SetStateAction<RecraftRgbColor[]>>;
@@ -659,8 +647,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [jimengMultiframeResolution, setJimengMultiframeResolution] = useState<JimengMultiframeResolutionSelectionValue>('720p');
   const [jimengSessionId, setJimengSessionId] = useState<number>(0);
   const [flux2MaxImageSize, setFlux2MaxImageSize] = useState<Flux2MaxImageSizeSelectionValue>('landscape_4_3');
-  const [wan27ImageAspectRatio, setWan27ImageAspectRatio] = useState<Wan27ImageAspectRatioSelectionValue>('landscape_16_9');
-  const [wan27ImageMaxImages, setWan27ImageMaxImages] = useState<Wan27ImageMaxImagesSelectionValue>('1');
   const [recraftImageSize, setRecraftImageSize] = useState<RecraftV4ProImageSizeSelectionValue>(RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE);
   const [recraftBackgroundColor, setRecraftBackgroundColor] = useState<RecraftRgbColor>(RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR);
   const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
@@ -716,7 +702,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   );
   const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
   const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
-  const isWan27ImageModel = !isVideoMode && falImageModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isGptImage2ModelSelection = !isVideoMode && isGptImage2Model(falImageModelId);
   const isKrea2LargeModelSelection = !isVideoMode && isKrea2LargeModelId(falImageModelId);
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
@@ -1386,18 +1371,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
   }, []);
 
-  const handleWan27ImageAspectRatioChange = useCallback((value: string) => {
-    if (isWan27ImageAspectRatioSelectionValue(value)) {
-      setWan27ImageAspectRatio(value);
-    }
-  }, []);
-
-  const handleWan27ImageMaxImagesChange = useCallback((value: string) => {
-    if (isWan27ImageMaxImagesSelectionValue(value)) {
-      setWan27ImageMaxImages(value);
-    }
-  }, []);
-
   const handleRecraftImageSizeChange = useCallback((value: string) => {
     if (isRecraftV4ProImageSizeSelectionValue(value)) {
       setRecraftImageSize(value);
@@ -1666,8 +1639,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       recraftImageSize: setRecraftImageSize,
       recraftBackgroundColor: value => setRecraftBackgroundColor({ ...value }),
       recraftColors: value => setRecraftColors(value.map(color => ({ ...color }))),
-      wan27ImageAspectRatio: setWan27ImageAspectRatio,
-      wan27ImageMaxImages: setWan27ImageMaxImages,
     }); // Each restorable control names its setter once; the shared walker skips options the metadata omits.
 
     return true; // The supported model and every saved visible control are now restored.
@@ -1769,8 +1740,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     jimengMultiframeResolution,
     jimengSessionId,
     flux2MaxImageSize,
-    wan27ImageAspectRatio,
-    wan27ImageMaxImages,
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
@@ -1785,7 +1754,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     krea2AspectRatio,
     krea2Creativity,
     isFlux2MaxModel,
-    isWan27ImageModel,
     isGptImage2Model: isGptImage2ModelSelection,
     isKrea2LargeModel: isKrea2LargeModelSelection,
     falImageSizeSelection,
@@ -1894,8 +1862,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSeedance25DurationChange,
     handleSeedance25GenerateAudioChange,
     handleFlux2MaxImageSizeChange,
-    handleWan27ImageAspectRatioChange,
-    handleWan27ImageMaxImagesChange,
     handleRecraftImageSizeChange,
     handleRecraftBackgroundColorChange,
     handleRecraftColorChange,
@@ -1998,8 +1964,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setJimengMultiframeResolution,
     setJimengSessionId,
     setFlux2MaxImageSize,
-    setWan27ImageAspectRatio,
-    setWan27ImageMaxImages,
     setRecraftImageSize,
     setRecraftBackgroundColor,
     setRecraftColors,

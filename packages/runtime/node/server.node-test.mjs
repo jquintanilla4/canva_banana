@@ -315,7 +315,50 @@ test('Fal proxy rejects retired video selectors and endpoints without contacting
   }
 });
 
-test('Fal proxy still forwards supported video models, Wan image models, and saved media', async () => {
+test('Fal proxy rejects retired image endpoints and legacy aliases without contacting Fal', async () => {
+  const calls = [];
+  const server = createSecureBackendServer({
+    env: { FAL_API_KEY: 'fal-secret' },
+    fetchImpl: async (...args) => {
+      calls.push(args);
+      return new Response('{}');
+    },
+  });
+  const baseUrl = await listenOnRandomPort(server);
+  const retiredPaths = [
+    'fal-ai/bytedance/seedream/v4/edit',
+    'fal-ai/bytedance/seedream/v4/text-to-image',
+    'fal-ai/bytedance/seedream/v4.5/edit',
+    'fal-ai/bytedance/seedream/v4.5/text-to-image',
+    'fal-ai/wan/v2.7/pro/text-to-image',
+    'fal-ai/wan/v2.7/pro/edit',
+    'wan/v2.6/text-to-image',
+    'wan/v2.6/image-to-image',
+    'fal-ai/bytedance/seedream/v4/edit/requests/saved-request/status',
+    'fal-ai/wan/v2.7/pro/edit/requests/saved-request',
+    'fal-ai/bytedance/seedream/%764.5/edit',
+    'fal-ai%2Fwan%2Fv2.7%2Fpro%2Ftext-to-image',
+  ];
+  try {
+    for (const path of retiredPaths) {
+      for (const method of ['POST', 'GET']) {
+        const response = await fetch(`${baseUrl}/api/fal/proxy`, {
+          method,
+          headers: { Origin: TRUSTED_ORIGIN, 'x-fal-target-url': `https://queue.fal.run/${path}` },
+          ...(method === 'POST' ? { body: '{}' } : {}),
+        });
+        assert.equal(response.status, 410, `${method} ${path}`);
+        assert.match((await response.json()).detail, /image model is no longer supported/);
+        assert.equal(response.headers.get('access-control-allow-origin'), TRUSTED_ORIGIN);
+      }
+    }
+    assert.equal(calls.length, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test('Fal proxy still forwards supported video models, Seedream 5, and saved media', async () => {
   const calls = [];
   const server = createSecureBackendServer({
     env: { FAL_API_KEY: 'fal-secret' },
@@ -330,10 +373,15 @@ test('Fal proxy still forwards supported video models, Wan image models, and sav
     'https://queue.fal.run/minimax/h3/text-to-video',
     'https://queue.fal.run/blackforestlabs/flux-3/text-to-video',
     'https://queue.fal.run/bytedance/seedance-2.5/reference-to-video',
-    'https://queue.fal.run/fal-ai/wan/v2.7/pro/text-to-image',
-    'https://queue.fal.run/fal-ai/wan/v2.7/pro/edit',
+    'https://queue.fal.run/fal-ai/bytedance/seedream/v5/lite/text-to-image',
+    'https://queue.fal.run/fal-ai/bytedance/seedream/v5/lite/edit',
+    'https://queue.fal.run/bytedance/seedream/v5/pro/text-to-image',
+    'https://queue.fal.run/bytedance/seedream/v5/pro/edit',
     'https://queue.fal.run/fal-ai/wan-vision-enhancer',
     'https://v3.fal.media/files/scail-output.mp4',
+    'https://v3.fal.media/files/seedream-v4.5-output.png',
+    'https://v3.fal.media/files/wan-v2.7-pro-output.png',
+    'https://v3.fal.media/fal-ai/bytedance/seedream/v4/edit/output.png',
   ];
   try {
     for (const target of targets) {

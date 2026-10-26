@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   isFalVideoModelId,
   isVideoNegativePromptModelId,
   normalizeFalModelId,
@@ -36,7 +35,6 @@ interface UseGenerationPromptBarTransferArgs {
   setActiveEmbeddedPromptBarId: Dispatch<SetStateAction<string | null>>;
   setSelectedVideoPromptAreaId: Dispatch<SetStateAction<string | null>>;
   setVideoNegativePromptForModel: (modelId: FalVideoModelId, value: string) => void;
-  setWan27ImageNegativePrompt: Dispatch<SetStateAction<string>>;
   setKrea2StyleReferenceStrengths: Dispatch<SetStateAction<Record<string, number>>>;
   setToastMessage: Dispatch<SetStateAction<string | null>>;
   resetEditContext: () => void;
@@ -72,7 +70,6 @@ export const useGenerationPromptBarTransfer = ({
   setActiveEmbeddedPromptBarId,
   setSelectedVideoPromptAreaId,
   setVideoNegativePromptForModel,
-  setWan27ImageNegativePrompt,
   setKrea2StyleReferenceStrengths,
   setToastMessage,
   resetEditContext,
@@ -145,8 +142,6 @@ export const useGenerationPromptBarTransfer = ({
     let skippedNegativePrompt = false;
     if (normalizedModelId && isFalVideoModelId(normalizedModelId) && isVideoNegativePromptModelId(normalizedModelId)) {
       setVideoNegativePromptForModel(normalizedModelId, savedNegativePrompt); // Only models owning a bucket may overwrite it, never a shared fallback.
-    } else if (normalizedModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
-      setWan27ImageNegativePrompt(savedNegativePrompt); // Wan image generations use the dedicated negative prompt field.
     } else {
       skippedNegativePrompt = hasSavedNegativePrompt; // Other settings and inputs still load when this field cannot.
     }
@@ -186,7 +181,6 @@ export const useGenerationPromptBarTransfer = ({
     showTransferToast,
     setVideoLastFrameImageId,
     setVideoNegativePromptForModel,
-    setWan27ImageNegativePrompt,
   ]);
 
   return { handleMetadataToPromptBar, promptFocusRequestToken }; // App only wires the action and focus signal.

@@ -22,7 +22,6 @@ import {
   FLUX_3_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
 } from './services/modelConfig';
 import {
@@ -283,10 +282,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setVideoNegativePromptForModel,
   } = useVideoNegativePrompt({ isVideoMode: fal.isVideoMode, falVideoModelId: fal.falVideoModelId });
 
-  // Negative prompt state for Wan 2.7 Pro Image model
-  const [wan27ImageNegativePrompt, setWan27ImageNegativePrompt] = useState<string>(WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT);
-  const generationNegativePrompt = fal.isWan27ImageModel ? wan27ImageNegativePrompt : videoNegativePrompt; // Route active negative prompt into generation.
-
   // Toggles display of metadata overlays on canvas images
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
 
@@ -457,7 +452,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setActiveEmbeddedPromptBarId,
     setSelectedVideoPromptAreaId,
     setVideoNegativePromptForModel,
-    setWan27ImageNegativePrompt,
     setKrea2StyleReferenceStrengths,
     setToastMessage,
     resetEditContext: resetMetadataEditContext,
@@ -881,7 +875,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     images,
     paths,
     krea2StyleReferenceStrengths,
-    videoNegativePrompt: generationNegativePrompt,
+    videoNegativePrompt,
     setError,
     setIsLoading,
     setFalJobs,
@@ -1118,7 +1112,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     isKlingV4VideoModel: fal.isKlingV4VideoModel,
     isMultimodalReferenceMode,
     isFlux2MaxModel: fal.isFlux2MaxModel,
-    isWan27ImageModel: fal.isWan27ImageModel,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds: effectiveSeedanceReferenceImageIds,
@@ -1183,8 +1176,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     ? '#f59e0b'
     : shouldShowNegativePrompt ? '#34d399' : undefined;
   const negativePromptOutlineColor = shouldShowNegativePrompt ? '#f87171' : undefined;
-  const activeNegativePrompt = generationNegativePrompt;
-  const activeNegativePromptSetter = fal.isWan27ImageModel ? setWan27ImageNegativePrompt : setVideoNegativePrompt;
+  const activeNegativePrompt = videoNegativePrompt;
+  const activeNegativePromptSetter = setVideoNegativePrompt;
   const isTopToolbarSuppressed = cropMode !== null || transformMode !== null; // Keep its grid width while crop or transform controls take over.
 
   useWorkspaceApi({ editorRef, state: { images: displayedImages, paths: displayedPaths, notes: displayedNotes,

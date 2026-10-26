@@ -115,7 +115,7 @@ export function AppFooter({
         multiPromptOutlineColor={fal.isKlingV3VideoModel && fal.klingV3MultiPromptEnabled ? '#38bdf8' : undefined}
         negativePrompt={negativePrompt}
         onNegativePromptChange={onNegativePromptChange}
-        negativePromptPlaceholder={fal.isWan27ImageModel ? 'Describe what the image should avoid... (optional)' : 'Describe what the video should avoid... (optional)'}
+        negativePromptPlaceholder="Describe what the video should avoid... (optional)"
         promptOutlineColor={promptOutlineColor}
         negativePromptOutlineColor={negativePromptOutlineColor}
         cameraThemeActive={cameraThemeActive}

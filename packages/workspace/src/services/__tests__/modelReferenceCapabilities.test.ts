@@ -8,7 +8,7 @@ import {
   GPT_IMAGE_25_MODEL_ID,
   IDEOGRAM_45_MODEL_ID,
   IDEOGRAM_45_EDIT_MODEL_ID,
-  SEEDREAM_V45_MODEL_ID,
+  SEEDREAM_V5_LITE_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   getGptImage25Endpoint,
   getMaxReferenceImages,
@@ -37,7 +37,7 @@ describe('model annotation reference capabilities', () => {
     }
   });
 
-  it.each([SEEDREAM_V45_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID, undefined])('leaves other model accounting unchanged for %s', modelId => {
+  it.each([SEEDREAM_V5_LITE_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID, undefined])('leaves other model accounting unchanged for %s', modelId => {
     const capacity = getMaxReferenceImages(modelId);
     expect(getModelReferenceCapabilities(modelId, Tool.ANNOTATE)).toEqual({
       referenceCapacity: capacity, annotationSlots: 0, availableReferenceSlots: capacity,

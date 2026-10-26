@@ -15,7 +15,7 @@ import { emitFalPhase } from './phase'; // Phase update helper.
 import { extractInlineData, normalizeFalImageMetadata, runFalDownloadStep } from './responses'; // Response parsing helpers.
 import { createRandomSeed } from './random'; // Seed helper.
 import { uploadImageElementToFal } from './media'; // Media upload helper.
-import { isSeedreamTextToImageModelId, normalizeModelId, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
+import { assertSupportedImageModelId, isSeedreamTextToImageModelId, normalizeModelId, resolveSeedreamCustomSizeForModel } from './models'; // Model helpers.
 import {
   FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   isGptImage25Model,
@@ -37,7 +37,6 @@ import {
   RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   RECRAFT_V4_PRO_MAX_COLORS,
   normalizeRecraftRgbColor,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
 
 const normalizeKreaStyleReferenceStrength = (value: number): number => {
@@ -49,11 +48,12 @@ export const generateImage = async (
   prompt: string,
   options: GenerateImageOptions = {},
 ): Promise<FalImageGenerationResult> => { // Generate an image from text.
+  const selectedModelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
+  assertSupportedImageModelId(selectedModelId); // Reject retired saved ids before configuring Fal or uploading media.
   options = { ...options, abortSignal: options.abortSignal ?? getWorkspaceSignal() };
   options.abortSignal?.throwIfAborted();
   ensureFalClientConfigured();
 
-  const selectedModelId = normalizeModelId(options.modelId) || NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID;
   const gptImage2Settings = isGptImage2TextToImageModelId(selectedModelId) || isGptImage2EditModelId(selectedModelId)
     ? resolveGptImage2SettingsForRequest('text_to_image', options) : undefined;
   const gptImage25Settings = isGptImage25Model(selectedModelId)
@@ -72,7 +72,6 @@ export const generateImage = async (
   const isGptImage2TextToImage = isGptImage2TextToImageModelId(modelId);
   const isKrea2TextToImage = modelId === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
   const isFlux2MaxTextToImage = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
-  const isWan27ImageTextToImage = modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
   const isRecraftV4ProTextToImage = isRecraftV4ProModel(modelId);
   const isGrokImagineModel = modelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
   const supportsAspectRatio = isNanoBananaTextToImage
@@ -150,23 +149,10 @@ export const generateImage = async (
     body.image_size = flux2ImageSize;
   }
 
-  if (isWan27ImageTextToImage) { // Wan 2.7 Pro Image T2I specific settings.
-    const wan27Body = body as Record<string, unknown>;
-    wan27Body.image_size = options.wan27ImageSize ?? 'landscape_16_9';
-    const maxImages = parseInt(options.wan27ImageMaxImages ?? '1', 10);
-    wan27Body.max_images = Math.min(5, Math.max(1, maxImages));
-    if (options.negativePrompt) {
-      wan27Body.negative_prompt = options.negativePrompt;
-    }
-    wan27Body.enable_safety_checker = true;
-    delete wan27Body.output_format;
-    delete wan27Body.sync_mode;
-  }
-
   if (nanoBananaSettings) Object.assign(body, serializeNanoBananaInput(nanoBananaSettings));
   if (gptImageInput) Object.assign(body, gptImageInput);
 
-  if (!nanoBananaSettings && !ideogram45Input && !gptImageInput && !isKrea2TextToImage && !isRecraftV4ProTextToImage && !isWan27ImageTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!nanoBananaSettings && !ideogram45Input && !gptImageInput && !isKrea2TextToImage && !isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {

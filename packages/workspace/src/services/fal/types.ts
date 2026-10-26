@@ -39,7 +39,6 @@ import type {
   MiniMaxH3Variant,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
-  Wan27ImageAspectRatioSelectionValue,
   Wan27VideoAudioSettingSelectionValue,
   Wan27VideoAspectRatioSelectionValue,
   Wan27VideoDurationSelectionValue,
@@ -124,9 +123,6 @@ export interface GenerateImageEditOptions extends FalPhaseOptions {
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
   ideogram45RunSettings?: Ideogram45EditRunSettings; // Resolved settings take precedence over raw picker options.
-  wan27ImageSize?: Wan27ImageAspectRatioSelectionValue;
-  wan27ImageMaxImages?: string;
-  negativePrompt?: string;
 } // Optional controls for image edits.
 
 export interface GenerateImageOptions extends FalPhaseOptions {
@@ -155,9 +151,6 @@ export interface GenerateImageOptions extends FalPhaseOptions {
   krea2Creativity?: FalKrea2CreativityOption;
   imageStyleReferences?: Array<{ image: HTMLImageElement; strength: number }>;
   flux2MaxImageSize?: string;
-  wan27ImageSize?: Wan27ImageAspectRatioSelectionValue;
-  wan27ImageMaxImages?: string;
-  negativePrompt?: string;
   recraftImageSize?: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor?: RecraftRgbColor;
   recraftColors?: RecraftRgbColor[];

@@ -12,7 +12,7 @@ import {
   KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
-  SEEDREAM_MODEL_ID,
+  SEEDREAM_V5_LITE_MODEL_ID,
 } from '../modelConfig';
 import type { UseFalSettingsResult } from '../../hooks/useFalSettings';
 import type { CanvasVideoPromptBar, VideoPromptAreaMembership } from '../../types';
@@ -112,7 +112,7 @@ describe('derivePromptBarModelFlags', () => {
   });
 
   it('keeps a stale video selection from leaking into image mode', () => {
-    const flags = derivePromptBarModelFlags('fal', SEEDREAM_MODEL_ID, 'image');
+    const flags = derivePromptBarModelFlags('fal', SEEDREAM_V5_LITE_MODEL_ID, 'image');
     expect(flags.isSeedreamModel).toBe(true);
     expect(flags.isJimengMultiframeVideoModel).toBe(false);
     expect(flags.isKlingV3VideoModel).toBe(false);

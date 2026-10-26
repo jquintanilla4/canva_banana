@@ -20,8 +20,9 @@ import {
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
+  SEEDREAM_V5_LITE_MODEL_ID,
+  SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_EDIT_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
 } from '../../services/modelConfig';
 import { Tool, type CanvasImage, type FalQueueJob, type GenerationFalOptions, type GenerationInputs } from '../../types';
@@ -152,9 +153,6 @@ const createFalStub = (): UseFalSettingsResult => ({
   isSeedance15VideoModel: false,
   flux2MaxImageSize: 'landscape_16_9',
   isFlux2MaxModel: false,
-  wan27ImageAspectRatio: 'landscape_16_9',
-  wan27ImageMaxImages: '1',
-  isWan27ImageModel: false,
   recraftImageSize: 'square_hd',
   recraftBackgroundColor: { r: 255, g: 255, b: 255 },
   recraftColors: [],
@@ -2766,7 +2764,47 @@ describe('useGeneration (seedance 2)', () => {
     expect(setFalJobs).not.toHaveBeenCalled();
   });
 
-  it.each(['text_to_image', 'image_edit'] as const)('keeps Wan image $kind reruns working with a stale retired video selection', async kind => {
+  it.each([
+    'fal-ai/bytedance/seedream/v4/edit',
+    'fal-ai/bytedance/seedream/v4/text-to-image',
+    'fal-ai/bytedance/seedream/v4.5/edit',
+    'fal-ai/bytedance/seedream/v4.5/text-to-image',
+    'fal-ai/wan/v2.7/pro/text-to-image',
+    'fal-ai/wan/v2.7/pro/edit',
+    'wan/v2.6/text-to-image',
+    'wan/v2.6/image-to-image',
+  ])('rejects removed image model %s without falling back to another model', async modelId => {
+    const image = buildCanvasMedia('image-1', 'image');
+    const setError = vi.fn();
+    const setFalJobs = vi.fn();
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.FREE_SELECTION, prompt: 'Current prompt', promptPrefix: '', apiProvider: 'fal',
+      fal: createFalStub(), selection: createSelectionStub(), images: [image], paths: [], videoNegativePrompt: '',
+      setError, setIsLoading: vi.fn(), setFalJobs, setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+
+    for (const kind of ['text_to_image', 'image_edit'] as const) {
+      await act(async () => {
+        await result.current.handleGenerate({
+          kind, prompt: 'Repeat the saved image', provider: 'fal', modelId, modelMode: 'image', primaryImageId: image.id,
+        });
+      });
+    }
+
+    expect(setError.mock.calls).toEqual(Array.from({ length: 2 }, () => [
+      'This image model is no longer supported. Select a supported image model and create a new generation.',
+    ]));
+    expect(generateFalImage).not.toHaveBeenCalled();
+    expect(generateFalImageEdit).not.toHaveBeenCalled();
+    expect(generateGoogleImage).not.toHaveBeenCalled();
+    expect(generateGoogleImageEdit).not.toHaveBeenCalled();
+    expect(generateImageToVideo).not.toHaveBeenCalled();
+    expect(generateSeedanceVideo).not.toHaveBeenCalled();
+    expect(generateJimengSeedanceVideo).not.toHaveBeenCalled();
+    expect(setFalJobs).not.toHaveBeenCalled();
+  });
+
+  it.each(['text_to_image', 'image_edit'] as const)('keeps Seedream 5 $kind reruns working with a stale retired video selection', async kind => {
     const image = buildCanvasMedia('image-1', 'image');
     const fal = createFalStub();
     fal.falVideoModelId = WAN_27_VIDEO_MODEL_ID;
@@ -2781,7 +2819,7 @@ describe('useGeneration (seedance 2)', () => {
 
     await act(async () => {
       void result.current.handleGenerate({
-        kind, prompt: 'A watercolor landscape', provider: 'fal', modelId: WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID, modelMode: 'image',
+        kind, prompt: 'A watercolor landscape', provider: 'fal', modelId: SEEDREAM_V5_LITE_MODEL_ID, modelMode: 'image',
         ...(kind === 'image_edit' ? { primaryImageId: image.id } : {}),
       });
       await Promise.resolve();
@@ -2789,7 +2827,9 @@ describe('useGeneration (seedance 2)', () => {
 
     const generationService = kind === 'text_to_image' ? generateFalImage : generateFalImageEdit;
     expect(generationService).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(generationService).mock.calls[0]?.[1]).toMatchObject({ modelId: WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID });
+    expect(vi.mocked(generationService).mock.calls[0]?.[1]).toMatchObject({
+      modelId: kind === 'text_to_image' ? SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID : SEEDREAM_V5_LITE_MODEL_ID,
+    });
     expect(setError.mock.calls.every(([message]) => message === null)).toBe(true);
     expect(generateImageToVideo).not.toHaveBeenCalled();
     expect(generateSeedanceVideo).not.toHaveBeenCalled();

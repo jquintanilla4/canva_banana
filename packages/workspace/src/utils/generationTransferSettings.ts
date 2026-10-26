@@ -31,7 +31,6 @@ import {
   SEEDVR_UPSCALER_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_EDIT_VIDEO_MODEL_ID,
   WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
@@ -188,7 +187,6 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: (modelId) => isIdeogram45Model(modelId), defaults: IDEOGRAM_45_DEFAULTS },
   { matches: (modelId) => isGptImage2Model(modelId), defaults: GPT_IMAGE_2_DEFAULTS },
   { matches: (modelId) => isKrea2LargeModelId(modelId), defaults: { aspectRatioSelection: KREA_2_DEFAULT_ASPECT_RATIO, krea2Creativity: KREA_2_DEFAULT_CREATIVITY } }, // Krea defaults.
-  { matches: [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID], defaults: { wan27ImageAspectRatio: 'landscape_16_9', wan27ImageMaxImages: '1' } }, // Wan image defaults.
   {
     matches: (modelId) => isRecraftV4ProModel(modelId),
     defaults: () => ({ recraftImageSize: RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE, recraftBackgroundColor: { ...RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR }, recraftColors: [] }), // Recraft defaults.

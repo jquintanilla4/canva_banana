@@ -19,9 +19,9 @@ import {
   uploadCanvasToFal,
   uploadImageElementToFal,
 } from './media'; // Media upload helpers.
-import { convertWan27ImageMentions } from './prompts'; // Prompt conversion helpers.
 import { extractInlineData, normalizeFalImageMetadata, runFalDownloadStep } from './responses'; // Response parsing helpers.
 import {
+  assertSupportedImageModelId,
   getDefaultFalModelId,
   isSeedreamEditModelId,
   normalizeModelId,
@@ -38,9 +38,6 @@ import {
   isGptImage2TextToImageModelId,
   isNanoBananaEditModelId,
   isSeedreamV5ProModelId,
-  WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
-  type Wan27ImageAspectRatioSelectionValue,
 } from '../modelConfig'; // Canonical model IDs.
 
 const emitImageEditQueuePhase = (
@@ -67,11 +64,12 @@ export const generateImageEdit = async (
   }: GenerateImageEditParams,
   options: GenerateImageEditOptions = {},
 ): Promise<FalImageGenerationResult> => { // Edit an image with Fal.
+  const selectedModelId = normalizeModelId(options.modelId) || getDefaultFalModelId();
+  assertSupportedImageModelId(selectedModelId); // Include retired runtime defaults before any provider side effects.
   options = { ...options, abortSignal: options.abortSignal ?? getWorkspaceSignal() };
   options.abortSignal?.throwIfAborted();
   ensureFalClientConfigured();
 
-  const selectedModelId = normalizeModelId(options.modelId) || getDefaultFalModelId();
   const gptImage2Settings = isGptImage2EditModelId(selectedModelId) || isGptImage2TextToImageModelId(selectedModelId)
     ? resolveGptImage2SettingsForRequest('image_edit', options) : undefined;
   const gptImage25Settings = isGptImage25Model(selectedModelId)
@@ -103,7 +101,6 @@ export const generateImageEdit = async (
       abortSignal: options.abortSignal,
     label: 'source image',
   });
-  const isWan27ImageModel = modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID || modelId === WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID; // Wan 2.7 Pro image edit routing.
 
   if (modelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
     const numImagesOption = options.numImages; // Grok supports 1-4 outputs per request.
@@ -228,7 +225,7 @@ export const generateImageEdit = async (
   }
 
   const isFlux2MaxModel = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID; // Flux2 Max edit routing.
-  if (!isWan27ImageModel && !isFlux2MaxModel && referenceImages && referenceImages.length > 0) {
+  if (!isFlux2MaxModel && referenceImages && referenceImages.length > 0) {
     const referenceUrls = await collectReferenceUploadUrls(referenceImages, {
       jobId: options.jobId,
       onPhaseUpdate: options.onPhaseUpdate,
@@ -349,136 +346,6 @@ export const generateImageEdit = async (
     const [primaryBase64] = base64List;
     if (!primaryBase64) {
       throw new Error('Failed to extract image data from Fal.ai Flux2 Max edit response.');
-    }
-
-    const requestId = result?.requestId || latestRequestId;
-    return { imageBase64: primaryBase64, imagesBase64: base64List, imageDataUrls: inlineDataList, text: '', requestId };
-  }
-
-  if (isWan27ImageModel) {
-    const hasReferenceImages = referenceImages && referenceImages.length > 0;
-    let latestRequestId: string | undefined;
-
-    if ((referenceImages?.length ?? 0) > 3) { // Fal edit endpoint accepts 1 base image plus 3 references.
-      throw new Error('Wan 2.7 Pro Image supports up to 4 images total. Please reduce the number of selected images.');
-    }
-
-    const allImageUrls = [baseImageUrl]; // Base image first, then references.
-    if (hasReferenceImages) {
-      const referenceUrls = await collectReferenceUploadUrls(referenceImages, {
-        jobId: options.jobId,
-        onPhaseUpdate: options.onPhaseUpdate,
-      abortSignal: options.abortSignal,
-      });
-      allImageUrls.push(...referenceUrls);
-    }
-
-    if (allImageUrls.length > 4) { // Fal edit endpoint accepts 1 base image plus 3 references.
-      throw new Error('Wan 2.7 Pro Image supports up to 4 images total. Please reduce the number of selected images.');
-    }
-
-    const convertedPrompt = convertWan27ImageMentions(prompt); // Convert @ImageN mentions.
-
-    const wan27Body: {
-      prompt: string;
-      image_urls: string[];
-      image_size?: Wan27ImageAspectRatioSelectionValue;
-      num_images?: number;
-      negative_prompt?: string;
-      enable_prompt_expansion?: boolean;
-      enable_safety_checker?: boolean;
-    } = {
-      prompt: convertedPrompt,
-      image_urls: allImageUrls,
-      image_size: options.wan27ImageSize ?? 'landscape_16_9',
-      enable_prompt_expansion: true,
-      enable_safety_checker: true,
-    };
-
-    const numImages = parseInt(options.wan27ImageMaxImages ?? '1', 10);
-    wan27Body.num_images = Math.min(4, Math.max(1, numImages)); // Edit endpoint num_images cap.
-
-    if (options.negativePrompt) {
-      wan27Body.negative_prompt = options.negativePrompt;
-    }
-
-    const i2iModelId = WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID;
-    emitFalPhase(options, i2iModelId, { phase: 'submitting', message: 'Submitting to Fal...' });
-    options.abortSignal?.throwIfAborted();
-    logFalEvent('outbound', i2iModelId, 'Outbound request (fal.subscribe)', { input: wan27Body });
-
-    let result: Awaited<ReturnType<typeof fal.subscribe>>;
-    try {
-      options.abortSignal?.throwIfAborted();
-      result = await fal.subscribe(i2iModelId, {
-        ...options.abortSignal ? { abortSignal: options.abortSignal } : {},
-        input: wan27Body,
-        logs: true,
-        onQueueUpdate: update => {
-          if (options.abortSignal?.aborted) return;
-          const queueUpdate = update as unknown as FalQueueUpdate;
-          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-          if (resolvedRequestId) {
-            latestRequestId = resolvedRequestId;
-          }
-          emitImageEditQueuePhase(options, i2iModelId, queueUpdate, resolvedRequestId);
-          logFalEvent('inbound', i2iModelId, 'Queue update', {
-            status: queueUpdate.status,
-            position: queueUpdate.position,
-            eta: queueUpdate.eta,
-            requestId: resolvedRequestId,
-            logs: normalizedLogs.map(log => log?.message ?? ''),
-          });
-          options.onQueueUpdate?.({
-            ...queueUpdate,
-            requestId: resolvedRequestId || '',
-            logs: normalizedLogs,
-          });
-        },
-      });
-    } catch (error) {
-      options.abortSignal?.throwIfAborted();
-      logFalEvent('error', i2iModelId, 'Request failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
-    }
-
-    options.abortSignal?.throwIfAborted();
-    logFalEvent('inbound', i2iModelId, 'Result received', {
-      requestId: result?.requestId || latestRequestId,
-      data: (result?.data as Record<string, unknown>) ?? undefined,
-    });
-
-    const data = result?.data as { images?: Array<{ url: string }> } | undefined;
-    const images = data?.images;
-    if (!images || images.length === 0) {
-      throw new Error('Fal.ai Wan 2.7 Pro Image Edit API did not return an image.');
-    }
-
-    emitFalPhase(options, i2iModelId, {
-      phase: 'downloading',
-      message: 'Downloading generated image...',
-      requestId: result?.requestId || latestRequestId,
-    });
-    const downloadRequestId = result?.requestId || latestRequestId; // Keep request id on download failures.
-    const inlineDataList = await runFalDownloadStep(downloadRequestId, async () => (
-      Promise.all(images.map(img => extractInlineData(img.url, options.abortSignal)))
-    ));
-    const base64List = await runFalDownloadStep(downloadRequestId, async () => (
-      inlineDataList.map(dataUrl => {
-        const base64 = dataUrl.split(',')[1];
-        if (!base64) {
-          throw new Error('Failed to extract image data from Fal.ai Wan 2.7 Pro Image Edit response.');
-        }
-        return base64;
-      })
-    ));
-
-    const [primaryBase64] = base64List;
-    if (!primaryBase64) {
-      throw new Error('Failed to extract image data from Fal.ai Wan 2.7 Pro Image Edit response.');
     }
 
     const requestId = result?.requestId || latestRequestId;

@@ -19,7 +19,6 @@ import {
   SEEDVR_UPSCALER_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   getVolcengineSafeSeedance2Settings,
@@ -60,7 +59,7 @@ import { KLING_V4_DEFAULTS, isKlingV4VideoModel, isKlingV4Variant, isKlingV4Reso
 
 type PromptBarModelFlagKey =
   | 'isVideoMode' | 'usingFal' | 'isSeedreamModel' | 'isNanoBananaModel' | 'isKrea2LargeModel'
-  | 'isFlux2MaxModel' | 'isWan27ImageModel' | 'isGptImage2Model' | 'isUpscaleModel'
+  | 'isFlux2MaxModel' | 'isGptImage2Model' | 'isUpscaleModel'
   | 'isKlingVideoModel' | 'isKlingV4VideoModel' | 'isKlingV3VideoModel' | 'isKlingO3VideoModel' | 'isKlingV3ControlVideoModel'
   | 'isWanAnimateVideoModel' | 'isLipsyncVideoModel' | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel' | 'isGrokImagineVideoModel' | 'isVeo31VideoModel' | 'isWan27VideoModel'
@@ -87,7 +86,6 @@ export const derivePromptBarModelFlags = (
     isGptImage2Model: !isVideoMode && isGptImage2EditModelId(modelId),
     isKrea2LargeModel: apiProvider === 'fal' && !isVideoMode && isKrea2LargeModelId(modelId), // Krea behavior only applies while Fal is active.
     isFlux2MaxModel: !isVideoMode && modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
-    isWan27ImageModel: !isVideoMode && modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
     isUpscaleModel: !isVideoMode && (modelId === CRYSTAL_UPSCALER_MODEL_ID || modelId === SEEDVR_UPSCALER_MODEL_ID),
     isKlingVideoModel: isVideoMode && modelId === KLING_VIDEO_MODEL_ID,
     isKlingV4VideoModel: isVideoMode && isKlingV4VideoModel(modelId),
@@ -139,7 +137,7 @@ const PROMPT_BAR_VALUE_KEYS = [
   'jimengMultiframeDuration', 'jimengMultiframeResolution',
   'seedance2GenerateAudio', 'seedance2CameraFixed', 'seedance2OutputFormat',
   'seedance25Variant', 'seedance25AspectRatio', 'seedance25Resolution', 'seedance25Duration', 'seedance25GenerateAudio',
-  'flux2MaxImageSize', 'wan27ImageAspectRatio', 'wan27ImageMaxImages',
+  'flux2MaxImageSize',
   'recraftImageSize', 'recraftBackgroundColor', 'recraftColors',
   'gptImage25Variant', 'gptImage25Background', 'gptImage25Quality', 'gptImage2Quality', 'krea2AspectRatio', 'krea2Creativity',
   'nanoBananaWebSearch', 'nanoBananaThinkingLevel',
@@ -254,8 +252,6 @@ const buildEmbeddedPromptBarValues = (
     seedance25Duration: options.seedance25Duration ?? 'auto',
     seedance25GenerateAudio: options.seedance25GenerateAudio ?? true,
     flux2MaxImageSize: fal.flux2MaxImageSize,
-    wan27ImageAspectRatio: fal.wan27ImageAspectRatio,
-    wan27ImageMaxImages: fal.wan27ImageMaxImages,
     recraftImageSize: fal.recraftImageSize,
     recraftBackgroundColor: fal.recraftBackgroundColor,
     recraftColors: fal.recraftColors,
@@ -370,8 +366,6 @@ const createFooterPromptBarHandlers = (
   onSeedance25DurationChange: fal.handleSeedance25DurationChange,
   onSeedance25GenerateAudioChange: fal.handleSeedance25GenerateAudioChange,
   onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
-  onWan27ImageAspectRatioChange: fal.handleWan27ImageAspectRatioChange,
-  onWan27ImageMaxImagesChange: fal.handleWan27ImageMaxImagesChange,
   onRecraftImageSizeChange: fal.handleRecraftImageSizeChange,
   onRecraftBackgroundColorChange: fal.handleRecraftBackgroundColorChange,
   onRecraftColorChange: fal.handleRecraftColorChange,
@@ -583,8 +577,6 @@ const createEmbeddedPromptBarHandlers = (
     onSeedance25DurationChange: value => updateFalOption('seedance25Duration', value),
     onSeedance25GenerateAudioChange: value => updateFalOption('seedance25GenerateAudio', value),
     onFlux2MaxImageSizeChange: NOOP,
-    onWan27ImageAspectRatioChange: NOOP,
-    onWan27ImageMaxImagesChange: NOOP,
     onRecraftImageSizeChange: NOOP,
     onRecraftBackgroundColorChange: NOOP,
     onRecraftColorChange: NOOP,

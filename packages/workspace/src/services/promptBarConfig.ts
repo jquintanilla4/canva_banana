@@ -56,8 +56,6 @@ import type {
   Wan27VideoDurationSelectionValue,
   Wan27VideoResolutionSelectionValue,
   Wan27VideoVariant,
-  Wan27ImageAspectRatioSelectionValue,
-  Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -184,9 +182,6 @@ import {
   WAN_27_VIDEO_REFERENCE_DURATION_OPTIONS,
   WAN_27_VIDEO_RESOLUTION_OPTIONS,
   WAN_27_VIDEO_VARIANT_OPTIONS,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
-  WAN_27_IMAGE_ASPECT_RATIO_OPTIONS,
-  WAN_27_IMAGE_MAX_IMAGES_OPTIONS,
 } from './modelConfig';
 
 type Flux3PromptBarControlsInput = {
@@ -768,7 +763,6 @@ export type PromptBarControlsInput = {
   isNanoBananaModel: boolean;
   isKrea2LargeModel?: boolean;
   isFlux2MaxModel: boolean;
-  isWan27ImageModel: boolean;
   isGptImage2Model?: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
@@ -876,8 +870,6 @@ export type PromptBarControlsInput = {
   seedance25GenerateAudio?: boolean;
   seedance25UsesSourceAspectRatio?: boolean;
   flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
-  wan27ImageAspectRatio: Wan27ImageAspectRatioSelectionValue;
-  wan27ImageMaxImages: Wan27ImageMaxImagesSelectionValue;
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
@@ -980,8 +972,6 @@ export type PromptBarControlsInput = {
   onSeedance25DurationChange?: (value: string) => void;
   onSeedance25GenerateAudioChange?: (value: boolean) => void;
   onFlux2MaxImageSizeChange: (value: string) => void;
-  onWan27ImageAspectRatioChange: (value: string) => void;
-  onWan27ImageMaxImagesChange: (value: string) => void;
   onRecraftImageSizeChange: (value: string) => void;
   onRecraftBackgroundColorChange: (value: string) => void;
   onRecraftColorChange: (index: number, value: string) => void;
@@ -1021,7 +1011,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     isNanoBananaModel,
     isKrea2LargeModel = false,
     isFlux2MaxModel,
-    isWan27ImageModel,
     isGptImage2Model = false,
     isUpscaleModel,
     isKlingVideoModel,
@@ -1124,8 +1113,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     seedance25GenerateAudio = true,
     seedance25UsesSourceAspectRatio = false,
     flux2MaxImageSize,
-    wan27ImageAspectRatio,
-    wan27ImageMaxImages,
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
@@ -1223,8 +1210,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onSeedance25DurationChange = () => undefined,
     onSeedance25GenerateAudioChange = () => undefined,
     onFlux2MaxImageSizeChange,
-    onWan27ImageAspectRatioChange,
-    onWan27ImageMaxImagesChange,
     onRecraftImageSizeChange,
     onRecraftBackgroundColorChange,
     onRecraftColorChange,
@@ -2012,29 +1997,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     }
   }
 
-  // Wan 2.7 Pro Image controls
-  if (!isVideoMode && usingFal && isWan27ImageModel) {
-    controls.push({
-      id: 'wan27-image-max-images-select',
-      prefixLabel: 'Images',
-      ariaLabel: 'Select number of images to generate',
-      options: WAN_27_IMAGE_MAX_IMAGES_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan27ImageMaxImages,
-      onChange: onWan27ImageMaxImagesChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'wan27-image-aspect-ratio-select',
-      prefixLabel: 'Aspect Ratio',
-      ariaLabel: 'Select output aspect ratio',
-      options: WAN_27_IMAGE_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan27ImageAspectRatio,
-      onChange: onWan27ImageAspectRatioChange,
-      disabled: isLoading,
-    });
-  }
-
   const isGrokImagineModel = !isVideoMode && falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
   const isSeedreamV5Lite = isSeedreamV5LiteModelId(falModelId); // Seedream 5 Lite uses stricter controls.
   const isSeedreamV5Pro = isSeedreamV5ProModelId(falModelId); // Seedream 5 Pro uses Pro controls.
@@ -2155,4 +2117,4 @@ export const getPromptBarModelOptions = (mode: FalModelMode): ReadonlyArray<FalM
   mode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
 
 export const shouldShowKlingNegativePrompt = (falModelId: FalVideoModelId | string): boolean =>
-  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_V3_VIDEO_MODEL_ID || falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_V3_VIDEO_MODEL_ID;

@@ -2,30 +2,35 @@ import { normalizeNanoBananaEndpoint } from '../nanoBananaConfig';
 import type { FalAspectRatioOption, FalImageSizeOption } from '../../types'; // UI option types.
 import {
   NANO_BANANA_PRO_EDIT_MODEL_ID,
-  SEEDREAM_MODEL_ID,
-  SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V5_PRO_MODEL_ID,
   SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
-  SEEDREAM_V45_MODEL_ID,
-  SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
-  WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
 } from '../modelConfig'; // Canonical model IDs.
 import { getRuntimeConfig } from '../runtimeConfig'; // Shared web/desktop config.
 
-const LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'wan/v2.6/text-to-image'; // Legacy Wan image t2i id.
-const LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'wan/v2.6/image-to-image'; // Legacy Wan image edit id.
+const RETIRED_IMAGE_MODEL_IDS = new Set([
+  'fal-ai/bytedance/seedream/v4/edit',
+  'fal-ai/bytedance/seedream/v4/text-to-image',
+  'fal-ai/bytedance/seedream/v4.5/edit',
+  'fal-ai/bytedance/seedream/v4.5/text-to-image',
+  'fal-ai/wan/v2.7/pro/text-to-image',
+  'fal-ai/wan/v2.7/pro/edit',
+  'wan/v2.6/text-to-image',
+  'wan/v2.6/image-to-image',
+]); // Saved ids remain rejectable without exposing retired models as supported exports.
+export const isRetiredImageModelId = (modelId: string | undefined): boolean =>
+  !!modelId && RETIRED_IMAGE_MODEL_IDS.has(modelId);
+
+export const assertSupportedImageModelId = (modelId: string | undefined): void => {
+  if (isRetiredImageModelId(modelId)) {
+    throw new Error('This image model is no longer supported. Select a supported image model and create a new generation.');
+  }
+};
+
 const REMOVED_KLING_O1_IMAGE_MODEL_ID = 'fal-ai/kling-image/o1'; // Removed Kling image id.
 
 export const normalizeModelId = (modelId: string | undefined): string | undefined => { // Normalize legacy ids.
-  if (modelId === LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
-    return WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
-  }
-  if (modelId === LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID) {
-    return WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID;
-  }
   if (modelId === REMOVED_KLING_O1_IMAGE_MODEL_ID) {
     return undefined;
   }
@@ -34,12 +39,12 @@ export const normalizeModelId = (modelId: string | undefined): string | undefine
 
 export const getDefaultFalModelId = (): string => normalizeModelId(getRuntimeConfig().falModelId) || NANO_BANANA_PRO_EDIT_MODEL_ID; // Default edit model.
 
-const SEEDREAM_EDIT_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID, SEEDREAM_V5_PRO_MODEL_ID] as const; // Seedream edit ids.
+const SEEDREAM_EDIT_MODEL_IDS = [SEEDREAM_V5_LITE_MODEL_ID, SEEDREAM_V5_PRO_MODEL_ID] as const; // Supported Seedream edit ids.
 export type SeedreamEditModelId = typeof SEEDREAM_EDIT_MODEL_IDS[number]; // Seedream edit id union.
 export const isSeedreamEditModelId = (modelId: string | undefined): modelId is SeedreamEditModelId =>
   !!modelId && (SEEDREAM_EDIT_MODEL_IDS as readonly string[]).includes(modelId); // Seedream edit guard.
 
-const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID] as const; // Seedream t2i ids.
+const SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS = [SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID, SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID] as const; // Supported Seedream t2i ids.
 export const isSeedreamTextToImageModelId = (modelId: string | undefined): boolean =>
   !!modelId && (SEEDREAM_TEXT_TO_IMAGE_MODEL_IDS as readonly string[]).includes(modelId); // Seedream t2i guard.
 

@@ -20,9 +20,7 @@ import {
   KREA_2_MAX_STYLE_REFERENCES,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
-  SEEDREAM_V45_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -206,33 +204,12 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
     matches: (modelId) => isSeedreamModelId(modelId as FalModelId) || isNanoBananaEditModelId(modelId),
     base: { supportsCameraSettings: true },
-    resolve: (_ctx, modelId) => (
-      modelId === SEEDREAM_V45_MODEL_ID
-        ? {
-          referenceLimitToast: (max) => (max >= 10
-            ? { message: 'Seedream 4.5 only accepts up to 10 reference images.', durationMs: 2000 }
-            : null),
-        }
-        : {}
-    ),
   },
   {
     matches: [GROK_IMAGINE_IMAGE_MODEL_ID],
     base: {
       referenceLimitToast: () => ({
         message: 'Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.',
-        durationMs: 4000,
-      }),
-    },
-  },
-  {
-    matches: [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID],
-    base: {
-      klingSuggestionsEnabled: true,
-      showNegativePrompt: true,
-      promptPlaceholder: `Describe your generation, or your edit, or use @ to reference images (4 images in total)... ${GENERATE_SUFFIX}`,
-      referenceLimitToast: () => ({
-        message: 'Wan 2.7 Pro Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.',
         durationMs: 4000,
       }),
     },

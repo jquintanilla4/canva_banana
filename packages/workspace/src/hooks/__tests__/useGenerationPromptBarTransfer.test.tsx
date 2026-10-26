@@ -40,7 +40,6 @@ const buildHookArgs = (displayedImages: CanvasImage[]) => ({
   setActiveEmbeddedPromptBarId: vi.fn(),
   setSelectedVideoPromptAreaId: vi.fn(),
   setVideoNegativePromptForModel: vi.fn(),
-  setWan27ImageNegativePrompt: vi.fn(),
   setKrea2StyleReferenceStrengths: vi.fn(),
   setToastMessage: vi.fn(),
   resetEditContext: vi.fn(),
@@ -103,7 +102,6 @@ describe('useGenerationPromptBarTransfer', () => {
     expect(args.selection.setSelectedImageIds).toHaveBeenCalledWith(['source-image']);
     expect(args.selection.setReferenceImageIds).toHaveBeenCalledWith([]);
     expect(args.setVideoNegativePromptForModel).not.toHaveBeenCalled();
-    expect(args.setWan27ImageNegativePrompt).not.toHaveBeenCalled();
     expect(args.setToastMessage).toHaveBeenCalledWith(expect.stringContaining('saved negative prompt was not restored'));
     expect(result.current.promptFocusRequestToken).toBe(1);
   });

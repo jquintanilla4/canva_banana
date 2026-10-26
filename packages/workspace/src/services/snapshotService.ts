@@ -70,8 +70,6 @@ import {
   isMiniMaxH3AspectRatioSelectionValue,
   isMiniMaxH3DurationSelectionValue,
   isMiniMaxH3Variant,
-  isWan27ImageAspectRatioSelectionValue,
-  isWan27ImageMaxImagesSelectionValue,
   isVeo31AspectRatioSelectionValue,
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
@@ -2145,13 +2143,6 @@ export const normalizeSnapshotImageMetadata = (
           normalizedOptions.recraftColors = recraftColors;
         }
       }
-      if (isWan27ImageAspectRatioSelectionValue((typed as { wan27ImageAspectRatio?: unknown }).wan27ImageAspectRatio)) {
-        normalizedOptions.wan27ImageAspectRatio = typed.wan27ImageAspectRatio;
-      }
-      if (isWan27ImageMaxImagesSelectionValue((typed as { wan27ImageMaxImages?: unknown }).wan27ImageMaxImages)) {
-        normalizedOptions.wan27ImageMaxImages = typed.wan27ImageMaxImages;
-      }
-
       if (isSeedance2Variant((typed as { seedance2Variant?: unknown }).seedance2Variant)) {
         normalizedOptions.seedance2Variant = typed.seedance2Variant;
       }

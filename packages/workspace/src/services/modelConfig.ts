@@ -32,12 +32,8 @@ export * from './ideogram45Config';
 
 // Central registry of supported model IDs plus helpers for validation/labeling in the UI.
 export const KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID = 'krea/v2/large/text-to-image' as const; // Krea 2 Large t2i endpoint.
-export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
-export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
 export const SEEDREAM_V5_LITE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/edit' as const;
 export const SEEDREAM_V5_PRO_MODEL_ID = 'bytedance/seedream/v5/pro/edit' as const; // Seedream 5 Pro edit endpoint.
-export const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
-export const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
 export const SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/text-to-image' as const;
 export const SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID = 'bytedance/seedream/v5/pro/text-to-image' as const; // Seedream 5 Pro t2i endpoint.
 export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
@@ -101,8 +97,6 @@ export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as 
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video' as const;
 export const SCAIL_VIDEO_MODEL_ID = 'fal-ai/scail' as const;
-export const WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/wan/v2.7/pro/text-to-image' as const;
-export const WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'fal-ai/wan/v2.7/pro/edit' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 export type KlingVariant = 'standard' | 'pro';
@@ -123,7 +117,6 @@ export type KlingV3ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
   'oversaturated, overexposed, static, blurry details, subtitles, stylized, artwork, painting, still frame, overall gray, worst quality, low quality, JPEG artifacts, ugly, mutated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, static motion, cluttered background, three legs, crowded background, walking backwards';
-export const WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT = 'low resolution, error, worst quality, low quality, deformed, extra fingers';
 
 export type WanTargetResolution = '720p' | '1080p';
 export type WanCreativity = 0 | 1 | 2 | 3 | 4;
@@ -156,12 +149,9 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: NANO_BANANA_21_EDIT_MODEL_ID, label: 'NanoBanana 2.1' }, // Selector uses edit id.
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4 Pro' }, // Direct text-to-image endpoint.
-  { value: SEEDREAM_MODEL_ID, label: 'Seedream 4' },
-  { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream 4.5' },
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
   { value: SEEDREAM_V5_PRO_MODEL_ID, label: 'Seedream 5 Pro' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
-  { value: WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Wan 2.7 Pro Image' },
  ] as const;
 
 export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_OPTIONS_BASE);
@@ -1035,32 +1025,12 @@ export const isFlux2MaxImageSizeSelectionValue = (value: unknown): value is Flux
 export const isFlux2MaxModel = (modelId: string | undefined): boolean =>
   modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
 
-// Wan 2.7 Pro Image options
-export type Wan27ImageAspectRatioSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-export type Wan27ImageMaxImagesSelectionValue = '1' | '2' | '3' | '4' | '5';
 export type RecraftV4ProImageSizeSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
 export type RecraftRgbColor = { r: number; g: number; b: number };
 
 export const RECRAFT_V4_PRO_MAX_COLORS = 5; // UI cap for preferred colors.
 export const RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE: RecraftV4ProImageSizeSelectionValue = 'square_hd'; // Fal default.
 export const RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR: RecraftRgbColor = { r: 255, g: 255, b: 255 }; // Neutral background color.
-
-export const WAN_27_IMAGE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan27ImageAspectRatioSelectionValue; label: string }> = [
-  { value: 'landscape_16_9', label: 'Landscape 16:9' },
-  { value: 'landscape_4_3', label: 'Landscape 4:3' },
-  { value: 'portrait_16_9', label: 'Portrait 16:9' },
-  { value: 'portrait_4_3', label: 'Portrait 4:3' },
-  { value: 'square_hd', label: 'Square HD' },
-  { value: 'square', label: 'Square' },
-] as const;
-
-export const WAN_27_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan27ImageMaxImagesSelectionValue; label: string }> = [
-  { value: '1', label: '1' },
-  { value: '2', label: '2' },
-  { value: '3', label: '3' },
-  { value: '4', label: '4' },
-  { value: '5', label: '5' },
-] as const;
 
 export type Krea2AspectRatioSelectionValue = '1:1' | '4:3' | '3:2' | '16:9' | '2.35:1' | '4:5' | '2:3' | '9:16';
 export type Krea2CreativitySelectionValue = FalKrea2CreativityOption;
@@ -1095,9 +1065,6 @@ export const RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: RecraftV4
   { value: 'landscape_16_9', label: 'Landscape 16:9' },
 ] as const;
 
-export const isWan27ImageModel = (modelId: string | undefined): boolean =>
-  modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
-
 export const isGptImage2Model = (modelId: string | undefined): boolean =>
   modelId === GPT_IMAGE_2_EDIT_MODEL_ID; // Selector id for GPT Image 2.
 
@@ -1106,12 +1073,6 @@ export const isKrea2LargeModel = (modelId: string | undefined): boolean =>
 
 export const isRecraftV4ProModel = (modelId: string | undefined): boolean =>
   modelId === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID;
-
-export const isWan27ImageAspectRatioSelectionValue = (value: unknown): value is Wan27ImageAspectRatioSelectionValue =>
-  value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
-
-export const isWan27ImageMaxImagesSelectionValue = (value: unknown): value is Wan27ImageMaxImagesSelectionValue =>
-  value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
 
 export const isKrea2AspectRatioSelectionValue = (value: unknown): value is Krea2AspectRatioSelectionValue =>
   value === '1:1' || value === '4:3' || value === '3:2' || value === '16:9' || value === '2.35:1' || value === '4:5' || value === '2:3' || value === '9:16';
@@ -1162,16 +1123,12 @@ export const recraftHexToRgb = (value: string): RecraftRgbColor | undefined => {
 
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS_BASE, ...FAL_VIDEO_MODEL_OPTIONS_BASE] as const;
 export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];
-export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID, SEEDREAM_V5_PRO_MODEL_ID] as const;
+export const SEEDREAM_MODEL_IDS = [SEEDREAM_V5_LITE_MODEL_ID, SEEDREAM_V5_PRO_MODEL_ID] as const;
 export type SeedreamModelId = typeof SEEDREAM_MODEL_IDS[number];
 export const SEEDREAM_TEXT_TO_IMAGE_MAP: Record<SeedreamModelId, string> = {
-  [SEEDREAM_MODEL_ID]: SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
-  [SEEDREAM_V45_MODEL_ID]: SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
   [SEEDREAM_V5_LITE_MODEL_ID]: SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   [SEEDREAM_V5_PRO_MODEL_ID]: SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
 };
-export const isSeedreamV45ModelId = (value: string | undefined): boolean =>
-  value === SEEDREAM_V45_MODEL_ID || value === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID;
 export const isSeedreamV5LiteModelId = (value: string | undefined): boolean =>
   value === SEEDREAM_V5_LITE_MODEL_ID || value === SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID; // Match both edit and t2i IDs.
 export const isSeedreamV5ProModelId = (value: string | undefined): boolean =>
@@ -1377,9 +1334,6 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   if (value === LEGACY_WAN_26_VIDEO_MODEL_ID || value === WAN_27_TEXT_TO_VIDEO_MODEL_ID || value === WAN_27_IMAGE_TO_VIDEO_MODEL_ID || value === WAN_27_REFERENCE_TO_VIDEO_MODEL_ID || value === WAN_27_EDIT_VIDEO_MODEL_ID) {
     return WAN_27_VIDEO_MODEL_ID;
   }
-  if (value === LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID || value === LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID) {
-    return WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
-  }
   return isFalModelId(value) ? value : undefined;
 };
 
@@ -1431,7 +1385,7 @@ export const SEEDREAM_V5_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImage
 export const getSeedreamImageSizeOptions = (modelId: string | undefined) =>
   isSeedreamV5ProModelId(modelId)
     ? SEEDREAM_V5_PRO_IMAGE_SIZE_OPTIONS
-    : isSeedreamV5LiteModelId(modelId) ? SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS : FAL_IMAGE_SIZE_OPTIONS; // Keep v4/v4.5 behavior unchanged.
+    : isSeedreamV5LiteModelId(modelId) ? SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS : FAL_IMAGE_SIZE_OPTIONS;
 
 export const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 export const FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE = [1, 2, 3, 4, 5, 6] as const;
@@ -1501,14 +1455,11 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [GPT_IMAGE_25_MODEL_ID]: 15, // Primary plus references must fit 16 total inputs.
   [IDEOGRAM_45_MODEL_ID]: 4, // Primary source plus four references.
   [KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID]: KREA_2_MAX_STYLE_REFERENCES,
-  [SEEDREAM_MODEL_ID]: 7,
-  [SEEDREAM_V45_MODEL_ID]: 10,
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.
   [SEEDREAM_V5_PRO_MODEL_ID]: 9, // Seedream 5 Pro supports 10 total input images.
   [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
   [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
   [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,
-  [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID]: 3, // Wan 2.7 Pro Image supports up to 4 total images (1 primary + 3 references)
   [KLING_O3_VIDEO_MODEL_ID]: 4,
   [KLING_O3_VIDEO_EDIT_MODEL_ID]: 4,
   [KLING_VIDEO_MODEL_ID]: 0,
