@@ -27,6 +27,7 @@ import {
   SEEDANCE25_REFERENCE_VIDEO_LIMIT,
 } from '../utils/seedance25References';
 import { getFlux3ModePolicy } from '../utils/flux3';
+import { isKlingV4VideoModel, KLING_V4_REFERENCE_IMAGE_LIMIT, KLING_V4_REFERENCE_VIDEO_LIMIT, KLING_V4_REFERENCE_TOTAL_LIMIT } from '../services/klingV4Config';
 
 type SelectionFalSettings = Pick<
   UseFalSettingsResult,
@@ -53,9 +54,9 @@ type SelectionFalSettings = Pick<
   flux3Variant?: UseFalSettingsResult['flux3Variant'];
   wan27VideoVariant?: UseFalSettingsResult['wan27VideoVariant']; // Missing values fall back to Smart.
   isKlingV3VideoModel?: UseFalSettingsResult['isKlingV3VideoModel']; // Older test stubs and snapshots do not carry this flag.
-  isKrea2LargeModel?: UseFalSettingsResult['isKrea2LargeModel']; // Older test stubs do not carry this image flag.
   isMiniMaxH3VideoModel?: UseFalSettingsResult['isMiniMaxH3VideoModel']; // Older test stubs predate H3.
   miniMaxH3Variant?: UseFalSettingsResult['miniMaxH3Variant']; // Missing H3 state defaults to Reference elsewhere.
+  klingV4Variant?: 'generate' | 'edit';
   isSeedance25VideoModel?: UseFalSettingsResult['isSeedance25VideoModel']; // Seedance 2.5 is optional for older test stubs.
   seedance25Variant?: UseFalSettingsResult['seedance25Variant']; // Missing 2.5 state defaults to Reference elsewhere.
   seedance2VolcengineModel?: UseFalSettingsResult['seedance2VolcengineModel']; // Missing Volcengine sub-model state defaults to the 2.0 limits.
@@ -125,9 +126,9 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     isWan27VideoModel,
     isMiniMaxH3VideoModel,
     miniMaxH3Variant,
+    klingV4Variant = 'generate',
     isFlux3VideoModel = false,
     flux3Variant = 'smart',
-    isKrea2LargeModel,
     wan27VideoVariant,
     isSeedance15VideoModel,
     isSeedance2VideoModel,
@@ -139,7 +140,9 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     veo31Variant,
   } = fal;
   const isFalProvider = apiProvider === 'fal'; // Fal-only caps should not affect Google selection.
-  const isActiveKrea2LargeModel = apiProvider === 'fal' && Boolean(isKrea2LargeModel); // Krea rules apply only while Fal is active.
+  const isKlingV4 = isFalProvider && falModelMode === 'video' && isKlingV4VideoModel(falVideoModelId);
+  const isKlingV4GenerateMode = isKlingV4 && klingV4Variant === 'generate';
+  const isKlingV4EditMode = isKlingV4 && klingV4Variant === 'edit';
 
   const isKlingO3VideoInputMode = isKlingO3EditMode;
   const isWanVideoInputMode =
@@ -191,22 +194,25 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && falModelMode === 'video'
     && isMiniMaxH3VideoModel
     && miniMaxH3Variant === 'reference';
-  const isMultimodalReferenceMode = isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode || isFlux3KeyframesMode;
-  const multimodalReferenceLabel = isFlux3KeyframesMode ? 'Flux 3 Keyframes' : isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && seedance2VolcengineModel === 'seedance25') ? 'Seedance 2.5' : 'Seedance 2';
+  const isMultimodalReferenceMode = isKlingV4GenerateMode || isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode || isFlux3KeyframesMode;
+  const multimodalReferenceLabel = isKlingV4GenerateMode ? 'Kling v4' : isFlux3KeyframesMode ? 'Flux 3 Keyframes' : isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && seedance2VolcengineModel === 'seedance25') ? 'Seedance 2.5' : 'Seedance 2';
   const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2Mode ? seedance2VolcengineModel : 'standard'); // Non-Volcengine Seedance 2 providers share the 2.0 envelope.
-  const multimodalReferenceLimits = useMemo(() => isFlux3KeyframesMode
+  const multimodalReferenceLimits = useMemo(() => isKlingV4GenerateMode
+    ? { images: KLING_V4_REFERENCE_IMAGE_LIMIT, videos: KLING_V4_REFERENCE_VIDEO_LIMIT, audios: 0 }
+    : isFlux3KeyframesMode
     ? { images: flux3ModePolicy.maxImages, videos: 0, audios: 0 }
     : isSeedance25ReferenceMode
     ? { images: SEEDANCE25_REFERENCE_IMAGE_LIMIT, videos: SEEDANCE25_REFERENCE_VIDEO_LIMIT, audios: SEEDANCE25_REFERENCE_AUDIO_LIMIT }
     : isSeedance2ExtendMode
       ? { images: 0, videos: volcengineReferenceLimits.videos, audios: 0 } // Extend chains video clips only.
-      : { images: volcengineReferenceLimits.images, videos: volcengineReferenceLimits.videos, audios: volcengineReferenceLimits.audios }, [flux3ModePolicy.maxImages, isFlux3KeyframesMode, isSeedance25ReferenceMode, isSeedance2ExtendMode, volcengineReferenceLimits]);
-  const multimodalReferenceTotalLimit = isFlux3KeyframesMode ? flux3ModePolicy.maxImages : isSeedance25ReferenceMode
+      : { images: volcengineReferenceLimits.images, videos: volcengineReferenceLimits.videos, audios: volcengineReferenceLimits.audios }, [flux3ModePolicy.maxImages, isKlingV4GenerateMode, isFlux3KeyframesMode, isSeedance25ReferenceMode, isSeedance2ExtendMode, volcengineReferenceLimits]);
+  const multimodalReferenceTotalLimit = isKlingV4GenerateMode ? KLING_V4_REFERENCE_TOTAL_LIMIT : isFlux3KeyframesMode ? flux3ModePolicy.maxImages : isSeedance25ReferenceMode
     ? SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT
     : isSeedance2ExtendMode
       ? volcengineReferenceLimits.videos // Extend caps out at its video clips.
       : volcengineReferenceLimits.total;
   const isVideoInputMode = isKlingO3VideoInputMode
+    || isKlingV4EditMode
     || isWanVideoInputMode
     || isAudioInputMode
     || isKlingV3ControlVideoInputMode
@@ -263,8 +269,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   const activePrimaryImage = useMemo(() => (
     isImageCanvasMedia(primaryImage) ? primaryImage : null
   ), [primaryImage]);
-  const activePrimaryImageId = activePrimaryImage?.id ?? null; // Null means the primary cannot be a Krea style ref.
-  const hasActivePrimaryReference = activePrimaryImageId ? referenceImageIds.includes(activePrimaryImageId) : false; // Detect ref clears without primary changes.
 
   // Ensure selections stay valid when images are deleted or imported.
   useEffect(() => {
@@ -406,20 +410,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
   }, [images, isFalSeedance2SmartMode, isSeedance25SmartMode, onReferenceLimit, selectedImageIds]);
 
   useEffect(() => {
-    if (isActiveKrea2LargeModel || !primaryImageId) {
+    if (!primaryImageId) {
       return;
     }
-    setReferenceImageIds(prevIds => prevIds.filter(id => id !== primaryImageId)); // Only Krea can reuse the primary as a style ref.
-  }, [isActiveKrea2LargeModel, primaryImageId]);
-
-  useEffect(() => {
-    if (!isActiveKrea2LargeModel || !activePrimaryImageId || hasActivePrimaryReference) {
-      return; // Only still images can be Krea style references.
-    }
-    setReferenceImageIds(prevIds =>
-      prevIds.includes(activePrimaryImageId) ? prevIds : [activePrimaryImageId, ...prevIds],
-    ); // Krea treats the primary image as a style reference like every other.
-  }, [activePrimaryImageId, hasActivePrimaryReference, isActiveKrea2LargeModel]);
+    setReferenceImageIds(prevIds => prevIds.filter(id => id !== primaryImageId)); // The primary occupies its own input slot.
+  }, [primaryImageId]);
 
   useEffect(() => {
     const effectiveSeedanceReferenceIds = isMultimodalReferenceMode
@@ -495,6 +490,12 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
   }, [isVideoInputMode, sourceVideoId]);
 
+  useEffect(() => {
+    if (isKlingV4EditMode && primarySelectionMediaType === 'video') {
+      setSourceVideoId(primaryImageId); // Uploads and model switches can select a video without the canvas click handler.
+    }
+  }, [isKlingV4EditMode, primaryImageId, primarySelectionMediaType]);
+
   // Clear sourceAudioId when leaving audio-input modes.
   useEffect(() => {
     if (!isAudioInputMode && sourceAudioId) {
@@ -547,6 +548,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     const isKlingO3VideoSelection = apiProvider === 'fal'
       && falModelMode === 'video'
       && isKlingO3VideoModelId(falVideoModelId);
+
+    if (reference && isKlingV4EditMode && imageId && targetImage?.mediaType !== 'image') {
+      onError('Kling v4 Edit supports still image references only. Click a video to select it as the source.');
+      return;
+    }
 
     if (reference && isSeedance2ExtendMode && imageId && targetImage?.mediaType !== 'video') {
       onError('Seedance 2 Extend supports video clips only.');
@@ -622,12 +628,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return;
     }
 
-    if (reference && isActiveKrea2LargeModel && targetImage?.mediaType !== 'image') {
-      onError('Krea 2 Large style references must be still images.');
-      return;
-    }
-
-    if (reference && targetImage?.mediaType === 'video') {
+    if (reference && imageId && !isImageCanvasMedia(targetImage)) {
       onError('Reference images must be still images.');
       return;
     }
@@ -637,7 +638,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (lastFrame) {
-      if (!isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isSeedance25SmartMode && !isMiniMaxH3StandardMode && !isVeo31TailCapable && !isFlux3TailCapable) {
+      if (!isKlingV4GenerateMode && !isKlingProVideoSelection && !isKlingV3SmartMode && !isKlingO3ReferenceMode && !isWan27SmartMode && !isSeedance15FflfMode && !isSeedance2SmartMode && !isSeedance25SmartMode && !isMiniMaxH3StandardMode && !isVeo31TailCapable && !isFlux3TailCapable) {
         return;
       }
       if (!imageId) {
@@ -699,7 +700,7 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     }
 
     if (reference) {
-      if (primaryImageId && imageId === primaryImageId && !isMultimodalReferenceMode && !isWan27ReferenceMode && !isActiveKrea2LargeModel) {
+      if (primaryImageId && imageId === primaryImageId && !isMultimodalReferenceMode && !isWan27ReferenceMode) {
         return;
       }
       if (!imageId) {
@@ -875,6 +876,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     falVideoModelId,
     images,
     isKlingProVideoSelection,
+    isKlingV4GenerateMode,
+    isKlingV4EditMode,
     isKlingV3SmartMode,
     isKlingO3ReferenceMode,
     isWan27EditMode,
@@ -907,7 +910,6 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     multimodalReferenceLabel,
     multimodalReferenceLimits,
     isWan27ReferenceMode,
-    isActiveKrea2LargeModel,
     tool,
   ]);
 

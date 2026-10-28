@@ -7,7 +7,6 @@ import type {
   FalAspectRatioOption,
   FalGptImage2QualityOption,
   FalImageSizePreset,
-  FalKrea2CreativityOption,
   FalResolutionOption,
   FalVideoDuration,
   Flux2MaxImageSizeOption,
@@ -24,25 +23,25 @@ import type {
 import { IDEOGRAM_45_MODEL_ID, IDEOGRAM_45_EDIT_MODEL_ID, IDEOGRAM_45_MAX_OUTPUT_IMAGES, isIdeogram45Model } from './ideogram45Config';
 import { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_MAX_OUTPUT_IMAGES, GPT_IMAGE_2_NUM_IMAGE_OPTIONS } from './gptImage2Config';
 import { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_MAX_OUTPUT_IMAGES, GPT_IMAGE_25_NUM_IMAGE_OPTIONS, isGptImage25Model } from './gptImage25Config';
+import { KREA_3_MODEL_ID, KREA_3_MAX_INPUTS, getKrea3SelectorModelId } from './krea3Config';
+export { KREA_3_MODEL_ID, isKrea3Model } from './krea3Config';
+import { KLING_V4_VIDEO_MODEL_ID, isKlingV4VideoModel } from './klingV4Config';
+import { RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID } from './recraftConfig';
+export * from './recraftConfig';
+import { GROK_IMAGINE_IMAGE_MODEL_ID, GROK_IMAGE_MAX_INPUTS, GROK_IMAGE_MAX_OUTPUT_IMAGES, GROK_IMAGE_NUM_IMAGE_OPTIONS, FAL_GROK_ASPECT_RATIO_OPTIONS, getGrokImageSelectorModelId } from './grokImageConfig';
+export { GROK_IMAGINE_IMAGE_MODEL_ID, GROK_IMAGINE_IMAGE_EDIT_MODEL_ID, FAL_GROK_ASPECT_RATIO_OPTIONS } from './grokImageConfig';
+import { FLUX_3_TEXT_TO_IMAGE_MODEL_ID, FLUX3_IMAGE_MAX_INPUTS, getFlux3ImageSelectorModelId } from './flux3ImageConfig';
+export { FLUX_3_TEXT_TO_IMAGE_MODEL_ID, FLUX_3_EDIT_IMAGE_MODEL_ID, FLUX3_IMAGE_ASPECT_RATIO_OPTIONS, FLUX3_IMAGE_RESOLUTION_OPTIONS, isFlux3ImageAspectRatio, isFlux3ImageResolution } from './flux3ImageConfig';
 export { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_QUALITY_OPTIONS, GPT_IMAGE_2_DEFAULTS, isGptImage2QualitySelectionValue } from './gptImage2Config';
 export { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_DEFAULTS, GPT_IMAGE_25_VARIANT_OPTIONS, GPT_IMAGE_25_BACKGROUND_OPTIONS, GPT_IMAGE_25_QUALITY_OPTIONS, isGptImage25Model, isGptImage25Variant, isGptImage25Background, isGptImage25Quality, getGptImage25Endpoint } from './gptImage25Config';
+export { KLING_V4_VIDEO_MODEL_ID, KLING_V4_TEXT_TO_VIDEO_MODEL_ID, KLING_V4_IMAGE_TO_VIDEO_MODEL_ID, KLING_V4_REFERENCE_TO_VIDEO_MODEL_ID, KLING_V4_EDIT_VIDEO_MODEL_ID, isKlingV4VideoModel } from './klingV4Config';
 export * from './ideogram45Config';
 
 // Central registry of supported model IDs plus helpers for validation/labeling in the UI.
-export const KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID = 'krea/v2/large/text-to-image' as const; // Krea 2 Large t2i endpoint.
-export const SEEDREAM_MODEL_ID = 'fal-ai/bytedance/seedream/v4/edit' as const;
-export const SEEDREAM_V45_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/edit' as const;
 export const SEEDREAM_V5_LITE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/edit' as const;
 export const SEEDREAM_V5_PRO_MODEL_ID = 'bytedance/seedream/v5/pro/edit' as const; // Seedream 5 Pro edit endpoint.
-export const SEEDREAM_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4/text-to-image' as const;
-export const SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v4.5/text-to-image' as const;
 export const SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/bytedance/seedream/v5/lite/text-to-image' as const;
 export const SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID = 'bytedance/seedream/v5/pro/text-to-image' as const; // Seedream 5 Pro t2i endpoint.
-export const FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/flux-2-max' as const;
-export const FLUX2_MAX_EDIT_MODEL_ID = 'fal-ai/flux-2-max/edit' as const;
-export const RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/recraft/v4/pro/text-to-image' as const; // Recraft v4 Pro t2i endpoint.
-export const GROK_IMAGINE_IMAGE_MODEL_ID = 'xai/grok-imagine-image' as const; // Grok Imagine image model id.
-export const GROK_IMAGINE_IMAGE_EDIT_MODEL_ID = 'xai/grok-imagine-image/edit' as const; // Grok Imagine edit endpoint id.
 export const GROK_IMAGINE_VIDEO_MODEL_ID = 'xai/grok-imagine-video/image-to-video' as const; // Grok Imagine image-to-video endpoint id.
 export const GROK_IMAGINE_VIDEO_EDIT_MODEL_ID = 'xai/grok-imagine-video/edit-video' as const; // Grok Imagine video edit endpoint id.
 export const CRYSTAL_UPSCALER_MODEL_ID = 'clarityai/crystal-upscaler' as const;
@@ -99,8 +98,6 @@ export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as 
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
 export const VEO_31_EXTEND_VIDEO_MODEL_ID = 'fal-ai/veo3.1/extend-video' as const;
 export const SCAIL_VIDEO_MODEL_ID = 'fal-ai/scail' as const;
-export const WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID = 'fal-ai/wan/v2.7/pro/text-to-image' as const;
-export const WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID = 'fal-ai/wan/v2.7/pro/edit' as const;
 export const UPSCALE_MODEL_HIGHLIGHT_COLOR = '#3596F8' as const;
 
 export type KlingVariant = 'standard' | 'pro';
@@ -121,7 +118,6 @@ export type KlingV3ControlSoundSelectionValue = 'true' | 'false';
 export const KLING_DEFAULT_NEGATIVE_PROMPT = 'blur, distort, and low quality';
 export const WAN_DEFAULT_NEGATIVE_PROMPT =
   'oversaturated, overexposed, static, blurry details, subtitles, stylized, artwork, painting, still frame, overall gray, worst quality, low quality, JPEG artifacts, ugly, mutated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, static motion, cluttered background, three legs, crowded background, walking backwards';
-export const WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT = 'low resolution, error, worst quality, low quality, deformed, extra fingers';
 
 export type WanTargetResolution = '720p' | '1080p';
 export type WanCreativity = 0 | 1 | 2 | 3 | 4;
@@ -145,21 +141,18 @@ const sortModelOptionsByLabel = <T extends { label: string }>(options: readonly 
 
 const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
-  { value: FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux2 Max' },
+  { value: FLUX_3_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux 3' },
   { value: GPT_IMAGE_2_EDIT_MODEL_ID, label: 'GPT Image 2' }, // Selector uses edit id.
   { value: GPT_IMAGE_25_MODEL_ID, label: 'GPT Image 2.5' },
   { value: IDEOGRAM_45_MODEL_ID, label: 'Ideogram 4.5' },
-  { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine' }, // Grok model option.
-  { value: KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Krea 2 Large' },
+  { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine 2.0' },
+  { value: KREA_3_MODEL_ID, label: 'Krea 3' },
   { value: NANO_BANANA_21_EDIT_MODEL_ID, label: 'NanoBanana 2.1' }, // Selector uses edit id.
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
-  { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4 Pro' }, // Direct text-to-image endpoint.
-  { value: SEEDREAM_MODEL_ID, label: 'Seedream 4' },
-  { value: SEEDREAM_V45_MODEL_ID, label: 'Seedream 4.5' },
+  { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4.1 Pro' }, // Direct text-to-image endpoint.
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
   { value: SEEDREAM_V5_PRO_MODEL_ID, label: 'Seedream 5 Pro' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
-  { value: WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID, label: 'Wan 2.7 Pro Image' },
  ] as const;
 
 export const FAL_IMAGE_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_IMAGE_MODEL_OPTIONS_BASE);
@@ -172,6 +165,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: KLING_VIDEO_MODEL_ID, label: 'Kling 2.5 Turbo' },
   { value: KLING_V3_CONTROL_VIDEO_MODEL_ID, label: 'Kling 3.0 Control' },
   { value: KLING_V3_VIDEO_MODEL_ID, label: 'Kling 3.0 Pro' },
+  { value: KLING_V4_VIDEO_MODEL_ID, label: 'Kling v4' },
   { value: KLING_O3_VIDEO_MODEL_ID, label: 'Kling O3 Video' },
   { value: MINIMAX_H3_VIDEO_MODEL_ID, label: 'MiniMax H3' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
@@ -189,7 +183,34 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: WAN_VISION_ENHANCER_MODEL_ID, label: 'Wan Vision Enhancer', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
 ] as const;
 
-export const FAL_VIDEO_MODEL_OPTIONS = sortModelOptionsByLabel(FAL_VIDEO_MODEL_OPTIONS_BASE);
+const RETIRED_VIDEO_MODEL_IDS: ReadonlySet<string> = new Set([
+  KLING_VIDEO_MODEL_ID,
+  KLING_VIDEO_STANDARD_MODEL_ID,
+  KLING_VIDEO_PRO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
+  KLING_V3_TEXT_TO_VIDEO_MODEL_ID,
+  KLING_V3_IMAGE_TO_VIDEO_MODEL_ID,
+  KLING_V3_CONTROL_VIDEO_MODEL_ID,
+  ...KLING_O3_VIDEO_MODEL_IDS,
+  SCAIL_VIDEO_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
+  WAN_27_TEXT_TO_VIDEO_MODEL_ID,
+  WAN_27_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
+  WAN_27_EDIT_VIDEO_MODEL_ID,
+  WAN_ANIMATE_REPLACE_MODEL_ID,
+  WAN_ANIMATE_MOVE_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
+  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+  VEO_31_FFLF_VIDEO_MODEL_ID,
+  VEO_31_EXTEND_VIDEO_MODEL_ID,
+]); // Keep endpoint ids detectable so old saved requests cannot bypass retirement.
+
+export const FAL_VIDEO_MODEL_OPTIONS = sortModelOptionsByLabel(
+  FAL_VIDEO_MODEL_OPTIONS_BASE.filter(option =>
+    option.value !== JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+    && !RETIRED_VIDEO_MODEL_IDS.has(option.value)),
+); // Hide retired models from pickers while retaining saved metadata.
 
 export const FLUX3_VARIANT_OPTIONS: ReadonlyArray<{ value: Flux3Variant; label: string }> = [
   { value: 'smart', label: 'Smart Mode' },
@@ -987,161 +1008,23 @@ export const isSeedance2VolcengineDurationSelectionValue = (value: unknown): val
 export const isSeedance2OutputFormatSelectionValue = (value: unknown): value is Seedance2OutputFormatSelectionValue =>
   value === 'mp4' || value === 'mov';
 
-// Flux2 Max image size options
+// Legacy Flux 2 Max sizes remain readable in saved snapshots.
 export type Flux2MaxImageSizeSelectionValue = Flux2MaxImageSizeOption;
-
-export const FLUX2_MAX_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: Flux2MaxImageSizeSelectionValue; label: string }> = [
-  { value: 'landscape_4_3', label: 'Landscape 4:3' },
-  { value: 'landscape_16_9', label: 'Landscape 16:9' },
-  { value: 'portrait_4_3', label: 'Portrait 4:3' },
-  { value: 'portrait_16_9', label: 'Portrait 16:9' },
-  { value: 'square', label: 'Square' },
-  { value: 'square_hd', label: 'Square HD' },
-] as const;
 
 export const isFlux2MaxImageSizeSelectionValue = (value: unknown): value is Flux2MaxImageSizeSelectionValue =>
   value === 'landscape_4_3' || value === 'landscape_16_9' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'square' || value === 'square_hd';
 
-export const isFlux2MaxModel = (modelId: string | undefined): boolean =>
-  modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
-
-// Wan 2.7 Pro Image options
-export type Wan27ImageAspectRatioSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-export type Wan27ImageMaxImagesSelectionValue = '1' | '2' | '3' | '4' | '5';
-export type RecraftV4ProImageSizeSelectionValue = 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-export type RecraftRgbColor = { r: number; g: number; b: number };
-
-export const RECRAFT_V4_PRO_MAX_COLORS = 5; // UI cap for preferred colors.
-export const RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE: RecraftV4ProImageSizeSelectionValue = 'square_hd'; // Fal default.
-export const RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR: RecraftRgbColor = { r: 255, g: 255, b: 255 }; // Neutral background color.
-
-export const WAN_27_IMAGE_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Wan27ImageAspectRatioSelectionValue; label: string }> = [
-  { value: 'landscape_16_9', label: 'Landscape 16:9' },
-  { value: 'landscape_4_3', label: 'Landscape 4:3' },
-  { value: 'portrait_16_9', label: 'Portrait 16:9' },
-  { value: 'portrait_4_3', label: 'Portrait 4:3' },
-  { value: 'square_hd', label: 'Square HD' },
-  { value: 'square', label: 'Square' },
-] as const;
-
-export const WAN_27_IMAGE_MAX_IMAGES_OPTIONS: ReadonlyArray<{ value: Wan27ImageMaxImagesSelectionValue; label: string }> = [
-  { value: '1', label: '1' },
-  { value: '2', label: '2' },
-  { value: '3', label: '3' },
-  { value: '4', label: '4' },
-  { value: '5', label: '5' },
-] as const;
-
-export type Krea2AspectRatioSelectionValue = '1:1' | '4:3' | '3:2' | '16:9' | '2.35:1' | '4:5' | '2:3' | '9:16';
-export type Krea2CreativitySelectionValue = FalKrea2CreativityOption;
-export const KREA_2_DEFAULT_ASPECT_RATIO: Krea2AspectRatioSelectionValue = '16:9';
-export const KREA_2_DEFAULT_CREATIVITY: Krea2CreativitySelectionValue = 'medium';
-export const KREA_2_MAX_STYLE_REFERENCES = 10;
-
-export const KREA_2_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: Krea2AspectRatioSelectionValue; label: string }> = [
-  { value: '16:9', label: '16:9' },
-  { value: '1:1', label: '1:1' },
-  { value: '4:3', label: '4:3' },
-  { value: '3:2', label: '3:2' },
-  { value: '2.35:1', label: '2.35:1' },
-  { value: '4:5', label: '4:5' },
-  { value: '2:3', label: '2:3' },
-  { value: '9:16', label: '9:16' },
-] as const;
-
-export const KREA_2_CREATIVITY_OPTIONS: ReadonlyArray<{ value: Krea2CreativitySelectionValue; label: string }> = [
-  { value: 'raw', label: 'Raw' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-] as const;
-
-export const RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: RecraftV4ProImageSizeSelectionValue; label: string }> = [
-  { value: 'square_hd', label: 'Square HD' },
-  { value: 'square', label: 'Square' },
-  { value: 'portrait_4_3', label: 'Portrait 3:4' },
-  { value: 'portrait_16_9', label: 'Portrait 9:16' },
-  { value: 'landscape_4_3', label: 'Landscape 4:3' },
-  { value: 'landscape_16_9', label: 'Landscape 16:9' },
-] as const;
-
-export const isWan27ImageModel = (modelId: string | undefined): boolean =>
-  modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
-
 export const isGptImage2Model = (modelId: string | undefined): boolean =>
   modelId === GPT_IMAGE_2_EDIT_MODEL_ID; // Selector id for GPT Image 2.
 
-export const isKrea2LargeModel = (modelId: string | undefined): boolean =>
-  modelId === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID;
-
-export const isRecraftV4ProModel = (modelId: string | undefined): boolean =>
-  modelId === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID;
-
-export const isWan27ImageAspectRatioSelectionValue = (value: unknown): value is Wan27ImageAspectRatioSelectionValue =>
-  value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
-
-export const isWan27ImageMaxImagesSelectionValue = (value: unknown): value is Wan27ImageMaxImagesSelectionValue =>
-  value === '1' || value === '2' || value === '3' || value === '4' || value === '5';
-
-export const isKrea2AspectRatioSelectionValue = (value: unknown): value is Krea2AspectRatioSelectionValue =>
-  value === '1:1' || value === '4:3' || value === '3:2' || value === '16:9' || value === '2.35:1' || value === '4:5' || value === '2:3' || value === '9:16';
-
-export const isKrea2CreativitySelectionValue = (value: unknown): value is Krea2CreativitySelectionValue =>
-  value === 'raw' || value === 'low' || value === 'medium' || value === 'high';
-
-export const isRecraftV4ProImageSizeSelectionValue = (value: unknown): value is RecraftV4ProImageSizeSelectionValue =>
-  value === 'square_hd' || value === 'square' || value === 'portrait_4_3' || value === 'portrait_16_9' || value === 'landscape_4_3' || value === 'landscape_16_9';
-
-export const clampRecraftRgbChannel = (value: unknown): number => {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(parsed)) {
-    return 0;
-  }
-  return Math.min(255, Math.max(0, Math.round(parsed)));
-};
-
-export const normalizeRecraftRgbColor = (value: unknown): RecraftRgbColor | undefined => {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-  const color = value as Partial<RecraftRgbColor>;
-  return {
-    r: clampRecraftRgbChannel(color.r),
-    g: clampRecraftRgbChannel(color.g),
-    b: clampRecraftRgbChannel(color.b),
-  };
-};
-
-const toHexPair = (value: number): string => value.toString(16).padStart(2, '0');
-
-export const recraftRgbToHex = (color: RecraftRgbColor): string =>
-  `#${toHexPair(clampRecraftRgbChannel(color.r))}${toHexPair(clampRecraftRgbChannel(color.g))}${toHexPair(clampRecraftRgbChannel(color.b))}`;
-
-export const recraftHexToRgb = (value: string): RecraftRgbColor | undefined => {
-  const match = /^#?([0-9a-f]{6})$/i.exec(value.trim());
-  if (!match) {
-    return undefined;
-  }
-  const hex = match[1];
-  return {
-    r: Number.parseInt(hex.slice(0, 2), 16),
-    g: Number.parseInt(hex.slice(2, 4), 16),
-    b: Number.parseInt(hex.slice(4, 6), 16),
-  };
-};
-
 export const FAL_MODEL_OPTIONS = [...FAL_IMAGE_MODEL_OPTIONS_BASE, ...FAL_VIDEO_MODEL_OPTIONS_BASE] as const;
 export type FalModelOption = typeof FAL_MODEL_OPTIONS[number];
-export const SEEDREAM_MODEL_IDS = [SEEDREAM_MODEL_ID, SEEDREAM_V45_MODEL_ID, SEEDREAM_V5_LITE_MODEL_ID, SEEDREAM_V5_PRO_MODEL_ID] as const;
+export const SEEDREAM_MODEL_IDS = [SEEDREAM_V5_LITE_MODEL_ID, SEEDREAM_V5_PRO_MODEL_ID] as const;
 export type SeedreamModelId = typeof SEEDREAM_MODEL_IDS[number];
 export const SEEDREAM_TEXT_TO_IMAGE_MAP: Record<SeedreamModelId, string> = {
-  [SEEDREAM_MODEL_ID]: SEEDREAM_TEXT_TO_IMAGE_MODEL_ID,
-  [SEEDREAM_V45_MODEL_ID]: SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID,
   [SEEDREAM_V5_LITE_MODEL_ID]: SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   [SEEDREAM_V5_PRO_MODEL_ID]: SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
 };
-export const isSeedreamV45ModelId = (value: string | undefined): boolean =>
-  value === SEEDREAM_V45_MODEL_ID || value === SEEDREAM_V45_TEXT_TO_IMAGE_MODEL_ID;
 export const isSeedreamV5LiteModelId = (value: string | undefined): boolean =>
   value === SEEDREAM_V5_LITE_MODEL_ID || value === SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID; // Match both edit and t2i IDs.
 export const isSeedreamV5ProModelId = (value: string | undefined): boolean =>
@@ -1172,7 +1055,8 @@ export type FalModelId = FalImageModelId | FalVideoModelId;
 export const isFalImageModelId = (value: string | undefined): value is FalImageModelId =>
   typeof value === 'string' && FAL_IMAGE_MODEL_OPTIONS.some(option => option.value === value);
 export const isFalVideoModelId = (value: string | undefined): value is FalVideoModelId =>
-  typeof value === 'string' && FAL_VIDEO_MODEL_OPTIONS.some(option => option.value === value);
+  typeof value === 'string' && value !== JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+  && FAL_VIDEO_MODEL_OPTIONS_BASE.some(option => option.value === value); // Recognize saved models independently of whether they can still generate.
 export const isFalModelId = (value: string | undefined): value is FalModelId =>
   isFalImageModelId(value) || isFalVideoModelId(value);
 export const isSeedreamModelId = (value: FalModelId | undefined): value is SeedreamModelId =>
@@ -1312,9 +1196,17 @@ const VIDEO_NEGATIVE_PROMPT_MODEL_IDS = [
 export const isVideoNegativePromptModelId = (value: string | undefined): boolean =>
   typeof value === 'string' && (VIDEO_NEGATIVE_PROMPT_MODEL_IDS as readonly string[]).includes(value); // Other video models must never write into a shared bucket.
 export const normalizeFalModelId = (value: string | undefined): FalModelId | undefined => {
+  if (value === 'fal-ai/recraft/v4/pro/text-to-image') return RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID; // Upgrade saved Recraft selections.
+  const krea3ModelId = getKrea3SelectorModelId(value);
+  if (krea3ModelId) return krea3ModelId;
+  const grokImageModelId = getGrokImageSelectorModelId(value);
+  if (grokImageModelId) return grokImageModelId;
+  const flux3ImageModelId = getFlux3ImageSelectorModelId(value);
+  if (flux3ImageModelId) return flux3ImageModelId;
   const nanoBananaModelId = getNanoBananaSelectorModelId(value);
   if (nanoBananaModelId) return nanoBananaModelId;
   if (isGptImage25Model(value)) return GPT_IMAGE_25_MODEL_ID;
+  if (isKlingV4VideoModel(value)) return KLING_V4_VIDEO_MODEL_ID;
   if (value === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID) return GPT_IMAGE_2_EDIT_MODEL_ID;
   if (value === IDEOGRAM_45_EDIT_MODEL_ID) {
     return IDEOGRAM_45_MODEL_ID;
@@ -1345,11 +1237,14 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   if (value === LEGACY_WAN_26_VIDEO_MODEL_ID || value === WAN_27_TEXT_TO_VIDEO_MODEL_ID || value === WAN_27_IMAGE_TO_VIDEO_MODEL_ID || value === WAN_27_REFERENCE_TO_VIDEO_MODEL_ID || value === WAN_27_EDIT_VIDEO_MODEL_ID) {
     return WAN_27_VIDEO_MODEL_ID;
   }
-  if (value === LEGACY_WAN_26_IMAGE_TEXT_TO_IMAGE_MODEL_ID || value === LEGACY_WAN_26_IMAGE_IMAGE_TO_IMAGE_MODEL_ID) {
-    return WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
-  }
   return isFalModelId(value) ? value : undefined;
 };
+
+export const isRetiredVideoModelId = (value: string | undefined): boolean =>
+  typeof value === 'string' && (
+    RETIRED_VIDEO_MODEL_IDS.has(value)
+    || RETIRED_VIDEO_MODEL_IDS.has(normalizeFalModelId(value) ?? value)
+  ); // Check legacy aliases before provider routing can replace a saved model id.
 
 export const DEFAULT_FAL_IMAGE_MODEL_ID: FalImageModelId = NANO_BANANA_PRO_EDIT_MODEL_ID;
 export const DEFAULT_FAL_VIDEO_MODEL_ID: FalVideoModelId = MINIMAX_H3_VIDEO_MODEL_ID;
@@ -1393,19 +1288,23 @@ export const SEEDREAM_V5_PRO_IMAGE_SIZE_OPTIONS: ReadonlyArray<{ value: FalImage
 export const getSeedreamImageSizeOptions = (modelId: string | undefined) =>
   isSeedreamV5ProModelId(modelId)
     ? SEEDREAM_V5_PRO_IMAGE_SIZE_OPTIONS
-    : isSeedreamV5LiteModelId(modelId) ? SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS : FAL_IMAGE_SIZE_OPTIONS; // Keep v4/v4.5 behavior unchanged.
+    : isSeedreamV5LiteModelId(modelId) ? SEEDREAM_V5_LITE_IMAGE_SIZE_OPTIONS : FAL_IMAGE_SIZE_OPTIONS;
 
 export const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 export const FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE = [1, 2, 3, 4, 5, 6] as const;
 const IDEOGRAM_45_NUM_IMAGE_OPTIONS = Array.from({ length: IDEOGRAM_45_MAX_OUTPUT_IMAGES }, (_, index) => index + 1);
 export const getFalNumImageMaxForModel = (modelId: string | undefined): number =>
-  getNanoBananaSelectorModelId(modelId) ? NANO_BANANA_MAX_OUTPUT_IMAGES
+  getFlux3ImageSelectorModelId(modelId) || getKrea3SelectorModelId(modelId) ? 1
+    : getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_MAX_OUTPUT_IMAGES
+    : getNanoBananaSelectorModelId(modelId) ? NANO_BANANA_MAX_OUTPUT_IMAGES
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_MAX_OUTPUT_IMAGES
     : isGptImage25Model(modelId) ? GPT_IMAGE_25_MAX_OUTPUT_IMAGES
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_MAX_OUTPUT_IMAGES
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 6 : 4;
 export const getFalNumImageOptionsForModel = (modelId: string | undefined): ReadonlyArray<number> =>
-  isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
+  getFlux3ImageSelectorModelId(modelId) || getKrea3SelectorModelId(modelId) ? [1]
+    : getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_NUM_IMAGE_OPTIONS
+    : isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
     : isGptImage25Model(modelId) ? GPT_IMAGE_25_NUM_IMAGE_OPTIONS
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_NUM_IMAGE_OPTIONS
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS;
@@ -1423,22 +1322,6 @@ export const FAL_SEEDVR_NOISE_SCALE_OPTIONS = Array.from({ length: 10 }, (_, ind
   return { value: value.toFixed(1), label: value.toFixed(1) } as const;
 });
 
-export const FAL_GROK_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
-  { value: '1:1', label: '1:1' }, // Grok ratio.
-  { value: '2:1', label: '2:1' }, // Grok ratio.
-  { value: '20:9', label: '20:9' }, // Grok ratio.
-  { value: '19.5:9', label: '19.5:9' }, // Grok ratio.
-  { value: '16:9', label: '16:9' }, // Grok ratio.
-  { value: '4:3', label: '4:3' }, // Grok ratio.
-  { value: '3:2', label: '3:2' }, // Grok ratio.
-  { value: '2:3', label: '2:3' }, // Grok ratio.
-  { value: '3:4', label: '3:4' }, // Grok ratio.
-  { value: '9:16', label: '9:16' }, // Grok ratio.
-  { value: '9:19.5', label: '9:19.5' }, // Grok ratio.
-  { value: '9:20', label: '9:20' }, // Grok ratio.
-  { value: '1:2', label: '1:2' }, // Grok ratio.
-] as const; // Grok aspect ratio options.
-
 export const FAL_SEEDREAM_ASPECT_RATIO_OPTIONS: ReadonlyArray<{ value: FalAspectRatioSelectionValue; label: string }> = [
   { value: 'placeholder', label: 'Aspect Ratio' },
   { value: 'default', label: 'Default' },
@@ -1449,9 +1332,8 @@ export const getSeedreamAspectRatioOptions = (_modelId: string | undefined) => F
 
 export const FAL_ASPECT_RATIO_VALUES = new Set<FalAspectRatioSelectionValue>([
   ...NANO_BANANA_21_ASPECT_RATIO_OPTIONS.map(option => option.value),
-  ...FAL_GROK_ASPECT_RATIO_OPTIONS.map(option => option.value), // Grok ratio values.
+  ...FAL_GROK_ASPECT_RATIO_OPTIONS.map(option => option.value).filter(value => value !== 'auto' && value !== '5:2'), // Retain legacy shared ratios for saved runs.
   ...FAL_SEEDREAM_ASPECT_RATIO_OPTIONS.map(option => option.value),
-  ...KREA_2_ASPECT_RATIO_OPTIONS.map(option => option.value),
 ]);
 
 export const FAL_IMAGE_SIZE_DEFAULT_OPTION = 'default';
@@ -1462,18 +1344,16 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [GPT_IMAGE_2_EDIT_MODEL_ID]: 9, // GPT Image 2 supports 10 total input images.
   [GPT_IMAGE_25_MODEL_ID]: 15, // Primary plus references must fit 16 total inputs.
   [IDEOGRAM_45_MODEL_ID]: 4, // Primary source plus four references.
-  [KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID]: KREA_2_MAX_STYLE_REFERENCES,
-  [SEEDREAM_MODEL_ID]: 7,
-  [SEEDREAM_V45_MODEL_ID]: 10,
+  [KREA_3_MODEL_ID]: KREA_3_MAX_INPUTS - 1, // Primary plus references must fit eight total inputs.
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.
   [SEEDREAM_V5_PRO_MODEL_ID]: 9, // Seedream 5 Pro supports 10 total input images.
-  [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID]: 7, // Flux2 Max edit supports up to 8 total images (1 primary + 7 references)
-  [GROK_IMAGINE_IMAGE_MODEL_ID]: 0, // Grok Imagine supports only the selected image (no extra references).
+  [FLUX_3_TEXT_TO_IMAGE_MODEL_ID]: FLUX3_IMAGE_MAX_INPUTS - 1, // One primary image plus nine references.
+  [GROK_IMAGINE_IMAGE_MODEL_ID]: GROK_IMAGE_MAX_INPUTS - 1, // Source image plus four references.
   [GROK_IMAGINE_VIDEO_MODEL_ID]: 0,
-  [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID]: 3, // Wan 2.7 Pro Image supports up to 4 total images (1 primary + 3 references)
   [KLING_O3_VIDEO_MODEL_ID]: 4,
   [KLING_O3_VIDEO_EDIT_MODEL_ID]: 4,
   [KLING_VIDEO_MODEL_ID]: 0,
+  [KLING_V4_VIDEO_MODEL_ID]: 10, // Reference generation accepts ten images total.
   [KLING_V3_CONTROL_VIDEO_MODEL_ID]: 0,
   [WAN_ANIMATE_MODEL_ID]: 0,
   [WAN_VISION_ENHANCER_MODEL_ID]: 0,

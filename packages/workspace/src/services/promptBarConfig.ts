@@ -1,4 +1,9 @@
 import { getNanoBananaAspectRatioOptionsForProvider } from './nanoBananaAspectRatioPolicy';
+import { buildKrea3Controls } from './promptBar/krea3Controls';
+import { isKrea3Model, type Krea3Variant, type Krea3ReasoningLevel } from './krea3Config';
+import { buildRecraftControls } from './promptBar/recraftControls';
+import { buildGrokImageControls } from './promptBar/grokImageControls';
+import type { GrokImageAspectRatio, GrokImageResolution, GrokImageQuality, GrokImageOutputFormat } from './grokImageConfig';
 import type {
   FalAspectRatioSelectionValue,
   FalGptImage2QualitySelectionValue,
@@ -7,7 +12,6 @@ import type {
   FalModelMode,
   FalResolutionSelectionValue,
   FalVideoModelId,
-  Flux2MaxImageSizeSelectionValue,
   InfinitalkAccelerationSelectionValue,
   InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
@@ -26,8 +30,6 @@ import type {
   KlingV3DurationSelectionValue,
   KlingV3ShotDurationSelectionValue,
   KlingVariant,
-  Krea2AspectRatioSelectionValue,
-  Krea2CreativitySelectionValue,
   LipsyncSyncMode,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
@@ -56,8 +58,6 @@ import type {
   Wan27VideoDurationSelectionValue,
   Wan27VideoResolutionSelectionValue,
   Wan27VideoVariant,
-  Wan27ImageAspectRatioSelectionValue,
-  Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -66,13 +66,15 @@ import type {
   WanCreativity,
   WanTargetResolution,
 } from './modelConfig';
-import type { NanoBananaThinkingLevel, GptImage25Variant, GptImage25Background, GptImage25Quality, Ideogram45Quality, Ideogram45EditPrecision, Flux3AspectRatio, Flux3Duration, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant } from '../types';
+import type { NanoBananaThinkingLevel, GptImage25Variant, GptImage25Background, GptImage25Quality, Ideogram45Quality, Ideogram45EditPrecision, Flux3AspectRatio, Flux3Duration, Flux3ImageAspectRatio, Flux3ImageResolution, Flux3KeyframeTiming, Flux3Resolution, Flux3Variant, KlingV4Variant, KlingV4Resolution, KlingV4AspectRatio, KlingV4Duration } from '../types';
 import { isIdeogram45Model } from './ideogram45Config';
 import { buildIdeogram45Controls } from './promptBar/ideogram45Controls';
 import { buildNanoBananaControls } from './promptBar/nanoBananaControls';
 import { buildGptImage2Controls } from './promptBar/gptImage2Controls';
 import { buildGptImage25Controls } from './promptBar/gptImage25Controls';
 import { isGptImage25Model } from './gptImage25Config';
+import { buildKlingV4Controls } from './promptBar/klingV4Controls';
+import { isKlingV4VideoModel } from './klingV4Config';
 import type {
   PromptBarControl as PromptBarModelControl,
   PromptBarSelectControl,
@@ -82,18 +84,17 @@ import { getFlux3ModePolicy } from '../utils/flux3';
 import {
   FAL_CRYSTAL_CREATIVITY_OPTIONS,
   FAL_CRYSTAL_SCALE_FACTOR_OPTIONS,
-  FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_SEEDVR_NOISE_SCALE_OPTIONS,
-  KREA_2_ASPECT_RATIO_OPTIONS,
-  KREA_2_CREATIVITY_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
-  FLUX2_MAX_IMAGE_SIZE_OPTIONS,
+  FLUX3_IMAGE_ASPECT_RATIO_OPTIONS,
+  FLUX3_IMAGE_RESOLUTION_OPTIONS,
+  isFlux3ImageAspectRatio,
+  isFlux3ImageResolution,
   FLUX3_ASPECT_RATIO_OPTIONS,
   FLUX3_DURATION_OPTIONS,
   FLUX3_RESOLUTION_OPTIONS,
   FLUX3_VARIANT_OPTIONS,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_ASPECT_RATIO_OPTIONS,
   GROK_IMAGINE_VIDEO_DURATION_OPTIONS,
@@ -132,9 +133,6 @@ import {
   isSeedreamV5LiteModelId,
   isSeedreamV5ProModelId,
   isRecraftV4ProModel,
-  RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS,
-  RECRAFT_V4_PRO_MAX_COLORS,
-  recraftRgbToHex,
   SYNC_LIPSYNC_MODEL_ID,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
@@ -182,9 +180,6 @@ import {
   WAN_27_VIDEO_REFERENCE_DURATION_OPTIONS,
   WAN_27_VIDEO_RESOLUTION_OPTIONS,
   WAN_27_VIDEO_VARIANT_OPTIONS,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
-  WAN_27_IMAGE_ASPECT_RATIO_OPTIONS,
-  WAN_27_IMAGE_MAX_IMAGES_OPTIONS,
 } from './modelConfig';
 
 type Flux3PromptBarControlsInput = {
@@ -764,12 +759,11 @@ export type PromptBarControlsInput = {
   usingFal: boolean;
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
-  isKrea2LargeModel?: boolean;
-  isFlux2MaxModel: boolean;
-  isWan27ImageModel: boolean;
+  isFlux3ImageModel: boolean;
   isGptImage2Model?: boolean;
   isUpscaleModel: boolean;
   isKlingVideoModel: boolean;
+  isKlingV4VideoModel?: boolean;
   isKlingV3VideoModel: boolean;
   isKlingO3VideoModel: boolean;
   isKlingV3ControlVideoModel: boolean;
@@ -791,6 +785,10 @@ export type PromptBarControlsInput = {
   isJimengMultiframeVideoModel?: boolean;
   falVideoDuration: string;
   klingVariant: KlingVariant;
+  klingV4Variant?: KlingV4Variant;
+  klingV4Resolution?: KlingV4Resolution;
+  klingV4AspectRatio?: KlingV4AspectRatio;
+  klingV4Duration?: KlingV4Duration;
   klingV3Duration: KlingV3DurationSelectionValue;
   klingV3GenerateAudio: boolean;
   klingV3CfgScale: KlingV3CfgScaleSelectionValue;
@@ -868,9 +866,8 @@ export type PromptBarControlsInput = {
   seedance25Duration?: Seedance25DurationSelectionValue;
   seedance25GenerateAudio?: boolean;
   seedance25UsesSourceAspectRatio?: boolean;
-  flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
-  wan27ImageAspectRatio: Wan27ImageAspectRatioSelectionValue;
-  wan27ImageMaxImages: Wan27ImageMaxImagesSelectionValue;
+  flux3ImageAspectRatio: Flux3ImageAspectRatio;
+  flux3ImageResolution: Flux3ImageResolution;
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
@@ -883,8 +880,15 @@ export type PromptBarControlsInput = {
   ideogram45IsEditing?: boolean;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
-  krea2AspectRatio?: Krea2AspectRatioSelectionValue;
-  krea2Creativity?: Krea2CreativitySelectionValue;
+  krea3Variant?: Krea3Variant;
+  krea3ReasoningLevel?: Krea3ReasoningLevel;
+  krea3IsEditing?: boolean;
+  grokImageAspectRatio?: GrokImageAspectRatio;
+  grokImageResolution?: GrokImageResolution;
+  grokImageQuality?: GrokImageQuality;
+  grokImageOutputFormat?: GrokImageOutputFormat;
+  grokImagePassthrough?: boolean;
+  grokImageEnableSafetyChecker?: boolean;
   falScaleFactor: number;
   falCreativity: number;
   falNoiseScale: number;
@@ -895,6 +899,10 @@ export type PromptBarControlsInput = {
   isLoading: boolean;
   onFalVideoDurationChange: (value: string) => void;
   onKlingVariantChange: (value: string) => void;
+  onKlingV4VariantChange: (value: string) => void;
+  onKlingV4ResolutionChange: (value: string) => void;
+  onKlingV4AspectRatioChange: (value: string) => void;
+  onKlingV4DurationChange: (value: string) => void;
   onKlingV3DurationChange: (value: string) => void;
   onKlingV3GenerateAudioChange: (value: boolean) => void;
   onKlingV3CfgScaleChange: (value: string) => void;
@@ -968,9 +976,8 @@ export type PromptBarControlsInput = {
   onSeedance25ResolutionChange?: (value: string) => void;
   onSeedance25DurationChange?: (value: string) => void;
   onSeedance25GenerateAudioChange?: (value: boolean) => void;
-  onFlux2MaxImageSizeChange: (value: string) => void;
-  onWan27ImageAspectRatioChange: (value: string) => void;
-  onWan27ImageMaxImagesChange: (value: string) => void;
+  onFlux3ImageAspectRatioChange: (value: string) => void;
+  onFlux3ImageResolutionChange: (value: string) => void;
   onRecraftImageSizeChange: (value: string) => void;
   onRecraftBackgroundColorChange: (value: string) => void;
   onRecraftColorChange: (index: number, value: string) => void;
@@ -984,8 +991,14 @@ export type PromptBarControlsInput = {
   onIdeogram45EditPrecisionChange?: (value: string) => void;
   onGptImage25BackgroundChange?: (value: string) => void;
   onGptImage25VariantChange?: (value: string) => void;
-  onKrea2AspectRatioChange?: (value: string) => void;
-  onKrea2CreativityChange?: (value: string) => void;
+  onKrea3VariantChange?: (value: string) => void;
+  onKrea3ReasoningLevelChange?: (value: string) => void;
+  onGrokImageAspectRatioChange?: (value: string) => void;
+  onGrokImageResolutionChange?: (value: string) => void;
+  onGrokImageQualityChange?: (value: string) => void;
+  onGrokImageOutputFormatChange?: (value: string) => void;
+  onGrokImagePassthroughChange?: (value: boolean) => void;
+  onGrokImageEnableSafetyCheckerChange?: (value: boolean) => void;
   onFalScaleFactorChange: (value: string) => void;
   onFalCreativityChange: (value: string) => void;
   onFalNoiseScaleChange: (value: string) => void;
@@ -1008,9 +1021,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     usingFal,
     isSeedreamModel,
     isNanoBananaModel,
-    isKrea2LargeModel = false,
-    isFlux2MaxModel,
-    isWan27ImageModel,
+    isFlux3ImageModel,
     isGptImage2Model = false,
     isUpscaleModel,
     isKlingVideoModel,
@@ -1112,9 +1123,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     seedance25Duration = 'auto',
     seedance25GenerateAudio = true,
     seedance25UsesSourceAspectRatio = false,
-    flux2MaxImageSize,
-    wan27ImageAspectRatio,
-    wan27ImageMaxImages,
+    flux3ImageAspectRatio = 'auto',
+    flux3ImageResolution = '1k',
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
@@ -1126,8 +1136,12 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     ideogram45IsEditing = false,
     gptImage25Background,
     gptImage25Variant,
-    krea2AspectRatio = '16:9',
-    krea2Creativity = 'medium',
+    krea3Variant, krea3ReasoningLevel, krea3IsEditing = false,
+    onKrea3VariantChange = () => undefined, onKrea3ReasoningLevelChange = () => undefined,
+    grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
+    grokImagePassthrough, grokImageEnableSafetyChecker,
+    onGrokImageAspectRatioChange, onGrokImageResolutionChange, onGrokImageQualityChange, onGrokImageOutputFormatChange,
+    onGrokImagePassthroughChange, onGrokImageEnableSafetyCheckerChange,
     falScaleFactor,
     falCreativity,
     falNoiseScale,
@@ -1211,9 +1225,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onSeedance25ResolutionChange = () => undefined,
     onSeedance25DurationChange = () => undefined,
     onSeedance25GenerateAudioChange = () => undefined,
-    onFlux2MaxImageSizeChange,
-    onWan27ImageAspectRatioChange,
-    onWan27ImageMaxImagesChange,
+    onFlux3ImageAspectRatioChange,
+    onFlux3ImageResolutionChange,
     onRecraftImageSizeChange,
     onRecraftBackgroundColorChange,
     onRecraftColorChange,
@@ -1225,8 +1238,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onIdeogram45EditPrecisionChange = () => undefined,
     onGptImage25BackgroundChange = () => undefined,
     onGptImage25VariantChange = () => undefined,
-    onKrea2AspectRatioChange = () => undefined,
-    onKrea2CreativityChange = () => undefined,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -1239,6 +1250,21 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   } = input;
 
   const controls: PromptBarModelControl[] = [];
+
+  if (usingFal && isVideoMode && isKlingV4VideoModel(input.falModelId)) {
+    controls.push(...buildKlingV4Controls({
+      idPrefix: controlIdPrefix,
+      isLoading,
+      variant: input.klingV4Variant,
+      resolution: input.klingV4Resolution,
+      aspectRatio: input.klingV4AspectRatio,
+      duration: input.klingV4Duration,
+      onVariantChange: input.onKlingV4VariantChange,
+      onResolutionChange: input.onKlingV4ResolutionChange,
+      onAspectRatioChange: input.onKlingV4AspectRatioChange,
+      onDurationChange: input.onKlingV4DurationChange,
+    }));
+  }
 
   if (isKlingVideoModel) {
     controls.push({
@@ -1917,99 +1943,54 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
-  // Flux2 Max image size control
-  if (!isVideoMode && usingFal && isFlux2MaxModel) {
+  if (!isVideoMode && usingFal && isFlux3ImageModel) {
     controls.push({
-      id: 'flux2-max-image-size-select',
+      id: 'flux3-image-aspect-ratio-select',
+      prefixLabel: 'AR',
+      ariaLabel: 'Select Flux 3 image aspect ratio',
+      options: FLUX3_IMAGE_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: flux3ImageAspectRatio,
+      onChange: (value: string) => {
+        if (isFlux3ImageAspectRatio(value)) onFlux3ImageAspectRatioChange(value);
+      },
+      disabled: isLoading,
+    });
+    controls.push({
+      id: 'flux3-image-resolution-select',
       prefixLabel: 'Resolution',
-      ariaLabel: 'Select Flux2 Max image size',
-      options: FLUX2_MAX_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: flux2MaxImageSize,
-      onChange: onFlux2MaxImageSizeChange,
+      ariaLabel: 'Select Flux 3 image resolution',
+      options: FLUX3_IMAGE_RESOLUTION_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+      value: flux3ImageResolution,
+      onChange: (value: string) => {
+        if (isFlux3ImageResolution(value)) onFlux3ImageResolutionChange(value);
+      },
       disabled: isLoading,
     });
   }
 
   if (!isVideoMode && usingFal && isRecraftV4ProModel(falModelId)) {
-    controls.push({
-      id: 'recraft-image-size-select',
-      prefixLabel: 'Image Size',
-      ariaLabel: 'Select Recraft image size',
-      options: RECRAFT_V4_PRO_IMAGE_SIZE_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: recraftImageSize,
-      onChange: onRecraftImageSizeChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      kind: 'color',
-      id: 'recraft-background-color-picker',
-      prefixLabel: 'BG',
-      ariaLabel: 'Select Recraft background color',
-      value: recraftRgbToHex(recraftBackgroundColor),
-      onChange: onRecraftBackgroundColorChange,
-      disabled: isLoading,
-    });
-
-    recraftColors.slice(0, RECRAFT_V4_PRO_MAX_COLORS).forEach((color, index) => {
-      controls.push({
-        kind: 'color',
-        id: `recraft-color-${index + 1}-picker`,
-        prefixLabel: `C${index + 1}`,
-        ariaLabel: `Select Recraft preferred color ${index + 1}`,
-        value: recraftRgbToHex(color),
-        onChange: (value: string) => onRecraftColorChange(index, value),
-        disabled: isLoading,
-      });
-    });
-
-    if (recraftColors.length < RECRAFT_V4_PRO_MAX_COLORS) {
-      controls.push({
-        kind: 'action',
-        id: 'recraft-add-color-button',
-        label: '+ Color',
-        ariaLabel: 'Add Recraft preferred color',
-        onClick: onRecraftAddColor,
-        disabled: isLoading,
-      });
-    }
-
-    if (recraftColors.length > 0) {
-      controls.push({
-        kind: 'action',
-        id: 'recraft-remove-color-button',
-        label: '- Color',
-        ariaLabel: 'Remove Recraft preferred color',
-        onClick: onRecraftRemoveColor,
-        disabled: isLoading,
-      });
-    }
-  }
-
-  // Wan 2.7 Pro Image controls
-  if (!isVideoMode && usingFal && isWan27ImageModel) {
-    controls.push({
-      id: 'wan27-image-max-images-select',
-      prefixLabel: 'Images',
-      ariaLabel: 'Select number of images to generate',
-      options: WAN_27_IMAGE_MAX_IMAGES_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan27ImageMaxImages,
-      onChange: onWan27ImageMaxImagesChange,
-      disabled: isLoading,
-    });
-
-    controls.push({
-      id: 'wan27-image-aspect-ratio-select',
-      prefixLabel: 'Aspect Ratio',
-      ariaLabel: 'Select output aspect ratio',
-      options: WAN_27_IMAGE_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: wan27ImageAspectRatio,
-      onChange: onWan27ImageAspectRatioChange,
-      disabled: isLoading,
-    });
+    controls.push(...buildRecraftControls({
+      isLoading, imageSize: recraftImageSize, backgroundColor: recraftBackgroundColor, colors: recraftColors,
+      onImageSizeChange: onRecraftImageSizeChange, onBackgroundColorChange: onRecraftBackgroundColorChange,
+      onColorChange: onRecraftColorChange, onAddColor: onRecraftAddColor, onRemoveColor: onRecraftRemoveColor,
+    }));
   }
 
   const isGrokImagineModel = !isVideoMode && falModelId === GROK_IMAGINE_IMAGE_MODEL_ID; // Grok text-to-image model.
+  if (usingFal && isGrokImagineModel) {
+    controls.push(...buildGrokImageControls({
+      isLoading, aspectRatio: grokImageAspectRatio, resolution: grokImageResolution, quality: grokImageQuality,
+      outputFormat: grokImageOutputFormat, imagePassthrough: grokImagePassthrough,
+      enableSafetyChecker: grokImageEnableSafetyChecker, numImages: falNumImages,
+      onAspectRatioChange: onGrokImageAspectRatioChange ?? (() => {}),
+      onResolutionChange: onGrokImageResolutionChange ?? (() => {}),
+      onQualityChange: onGrokImageQualityChange ?? (() => {}),
+      onOutputFormatChange: onGrokImageOutputFormatChange ?? (() => {}),
+      onImagePassthroughChange: onGrokImagePassthroughChange ?? (() => {}),
+      onEnableSafetyCheckerChange: onGrokImageEnableSafetyCheckerChange ?? (() => {}),
+      onNumImagesChange: onFalNumImagesChange,
+    }));
+  }
   const isSeedreamV5Lite = isSeedreamV5LiteModelId(falModelId); // Seedream 5 Lite uses stricter controls.
   const isSeedreamV5Pro = isSeedreamV5ProModelId(falModelId); // Seedream 5 Pro uses Pro controls.
   const shouldShowSeedreamImageSizeControl = apiProvider === 'fal' && isSeedreamModel; // Show size picker for all Seedream models.
@@ -2028,6 +2009,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const isGptImage25 = !isVideoMode && isGptImage25Model(falModelId);
   const isIdeogram45 = !isVideoMode && isIdeogram45Model(falModelId);
+  if (apiProvider === 'fal' && !isVideoMode && isKrea3Model(falModelId)) {
+    controls.push(...buildKrea3Controls({
+      isLoading, isEditing: krea3IsEditing, variant: krea3Variant, reasoningLevel: krea3ReasoningLevel,
+      imageSizeSelection: falImageSizeSelection, onSizeChange: onFalImageSizeChange,
+      onVariantChange: onKrea3VariantChange, onReasoningLevelChange: onKrea3ReasoningLevelChange,
+    }));
+  }
   if (apiProvider === 'fal' && isIdeogram45) {
     controls.push(...buildIdeogram45Controls({
       isEditing: ideogram45IsEditing, isLoading,
@@ -2053,28 +2041,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     }));
   }
 
-  const shouldShowKrea2Controls = apiProvider === 'fal' && isKrea2LargeModel;
-  if (shouldShowKrea2Controls) {
-    controls.push({
-      id: 'fal-krea-2-aspect-ratio-select',
-      prefixLabel: 'AR',
-      ariaLabel: 'Select Krea 2 Large aspect ratio',
-      options: KREA_2_ASPECT_RATIO_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: krea2AspectRatio,
-      onChange: onKrea2AspectRatioChange,
-      disabled: isLoading,
-    });
-    controls.push({
-      id: 'fal-krea-2-creativity-select',
-      prefixLabel: 'Creativity',
-      ariaLabel: 'Select Krea 2 Large creativity',
-      options: KREA_2_CREATIVITY_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: krea2Creativity,
-      onChange: onKrea2CreativityChange,
-      disabled: isLoading,
-    });
-  }
-
   if (apiProvider === 'fal' && isNanoBananaModel) controls.push(...buildNanoBananaControls({
     modelId: falModelId, isLoading, aspectRatioSelection: falAspectRatioSelection, resolution: falResolutionSelection,
     webSearch: nanoBananaWebSearch, thinkingLevel: nanoBananaThinkingLevel,
@@ -2084,18 +2050,14 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   }));
 
   const supportsAspectRatioControl = (isNanoBananaModel && apiProvider !== 'fal')
-    || isGrokImagineModel // Grok aspect ratio support.
-    || (isSeedreamModel && !shouldShowSeedreamImageSizeControl); // Include Grok for AR control.
+    || (isSeedreamModel && !shouldShowSeedreamImageSizeControl);
   const shouldShowAspectRatioControl = supportsAspectRatioControl && (apiProvider === 'fal' || !isVideoMode);
   if (shouldShowAspectRatioControl) {
     const aspectRatioOptions = isNanoBananaModel
       ? getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider)
-      : isGrokImagineModel // Grok aspect ratio branch.
-        ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratio options.
-        : getSeedreamAspectRatioOptions(falModelId);
+      : getSeedreamAspectRatioOptions(falModelId);
     controls.push({
       id: 'fal-aspect-ratio-select',
-      prefixLabel: isGrokImagineModel ? 'AR' : undefined, // Grok uses short label.
       ariaLabel: 'Select aspect ratio',
       options: aspectRatioOptions.map(option => ({ value: option.value, label: option.label })),
       value: falAspectRatioSelection,
@@ -2106,7 +2068,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2Model || isGptImage25 || isIdeogram45);
+    && (isSeedreamModel || isNanoBananaModel || isGptImage2Model || isGptImage25 || isIdeogram45);
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
@@ -2129,4 +2091,4 @@ export const getPromptBarModelOptions = (mode: FalModelMode): ReadonlyArray<FalM
   mode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
 
 export const shouldShowKlingNegativePrompt = (falModelId: FalVideoModelId | string): boolean =>
-  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_V3_VIDEO_MODEL_ID || falModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_V3_VIDEO_MODEL_ID;

@@ -34,6 +34,8 @@ import {
 import { pruneBackupSessions, saveBackupSessionBinary } from '../services/backupService';
 import { createDesktopSnapshotSource } from '../services/desktopSnapshotSource';
 import { createBrowserSnapshotWorkingSource } from '../services/browserSnapshotWorkingSource';
+import { KLING_V4_DEFAULTS, isKlingV4Variant } from '../services/klingV4Config';
+import { resolveKlingV4RunSettings } from '../services/klingV4RunSettings';
 import { persistAutosaveSnapshot } from '../services/autosavePersistence';
 import { enqueueSnapshotAutosave } from '../services/snapshotAutosaveQueue';
 import { getAutosaveApprovedFileHandle, isFileSystemFileHandle } from '../services/fileSystemHandlePermissions';
@@ -375,6 +377,10 @@ export function useSnapshotIO({
     flux3Duration = 'auto',
     flux3GenerateAudio = true,
     flux3KeyframeTimings = [],
+    klingV4Variant = KLING_V4_DEFAULTS.klingV4Variant,
+    klingV4Resolution = KLING_V4_DEFAULTS.klingV4Resolution,
+    klingV4AspectRatio = KLING_V4_DEFAULTS.klingV4AspectRatio,
+    klingV4Duration = KLING_V4_DEFAULTS.klingV4Duration,
     jimengMultiframeDuration,
     jimengMultiframeResolution,
     jimengSessionId,
@@ -444,6 +450,10 @@ export function useSnapshotIO({
     setFlux3Duration = () => undefined,
     setFlux3GenerateAudio = () => undefined,
     setFlux3KeyframeTimings = () => undefined,
+    setKlingV4Variant = () => undefined,
+    setKlingV4Resolution = () => undefined,
+    setKlingV4AspectRatio = () => undefined,
+    setKlingV4Duration = () => undefined,
     setJimengMultiframeDuration,
     setJimengMultiframeResolution,
     setJimengSessionId,
@@ -548,6 +558,10 @@ export function useSnapshotIO({
       flux3Duration,
       flux3GenerateAudio,
       flux3KeyframeTimings: flux3KeyframeTimings.map(entry => ({ ...entry })),
+      klingV4Variant,
+      klingV4Resolution,
+      klingV4AspectRatio,
+      klingV4Duration,
       jimengMultiframeDuration,
       jimengMultiframeResolution,
       jimengSessionId,
@@ -639,6 +653,10 @@ export function useSnapshotIO({
     flux3Duration,
     flux3GenerateAudio,
     flux3KeyframeTimings,
+    klingV4Variant,
+    klingV4Resolution,
+    klingV4AspectRatio,
+    klingV4Duration,
     jimengMultiframeDuration,
     jimengMultiframeResolution,
     jimengSessionId,
@@ -1081,6 +1099,17 @@ export function useSnapshotIO({
       setFlux3Duration('auto');
       setFlux3GenerateAudio(true);
       setFlux3KeyframeTimings([]); // Snapshots created before Flux 3 use safe family defaults.
+      const restoredKlingV4 = resolveKlingV4RunSettings({
+        modelId: isKlingV4Variant(meta?.klingV4Variant) ? undefined : meta?.falModelId,
+        variant: meta?.klingV4Variant,
+        resolution: meta?.klingV4Resolution,
+        aspectRatio: meta?.klingV4AspectRatio,
+        duration: meta?.klingV4Duration,
+      });
+      setKlingV4Variant(restoredKlingV4.variant);
+      setKlingV4Resolution(restoredKlingV4.resolution);
+      setKlingV4AspectRatio(restoredKlingV4.aspectRatio);
+      setKlingV4Duration(restoredKlingV4.duration);
       if (meta) {
         const validAppMode: AppMode =
           meta.appMode === 'CANVAS'
@@ -1433,6 +1462,10 @@ export function useSnapshotIO({
     setSeedance25Resolution,
     setSeedance25Duration,
     setSeedance25GenerateAudio,
+    setKlingV4Variant,
+    setKlingV4Resolution,
+    setKlingV4AspectRatio,
+    setKlingV4Duration,
     setJimengMultiframeDuration,
     setJimengMultiframeResolution,
     setJimengSessionId,

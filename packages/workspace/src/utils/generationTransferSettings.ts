@@ -1,3 +1,5 @@
+import { KREA_3_DEFAULTS, isKrea3Model } from '../services/krea3Config';
+import { resolveKrea3RunSettings, serializeKrea3GenerationOptions } from '../services/krea3RunSettings';
 import type {
   GenerationFalOptions,
   GenerationInputs,
@@ -6,7 +8,7 @@ import type {
 } from '../types';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
@@ -20,18 +22,13 @@ import {
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  KREA_2_DEFAULT_ASPECT_RATIO,
-  KREA_2_DEFAULT_CREATIVITY,
   MINIMAX_H3_VIDEO_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
-  RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR,
-  RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE,
   SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDANCE_2_VIDEO_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_EDIT_VIDEO_MODEL_ID,
   WAN_27_REFERENCE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
@@ -40,7 +37,6 @@ import {
   isFalImageModelId,
   isGptImage2Model,
   isGptImage25Model,
-  isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
   isRecraftV4ProModel,
   isSeedance2VideoModel as isSeedance2VideoModelId,
@@ -50,14 +46,19 @@ import {
   type FalModelId,
 } from '../services/modelConfig';
 import { resolveFlux3Settings } from './flux3';
+import { resolveFlux3ImageSettings } from '../services/flux3ImageConfig';
 import { IDEOGRAM_45_DEFAULTS, isIdeogram45Model } from '../services/ideogram45Config';
 import { resolveIdeogram45RunSettings, serializeIdeogram45GenerationOptions } from '../services/ideogram45RunSettings';
 import { NANO_BANANA_DEFAULTS } from '../services/nanoBananaConfig';
 import { resolveNanoBananaRunSettings, serializeNanoBananaGenerationOptions } from '../services/nanoBananaRunSettings';
 import { GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
 import { GPT_IMAGE_25_DEFAULTS } from '../services/gptImage25Config';
+import { KLING_V4_DEFAULTS, KLING_V4_EDIT_VIDEO_MODEL_ID, isKlingV4VideoModel, isKlingV4Duration, isKlingV4Variant } from '../services/klingV4Config';
+import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '../services/klingV4RunSettings';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions } from '../services/gptImage25RunSettings';
+import { resolveRecraftRunSettings, serializeRecraftGenerationOptions } from '../services/recraftRunSettings';
+import { resolveGrokImageRunSettings, serializeGrokImageGenerationOptions } from '../services/grokImageRunSettings';
 
 export type GenerationTransferOptions = GenerationFalOptions & GenerationVolcengineOptions & GenerationJimengOptions; // Shared shape covers every provider-backed prompt control.
 
@@ -74,6 +75,10 @@ type TransferDefaultsRule = {
 // One rule per model (family); the first match wins. Video rules return complete
 // option sets; image rules are layered on top of the shared { numImages: 1 } base.
 const VIDEO_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
+  {
+    matches: isKlingV4VideoModel,
+    defaults: restoredOptions => ({ ...KLING_V4_DEFAULTS, klingV4Duration: restoredOptions.klingV4Variant === 'edit' ? 'source' : KLING_V4_DEFAULTS.klingV4Duration }),
+  },
   { matches: [KLING_VIDEO_MODEL_ID], defaults: { videoDuration: '5', klingVariant: 'standard' } }, // Kling 2.5 defaults.
   {
     matches: [KLING_V3_VIDEO_MODEL_ID],
@@ -177,22 +182,21 @@ const VIDEO_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
 const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [CRYSTAL_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, creativity: 0 } }, // Crystal defaults.
   { matches: [SEEDVR_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, noiseScale: 0.1 } }, // SeedVR defaults.
-  { matches: [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID], defaults: { flux2MaxImageSize: 'landscape_4_3' } }, // Flux defaults.
+  { matches: [FLUX_3_TEXT_TO_IMAGE_MODEL_ID], defaults: restoredOptions => resolveFlux3ImageSettings(restoredOptions) },
   { matches: (modelId) => isGptImage25Model(modelId), defaults: GPT_IMAGE_25_DEFAULTS },
+  { matches: (modelId) => isKrea3Model(modelId), defaults: KREA_3_DEFAULTS },
   { matches: (modelId) => isIdeogram45Model(modelId), defaults: IDEOGRAM_45_DEFAULTS },
   { matches: (modelId) => isGptImage2Model(modelId), defaults: GPT_IMAGE_2_DEFAULTS },
-  { matches: (modelId) => isKrea2LargeModelId(modelId), defaults: { aspectRatioSelection: KREA_2_DEFAULT_ASPECT_RATIO, krea2Creativity: KREA_2_DEFAULT_CREATIVITY } }, // Krea defaults.
-  { matches: [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID], defaults: { wan27ImageAspectRatio: 'landscape_16_9', wan27ImageMaxImages: '1' } }, // Wan image defaults.
   {
     matches: (modelId) => isRecraftV4ProModel(modelId),
-    defaults: () => ({ recraftImageSize: RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE, recraftBackgroundColor: { ...RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR }, recraftColors: [] }), // Recraft defaults.
+    defaults: () => serializeRecraftGenerationOptions(resolveRecraftRunSettings({}, 'restore')),
   },
   {
     matches: (modelId) => isSeedreamModelId(modelId),
     defaults: (_restoredOptions, modelId) => ({ imageSizeSelection: isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 'auto_2K' : 'default' }), // Seedream defaults vary by generation.
   },
   { matches: (modelId) => isNanoBananaEditModelId(modelId), defaults: NANO_BANANA_DEFAULTS }, // Nano Banana defaults.
-  { matches: [GROK_IMAGINE_IMAGE_MODEL_ID], defaults: { aspectRatioSelection: '1:1' } }, // Grok image default.
+  { matches: [GROK_IMAGINE_IMAGE_MODEL_ID], defaults: () => serializeGrokImageGenerationOptions(resolveGrokImageRunSettings({ kind: 'text_to_image' }, 'restore')) },
 ];
 
 const ruleMatches = (rule: TransferDefaultsRule, modelId: FalModelId): boolean => (
@@ -227,12 +231,14 @@ export const resolveGenerationTransferOptions = (
   generation: GenerationInputs,
   normalizedModelId: FalModelId,
 ): GenerationTransferOptions => {
-  const savedOptions = (generation.provider === 'jimeng'
+  const savedOptions: GenerationTransferOptions = (generation.provider === 'jimeng'
     ? generation.jimengOptions
     : generation.provider === 'volcengine'
       ? generation.volcengineOptions
       : generation.falOptions) ?? {}; // Legacy generations may only contain provider and model metadata.
-  const inferredVariantOptions: GenerationTransferOptions = normalizedModelId === KLING_O3_VIDEO_MODEL_ID
+  const inferredVariantOptions: GenerationTransferOptions = isKlingV4VideoModel(normalizedModelId)
+    ? { klingV4Variant: generation.modelId === KLING_V4_EDIT_VIDEO_MODEL_ID ? 'edit' : 'generate' }
+    : normalizedModelId === KLING_O3_VIDEO_MODEL_ID
     ? { klingO3Variant: generation.modelId === KLING_O3_VIDEO_EDIT_MODEL_ID ? 'edit' : 'reference' }
     : normalizedModelId === WAN_27_VIDEO_MODEL_ID
       ? {
@@ -249,6 +255,38 @@ export const resolveGenerationTransferOptions = (
     ...getGenerationTransferOptionDefaults(normalizedModelId, restoredOptions),
     ...restoredOptions,
   };
+  if (normalizedModelId === FLUX_3_TEXT_TO_IMAGE_MODEL_ID) {
+    return { ...resolvedOptions, ...resolveFlux3ImageSettings(restoredOptions), numImages: 1 };
+  }
+  if (isRecraftV4ProModel(normalizedModelId)) {
+    return { ...resolvedOptions, ...serializeRecraftGenerationOptions(resolveRecraftRunSettings({
+      imageSize: resolvedOptions.recraftImageSize, backgroundColor: resolvedOptions.recraftBackgroundColor, colors: resolvedOptions.recraftColors,
+    }, 'restore')) };
+  }
+  if (normalizedModelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
+    return { ...resolvedOptions, ...serializeGrokImageGenerationOptions(resolveGrokImageRunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
+      aspectRatio: savedOptions.grokImageAspectRatio ?? savedOptions.aspectRatioSelection,
+      numImages: resolvedOptions.numImages,
+      resolution: resolvedOptions.grokImageResolution, quality: resolvedOptions.grokImageQuality,
+      outputFormat: resolvedOptions.grokImageOutputFormat, imagePassthrough: resolvedOptions.grokImagePassthrough,
+      enableSafetyChecker: resolvedOptions.grokImageEnableSafetyChecker,
+    }, 'restore')) };
+  }
+  if (isKlingV4VideoModel(normalizedModelId)) {
+    const settings = resolveKlingV4RunSettings({
+      modelId: isKlingV4Variant(resolvedOptions.klingV4Variant) ? undefined : generation.modelId,
+      variant: resolvedOptions.klingV4Variant,
+      resolution: resolvedOptions.klingV4Resolution,
+      aspectRatio: resolvedOptions.klingV4AspectRatio,
+      duration: isKlingV4Duration(resolvedOptions.klingV4Duration) ? resolvedOptions.klingV4Duration
+        : generation.modelId === KLING_V4_EDIT_VIDEO_MODEL_ID || resolvedOptions.klingV4Variant === 'edit' ? 'source' : KLING_V4_DEFAULTS.klingV4Duration,
+    });
+    return {
+      ...resolvedOptions,
+      ...serializeKlingV4GenerationOptions(settings),
+    }; // Replays cannot inherit live controls or restore Source duration into Generate.
+  }
   if (isNanoBananaEditModelId(normalizedModelId)) {
     const settings = resolveNanoBananaRunSettings({
       kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image', modelId: normalizedModelId,
@@ -257,6 +295,14 @@ export const resolveGenerationTransferOptions = (
       numImages: resolvedOptions.numImages,
     }, 'restore');
     return { ...resolvedOptions, ...serializeNanoBananaGenerationOptions(settings) };
+  }
+  if (isKrea3Model(normalizedModelId)) {
+    const settings = resolveKrea3RunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
+      variant: resolvedOptions.krea3Variant, reasoningLevel: resolvedOptions.krea3ReasoningLevel,
+      imageSizeSelection: resolvedOptions.imageSizeSelection,
+    }, 'restore');
+    return { ...resolvedOptions, ...serializeKrea3GenerationOptions(settings) };
   }
   if (isGptImage25Model(normalizedModelId)) {
     const settings = resolveGptImage25RunSettings({

@@ -1,6 +1,7 @@
 import {
-  FAL_VIDEO_MODEL_OPTIONS,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  isFalVideoModelId as isVideoModelId,
+  isKrea3Model,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   CRYSTAL_UPSCALER_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
@@ -17,12 +18,9 @@ import {
   KLING_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
-  KREA_2_MAX_STYLE_REFERENCES,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
-  SEEDREAM_V45_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -31,7 +29,6 @@ import {
   isGptImage25Model,
   isIdeogram45Model,
   isKlingO3VideoModelId,
-  isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
   isSeedreamModelId,
   type FalModelId,
@@ -49,6 +46,7 @@ import type {
   Wan27VideoVariant,
 } from '../types';
 import { getFlux3ModePolicy } from '../utils/flux3';
+import { isKlingV4VideoModel } from './klingV4Config';
 import { Tool } from '../types';
 import { getModelReferenceCapabilities } from './modelReferenceCapabilities';
 import { getEmbeddedVideoProvider } from '../utils/embeddedVideoRouting';
@@ -83,6 +81,7 @@ import {
 export type ModelUiCapabilityContext = {
   klingVariant?: KlingVariant;
   klingO3Variant?: KlingO3Variant;
+  klingV4Variant?: 'generate' | 'edit';
   veo31Variant?: Veo31Variant;
   wan27VideoVariant?: Wan27VideoVariant;
   miniMaxH3Variant?: MiniMaxH3Variant;
@@ -96,9 +95,10 @@ export type ModelUiCapabilityContext = {
 
 // Canvas selection affordances plus the multimodal-reference derivation flags.
 export type ModelUiSelectionFlags = {
-  krea2StyleReferenceMode: boolean;
   klingO3VideoInputMode: boolean; // Kling O3 Edit takes a source video.
   klingO3ReferenceMode: boolean;
+  klingV4GenerateMode: boolean;
+  klingV4EditMode: boolean;
   seedance15FflfMode: boolean;
   klingV3ControlVideoInputMode: boolean;
   veo31ExtendMode: boolean;
@@ -135,9 +135,10 @@ export type ModelUiCapabilities = {
 };
 
 const DEFAULT_SELECTION: ModelUiSelectionFlags = {
-  krea2StyleReferenceMode: false,
   klingO3VideoInputMode: false,
   klingO3ReferenceMode: false,
+  klingV4GenerateMode: false,
+  klingV4EditMode: false,
   seedance15FflfMode: false,
   klingV3ControlVideoInputMode: false,
   veo31ExtendMode: false,
@@ -190,6 +191,13 @@ const annotationReferenceToast = (
 
 const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
+    matches: (modelId) => isKrea3Model(modelId),
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: annotationReferenceToast(modelId, 'Krea 3'),
+    }),
+  },
+  {
     matches: (modelId) => isIdeogram45Model(modelId),
     resolve: (_ctx, modelId) => ({
       maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
@@ -200,35 +208,11 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
     matches: (modelId) => isSeedreamModelId(modelId as FalModelId) || isNanoBananaEditModelId(modelId),
     base: { supportsCameraSettings: true },
-    resolve: (_ctx, modelId) => (
-      modelId === SEEDREAM_V45_MODEL_ID
-        ? {
-          referenceLimitToast: (max) => (max >= 10
-            ? { message: 'Seedream 4.5 only accepts up to 10 reference images.', durationMs: 2000 }
-            : null),
-        }
-        : {}
-    ),
   },
   {
     matches: [GROK_IMAGINE_IMAGE_MODEL_ID],
     base: {
-      referenceLimitToast: () => ({
-        message: 'Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.',
-        durationMs: 4000,
-      }),
-    },
-  },
-  {
-    matches: [WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID],
-    base: {
-      klingSuggestionsEnabled: true,
-      showNegativePrompt: true,
-      promptPlaceholder: `Describe your generation, or your edit, or use @ to reference images (4 images in total)... ${GENERATE_SUFFIX}`,
-      referenceLimitToast: () => ({
-        message: 'Wan 2.7 Pro Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.',
-        durationMs: 4000,
-      }),
+      referenceLimitToast: annotationReferenceToast(GROK_IMAGINE_IMAGE_MODEL_ID, 'Grok Imagine 2.0'),
     },
   },
   {
@@ -246,17 +230,7 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
     }),
   },
   {
-    matches: (modelId) => isKrea2LargeModelId(modelId),
-    base: {
-      selection: { krea2StyleReferenceMode: true },
-      referenceLimitToast: () => ({
-        message: `Krea 2 Large supports up to ${KREA_2_MAX_STYLE_REFERENCES} style references.`,
-        durationMs: 4000,
-      }),
-    },
-  },
-  {
-    matches: [FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID],
+    matches: [FLUX_3_TEXT_TO_IMAGE_MODEL_ID],
     base: {
       supportsAnnotate: false,
       klingSuggestionsEnabled: true,
@@ -276,6 +250,21 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
     matches: [KLING_V3_VIDEO_MODEL_ID],
     base: { supportsTailFrame: true, showNegativePrompt: true },
+  },
+  {
+    matches: isKlingV4VideoModel,
+    base: { klingSuggestionsEnabled: true },
+    resolve: (ctx) => ({
+      supportsTailFrame: ctx.klingV4Variant !== 'edit',
+      promptPlaceholder: ctx.klingV4Variant === 'edit'
+        ? `Kling v4 Edit: select a source video (@Video1), shift-click optional image references (@Image1), then describe the edit... ${GENERATE_SUFFIX}`
+        : `Kling v4: describe a video, select a first frame (Shift-click an end frame), or Alt/Option+Shift-click references and use @Image1 or @Video1... ${GENERATE_SUFFIX}`,
+      referenceLimitToast: () => ({ message: 'Kling v4 supports up to 10 image references and 5 video references. Audio references are not supported.', durationMs: 4000 }),
+      selection: {
+        klingV4GenerateMode: ctx.klingV4Variant !== 'edit',
+        klingV4EditMode: ctx.klingV4Variant === 'edit',
+      },
+    }),
   },
   {
     matches: (modelId) => isKlingO3VideoModelId(modelId),
@@ -388,6 +377,7 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   {
     matches: [JIMENG_MULTIFRAME_VIDEO_MODEL_ID],
     base: {
+      supportsAnnotate: false, // Saved Multi-frame bars remain video workflows even while hidden from pickers.
       promptPlaceholder: `Jimeng Multi-frame: select ${JIMENG_MULTIFRAME_MIN_IMAGES}–${JIMENG_MULTIFRAME_MAX_IMAGES} still images in story order. For 2 images, describe the transition; for 3+, separate each transition prompt with ||. ${GENERATE_SUFFIX}`,
     },
   },
@@ -446,9 +436,6 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
   },
 ];
 
-const isVideoModelId = (modelId: string): boolean =>
-  FAL_VIDEO_MODEL_OPTIONS.some(option => option.value === modelId);
-
 const ruleMatches = (rule: ModelUiCapabilityRule, modelId: string): boolean => (
   typeof rule.matches === 'function' ? rule.matches(modelId) : rule.matches.includes(modelId)
 );
@@ -468,6 +455,7 @@ export const getModelUiCapabilities = (
   selection.multimodalReferenceMode = selection.seedance2ReferenceMode
     || selection.seedance25ReferenceMode
     || selection.miniMaxH3ReferenceMode
+    || selection.klingV4GenerateMode
     || selection.flux3KeyframesMode;
   const merged = {
     id: modelId,

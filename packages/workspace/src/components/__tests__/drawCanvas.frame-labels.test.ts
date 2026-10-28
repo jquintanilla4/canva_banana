@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
 import { Tool, type CanvasImage, type Path } from '../../types';
+import { useCanvasReferenceLabels } from '../../hooks/useCanvasReferenceLabels';
+import { getModelUiCapabilities } from '../../services/modelCapabilities';
+import { KLING_V4_VIDEO_MODEL_ID } from '../../services/klingV4Config';
 import { createCanvasRenderCache, drawCanvas } from '../canvas/render/drawCanvas';
 
 const buildContext = (): CanvasRenderingContext2D => ({
@@ -140,7 +144,6 @@ describe('drawCanvas frame role labels', () => {
       isVeo31ExtendMode: false,
       isWanAnimateVideoInputMode: false,
       isWan27VideoMode: false,
-      isKrea2StyleReferenceMode: false,
       showMetadataOverlay: false,
       cropMode: null,
       transformMode: null,
@@ -149,6 +152,52 @@ describe('drawCanvas frame role labels', () => {
     const labels = vi.mocked(ctx.fillText).mock.calls.map(([label]) => label);
     expect(labels).toContain('First frame');
     expect(labels).toContain('Last frame');
+  });
+
+  it.each([
+    { mode: 'first/last frames', prompt: 'A moving subject', tagged: false, selected: false, referenceMode: false },
+    { mode: 'tagged references', prompt: 'A moving subject', tagged: true, selected: false, referenceMode: true },
+    { mode: 'selected references', prompt: 'A moving subject', tagged: false, selected: true, referenceMode: true },
+    { mode: 'single mentioned reference', prompt: 'Animate @Image1', tagged: false, selected: false, referenceMode: true },
+  ])('keeps Kling v4 badges consistent with $mode', ({ prompt, tagged, selected, referenceMode }) => {
+    const first = buildImage('first', 10);
+    const second = buildImage('second', 140);
+    const ctx = buildContext();
+    const { selection, supportsTailFrame } = getModelUiCapabilities(KLING_V4_VIDEO_MODEL_ID, { klingV4Variant: 'generate' });
+    const { result } = renderHook(() => useCanvasReferenceLabels({
+      capabilitySelection: selection, klingSuggestionsEnabled: true, isKlingO3VideoModel: false, prompt,
+      effectiveSeedanceReferenceImageIds: tagged || selected ? [first.id, second.id] : [first.id],
+      effectiveSeedanceReferenceVideoIds: [], effectiveSeedanceReferenceAudioIds: [],
+      referenceImageIds: tagged ? [second.id] : [], referenceVideoIds: [], referenceAudioIds: [], elementImageIds: [],
+      primaryImageId: first.id, primarySelectionMediaType: 'image', sourceVideoId: null,
+      videoLastFrameImageId: referenceMode ? null : second.id,
+      flux3CanvasLabels: {}, videoPromptAreaLabelMap: {}, acceptedVideoPromptImageIds: [],
+      acceptedVideoPromptVideoIds: [], acceptedVideoPromptAudioIds: [], acceptedVideoPromptElementIds: [],
+    }));
+    drawCanvas({
+      canvas: buildCanvas(), ctx, pan: { x: 0, y: 0 }, scale: 1, images: [first, second], notes: [], paths: [],
+      selectedImageIds: selected ? [first.id, second.id] : [first.id],
+      referenceImageIds: result.current.canvasReferenceImageIds, referenceVideoIds: [], referenceAudioIds: [],
+      referenceImageOrderLabels: result.current.canvasReferenceOrderLabels,
+      elementImageIds: [], videoLastFrameImageId: referenceMode ? null : second.id,
+      tailSelectionEnabled: supportsTailFrame,
+      frameRoleLabelsEnabled: supportsTailFrame && !result.current.hasKlingV4ReferenceInputs,
+      sourceVideoId: null, isKlingO3VideoInputMode: false, isKlingO3ReferenceMode: false,
+      isSeedance15FflfMode: false, isKlingV3ControlVideoInputMode: false, isVeo31ExtendMode: false,
+      isWanAnimateVideoInputMode: false, isWan27VideoMode: false,
+      showMetadataOverlay: false, cropMode: null, transformMode: null,
+    });
+    const labels = vi.mocked(ctx.fillText).mock.calls.map(([label]) => label);
+    expect(supportsTailFrame).toBe(true); // Reference badges must not disable end-frame gestures.
+    if (referenceMode) {
+      expect(labels).toContain('@Image1');
+      if (tagged || selected) expect(labels).toContain('@Image2');
+      expect(labels).not.toContain('First frame');
+      expect(labels).not.toContain('Last frame');
+    } else {
+      expect(labels).toContain('First frame');
+      expect(labels).toContain('Last frame');
+    }
   });
 
   it('does not label ordinary selected stills outside first-last-frame modes', () => {
@@ -182,7 +231,6 @@ describe('drawCanvas frame role labels', () => {
       isVeo31ExtendMode: false,
       isWanAnimateVideoInputMode: false,
       isWan27VideoMode: false,
-      isKrea2StyleReferenceMode: false,
       showMetadataOverlay: false,
       cropMode: null,
       transformMode: null,
@@ -224,7 +272,6 @@ describe('drawCanvas frame role labels', () => {
       isVeo31ExtendMode: false,
       isWanAnimateVideoInputMode: false,
       isWan27VideoMode: false,
-      isKrea2StyleReferenceMode: false,
       showMetadataOverlay: false,
       cropMode: null,
       transformMode: null,
@@ -269,7 +316,6 @@ describe('drawCanvas culling and path cache', () => {
       isVeo31ExtendMode: false,
       isWanAnimateVideoInputMode: false,
       isWan27VideoMode: false,
-      isKrea2StyleReferenceMode: false,
       showMetadataOverlay: false,
       cropMode: null,
       transformMode: null,

@@ -4,6 +4,7 @@ import { Tool, type CanvasImage } from '../../types';
 import { parseBinarySnapshotFile, readSnapshotBlobPartAsArrayBuffer, type SnapshotByteSource, type SnapshotMetaState } from '../../services/snapshotService';
 import { createDesktopSnapshotSource } from '../../services/desktopSnapshotSource';
 import { FLUX_3_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID } from '../../services/modelConfig';
+import { KLING_V4_EDIT_VIDEO_MODEL_ID, KLING_V4_VIDEO_MODEL_ID } from '../../services/klingV4Config';
 import { beginWorkspaceSession } from '../../services/workspaceSession';
 import { useSnapshotIO } from '../useSnapshotIO';
 import type { SelectionStateResult } from '../useSelectionState';
@@ -1946,9 +1947,17 @@ describe('useSnapshotIO (Kling v3)', () => {
     expect(parsed.manifest.state.meta?.jimengSessionId).toBe(23);
   });
 
-  it('round-trips the Flux 3 Extend source video role', async () => {
+  it.each([FLUX_3_VIDEO_MODEL_ID, KLING_V4_VIDEO_MODEL_ID, KLING_V4_EDIT_VIDEO_MODEL_ID])('round-trips source video and settings for %s', async modelId => {
     const exportedChunks: Uint8Array[] = [];
     const setSourceVideoId = vi.fn();
+    const klingV4Variant = modelId === KLING_V4_EDIT_VIDEO_MODEL_ID ? 'generate' : 'edit'; // Explicit controls win over imported endpoint aliases.
+    const klingV4Duration = klingV4Variant === 'edit' ? 'source' : '9';
+    const klingV4Setters = {
+      setKlingV4Variant: vi.fn(),
+      setKlingV4Resolution: vi.fn(),
+      setKlingV4AspectRatio: vi.fn(),
+      setKlingV4Duration: vi.fn(),
+    };
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
     window.canvaBananaDesktop = {
       fileMenu: {
@@ -1998,7 +2007,11 @@ describe('useSnapshotIO (Kling v3)', () => {
         setIsFileMenuOpen: vi.fn(),
       },
       fal: {
-        falModelId: FLUX_3_VIDEO_MODEL_ID,
+        falModelId: modelId,
+        ...(modelId !== FLUX_3_VIDEO_MODEL_ID ? {
+          klingV4Variant, klingV4Resolution: '720p', klingV4AspectRatio: '21:9', klingV4Duration,
+        } : {}),
+        ...klingV4Setters,
         flux3Variant: 'extend',
         flux3AspectRatio: 'auto',
         flux3Resolution: '720p',
@@ -2047,6 +2060,11 @@ describe('useSnapshotIO (Kling v3)', () => {
     const exportedFile = fileFromChunks(exportedChunks, 'flux-extend.bcsnap');
     const parsed = await parseBinarySnapshotFile(exportedFile);
     expect(parsed.manifest.state.meta?.sourceVideoId).toBe(sourceVideo.id);
+    if (modelId !== FLUX_3_VIDEO_MODEL_ID) {
+      expect(parsed.manifest.state.meta).toMatchObject({
+        klingV4Variant, klingV4Resolution: '720p', klingV4AspectRatio: '21:9', klingV4Duration,
+      });
+    }
 
     const exportedBytes = new Uint8Array(await readSnapshotBlobPartAsArrayBuffer(exportedFile, 0, exportedFile.size));
     const importSource: SnapshotByteSource = {
@@ -2064,5 +2082,11 @@ describe('useSnapshotIO (Kling v3)', () => {
 
     expect(setSourceVideoId).toHaveBeenLastCalledWith(sourceVideo.id);
     expect(selectionSetters.setSelectedImageIds).toHaveBeenLastCalledWith([sourceVideo.id]);
+    if (modelId !== FLUX_3_VIDEO_MODEL_ID) {
+      expect(klingV4Setters.setKlingV4Variant).toHaveBeenLastCalledWith(klingV4Variant);
+      expect(klingV4Setters.setKlingV4Resolution).toHaveBeenLastCalledWith('720p');
+      expect(klingV4Setters.setKlingV4AspectRatio).toHaveBeenLastCalledWith('21:9');
+      expect(klingV4Setters.setKlingV4Duration).toHaveBeenLastCalledWith(klingV4Duration);
+    }
   });
 });

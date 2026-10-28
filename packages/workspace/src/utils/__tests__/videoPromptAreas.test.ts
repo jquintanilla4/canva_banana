@@ -32,6 +32,37 @@ const buildCanvasMedia = (id: string, mediaType: CanvasImage['mediaType']): Canv
 });
 
 describe('video prompt area helpers', () => {
+  it('uses Kling v4 reference roles and switches Edit to one source video with native mentions', () => {
+    const media = [
+      buildCanvasMedia('image-b', 'image'),
+      buildCanvasMedia('video-b', 'video'),
+      buildCanvasMedia('image-a', 'image'),
+      buildCanvasMedia('video-a', 'video'),
+      buildCanvasMedia('audio-a', 'audio'),
+    ];
+    const area: CanvasVideoPromptArea = {
+      id: 'kling-area', sequence: 1, label: 'Kling area', x: 0, y: 0, width: 600, height: 400,
+      orderedMediaIds: media.map(item => item.id), promptBarId: null,
+    };
+    const generate = getVideoPromptAreaCapabilityProfile('kling/v4');
+    const generatedMembership = buildVideoPromptAreaMembership(area, media, generate);
+    expect(generate.supportsTextOnly).toBe(true);
+    expect(generatedMembership.acceptedImageIds).toEqual(['image-b', 'image-a']);
+    expect(generatedMembership.acceptedVideoIds).toEqual(['video-b', 'video-a']);
+    expect(generatedMembership.ignoredMediaIds).toEqual(['audio-a']);
+    expect(generatedMembership.orderLabels).toEqual({
+      'image-b': '@Image1', 'image-a': '@Image2', 'video-b': '@Video1', 'video-a': '@Video2',
+    });
+
+    const edit = getVideoPromptAreaCapabilityProfile('kling/v4', undefined, { klingV4Variant: 'edit' });
+    const editMembership = buildVideoPromptAreaMembership(area, media, edit);
+    expect(edit.supportsTextOnly).toBe(false);
+    expect(editMembership.sourceVideoId).toBe('video-b');
+    expect(editMembership.acceptedVideoIds).toEqual([]);
+    expect(editMembership.ignoredMediaIds).toEqual(['video-a', 'audio-a']);
+    expect(editMembership.orderLabels).toEqual({ 'image-b': '@Image1', 'image-a': '@Image2', 'video-b': '@Video1' });
+  });
+
   it('marks overflow media as ignored while preserving accepted order labels', () => {
     const area: CanvasVideoPromptArea = {
       id: 'area-1',

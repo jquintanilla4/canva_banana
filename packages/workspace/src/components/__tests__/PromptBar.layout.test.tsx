@@ -349,9 +349,9 @@ const RecraftPromptBarHarness = ({ isLoading = false }: { isLoading?: boolean })
       inputDisabled={false}
       submitDisabled={false}
       modelOptions={[
-        { value: 'fal-ai/recraft/v4/pro/text-to-image', label: 'Recraft v4 Pro' },
+        { value: 'fal-ai/recraft/v4.1/pro/text-to-image', label: 'Recraft v4.1 Pro' },
       ]}
-      selectedModel="fal-ai/recraft/v4/pro/text-to-image"
+      selectedModel="fal-ai/recraft/v4.1/pro/text-to-image"
       onModelChange={vi.fn()}
       modelSelectDisabled={false}
       modelMode="image"

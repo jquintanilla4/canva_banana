@@ -140,8 +140,7 @@ const mockState = vi.hoisted(() => {
     isVolcengineSeedance2VideoModel: true,
     isJimengSeedance2VideoModel: false,
     isVeo31VideoModel: false,
-    isFlux2MaxModel: false,
-    isWan27ImageModel: false,
+    isFlux3ImageModel: false,
     isUpscaleModel: false,
     isKlingProVideoSelection: false,
     isKlingO3EditMode: false,
@@ -207,9 +206,8 @@ const mockState = vi.hoisted(() => {
     seedance2Duration: '5',
     seedance2GenerateAudio: false,
     seedance2CameraFixed: false,
-    flux2MaxImageSize: 'landscape_16_9',
-    wan27ImageAspectRatio: 'landscape_16_9',
-    wan27ImageMaxImages: '1',
+    flux3ImageAspectRatio: 'auto',
+    flux3ImageResolution: '1k',
   };
 
   falState.handleModelModeChange = vi.fn((mode: 'image' | 'video') => {
@@ -276,9 +274,8 @@ const mockState = vi.hoisted(() => {
   falState.handleSeedance2DurationChange = vi.fn();
   falState.handleSeedance2GenerateAudioChange = vi.fn();
   falState.handleSeedance2CameraFixedChange = vi.fn();
-  falState.handleFlux2MaxImageSizeChange = vi.fn();
-  falState.handleWan27ImageAspectRatioChange = vi.fn();
-  falState.handleWan27ImageMaxImagesChange = vi.fn();
+  falState.handleFlux3ImageAspectRatioChange = vi.fn();
+  falState.handleFlux3ImageResolutionChange = vi.fn();
   falState.handleFalImageSizeChange = vi.fn();
   falState.handleFalAspectRatioChange = vi.fn();
   falState.handleFalResolutionChange = vi.fn();
@@ -1371,7 +1368,7 @@ describe('App video prompt area gating', () => {
         kind: 'video',
         prompt: 'Restored generation prompt',
         provider: 'fal',
-        modelId: 'fal-ai/kling-video/v3/pro',
+        modelId: 'kling/v4',
         modelMode: 'video',
         primaryImageId: 'primary-image',
         referenceImageIds: ['reference-image'],
@@ -1383,8 +1380,7 @@ describe('App video prompt area gating', () => {
         sourceAudioId: 'source-audio',
         falOptions: {
           negativePrompt: 'No camera shake',
-          klingV3MultiPromptEnabled: false,
-          klingV3MultiPrompt: '',
+          klingV4Duration: '8',
         },
       },
     };
@@ -1526,9 +1522,13 @@ describe('App video prompt area gating', () => {
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual(expect.arrayContaining([
       { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
       { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
-      { value: 'fal-ai/kling-video/v3/pro', label: 'Kling 3.0 Pro' },
+      { value: 'kling/v4', label: 'Kling v4' },
       { value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine' },
     ]));
+    expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).not.toContainEqual({
+      value: 'fal-ai/kling-video/v3/pro',
+      label: 'Kling 3.0 Pro',
+    });
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).not.toContainEqual({
       value: 'fal-ai/wan-vision-enhancer',
       label: 'Wan Vision Enhancer',

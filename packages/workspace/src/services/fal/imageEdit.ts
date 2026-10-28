@@ -1,12 +1,16 @@
 import { getWorkspaceSignal } from '../workspaceSession';
+import { isKrea3Model } from '../krea3Config';
+import { resolveKrea3SettingsForRequest, serializeKrea3Input } from './krea3';
 import { getNanoBananaSelectorModelId } from '../nanoBananaConfig';
 import { resolveNanoBananaSettingsForRequest, serializeNanoBananaInput } from './nanoBanana';
+import { FLUX3_IMAGE_MAX_INPUTS, resolveFlux3ImageSettings } from '../flux3ImageConfig';
 import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_EDIT_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45EditInput, type Ideogram45EditRequest } from './ideogram45';
 import { resolveGptImage2SettingsForRequest, resolveGptImage25SettingsForRequest, serializeGptImage2Input, serializeGptImage25Input } from './gptImage';
+import { resolveGrokImageSettingsForRequest, serializeGrokImageInput } from './grokImage';
 import { getModelReferenceCapabilities } from '../modelReferenceCapabilities';
-import { Tool, type FalAspectRatioOption, type FalImageSizeOption, type FalResolutionOption, type GptImage25Quality, type GptImage25Background } from '../../types'; // Shared types.
+import { Tool, type FalAspectRatioOption, type FalImageSizeOption, type FalResolutionOption, type Flux3ImageAspectRatio, type Flux3ImageResolution, type GptImage25Quality, type GptImage25Background } from '../../types'; // Shared types.
 import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageEditOptions, GenerateImageEditParams } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
 import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
@@ -19,18 +23,18 @@ import {
   uploadCanvasToFal,
   uploadImageElementToFal,
 } from './media'; // Media upload helpers.
-import { convertWan27ImageMentions } from './prompts'; // Prompt conversion helpers.
 import { extractInlineData, normalizeFalImageMetadata, runFalDownloadStep } from './responses'; // Response parsing helpers.
 import {
+  assertSupportedImageModelId,
   getDefaultFalModelId,
   isSeedreamEditModelId,
   normalizeModelId,
   resolveSeedreamCustomSizeForModel,
 } from './models'; // Model helpers.
 import {
-  FLUX2_MAX_EDIT_MODEL_ID,
+  FLUX_3_EDIT_IMAGE_MODEL_ID,
   isGptImage25Model,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   GROK_IMAGINE_IMAGE_EDIT_MODEL_ID,
   GROK_IMAGINE_IMAGE_MODEL_ID,
   getFalNumImageMaxForModel,
@@ -38,9 +42,6 @@ import {
   isGptImage2TextToImageModelId,
   isNanoBananaEditModelId,
   isSeedreamV5ProModelId,
-  WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
-  type Wan27ImageAspectRatioSelectionValue,
 } from '../modelConfig'; // Canonical model IDs.
 
 const emitImageEditQueuePhase = (
@@ -67,33 +68,40 @@ export const generateImageEdit = async (
   }: GenerateImageEditParams,
   options: GenerateImageEditOptions = {},
 ): Promise<FalImageGenerationResult> => { // Edit an image with Fal.
+  const selectedModelId = normalizeModelId(options.modelId) || getDefaultFalModelId();
+  assertSupportedImageModelId(selectedModelId); // Include retired runtime defaults before any provider side effects.
   options = { ...options, abortSignal: options.abortSignal ?? getWorkspaceSignal() };
   options.abortSignal?.throwIfAborted();
   ensureFalClientConfigured();
 
-  const selectedModelId = normalizeModelId(options.modelId) || getDefaultFalModelId();
   const gptImage2Settings = isGptImage2EditModelId(selectedModelId) || isGptImage2TextToImageModelId(selectedModelId)
     ? resolveGptImage2SettingsForRequest('image_edit', options) : undefined;
   const gptImage25Settings = isGptImage25Model(selectedModelId)
     ? resolveGptImage25SettingsForRequest('image_edit', options) : undefined;
   const nanoBananaSettings = getNanoBananaSelectorModelId(selectedModelId)
     ? resolveNanoBananaSettingsForRequest('image_edit', { ...options, modelId: selectedModelId }) : undefined;
-  const modelId = nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
+  const krea3Settings = isKrea3Model(selectedModelId) ? resolveKrea3SettingsForRequest('image_edit', options) : undefined;
+  const modelId = krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
     ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_EDIT_MODEL_ID : selectedModelId);
   const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
     : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings) : undefined;
   const isIdeogram45 = isIdeogram45Model(modelId);
   const ideogram45Input = isIdeogram45 ? resolveIdeogram45EditInput(options) : undefined;
   const isGptImage25 = isGptImage25Model(modelId);
-  if (isIdeogram45 || isGptImage25 || isGptImage2EditModelId(modelId)) {
+  const grokSettings = modelId === GROK_IMAGINE_IMAGE_MODEL_ID ? resolveGrokImageSettingsForRequest('image_edit', options) : undefined;
+  if (krea3Settings || isIdeogram45 || isGptImage25 || isGptImage2EditModelId(modelId) || grokSettings) {
     const { referenceCapacity, availableReferenceSlots } = getModelReferenceCapabilities(modelId, tool);
     if ((referenceImages?.length ?? 0) > availableReferenceSlots) {
       throw new Error(isIdeogram45
         ? `Ideogram 4.5 supports up to ${referenceCapacity} reference images. The annotation image also counts as a reference.`
-        : `${isGptImage25 ? 'GPT Image 2.5' : 'GPT Image 2'} supports up to ${referenceCapacity + 1} total input images. Please reduce the number of selected images.`);
+        : `${krea3Settings ? 'Krea 3' : grokSettings ? 'Grok Imagine 2.0' : isGptImage25 ? 'GPT Image 2.5' : 'GPT Image 2'} supports up to ${referenceCapacity + 1} total input images. Please reduce the number of selected images.`);
     }
   }
   const isSeedreamAnnotateSingle = tool === Tool.ANNOTATE && isSeedreamEditModelId(modelId);
+  const isFlux3ImageModel = modelId === FLUX_3_TEXT_TO_IMAGE_MODEL_ID;
+  if (isFlux3ImageModel && (referenceImages?.length ?? 0) + 1 > FLUX3_IMAGE_MAX_INPUTS) {
+    throw new Error('Flux 3 edit supports up to 10 images. Please reduce the number of selected images.');
+  }
   const imageUrls: string[] = [];
   let annotationImageUrl: string | undefined;
 
@@ -103,29 +111,37 @@ export const generateImageEdit = async (
       abortSignal: options.abortSignal,
     label: 'source image',
   });
-  const isWan27ImageModel = modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID || modelId === WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID; // Wan 2.7 Pro image edit routing.
 
-  if (modelId === GROK_IMAGINE_IMAGE_MODEL_ID) {
-    const numImagesOption = options.numImages; // Grok supports 1-4 outputs per request.
-    const grokBody: {
-      prompt: string;
-      image_url: string;
-      num_images?: number;
-      output_format?: 'png' | 'jpeg' | 'webp';
-      sync_mode?: boolean;
-    } = {
+  if (!isSeedreamAnnotateSingle) {
+    imageUrls.push(baseImageUrl);
+  }
+
+  if (tool === Tool.ANNOTATE) {
+    const annotationCanvas = buildAnnotationCanvas(image, paths, imageDimensions);
+    annotationImageUrl = await uploadCanvasToFal(annotationCanvas, {
+      jobId: options.jobId,
+      onPhaseUpdate: options.onPhaseUpdate,
+      abortSignal: options.abortSignal,
+      label: 'annotation image',
+    });
+    imageUrls.push(annotationImageUrl);
+  }
+
+  if (!isFlux3ImageModel && referenceImages && referenceImages.length > 0) {
+    const referenceUrls = await collectReferenceUploadUrls(referenceImages, {
+      jobId: options.jobId,
+      onPhaseUpdate: options.onPhaseUpdate,
+      abortSignal: options.abortSignal,
+    });
+    imageUrls.push(...referenceUrls);
+  }
+
+  if (grokSettings) {
+    const grokBody = {
       prompt,
-      image_url: baseImageUrl,
-      output_format: 'png',
-      sync_mode: false,
+      image_urls: imageUrls,
+      ...serializeGrokImageInput(grokSettings),
     };
-
-    if (typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
-      const normalized = Math.min(4, Math.max(1, Math.floor(numImagesOption)));
-      if (normalized >= 1) {
-        grokBody.num_images = normalized;
-      }
-    }
 
     let latestRequestId: string | undefined;
 
@@ -212,32 +228,7 @@ export const generateImageEdit = async (
     return { imageBase64: primaryBase64, imagesBase64: base64List, imageDataUrls: inlineDataList, text: revisedPrompt, requestId };
   }
 
-  if (!isSeedreamAnnotateSingle) {
-    imageUrls.push(baseImageUrl);
-  }
-
-  if (tool === Tool.ANNOTATE) {
-    const annotationCanvas = buildAnnotationCanvas(image, paths, imageDimensions);
-    annotationImageUrl = await uploadCanvasToFal(annotationCanvas, {
-      jobId: options.jobId,
-      onPhaseUpdate: options.onPhaseUpdate,
-      abortSignal: options.abortSignal,
-      label: 'annotation image',
-    });
-    imageUrls.push(annotationImageUrl);
-  }
-
-  const isFlux2MaxModel = modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID; // Flux2 Max edit routing.
-  if (!isWan27ImageModel && !isFlux2MaxModel && referenceImages && referenceImages.length > 0) {
-    const referenceUrls = await collectReferenceUploadUrls(referenceImages, {
-      jobId: options.jobId,
-      onPhaseUpdate: options.onPhaseUpdate,
-      abortSignal: options.abortSignal,
-    });
-    imageUrls.push(...referenceUrls);
-  }
-
-  if (isFlux2MaxModel) {
+  if (isFlux3ImageModel) {
     const hasReferenceImages = referenceImages && referenceImages.length > 0;
     let latestRequestId: string | undefined;
 
@@ -254,36 +245,35 @@ export const generateImageEdit = async (
       allImageUrls.push(...referenceUrls);
     }
 
-    if (allImageUrls.length > 8) { // Limit to 8 images per API.
-      throw new Error('Flux2 Max edit supports up to 8 images. Please reduce the number of selected images.');
-    }
-
-    const flux2Body: {
+    const settings = resolveFlux3ImageSettings(options);
+    const flux3Body: {
       prompt: string;
       image_urls: string[];
-      image_size?: 'auto';
+      aspect_ratio: Flux3ImageAspectRatio;
+      resolution: Flux3ImageResolution;
       output_format?: 'png' | 'jpeg';
-      safety_tolerance?: '5';
+      safety_tolerance?: 4;
       sync_mode?: boolean;
     } = {
       prompt, // Keep @Image1, @Image2, etc. as-is
       image_urls: allImageUrls,
-      image_size: 'auto',
+      aspect_ratio: settings.flux3ImageAspectRatio,
+      resolution: settings.flux3ImageResolution,
       output_format: 'png',
-      safety_tolerance: '5', // Most permissive
+      safety_tolerance: 4, // Flux 3's most permissive supported value.
       sync_mode: false,
     };
 
-    emitFalPhase(options, FLUX2_MAX_EDIT_MODEL_ID, { phase: 'submitting', message: 'Submitting to Fal...' });
+    emitFalPhase(options, FLUX_3_EDIT_IMAGE_MODEL_ID, { phase: 'submitting', message: 'Submitting to Fal...' });
     options.abortSignal?.throwIfAborted();
-    logFalEvent('outbound', FLUX2_MAX_EDIT_MODEL_ID, 'Outbound request (fal.subscribe)', { input: flux2Body });
+    logFalEvent('outbound', FLUX_3_EDIT_IMAGE_MODEL_ID, 'Outbound request (fal.subscribe)', { input: flux3Body });
 
     let result: Awaited<ReturnType<typeof fal.subscribe>>;
     try {
       options.abortSignal?.throwIfAborted();
-      result = await fal.subscribe(FLUX2_MAX_EDIT_MODEL_ID, {
+      result = await fal.subscribe(FLUX_3_EDIT_IMAGE_MODEL_ID, {
         ...options.abortSignal ? { abortSignal: options.abortSignal } : {},
-        input: flux2Body,
+        input: flux3Body,
         logs: true,
         onQueueUpdate: update => {
           if (options.abortSignal?.aborted) return;
@@ -293,8 +283,8 @@ export const generateImageEdit = async (
           if (resolvedRequestId) {
             latestRequestId = resolvedRequestId;
           }
-          emitImageEditQueuePhase(options, FLUX2_MAX_EDIT_MODEL_ID, queueUpdate, resolvedRequestId);
-          logFalEvent('inbound', FLUX2_MAX_EDIT_MODEL_ID, 'Queue update', {
+          emitImageEditQueuePhase(options, FLUX_3_EDIT_IMAGE_MODEL_ID, queueUpdate, resolvedRequestId);
+          logFalEvent('inbound', FLUX_3_EDIT_IMAGE_MODEL_ID, 'Queue update', {
             status: queueUpdate.status,
             position: queueUpdate.position,
             eta: queueUpdate.eta,
@@ -310,14 +300,14 @@ export const generateImageEdit = async (
       });
     } catch (error) {
       options.abortSignal?.throwIfAborted();
-      logFalEvent('error', FLUX2_MAX_EDIT_MODEL_ID, 'Request failed', {
+      logFalEvent('error', FLUX_3_EDIT_IMAGE_MODEL_ID, 'Request failed', {
         error: error instanceof Error ? error.message : String(error),
       });
       throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
     }
 
     options.abortSignal?.throwIfAborted();
-    logFalEvent('inbound', FLUX2_MAX_EDIT_MODEL_ID, 'Result received', {
+    logFalEvent('inbound', FLUX_3_EDIT_IMAGE_MODEL_ID, 'Result received', {
       requestId: result?.requestId || latestRequestId,
       data: (result?.data as Record<string, unknown>) ?? undefined,
     });
@@ -325,10 +315,10 @@ export const generateImageEdit = async (
     const data = result?.data as { images?: Array<{ url: string }> } | undefined;
     const images = data?.images;
     if (!images || images.length === 0) {
-      throw new Error('Fal.ai Flux2 Max edit API did not return an image.');
+      throw new Error('Fal.ai Flux 3 edit API did not return an image.');
     }
 
-    emitFalPhase(options, FLUX2_MAX_EDIT_MODEL_ID, {
+    emitFalPhase(options, FLUX_3_EDIT_IMAGE_MODEL_ID, {
       phase: 'downloading',
       message: 'Downloading generated image...',
       requestId: result?.requestId || latestRequestId,
@@ -340,7 +330,7 @@ export const generateImageEdit = async (
       return inlineDataList.map(dataUrl => {
         const base64 = dataUrl.split(',')[1];
         if (!base64) {
-          throw new Error('Failed to extract image data from Fal.ai Flux2 Max edit response.');
+          throw new Error('Failed to extract image data from Fal.ai Flux 3 edit response.');
         }
         return base64;
       });
@@ -348,137 +338,7 @@ export const generateImageEdit = async (
 
     const [primaryBase64] = base64List;
     if (!primaryBase64) {
-      throw new Error('Failed to extract image data from Fal.ai Flux2 Max edit response.');
-    }
-
-    const requestId = result?.requestId || latestRequestId;
-    return { imageBase64: primaryBase64, imagesBase64: base64List, imageDataUrls: inlineDataList, text: '', requestId };
-  }
-
-  if (isWan27ImageModel) {
-    const hasReferenceImages = referenceImages && referenceImages.length > 0;
-    let latestRequestId: string | undefined;
-
-    if ((referenceImages?.length ?? 0) > 3) { // Fal edit endpoint accepts 1 base image plus 3 references.
-      throw new Error('Wan 2.7 Pro Image supports up to 4 images total. Please reduce the number of selected images.');
-    }
-
-    const allImageUrls = [baseImageUrl]; // Base image first, then references.
-    if (hasReferenceImages) {
-      const referenceUrls = await collectReferenceUploadUrls(referenceImages, {
-        jobId: options.jobId,
-        onPhaseUpdate: options.onPhaseUpdate,
-      abortSignal: options.abortSignal,
-      });
-      allImageUrls.push(...referenceUrls);
-    }
-
-    if (allImageUrls.length > 4) { // Fal edit endpoint accepts 1 base image plus 3 references.
-      throw new Error('Wan 2.7 Pro Image supports up to 4 images total. Please reduce the number of selected images.');
-    }
-
-    const convertedPrompt = convertWan27ImageMentions(prompt); // Convert @ImageN mentions.
-
-    const wan27Body: {
-      prompt: string;
-      image_urls: string[];
-      image_size?: Wan27ImageAspectRatioSelectionValue;
-      num_images?: number;
-      negative_prompt?: string;
-      enable_prompt_expansion?: boolean;
-      enable_safety_checker?: boolean;
-    } = {
-      prompt: convertedPrompt,
-      image_urls: allImageUrls,
-      image_size: options.wan27ImageSize ?? 'landscape_16_9',
-      enable_prompt_expansion: true,
-      enable_safety_checker: true,
-    };
-
-    const numImages = parseInt(options.wan27ImageMaxImages ?? '1', 10);
-    wan27Body.num_images = Math.min(4, Math.max(1, numImages)); // Edit endpoint num_images cap.
-
-    if (options.negativePrompt) {
-      wan27Body.negative_prompt = options.negativePrompt;
-    }
-
-    const i2iModelId = WAN_27_IMAGE_IMAGE_TO_IMAGE_MODEL_ID;
-    emitFalPhase(options, i2iModelId, { phase: 'submitting', message: 'Submitting to Fal...' });
-    options.abortSignal?.throwIfAborted();
-    logFalEvent('outbound', i2iModelId, 'Outbound request (fal.subscribe)', { input: wan27Body });
-
-    let result: Awaited<ReturnType<typeof fal.subscribe>>;
-    try {
-      options.abortSignal?.throwIfAborted();
-      result = await fal.subscribe(i2iModelId, {
-        ...options.abortSignal ? { abortSignal: options.abortSignal } : {},
-        input: wan27Body,
-        logs: true,
-        onQueueUpdate: update => {
-          if (options.abortSignal?.aborted) return;
-          const queueUpdate = update as unknown as FalQueueUpdate;
-          const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-          const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-          if (resolvedRequestId) {
-            latestRequestId = resolvedRequestId;
-          }
-          emitImageEditQueuePhase(options, i2iModelId, queueUpdate, resolvedRequestId);
-          logFalEvent('inbound', i2iModelId, 'Queue update', {
-            status: queueUpdate.status,
-            position: queueUpdate.position,
-            eta: queueUpdate.eta,
-            requestId: resolvedRequestId,
-            logs: normalizedLogs.map(log => log?.message ?? ''),
-          });
-          options.onQueueUpdate?.({
-            ...queueUpdate,
-            requestId: resolvedRequestId || '',
-            logs: normalizedLogs,
-          });
-        },
-      });
-    } catch (error) {
-      options.abortSignal?.throwIfAborted();
-      logFalEvent('error', i2iModelId, 'Request failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
-    }
-
-    options.abortSignal?.throwIfAborted();
-    logFalEvent('inbound', i2iModelId, 'Result received', {
-      requestId: result?.requestId || latestRequestId,
-      data: (result?.data as Record<string, unknown>) ?? undefined,
-    });
-
-    const data = result?.data as { images?: Array<{ url: string }> } | undefined;
-    const images = data?.images;
-    if (!images || images.length === 0) {
-      throw new Error('Fal.ai Wan 2.7 Pro Image Edit API did not return an image.');
-    }
-
-    emitFalPhase(options, i2iModelId, {
-      phase: 'downloading',
-      message: 'Downloading generated image...',
-      requestId: result?.requestId || latestRequestId,
-    });
-    const downloadRequestId = result?.requestId || latestRequestId; // Keep request id on download failures.
-    const inlineDataList = await runFalDownloadStep(downloadRequestId, async () => (
-      Promise.all(images.map(img => extractInlineData(img.url, options.abortSignal)))
-    ));
-    const base64List = await runFalDownloadStep(downloadRequestId, async () => (
-      inlineDataList.map(dataUrl => {
-        const base64 = dataUrl.split(',')[1];
-        if (!base64) {
-          throw new Error('Failed to extract image data from Fal.ai Wan 2.7 Pro Image Edit response.');
-        }
-        return base64;
-      })
-    ));
-
-    const [primaryBase64] = base64List;
-    if (!primaryBase64) {
-      throw new Error('Failed to extract image data from Fal.ai Wan 2.7 Pro Image Edit response.');
+      throw new Error('Failed to extract image data from Fal.ai Flux 3 edit response.');
     }
 
     const requestId = result?.requestId || latestRequestId;
@@ -563,7 +423,8 @@ export const generateImageEdit = async (
 
   if (nanoBananaSettings) Object.assign(body, serializeNanoBananaInput(nanoBananaSettings));
   if (gptImageInput) Object.assign(body, gptImageInput);
-  if (!nanoBananaSettings && !ideogram45Input && !gptImageInput && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (krea3Settings) Object.assign(body, serializeKrea3Input(krea3Settings));
+  if (!krea3Settings && !nanoBananaSettings && !ideogram45Input && !gptImageInput && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {

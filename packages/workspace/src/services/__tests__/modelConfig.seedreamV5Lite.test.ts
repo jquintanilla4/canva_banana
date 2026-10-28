@@ -2,28 +2,39 @@ import { describe, expect, it } from 'vitest';
 import {
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
+  GROK_IMAGINE_IMAGE_MODEL_ID,
+  GROK_IMAGINE_VIDEO_MODEL_ID,
   getFalNumImageMaxForModel,
   getFalNumImageOptionsForModel,
   getSeedreamImageSizeOptions,
   isFalVideoModelId,
   isFalModelId,
   getMaxReferenceImages,
-  isKrea2AspectRatioSelectionValue,
-  isKrea2CreativitySelectionValue,
   isRemovedHailuoModelId,
+  isRetiredVideoModelId,
+  KLING_O3_VIDEO_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
+  KLING_V3_VIDEO_MODEL_ID,
+  KLING_V4_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
+  KREA_3_MODEL_ID,
   isRecraftV4ProModel,
+  JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   normalizeFalModelId,
   RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID,
-  SEEDREAM_MODEL_ID,
+  SCAIL_VIDEO_MODEL_ID,
+  SEEDANCE_15_VIDEO_MODEL_ID,
   SEEDREAM_V5_LITE_MODEL_ID,
   SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID,
   SEEDREAM_V5_PRO_MODEL_ID,
   SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID,
+  VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+  WAN_27_VIDEO_MODEL_ID,
+  WAN_ANIMATE_MODEL_ID,
+  WAN_VISION_ENHANCER_MODEL_ID,
   isSeedreamV5ProModelId,
   getSeedreamTextToImageModelId,
 } from '../modelConfig';
@@ -34,13 +45,33 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(getFalNumImageMaxForModel(SEEDREAM_V5_LITE_TEXT_TO_IMAGE_MODEL_ID)).toBe(6);
     expect(getFalNumImageMaxForModel(SEEDREAM_V5_PRO_MODEL_ID)).toBe(6);
     expect(getFalNumImageMaxForModel(SEEDREAM_V5_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(6);
-    expect(getFalNumImageMaxForModel(SEEDREAM_MODEL_ID)).toBe(4);
   });
 
   it('returns Seedream 5 Lite num image picker values as 1..6', () => {
     expect(getFalNumImageOptionsForModel(SEEDREAM_V5_LITE_MODEL_ID)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(getFalNumImageOptionsForModel(SEEDREAM_V5_PRO_MODEL_ID)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(getFalNumImageOptionsForModel(SEEDREAM_MODEL_ID)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('removes Seedream 4, Seedream 4.5, and Wan Pro Image without migrating saved selections', () => {
+    const imageModelLabels = FAL_IMAGE_MODEL_OPTIONS.map(option => option.label);
+    expect(imageModelLabels).not.toContain('Seedream 4');
+    expect(imageModelLabels).not.toContain('Seedream 4.5');
+    expect(imageModelLabels).not.toContain('Wan 2.7 Pro Image');
+    for (const modelId of [
+      'fal-ai/bytedance/seedream/v4/edit',
+      'fal-ai/bytedance/seedream/v4/text-to-image',
+      'fal-ai/bytedance/seedream/v4.5/edit',
+      'fal-ai/bytedance/seedream/v4.5/text-to-image',
+      'fal-ai/wan/v2.7/pro/text-to-image',
+      'fal-ai/wan/v2.7/pro/edit',
+      'wan/v2.6/text-to-image',
+      'wan/v2.6/image-to-image',
+    ]) {
+      expect(isFalModelId(modelId)).toBe(false);
+      expect(normalizeFalModelId(modelId)).toBeUndefined();
+    }
+    expect(imageModelLabels).toContain('Seedream 5 Lite');
+    expect(imageModelLabels).toContain('Seedream 5 Pro');
   });
 
   it('returns strict Seedream 5 Lite image sizes', () => {
@@ -81,6 +112,15 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(normalizeFalModelId('fal-ai/sora-2/image-to-video/pro')).toBe(KLING_VIDEO_MODEL_ID);
   });
 
+  it('hides Jimeng Multi-frame without removing the Jimeng Seedance choices', () => {
+    const videoModelIds = FAL_VIDEO_MODEL_OPTIONS.map(option => option.value);
+
+    expect(videoModelIds).not.toContain(JIMENG_MULTIFRAME_VIDEO_MODEL_ID);
+    expect(normalizeFalModelId(JIMENG_MULTIFRAME_VIDEO_MODEL_ID)).toBeUndefined();
+    expect(videoModelIds).toContain(JIMENG_SEEDANCE_2_VIDEO_MODEL_ID);
+    expect(videoModelIds).toContain(JIMENG_SEEDANCE_25_VIDEO_MODEL_ID);
+  });
+
   it('removes Hailuo 2.3 without migrating saved selections', () => {
     const videoModelLabels = FAL_VIDEO_MODEL_OPTIONS.map(option => option.label as string);
 
@@ -94,14 +134,40 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(isRemovedHailuoModelId(MINIMAX_H3_VIDEO_MODEL_ID)).toBe(false);
   });
 
-  it('replaces Kling 2.6 Control with Kling 3.0 Control', () => {
+  it('hides retired video models while preserving saved model recognition', () => {
+    const videoModelIds = FAL_VIDEO_MODEL_OPTIONS.map(option => option.value);
+
+    for (const modelId of [
+      KLING_VIDEO_MODEL_ID,
+      KLING_V3_VIDEO_MODEL_ID,
+      KLING_V3_CONTROL_VIDEO_MODEL_ID,
+      KLING_O3_VIDEO_MODEL_ID,
+      SCAIL_VIDEO_MODEL_ID,
+      WAN_27_VIDEO_MODEL_ID,
+      WAN_ANIMATE_MODEL_ID,
+      SEEDANCE_15_VIDEO_MODEL_ID,
+      VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
+    ]) {
+      expect(videoModelIds).not.toContain(modelId);
+      expect(isFalVideoModelId(modelId)).toBe(true);
+      expect(normalizeFalModelId(modelId)).toBe(modelId);
+      expect(isRetiredVideoModelId(modelId)).toBe(true);
+    }
+    expect(videoModelIds).toContain(KLING_V4_VIDEO_MODEL_ID);
+    expect(videoModelIds).toContain(MINIMAX_H3_VIDEO_MODEL_ID);
+    expect(videoModelIds).toContain(WAN_VISION_ENHANCER_MODEL_ID);
+    expect(FAL_IMAGE_MODEL_OPTIONS.map(option => option.value)).toContain(SEEDREAM_V5_LITE_MODEL_ID);
+    expect(isRetiredVideoModelId(SEEDREAM_V5_LITE_MODEL_ID)).toBe(false);
+  });
+
+  it('still recognizes legacy Kling Control snapshots after retiring the picker entries', () => {
     const videoModelIds = FAL_VIDEO_MODEL_OPTIONS.map(option => option.value);
     const videoModelLabels = FAL_VIDEO_MODEL_OPTIONS.map(option => option.label as string);
     const legacyKling26StandardControlModelId = 'fal-ai/kling-video/v2.6/standard/motion-control';
     const legacyKling26ProControlModelId = 'fal-ai/kling-video/v2.6/pro/motion-control';
 
-    expect(videoModelIds).toContain(KLING_V3_CONTROL_VIDEO_MODEL_ID);
-    expect(videoModelLabels).toContain('Kling 3.0 Control');
+    expect(videoModelIds).not.toContain(KLING_V3_CONTROL_VIDEO_MODEL_ID);
+    expect(videoModelLabels).not.toContain('Kling 3.0 Control');
     expect(videoModelLabels).not.toContain('Kling 2.6');
     expect(isFalVideoModelId(KLING_V3_CONTROL_VIDEO_MODEL_ID)).toBe(true);
     expect(isFalModelId(KLING_V3_CONTROL_VIDEO_MODEL_ID)).toBe(true);
@@ -125,24 +191,41 @@ describe('modelConfig (seedream 5 lite helpers)', () => {
     expect(normalizeFalModelId('fal-ai/kling-image/o1')).toBeUndefined();
   });
 
-  it('exposes Recraft v4 Pro as a Fal image model', () => {
+  it('replaces Recraft v4 Pro with v4.1 Pro and upgrades saved selections', () => {
     const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID);
 
-    expect(option?.label).toBe('Recraft v4 Pro');
+    expect(option).toEqual({ value: 'fal-ai/recraft/v4.1/pro/text-to-image', label: 'Recraft v4.1 Pro' });
+    expect(FAL_IMAGE_MODEL_OPTIONS.map(model => model.value)).not.toContain('fal-ai/recraft/v4/pro/text-to-image');
     expect(isFalModelId(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
     expect(isRecraftV4ProModel(RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
+    expect(normalizeFalModelId('fal-ai/recraft/v4/pro/text-to-image')).toBe('fal-ai/recraft/v4.1/pro/text-to-image');
+    expect(normalizeFalModelId('fal-ai/recraft/v4.1/pro/text-to-image')).toBe('fal-ai/recraft/v4.1/pro/text-to-image');
   });
 
-  it('exposes Krea 2 Large with Krea-specific guards and reference cap', () => {
-    const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID);
+  it('upgrades Grok image selections to 2.0 without changing Grok video', () => {
+    expect(FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === GROK_IMAGINE_IMAGE_MODEL_ID)).toEqual({
+      value: 'xai/grok-imagine-image/v2.0/text-to-image', label: 'Grok Imagine 2.0',
+    });
+    for (const modelId of [
+      'xai/grok-imagine-image',
+      'xai/grok-imagine-image/edit',
+      'xai/grok-imagine-image/v2.0/text-to-image',
+      'xai/grok-imagine-image/v2.0/edit',
+    ]) {
+      expect(normalizeFalModelId(modelId)).toBe('xai/grok-imagine-image/v2.0/text-to-image');
+    }
+    expect(FAL_VIDEO_MODEL_OPTIONS.find(model => model.value === GROK_IMAGINE_VIDEO_MODEL_ID)).toEqual({
+      value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine',
+    });
+  });
 
-    expect(option?.label).toBe('Krea 2 Large');
-    expect(isFalModelId(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID)).toBe(true);
-    expect(getMaxReferenceImages(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID)).toBe(10);
-    expect(isKrea2AspectRatioSelectionValue('16:9')).toBe(true);
-    expect(isKrea2AspectRatioSelectionValue('21:9')).toBe(false);
-    expect(isKrea2CreativitySelectionValue('medium')).toBe(true);
-    expect(isKrea2CreativitySelectionValue('maximum')).toBe(false);
+  it('replaces Krea 2 Large with one Krea 3 selector', () => {
+    const option = FAL_IMAGE_MODEL_OPTIONS.find(model => model.value === KREA_3_MODEL_ID);
+
+    expect(option?.label).toBe('Krea 3');
+    expect(isFalModelId('krea/v2/large/text-to-image')).toBe(false);
+    expect(normalizeFalModelId('krea/v2/large/text-to-image')).toBeUndefined();
+    expect(getMaxReferenceImages(KREA_3_MODEL_ID)).toBe(7);
   });
 
   it('reports Jimeng Seedance 2 reference image capacity', () => {

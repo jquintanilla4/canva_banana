@@ -6,6 +6,7 @@ import type {
   VideoPromptAreaMembership,
 } from '../types';
 import { FAL_VIDEO_MODEL_OPTIONS, FLUX_3_VIDEO_MODEL_ID } from '../services/modelConfig';
+import { isKlingV4VideoModel } from '../services/klingV4Config';
 import { buildPromptBarModelControls } from '../services/promptBarConfig';
 import { buildEmbeddedPromptBarControlsInput } from '../services/promptBarSettingsView';
 import {
@@ -161,10 +162,13 @@ export function useVideoPromptBars({
   ), []);
 
   const getEmbeddedVideoPromptBarSubmitError = useCallback((bar: CanvasVideoPromptBar): string | null => {
+    const membership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined;
+    if (isKlingV4VideoModel(bar.modelId) && bar.falOptions?.klingV4Variant === 'edit' && !membership?.sourceVideoId) {
+      return 'Select a source video for Kling v4 Edit.';
+    }
     if (getEmbeddedVideoPromptBarModelId(bar.modelId) !== FLUX_3_VIDEO_MODEL_ID) {
       return null;
     }
-    const membership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined;
     return buildEmbeddedFlux3PromptState(bar, membership).runPlan.error;
   }, [videoPromptAreaMemberships]);
 

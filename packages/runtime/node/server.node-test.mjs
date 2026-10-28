@@ -259,6 +259,148 @@ test('Fal proxy forwards allowed Fal targets with the server key', async () => {
   }
 });
 
+test('Fal proxy rejects retired video selectors and endpoints without contacting Fal', async () => {
+  const calls = [];
+  const server = createSecureBackendServer({
+    env: { FAL_API_KEY: 'fal-secret' },
+    fetchImpl: async (...args) => {
+      calls.push(args);
+      return new Response('{}');
+    },
+  });
+  const baseUrl = await listenOnRandomPort(server);
+  const retiredPaths = [
+    'fal-ai/kling-video/v2.5-turbo/image-to-video',
+    'fal-ai/kling-video/v2.5-turbo/standard/image-to-video',
+    'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
+    'fal-ai/kling-video/v3/pro',
+    'fal-ai/kling-video/v3/pro/text-to-video',
+    'fal-ai/kling-video/v3/pro/image-to-video',
+    'fal-ai/kling-video/v3/pro/motion-control',
+    'fal-ai/kling-video/o3/pro/reference-to-video',
+    'fal-ai/kling-video/o3/pro/video-to-video/edit',
+    'fal-ai/scail',
+    'fal-ai/wan/v2.7',
+    'fal-ai/wan/v2.7/',
+    'fal-ai/wan/v2.7/text-to-video',
+    'fal-ai/wan/v2.7/image-to-video',
+    'fal-ai/wan/v2.7/reference-to-video',
+    'fal-ai/wan/v2.7/edit-video',
+    'fal-ai/wan/v2.2-14b/animate/replace',
+    'fal-ai/wan/v2.2-14b/animate/move',
+    'fal-ai/bytedance/seedance/v1.5/pro/image-to-video',
+    'fal-ai/veo3.1/image-to-video',
+    'fal-ai/veo3.1/first-last-frame-to-video',
+    'fal-ai/veo3.1/extend-video',
+    'fal-ai/kling-video/o1/video-to-video/edit',
+    'fal-ai/kling-video/v2.6/pro/motion-control',
+    'wan/v2.6/image-to-video',
+    'fal-ai/sora-2/image-to-video/pro',
+    'fal-ai/%73cail',
+    'fal-ai%2Fwan%2Fv2.7%2Fedit-video',
+  ];
+  try {
+    for (const path of retiredPaths) {
+      const response = await fetch(`${baseUrl}/api/fal/proxy`, {
+        method: 'POST',
+        headers: { Origin: TRUSTED_ORIGIN, 'x-fal-target-url': `https://queue.fal.run/${path}` },
+        body: '{}',
+      });
+      assert.equal(response.status, 410, path);
+      assert.match((await response.json()).detail, /video model is no longer supported/);
+    }
+    assert.equal(calls.length, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test('Fal proxy rejects retired image endpoints and legacy aliases without contacting Fal', async () => {
+  const calls = [];
+  const server = createSecureBackendServer({
+    env: { FAL_API_KEY: 'fal-secret' },
+    fetchImpl: async (...args) => {
+      calls.push(args);
+      return new Response('{}');
+    },
+  });
+  const baseUrl = await listenOnRandomPort(server);
+  const retiredPaths = [
+    'fal-ai/bytedance/seedream/v4/edit',
+    'fal-ai/bytedance/seedream/v4/text-to-image',
+    'fal-ai/bytedance/seedream/v4.5/edit',
+    'fal-ai/bytedance/seedream/v4.5/text-to-image',
+    'fal-ai/wan/v2.7/pro/text-to-image',
+    'fal-ai/wan/v2.7/pro/edit',
+    'wan/v2.6/text-to-image',
+    'wan/v2.6/image-to-image',
+    'fal-ai/bytedance/seedream/v4/edit/requests/saved-request/status',
+    'fal-ai/wan/v2.7/pro/edit/requests/saved-request',
+    'fal-ai/bytedance/seedream/%764.5/edit',
+    'fal-ai%2Fwan%2Fv2.7%2Fpro%2Ftext-to-image',
+  ];
+  try {
+    for (const path of retiredPaths) {
+      for (const method of ['POST', 'GET']) {
+        const response = await fetch(`${baseUrl}/api/fal/proxy`, {
+          method,
+          headers: { Origin: TRUSTED_ORIGIN, 'x-fal-target-url': `https://queue.fal.run/${path}` },
+          ...(method === 'POST' ? { body: '{}' } : {}),
+        });
+        assert.equal(response.status, 410, `${method} ${path}`);
+        assert.match((await response.json()).detail, /image model is no longer supported/);
+        assert.equal(response.headers.get('access-control-allow-origin'), TRUSTED_ORIGIN);
+      }
+    }
+    assert.equal(calls.length, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test('Fal proxy still forwards supported video models, Flux 3 images, Seedream 5, and saved media', async () => {
+  const calls = [];
+  const server = createSecureBackendServer({
+    env: { FAL_API_KEY: 'fal-secret' },
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return new Response('{}');
+    },
+  });
+  const baseUrl = await listenOnRandomPort(server);
+  const targets = [
+    'https://queue.fal.run/kling/v4/text-to-video',
+    'https://queue.fal.run/minimax/h3/text-to-video',
+    'https://queue.fal.run/blackforestlabs/flux-3/text-to-video',
+    'https://queue.fal.run/blackforestlabs/flux-3/text-to-image',
+    'https://queue.fal.run/blackforestlabs/flux-3/edit-image',
+    'https://queue.fal.run/bytedance/seedance-2.5/reference-to-video',
+    'https://queue.fal.run/fal-ai/bytedance/seedream/v5/lite/text-to-image',
+    'https://queue.fal.run/fal-ai/bytedance/seedream/v5/lite/edit',
+    'https://queue.fal.run/bytedance/seedream/v5/pro/text-to-image',
+    'https://queue.fal.run/bytedance/seedream/v5/pro/edit',
+    'https://queue.fal.run/fal-ai/wan-vision-enhancer',
+    'https://v3.fal.media/files/scail-output.mp4',
+    'https://v3.fal.media/files/seedream-v4.5-output.png',
+    'https://v3.fal.media/files/wan-v2.7-pro-output.png',
+    'https://v3.fal.media/fal-ai/bytedance/seedream/v4/edit/output.png',
+  ];
+  try {
+    for (const target of targets) {
+      const response = await fetch(`${baseUrl}/api/fal/proxy`, {
+        method: 'POST',
+        headers: { Origin: TRUSTED_ORIGIN, 'x-fal-target-url': target },
+        body: '{}',
+      });
+      assert.equal(response.status, 200, target);
+      await response.text();
+    }
+    assert.deepEqual(calls, targets);
+  } finally {
+    server.close();
+  }
+});
+
 test('Fal proxy strips upstream CORS headers before responding to the browser', async () => {
   const server = createSecureBackendServer({
     env: { MOONSHOT_API_KEY: 'moonshot-secret', FAL_API_KEY: 'fal-secret' },

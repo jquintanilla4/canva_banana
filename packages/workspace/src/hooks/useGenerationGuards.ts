@@ -35,6 +35,7 @@ import {
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
 } from '../utils/seedanceReferences';
 import { getJimengMultiframeDisabledReason } from '../utils/jimengMultiframe';
+import { isKlingV4VideoModel } from '../services/klingV4Config';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
   SEEDANCE25_REFERENCE_IMAGE_LIMIT,
@@ -54,7 +55,6 @@ type Args = {
   isSeedreamModel: boolean;
   isNanoBananaModel: boolean;
   isGptImage2Model?: boolean;
-  isKrea2LargeModel?: boolean;
   isGrokModel: boolean; // Grok text-to-image flag.
   isGrokImagineVideoModel: boolean;
   isKlingVideoModel: boolean;
@@ -68,6 +68,7 @@ type Args = {
   flux3ValidationError?: string | null;
   miniMaxH3Variant?: 'standard' | 'reference';
   miniMaxH3ReferenceAssetCount?: number;
+  klingV4Variant?: 'generate' | 'edit';
   isSeedance2VideoModel: boolean;
   seedance2Variant: Seedance2Variant;
   seedance2ReferenceAssetCount: number;
@@ -146,7 +147,6 @@ export const buildGenerationGuardArgs = ({
   isSeedreamModel: !fal.isVideoMode && isSeedreamModelId(fal.falModelId),
   isNanoBananaModel: !fal.isVideoMode && isNanoBananaEditModelId(fal.falModelId),
   isGptImage2Model: !fal.isVideoMode && (isGptImage2EditModelId(fal.falModelId) || isGptImage25Model(fal.falModelId)),
-  isKrea2LargeModel: apiProvider === 'fal' && fal.isKrea2LargeModel, // Krea behavior only applies while Fal is active.
   isGrokModel: !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID, // Grok text-to-image.
   isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
   isKlingVideoModel: fal.isKlingVideoModel,
@@ -160,6 +160,7 @@ export const buildGenerationGuardArgs = ({
   flux3ValidationError: flux3RunPlan.error,
   miniMaxH3Variant: fal.miniMaxH3Variant,
   miniMaxH3ReferenceAssetCount: capabilities.selection.miniMaxH3ReferenceMode ? seedance2ReferenceAssetCount : 0,
+  klingV4Variant: fal.klingV4Variant,
   isSeedance2VideoModel: fal.isSeedance2VideoModel,
   seedance2Variant: fal.seedance2Variant,
   seedance2ReferenceAssetCount,
@@ -204,7 +205,6 @@ export function useGenerationGuards({
   isSeedreamModel,
   isNanoBananaModel,
   isGptImage2Model = false,
-  isKrea2LargeModel = false,
   isGrokModel, // Grok text-to-image flag.
   isGrokImagineVideoModel,
   isKlingVideoModel,
@@ -218,6 +218,7 @@ export function useGenerationGuards({
   flux3ValidationError = null,
   miniMaxH3Variant = 'reference',
   miniMaxH3ReferenceAssetCount = 0,
+  klingV4Variant = 'generate',
   isSeedance2VideoModel,
   seedance2Variant,
   seedance2ReferenceAssetCount,
@@ -238,6 +239,8 @@ export function useGenerationGuards({
   selectedStillImageCount,
 }: Args): GenerationGuardsResult {
   const isKlingO3VideoInputMode = isKlingO3EditMode;
+  const isKlingV4 = isVideoMode && isKlingV4VideoModel(falModelId);
+  const isKlingV4EditMode = isKlingV4 && klingV4Variant === 'edit';
   const isWanVisionEnhancerVideoModel = isVideoMode && falModelId === WAN_VISION_ENHANCER_MODEL_ID;
   const isWanAnimateVideoModel = isVideoMode && falModelId === WAN_ANIMATE_MODEL_ID;
   const isFlux3ExtendMode = isVideoMode && isFlux3VideoModel && flux3InputKind === 'source-video';
@@ -268,6 +271,7 @@ export function useGenerationGuards({
   const isWanVideoInputMode = isWanVisionEnhancerVideoModel || isWanAnimateVideoModel;
   const isAudioInputMode = isLipsyncVideoModel || isHeygenV3LipsyncVideoModel || isInfinitalkVideoModel;
   const isFalVideoInputMode = isWanVideoInputMode
+    || isKlingV4EditMode
     || isAudioInputMode
     || isKlingV3ControlVideoModel
     || isVeo31ExtendMode
@@ -329,8 +333,7 @@ export function useGenerationGuards({
     const hasScailStillImage = isScailVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const hasKlingV3ControlStillImage = isKlingV3ControlVideoModel ? hasSelectedStillImage : hasPrimaryImage;
     const isRecraftTextToImage = usingFal && !isVideoMode && isRecraftV4ProModel(falModelId); // Recraft t2i is Fal-only.
-    const isKrea2TextToImage = usingFal && !isVideoMode && isKrea2LargeModel; // Krea refs are style inputs, not edits.
-    const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage || isKrea2TextToImage) && !(isVideoMode && (
+    const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage) && !(isVideoMode && (
       (isVideoInputMode && hasSourceVideo) || isGrokImagineVideoEditMode
     ));
     const promptEmpty = prompt.trim().length === 0;
@@ -352,7 +355,7 @@ export function useGenerationGuards({
     const requiresPrompt = !(usingFal && (isUpscaleModel || isWanPromptOptional || isKlingV3ControlPromptOptional || isLipsyncPromptOptional || isJimengReferenceMode));
     const isPromptMissing = requiresPrompt && promptEmpty;
     const requiresSelectedImageForUpscale = usingFal && isUpscaleModel && isTextToImage;
-    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isFlux3VideoModel && !isSeedance2VideoModel && !isSeedance25VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
+    const requiresSelectedImageForVideo = usingFal && isVideoMode && !isKlingV4 && !isKlingV3SmartVideoModel && !isMiniMaxH3VideoModel && !isFlux3VideoModel && !isSeedance2VideoModel && !isSeedance25VideoModel && !isWan27VideoModel && !isVideoInputMode && !hasPrimaryImage && !isGrokImagineVideoEditMode;
     const requiresSelectedImageForWanAnimate = usingFal && isWanAnimateVideoModel && !hasWanAnimateStillImage;
     const requiresSelectedImageForKlingV3Control = usingFal && isKlingV3ControlVideoModel && !hasKlingV3ControlStillImage;
     const requiresSelectedImageForScail = usingFal && isScailVideoModel && !hasScailStillImage;
@@ -389,6 +392,11 @@ export function useGenerationGuards({
 
     const promptPlaceholderText = (() => {
       if (isVideoMode) {
+        if (isKlingV4) {
+          return isKlingV4EditMode
+            ? 'Select a source video (@Video1), optionally shift-click image references, then describe the edit...'
+            : 'Describe a video, select a first frame (Shift-click an end frame), or Alt/Option+Shift-click references and use @Image1 or @Video1...';
+        }
         if (flux3SmartUnsupportedSelectionReason) {
           return selectedMediaCount > 1
             ? flux3SmartUnsupportedSelectionReason
@@ -553,9 +561,6 @@ export function useGenerationGuards({
       if (usingFal && isUpscaleModel) {
         return `Prompt disabled for ${getFalModelLabel(falModelId as FalModelId)}. Select an image and scale factor.`;
       }
-      if (usingFal && isKrea2LargeModel) {
-        return 'Describe the image to create, or shift-click up to 10 canvas images as style references...';
-      }
       return isTextToImage
         ? 'Describe the image you want to create... (Cmd/Ctrl + Enter to generate)'
         : 'Describe your edit... (Cmd/Ctrl + Enter to generate)';
@@ -565,6 +570,7 @@ export function useGenerationGuards({
     return {
       submitDisabled,
       submitDisabledReason: flux3SmartUnsupportedSelectionReason
+        ?? (usingFal && isKlingV4EditMode && !hasSourceVideo ? 'Select a source video for Kling v4 Edit.' : null)
         ?? (usingFal && isFlux3VideoModel ? flux3ValidationError : null)
         ?? jimengMultiframeDisabledReason,
       promptPlaceholderText,

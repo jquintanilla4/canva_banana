@@ -22,7 +22,6 @@ import {
   FLUX_3_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT,
   getFalModelLabel,
 } from './services/modelConfig';
 import {
@@ -41,7 +40,6 @@ import { GenerationCanvasNotifications } from './components/GenerationCanvasNoti
 import { SnapshotFileName } from './components/SnapshotFileName';
 import { useGeneration } from './hooks/useGeneration';
 import { useCanvasReferenceLabels } from './hooks/useCanvasReferenceLabels';
-import { useKrea2StyleStrengths } from './hooks/useKrea2StyleStrengths';
 import { useCanvasHistory } from './hooks/useCanvasHistory';
 import { useSelectionState } from './hooks/useSelectionState';
 import { useFalSettings } from './hooks/useFalSettings';
@@ -283,10 +281,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setVideoNegativePromptForModel,
   } = useVideoNegativePrompt({ isVideoMode: fal.isVideoMode, falVideoModelId: fal.falVideoModelId });
 
-  // Negative prompt state for Wan 2.7 Pro Image model
-  const [wan27ImageNegativePrompt, setWan27ImageNegativePrompt] = useState<string>(WAN_27_IMAGE_DEFAULT_NEGATIVE_PROMPT);
-  const generationNegativePrompt = fal.isWan27ImageModel ? wan27ImageNegativePrompt : videoNegativePrompt; // Route active negative prompt into generation.
-
   // Toggles display of metadata overlays on canvas images
   const [showMetadataOverlay, setShowMetadataOverlay] = useState(false);
 
@@ -344,6 +338,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     if (usingFalProvider) {
       const toast = getModelUiCapabilities(fal.falModelId, {
         klingO3Variant: fal.klingO3Variant,
+        klingV4Variant: fal.klingV4Variant,
         miniMaxH3Variant: fal.miniMaxH3Variant,
         seedance2Variant: fal.seedance2Variant,
         seedance25Variant: fal.seedance25Variant,
@@ -358,9 +353,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     const referenceLimitLabel = usingFalProvider ? getFalModelLabel(fal.falModelId) : PROVIDER_LABELS.google; // Match label to active provider.
     setToastMessage(`${referenceLimitLabel} supports up to ${maxReferenceImages} reference images (${totalLimit} total including the primary).`);
     setTimeout(() => setToastMessage(null), 2000);
-  }, [apiProvider, fal.falModelId, fal.klingO3Variant, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
-
-  const isActiveKrea2LargeModel = apiProvider === 'fal' && fal.isKrea2LargeModel; // Krea behavior only applies while Fal is active.
+  }, [apiProvider, fal.falModelId, fal.klingO3Variant, fal.klingV4Variant, fal.miniMaxH3Variant, fal.seedance2Variant, fal.seedance25Variant, setToastMessage]);
 
   // Tracks which images/notes are selected and enforces model-specific selection rules (reference limits, primary frames).
   const selection = useSelectionState({
@@ -404,6 +397,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const modelCapabilities = useMemo(() => getModelUiCapabilities(fal.falModelId, {
     klingVariant: fal.klingVariant,
     klingO3Variant: fal.klingO3Variant,
+    klingV4Variant: fal.klingV4Variant,
     veo31Variant: fal.veo31Variant,
     wan27VideoVariant: fal.wan27VideoVariant,
     miniMaxH3Variant: fal.miniMaxH3Variant,
@@ -418,6 +412,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     fal.falModelId,
     fal.flux3Variant,
     fal.klingO3Variant,
+    fal.klingV4Variant,
     fal.klingVariant,
     fal.miniMaxH3Variant,
     fal.seedance25Variant,
@@ -433,12 +428,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const isVeo31ExtendMode = capabilitySelection.veo31ExtendMode;
   const supportsTailFrameSelection = modelCapabilities.supportsTailFrame; // End-frame capable modes.
 
-  // Per-reference style strengths for Krea 2 Large.
-  const {
-    krea2StyleReferenceStrengths,
-    setKrea2StyleReferenceStrengths,
-    handleKrea2StyleReferenceStrengthChange,
-  } = useKrea2StyleStrengths({ isActive: isActiveKrea2LargeModel, referenceImageIds });
   const resetMetadataEditContext = useCallback(() => {
     setAppMode('CANVAS'); // Loaded edits use the normal canvas workflow.
     setTool(Tool.SELECTION); // A neutral selection avoids reusing the current brush tool.
@@ -454,8 +443,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setActiveEmbeddedPromptBarId,
     setSelectedVideoPromptAreaId,
     setVideoNegativePromptForModel,
-    setWan27ImageNegativePrompt,
-    setKrea2StyleReferenceStrengths,
     setToastMessage,
     resetEditContext: resetMetadataEditContext,
   }); // Transfer state and compatibility policy stay outside the root component.
@@ -877,8 +864,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     selection,
     images,
     paths,
-    krea2StyleReferenceStrengths,
-    videoNegativePrompt: generationNegativePrompt,
+    videoNegativePrompt,
     setError,
     setIsLoading,
     setFalJobs,
@@ -1028,6 +1014,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const {
     klingReferenceOrderLabels,
     klingElementOrderLabels,
+    hasKlingV4ReferenceInputs,
     seedance2ReferenceAssetCount,
     canvasElementImageIds,
     canvasReferenceOrderLabels,
@@ -1039,6 +1026,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     capabilitySelection,
     klingSuggestionsEnabled: modelCapabilities.klingSuggestionsEnabled,
     isKlingO3VideoModel: fal.isKlingO3VideoModel,
+    prompt,
     effectiveSeedanceReferenceImageIds,
     effectiveSeedanceReferenceVideoIds,
     effectiveSeedanceReferenceAudioIds,
@@ -1110,9 +1098,9 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
     isKlingO3VideoModel: fal.isKlingO3VideoModel,
     isKlingO3EditMode: fal.isKlingO3EditMode,
+    isKlingV4VideoModel: fal.isKlingV4VideoModel,
     isMultimodalReferenceMode,
-    isFlux2MaxModel: fal.isFlux2MaxModel,
-    isWan27ImageModel: fal.isWan27ImageModel,
+    isFlux3ImageModel: fal.isFlux3ImageModel,
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
     referenceImageIds: effectiveSeedanceReferenceImageIds,
@@ -1177,8 +1165,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     ? '#f59e0b'
     : shouldShowNegativePrompt ? '#34d399' : undefined;
   const negativePromptOutlineColor = shouldShowNegativePrompt ? '#f87171' : undefined;
-  const activeNegativePrompt = generationNegativePrompt;
-  const activeNegativePromptSetter = fal.isWan27ImageModel ? setWan27ImageNegativePrompt : setVideoNegativePrompt;
+  const activeNegativePrompt = videoNegativePrompt;
+  const activeNegativePromptSetter = setVideoNegativePrompt;
   const isTopToolbarSuppressed = cropMode !== null || transformMode !== null; // Keep its grid width while crop or transform controls take over.
 
   useWorkspaceApi({ editorRef, state: { images: displayedImages, paths: displayedPaths, notes: displayedNotes,
@@ -1323,16 +1311,13 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
           referenceVideoIds={canvasReferenceVideoIds}
           referenceAudioIds={canvasReferenceAudioIds}
           referenceImageOrderLabels={canvasReferenceOrderLabels}
-          isKrea2StyleReferenceMode={isActiveKrea2LargeModel}
-          krea2StyleReferenceImageIds={referenceImageIds}
-          krea2StyleReferenceStrengths={krea2StyleReferenceStrengths}
-          onKrea2StyleReferenceStrengthChange={handleKrea2StyleReferenceStrengthChange}
           disabledMediaIds={ignoredVideoPromptMediaIds}
           elementImageIds={canvasElementImageIds}
           elementImageOrderLabels={canvasElementOrderLabels}
           videoLastFrameImageId={videoLastFrameImageId}
           sourceVideoId={sourceVideoId}
           tailSelectionEnabled={supportsTailFrameSelection}
+          frameRoleLabelsEnabled={supportsTailFrameSelection && !hasKlingV4ReferenceInputs}
           isKlingO3VideoInputMode={isKlingO3VideoInputMode}
           isKlingO3ReferenceMode={isKlingO3ReferenceMode}
           isSeedance15FflfMode={capabilitySelection.seedance15FflfMode}

@@ -48,6 +48,7 @@ import {
   SEEDANCE25_REFERENCE_VIDEO_LIMIT,
 } from './seedance25References';
 import { getFlux3ModePolicy } from './flux3';
+import { isKlingV4VideoModel } from '../services/klingV4Config';
 
 type CanvasPoint = { x: number; y: number };
 export type EmbeddedVideoPromptBarSizeMode = 'full' | 'mini';
@@ -128,6 +129,19 @@ export const getVideoPromptAreaCapabilityProfile = (
   falOptions?: GenerationFalOptions,
 ): VideoModelCapabilityProfile => {
   const resolvedModelId = getEmbeddedVideoPromptBarModelId(modelId);
+
+  if (isKlingV4VideoModel(resolvedModelId)) {
+    const isEditMode = falOptions?.klingV4Variant === 'edit';
+    return imageOnlyProfile(resolvedModelId, {
+      defaultImageRole: 'reference',
+      defaultVideoRole: isEditMode ? 'sourceVideo' : 'reference',
+      shiftImageRole: 'reference',
+      supportedMediaTypes: ['image', 'video'],
+      maxImages: 10,
+      maxVideos: isEditMode ? 1 : 5,
+      supportsTextOnly: !isEditMode,
+    });
+  }
 
   if (resolvedModelId === FLUX_3_VIDEO_MODEL_ID) {
     const policy = getFlux3ModePolicy(falOptions?.flux3Variant ?? 'smart');
@@ -583,7 +597,10 @@ export const buildVideoPromptAreaMembership = (
     sourceVideoId,
     sourceAudioId,
     ignoredMediaIds,
-    orderLabels: buildMembershipOrderLabels(primaryImageId, acceptedImageIds, acceptedVideoIds, acceptedAudioIds, elementImageIds, tailImageId, sourceVideoId, sourceAudioId),
+    orderLabels: {
+      ...buildMembershipOrderLabels(primaryImageId, acceptedImageIds, acceptedVideoIds, acceptedAudioIds, elementImageIds, tailImageId, sourceVideoId, sourceAudioId),
+      ...(sourceVideoId && isKlingV4VideoModel(capabilityProfile.id) ? { [sourceVideoId]: '@Video1' } : {}),
+    },
   };
 };
 

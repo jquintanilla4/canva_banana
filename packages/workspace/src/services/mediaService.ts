@@ -216,6 +216,47 @@ export const loadImageFromBlob = (blob: Blob) =>
 export const loadImageFromDataUrl = (dataUrl: string) =>
   loadMediaFromDataUrl(dataUrl, 'image') as Promise<HTMLImageElement>;
 
+export const prepareGeneratedImage = async (
+  src: string,
+  formatPolicy: 'preserve-original' | 'png',
+): Promise<{ image: HTMLImageElement; file: File }> => {
+  let image = await loadImageFromDataUrl(src);
+  const originalMimeType = formatPolicy === 'preserve-original'
+    ? /^data:(image\/(?:png|jpeg|webp));base64,/.exec(src)?.[1]
+    : undefined;
+  const commaIndex = src.indexOf(',');
+  let base64 = commaIndex === -1 ? '' : src.slice(commaIndex + 1);
+
+  if (!originalMimeType && !(src.startsWith('data:image/png;base64,') && base64)) {
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (width <= 0 || height <= 0) {
+      throw new Error('Generated image has invalid dimensions.');
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Unable to prepare generated image.');
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+    const pngDataUrl = canvas.toDataURL('image/png');
+    const pngCommaIndex = pngDataUrl.indexOf(',');
+    base64 = pngCommaIndex === -1 ? '' : pngDataUrl.slice(pngCommaIndex + 1);
+    if (!base64) {
+      throw new Error('Failed to convert generated image to PNG.');
+    }
+    image = await loadImageFromDataUrl(pngDataUrl);
+  }
+
+  const mimeType = originalMimeType ?? 'image/png';
+  const file = new File([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], `generated.${mimeType.split('/')[1]}`, { type: mimeType });
+  return { image, file };
+};
+
 export const dataUrlToFile = async (dataUrl: string, fileName: string, fileType: string): Promise<File> => {
   const response = await fetch(dataUrl);
   const blob = await response.blob();

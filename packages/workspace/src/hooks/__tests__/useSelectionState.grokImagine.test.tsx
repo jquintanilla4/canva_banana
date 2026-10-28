@@ -48,10 +48,10 @@ const buildCanvasImage = (id: string): CanvasImage => {
 };
 
 describe('useSelectionState (grok imagine)', () => {
-  it('blocks shift-click reference selection', () => {
+  it('allows four shift-click references and blocks a sixth total input', () => {
     const image1 = buildCanvasImage('image-1');
     const image2 = buildCanvasImage('image-2');
-    const images = [image1, image2];
+    const images = [image1, image2, ...Array.from({ length: 4 }, (_, index) => buildCanvasImage(`extra-${index}`))];
     const fal = {
       falModelId: GROK_IMAGINE_IMAGE_MODEL_ID,
       falModelMode: 'image',
@@ -94,8 +94,13 @@ describe('useSelectionState (grok imagine)', () => {
       result.current.handleImageSelection(image2.id, { reference: true });
     });
 
-    expect(result.current.referenceImageIds).toEqual([]);
-    expect(onReferenceLimit).toHaveBeenCalledWith(0);
+    expect(result.current.referenceImageIds).toEqual([image2.id]);
+    expect(onReferenceLimit).not.toHaveBeenCalled();
+    for (const image of images.slice(2)) {
+      act(() => result.current.handleImageSelection(image.id, { reference: true }));
+    }
+    expect(result.current.referenceImageIds).toEqual(images.slice(1, 5).map(image => image.id));
+    expect(onReferenceLimit).toHaveBeenCalledWith(4);
     expect(onError).not.toHaveBeenCalled();
   });
 });

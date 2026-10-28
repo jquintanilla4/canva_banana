@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
 import { Tool, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
 import { createLazyVideoFromUrl } from '../../services/mediaService';
+import { getGenerationTransferBlockReason } from '../../utils/generationPromptBarTransfer';
 import * as imageLodCache from '../canvas/render/imageLodCache';
 
 type CanvasProps = ComponentProps<typeof Canvas>;
@@ -313,7 +314,10 @@ describe('Canvas selection temporary pan', () => {
     expect((within(container).getByRole('button', { name: 'Metadata to Prompt Bar' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('disables metadata transfer and names the reason when the saved generation cannot load', () => {
+  it.each([
+    'fal-ai/kling-video/o1/image-to-video',
+    'fal-ai/kling-video/v3/pro',
+  ])('disables metadata transfer and names the reason for retired %s', modelId => {
     const generated = buildImage('generated-1');
     generated.metadata = {
       source: 'generated',
@@ -321,14 +325,14 @@ describe('Canvas selection temporary pan', () => {
         kind: 'video',
         prompt: 'Prompt from a retired model',
         provider: 'fal',
-        modelId: 'fal-ai/kling-video/o1/image-to-video',
+        modelId,
         modelMode: 'video',
       },
     };
     const { container } = render(<Canvas {...buildCanvasProps({
       images: [generated],
       selectedImageIds: ['generated-1'],
-      getMetadataTransferBlockReason: () => 'Saved model is no longer available',
+      getMetadataTransferBlockReason: () => getGenerationTransferBlockReason(generated.metadata?.generation, { google: true, fal: true }),
     })} />);
 
     const button = within(container).getByRole('button', { name: 'Metadata to Prompt Bar' }) as HTMLButtonElement;
@@ -992,41 +996,6 @@ describe('Canvas selection temporary pan', () => {
     fireEvent.mouseDown(root, { clientX: 20, clientY: 20, altKey: true, shiftKey: true });
 
     expect(onImageSelect).toHaveBeenCalledWith('image-1', { reference: true });
-  });
-
-  it('renders Krea style reference sliders for tagged references', () => {
-    const onStrengthChange = vi.fn();
-    const { getByTestId, getByLabelText } = render(<Canvas {...buildCanvasProps({
-      images: [buildImage()],
-      referenceImageIds: ['image-1'],
-      isKrea2StyleReferenceMode: true,
-      krea2StyleReferenceStrengths: { 'image-1': 1.2 },
-      onKrea2StyleReferenceStrengthChange: onStrengthChange,
-    })} />);
-
-    expect(getByTestId('krea-style-reference-slider-image-1')).toBeTruthy();
-
-    const slider = getByLabelText('Krea style reference strength') as HTMLInputElement;
-    expect(slider.min).toBe('-2');
-    expect(slider.max).toBe('2');
-    expect(slider.step).toBe('0.1');
-    expect(slider.value).toBe('1.2');
-
-    fireEvent.change(slider, { target: { value: '-0.4' } });
-
-    expect(onStrengthChange).toHaveBeenCalledWith('image-1', -0.4);
-  });
-
-  it('renders Krea sliders only for submitted style references when provided', () => {
-    const { queryByTestId } = render(<Canvas {...buildCanvasProps({
-      images: [buildImage('style-ref'), buildImage('area-ref')],
-      referenceImageIds: ['style-ref', 'area-ref'],
-      isKrea2StyleReferenceMode: true,
-      krea2StyleReferenceImageIds: ['style-ref'],
-    })} />);
-
-    expect(queryByTestId('krea-style-reference-slider-style-ref')).toBeTruthy();
-    expect(queryByTestId('krea-style-reference-slider-area-ref')).toBeNull();
   });
 
   it('applies gentle pixel-based wheel zoom while trackpad mode is enabled', () => {

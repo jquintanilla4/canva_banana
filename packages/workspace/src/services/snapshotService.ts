@@ -1,5 +1,8 @@
 import { normalizeStoryboardSnapshot } from './storyboardSnapshot';
+import { isKrea3Variant, isKrea3ReasoningLevel } from './krea3Config';
 import { isIdeogram45Quality, isIdeogram45EditPrecision } from './ideogram45Config';
+import { isGrokImageAspectRatio, isGrokImageResolution, isGrokImageQuality, isGrokImageOutputFormat } from './grokImageConfig';
+import { isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from './klingV4Config';
 import type {
   ApiProviderId,
   AppMode,
@@ -23,6 +26,8 @@ import {
   isFalVideoModelId,
   isFalResolutionSelectionValue,
   isFlux2MaxImageSizeSelectionValue,
+  isFlux3ImageAspectRatio,
+  isFlux3ImageResolution,
   isFlux3AspectRatio,
   isFlux3Duration,
   isFlux3Resolution,
@@ -30,6 +35,7 @@ import {
   isGenerationProvider,
   isJimengMultiframeDurationSelectionValue,
   isJimengMultiframeResolutionSelectionValue,
+  isJimengMultiframeVideoModel,
   isJimengSeedance2ModelVersion,
   isGptImage2QualitySelectionValue,
   isGptImage25Quality,
@@ -42,7 +48,6 @@ import {
   isInfinitalkDurationSelectionValue,
   isInfinitalkResolutionSelectionValue,
   isInfinitalkSeedSelectionValue,
-  isKrea2CreativitySelectionValue,
   isKlingO3DurationSelectionValue,
   isKlingV3CfgScaleSelectionValue,
   isKlingV3DurationSelectionValue,
@@ -68,8 +73,6 @@ import {
   isMiniMaxH3AspectRatioSelectionValue,
   isMiniMaxH3DurationSelectionValue,
   isMiniMaxH3Variant,
-  isWan27ImageAspectRatioSelectionValue,
-  isWan27ImageMaxImagesSelectionValue,
   isVeo31AspectRatioSelectionValue,
   isVeo31DurationSelectionValue,
   isVeo31ResolutionSelectionValue,
@@ -112,6 +115,10 @@ const normalizeSnapshotPromptBarFalOptions = (value: unknown): GenerationInputs[
   if (!value || typeof value !== 'object') return undefined;
   const raw = value as Record<string, unknown>;
   const normalized = { ...raw } as GenerationInputs['falOptions'];
+  if ('klingV4Variant' in raw && !isKlingV4Variant(raw.klingV4Variant)) delete normalized.klingV4Variant;
+  if ('klingV4Resolution' in raw && !isKlingV4Resolution(raw.klingV4Resolution)) delete normalized.klingV4Resolution;
+  if ('klingV4AspectRatio' in raw && !isKlingV4AspectRatio(raw.klingV4AspectRatio)) delete normalized.klingV4AspectRatio;
+  if ('klingV4Duration' in raw && !isKlingV4Duration(raw.klingV4Duration)) delete normalized.klingV4Duration;
   if ('flux3Variant' in raw && !isFlux3Variant(raw.flux3Variant)) delete normalized.flux3Variant;
   if ('flux3AspectRatio' in raw && !isFlux3AspectRatio(raw.flux3AspectRatio)) delete normalized.flux3AspectRatio;
   if ('flux3Resolution' in raw && !isFlux3Resolution(raw.flux3Resolution)) delete normalized.flux3Resolution;
@@ -409,6 +416,10 @@ export type SnapshotMetaState = {
   jimengMultiframeDuration?: string;
   jimengMultiframeResolution?: string;
   jimengSessionId?: number;
+  klingV4Variant?: string;
+  klingV4Resolution?: string;
+  klingV4AspectRatio?: string;
+  klingV4Duration?: string;
   klingV3Duration?: string;
   klingV3GenerateAudio?: boolean;
   klingV3CfgScale?: string;
@@ -1593,7 +1604,7 @@ export const restoreSnapshotFromFile = async (
   });
   const sanitizedVideoPromptBars: CanvasVideoPromptBar[] = snapshotVideoPromptBars.map(bar => {
     const rawModelId = typeof bar?.modelId === 'string' ? bar.modelId : undefined;
-    const modelId = rawModelId && (isFalVideoModelId(rawModelId) || isRemovedHailuoModelId(rawModelId) || isRemovedOneToAllAnimateModelId(rawModelId))
+    const modelId = rawModelId && (isFalVideoModelId(rawModelId) || isRemovedHailuoModelId(rawModelId) || isRemovedOneToAllAnimateModelId(rawModelId) || isJimengMultiframeVideoModel(rawModelId))
       ? rawModelId
       : SEEDANCE_2_VIDEO_MODEL_ID; // Keep removed model ids so generation can block them safely.
     const isJimengBar = modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID;
@@ -1645,7 +1656,14 @@ export const restoreSnapshotFromFile = async (
   });
 
   const normalizedMeta = meta && typeof meta === 'object'
-    ? { ...meta, flux3KeyframeTimings: parseFlux3KeyframeTimings((meta as { flux3KeyframeTimings?: unknown }).flux3KeyframeTimings) }
+    ? {
+        ...meta,
+        klingV4Variant: isKlingV4Variant(meta.klingV4Variant) ? meta.klingV4Variant : undefined,
+        klingV4Resolution: isKlingV4Resolution(meta.klingV4Resolution) ? meta.klingV4Resolution : undefined,
+        klingV4AspectRatio: isKlingV4AspectRatio(meta.klingV4AspectRatio) ? meta.klingV4AspectRatio : undefined,
+        klingV4Duration: isKlingV4Duration(meta.klingV4Duration) ? meta.klingV4Duration : undefined,
+        flux3KeyframeTimings: parseFlux3KeyframeTimings((meta as { flux3KeyframeTimings?: unknown }).flux3KeyframeTimings),
+      }
     : meta;
   return {
     images: restoredImages,
@@ -1725,6 +1743,10 @@ export const normalizeSnapshotImageMetadata = (
     if (falOptionsRaw && typeof falOptionsRaw === 'object') {
       const typed = falOptionsRaw as GenerationInputs['falOptions'];
       const normalizedOptions: GenerationInputs['falOptions'] = {};
+      if (isKlingV4Variant(typed.klingV4Variant)) normalizedOptions.klingV4Variant = typed.klingV4Variant;
+      if (isKlingV4Resolution(typed.klingV4Resolution)) normalizedOptions.klingV4Resolution = typed.klingV4Resolution;
+      if (isKlingV4AspectRatio(typed.klingV4AspectRatio)) normalizedOptions.klingV4AspectRatio = typed.klingV4AspectRatio;
+      if (isKlingV4Duration(typed.klingV4Duration)) normalizedOptions.klingV4Duration = typed.klingV4Duration;
       if (isFalImageSizeSelectionValue((typed as { imageSizeSelection?: unknown }).imageSizeSelection)) {
         normalizedOptions.imageSizeSelection = typed.imageSizeSelection;
       }
@@ -1737,6 +1759,8 @@ export const normalizeSnapshotImageMetadata = (
       if (isFlux2MaxImageSizeSelectionValue((typed as { flux2MaxImageSize?: unknown }).flux2MaxImageSize)) {
         normalizedOptions.flux2MaxImageSize = typed.flux2MaxImageSize; // Keep the saved Flux output dimensions for reruns.
       }
+      if (isFlux3ImageAspectRatio(typed.flux3ImageAspectRatio)) normalizedOptions.flux3ImageAspectRatio = typed.flux3ImageAspectRatio;
+      if (isFlux3ImageResolution(typed.flux3ImageResolution)) normalizedOptions.flux3ImageResolution = typed.flux3ImageResolution;
       if (isGptImage25Variant(typed?.gptImage25Variant)) {
         normalizedOptions.gptImage25Variant = typed.gptImage25Variant;
       }
@@ -1746,6 +1770,14 @@ export const normalizeSnapshotImageMetadata = (
       if (isGptImage25Quality(typed?.gptImage25Quality)) {
         normalizedOptions.gptImage25Quality = typed.gptImage25Quality;
       }
+      if (isKrea3Variant(typed.krea3Variant)) normalizedOptions.krea3Variant = typed.krea3Variant;
+      if (isKrea3ReasoningLevel(typed.krea3ReasoningLevel)) normalizedOptions.krea3ReasoningLevel = typed.krea3ReasoningLevel;
+      if (isGrokImageAspectRatio(typed.grokImageAspectRatio)) normalizedOptions.grokImageAspectRatio = typed.grokImageAspectRatio;
+      if (isGrokImageResolution(typed.grokImageResolution)) normalizedOptions.grokImageResolution = typed.grokImageResolution;
+      if (isGrokImageQuality(typed.grokImageQuality)) normalizedOptions.grokImageQuality = typed.grokImageQuality;
+      if (isGrokImageOutputFormat(typed.grokImageOutputFormat)) normalizedOptions.grokImageOutputFormat = typed.grokImageOutputFormat;
+      if (typeof typed.grokImagePassthrough === 'boolean') normalizedOptions.grokImagePassthrough = typed.grokImagePassthrough;
+      if (typeof typed.grokImageEnableSafetyChecker === 'boolean') normalizedOptions.grokImageEnableSafetyChecker = typed.grokImageEnableSafetyChecker;
       if (isIdeogram45Quality(typed?.ideogram45Quality)) {
         normalizedOptions.ideogram45Quality = typed.ideogram45Quality;
       }
@@ -1755,9 +1787,6 @@ export const normalizeSnapshotImageMetadata = (
       if (isGptImage2QualitySelectionValue((typed as { gptImage2Quality?: unknown }).gptImage2Quality)) {
         normalizedOptions.gptImage2Quality = typed.gptImage2Quality;
       }
-      if (isKrea2CreativitySelectionValue((typed as { krea2Creativity?: unknown }).krea2Creativity)) {
-        normalizedOptions.krea2Creativity = typed.krea2Creativity;
-      }
       const normalizeNumberOption = (value: unknown, min: number, max: number) => {
         const parsed = typeof value === 'number' ? value : Number(value);
         if (!Number.isFinite(parsed)) {
@@ -1765,17 +1794,6 @@ export const normalizeSnapshotImageMetadata = (
         }
         return Math.min(max, Math.max(min, parsed));
       };
-      const krea2StyleReferenceStrengths = (typed as { krea2StyleReferenceStrengths?: unknown }).krea2StyleReferenceStrengths;
-      if (krea2StyleReferenceStrengths && typeof krea2StyleReferenceStrengths === 'object' && !Array.isArray(krea2StyleReferenceStrengths)) {
-        const normalizedStrengths = Object.fromEntries(Object.entries(krea2StyleReferenceStrengths)
-          .filter((entry): entry is [string, unknown] => typeof entry[0] === 'string')
-          .map(([id, value]) => [id, normalizeNumberOption(value, -2, 2)])
-          .filter((entry): entry is [string, number] => entry[1] !== undefined)
-          .map(([id, value]) => [id, Math.round(value * 10) / 10])); // Krea strength slider uses tenths.
-        if (Object.keys(normalizedStrengths).length > 0) {
-          normalizedOptions.krea2StyleReferenceStrengths = normalizedStrengths;
-        }
-      }
       const maxFalNumImages = getFalNumImageMaxForModel(modelId); // Resolve output cap from stored model id.
       const numImages = normalizeNumberOption((typed as { numImages?: unknown }).numImages, 1, maxFalNumImages);
       if (numImages !== undefined) {
@@ -2124,13 +2142,6 @@ export const normalizeSnapshotImageMetadata = (
           normalizedOptions.recraftColors = recraftColors;
         }
       }
-      if (isWan27ImageAspectRatioSelectionValue((typed as { wan27ImageAspectRatio?: unknown }).wan27ImageAspectRatio)) {
-        normalizedOptions.wan27ImageAspectRatio = typed.wan27ImageAspectRatio;
-      }
-      if (isWan27ImageMaxImagesSelectionValue((typed as { wan27ImageMaxImages?: unknown }).wan27ImageMaxImages)) {
-        normalizedOptions.wan27ImageMaxImages = typed.wan27ImageMaxImages;
-      }
-
       if (isSeedance2Variant((typed as { seedance2Variant?: unknown }).seedance2Variant)) {
         normalizedOptions.seedance2Variant = typed.seedance2Variant;
       }

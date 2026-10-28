@@ -1,7 +1,7 @@
 import type { PromptBarControlsInput } from './promptBarConfig';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -19,14 +19,12 @@ import {
   SEEDVR_UPSCALER_MODEL_ID,
   SYNC_LIPSYNC_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   getVolcengineSafeSeedance2Settings,
   isGptImage2EditModelId,
   isJimengSeedance2VideoModel,
   isKlingO3VideoModelId,
-  isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
   isSeedance2OutputFormatSelectionValue,
   isSeedance2VideoModel as isSeedance2VideoModelId,
@@ -46,6 +44,7 @@ import {
 } from '../utils/embeddedFlux3';
 import { getEmbeddedVideoPromptBarModelId } from '../utils/videoPromptAreas';
 import { getJimengSafeSeedance2Resolution } from '../utils/embeddedVideoRouting';
+import { KLING_V4_DEFAULTS, isKlingV4VideoModel, isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from './klingV4Config';
 
 // -----------------------------------------------------------------------------------
 // Single source for assembling PromptBarControlsInput.
@@ -58,9 +57,9 @@ import { getJimengSafeSeedance2Resolution } from '../utils/embeddedVideoRouting'
 // -----------------------------------------------------------------------------------
 
 type PromptBarModelFlagKey =
-  | 'isVideoMode' | 'usingFal' | 'isSeedreamModel' | 'isNanoBananaModel' | 'isKrea2LargeModel'
-  | 'isFlux2MaxModel' | 'isWan27ImageModel' | 'isGptImage2Model' | 'isUpscaleModel'
-  | 'isKlingVideoModel' | 'isKlingV3VideoModel' | 'isKlingO3VideoModel' | 'isKlingV3ControlVideoModel'
+  | 'isVideoMode' | 'usingFal' | 'isSeedreamModel' | 'isNanoBananaModel'
+  | 'isFlux3ImageModel' | 'isGptImage2Model' | 'isUpscaleModel'
+  | 'isKlingVideoModel' | 'isKlingV4VideoModel' | 'isKlingV3VideoModel' | 'isKlingO3VideoModel' | 'isKlingV3ControlVideoModel'
   | 'isWanAnimateVideoModel' | 'isLipsyncVideoModel' | 'isHeygenV3LipsyncVideoModel'
   | 'isInfinitalkVideoModel' | 'isGrokImagineVideoModel' | 'isVeo31VideoModel' | 'isWan27VideoModel'
   | 'isMiniMaxH3VideoModel' | 'isFlux3VideoModel' | 'isSeedance15VideoModel' | 'isSeedance2VideoModel'
@@ -84,11 +83,10 @@ export const derivePromptBarModelFlags = (
     isSeedreamModel: !isVideoMode && isSeedreamModelId(modelId as FalModelId),
     isNanoBananaModel: !isVideoMode && isNanoBananaEditModelId(modelId),
     isGptImage2Model: !isVideoMode && isGptImage2EditModelId(modelId),
-    isKrea2LargeModel: apiProvider === 'fal' && !isVideoMode && isKrea2LargeModelId(modelId), // Krea behavior only applies while Fal is active.
-    isFlux2MaxModel: !isVideoMode && modelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
-    isWan27ImageModel: !isVideoMode && modelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
+    isFlux3ImageModel: !isVideoMode && modelId === FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
     isUpscaleModel: !isVideoMode && (modelId === CRYSTAL_UPSCALER_MODEL_ID || modelId === SEEDVR_UPSCALER_MODEL_ID),
     isKlingVideoModel: isVideoMode && modelId === KLING_VIDEO_MODEL_ID,
+    isKlingV4VideoModel: isVideoMode && isKlingV4VideoModel(modelId),
     isKlingV3VideoModel: isVideoMode && modelId === KLING_V3_VIDEO_MODEL_ID,
     isKlingO3VideoModel: isVideoMode && isKlingO3VideoModelId(modelId),
     isKlingV3ControlVideoModel: isVideoMode && modelId === KLING_V3_CONTROL_VIDEO_MODEL_ID,
@@ -117,6 +115,7 @@ export const derivePromptBarModelFlags = (
 
 const PROMPT_BAR_VALUE_KEYS = [
   'falVideoDuration', 'klingVariant',
+  'klingV4Variant', 'klingV4Resolution', 'klingV4AspectRatio', 'klingV4Duration',
   'klingV3Duration', 'klingV3GenerateAudio', 'klingV3CfgScale', 'klingV3MultiPromptEnabled', 'klingV3Shot1Duration', 'klingV3Shot2Duration',
   'klingO3Variant', 'klingO3Duration', 'klingO3GenerateAudio', 'klingO3KeepAudio',
   'klingV3ControlKeepSound', 'klingV3ControlOrientation',
@@ -136,9 +135,12 @@ const PROMPT_BAR_VALUE_KEYS = [
   'jimengMultiframeDuration', 'jimengMultiframeResolution',
   'seedance2GenerateAudio', 'seedance2CameraFixed', 'seedance2OutputFormat',
   'seedance25Variant', 'seedance25AspectRatio', 'seedance25Resolution', 'seedance25Duration', 'seedance25GenerateAudio',
-  'flux2MaxImageSize', 'wan27ImageAspectRatio', 'wan27ImageMaxImages',
+  'flux3ImageAspectRatio', 'flux3ImageResolution',
   'recraftImageSize', 'recraftBackgroundColor', 'recraftColors',
-  'gptImage25Variant', 'gptImage25Background', 'gptImage25Quality', 'gptImage2Quality', 'krea2AspectRatio', 'krea2Creativity',
+  'grokImageAspectRatio', 'grokImageResolution', 'grokImageQuality', 'grokImageOutputFormat',
+  'grokImagePassthrough', 'grokImageEnableSafetyChecker',
+  'gptImage25Variant', 'gptImage25Background', 'gptImage25Quality', 'gptImage2Quality',
+  'krea3Variant', 'krea3ReasoningLevel',
   'nanoBananaWebSearch', 'nanoBananaThinkingLevel',
   'ideogram45Quality', 'ideogram45EditPrecision',
   'falScaleFactor', 'falCreativity', 'falNoiseScale',
@@ -172,6 +174,11 @@ const buildEmbeddedPromptBarValues = (
   return {
     falVideoDuration: options.videoDuration ?? fal.falVideoDuration,
     klingVariant: options.klingVariant ?? fal.klingVariant,
+    klingV4Variant: isKlingV4Variant(options.klingV4Variant) ? options.klingV4Variant : KLING_V4_DEFAULTS.klingV4Variant,
+    klingV4Resolution: isKlingV4Resolution(options.klingV4Resolution) ? options.klingV4Resolution : KLING_V4_DEFAULTS.klingV4Resolution,
+    klingV4AspectRatio: isKlingV4AspectRatio(options.klingV4AspectRatio) ? options.klingV4AspectRatio : KLING_V4_DEFAULTS.klingV4AspectRatio,
+    klingV4Duration: isKlingV4Duration(options.klingV4Duration) && (options.klingV4Duration !== 'source' || options.klingV4Variant === 'edit')
+      ? options.klingV4Duration : options.klingV4Variant === 'edit' ? 'source' : KLING_V4_DEFAULTS.klingV4Duration,
     klingV3Duration: bar.klingV3Duration ?? options.klingV3Duration ?? '5',
     klingV3GenerateAudio: bar.klingV3GenerateAudio ?? options.klingV3GenerateAudio ?? true,
     klingV3CfgScale: bar.klingV3CfgScale ?? options.klingV3CfgScale ?? '0.5',
@@ -245,9 +252,8 @@ const buildEmbeddedPromptBarValues = (
     seedance25Resolution: options.seedance25Resolution ?? '720p',
     seedance25Duration: options.seedance25Duration ?? 'auto',
     seedance25GenerateAudio: options.seedance25GenerateAudio ?? true,
-    flux2MaxImageSize: fal.flux2MaxImageSize,
-    wan27ImageAspectRatio: fal.wan27ImageAspectRatio,
-    wan27ImageMaxImages: fal.wan27ImageMaxImages,
+    flux3ImageAspectRatio: fal.flux3ImageAspectRatio,
+    flux3ImageResolution: fal.flux3ImageResolution,
     recraftImageSize: fal.recraftImageSize,
     recraftBackgroundColor: fal.recraftBackgroundColor,
     recraftColors: fal.recraftColors,
@@ -259,8 +265,14 @@ const buildEmbeddedPromptBarValues = (
     ideogram45EditPrecision: fal.ideogram45EditPrecision,
     gptImage25Background: fal.gptImage25Background,
     gptImage25Variant: fal.gptImage25Variant,
-    krea2AspectRatio: fal.krea2AspectRatio,
-    krea2Creativity: fal.krea2Creativity,
+    krea3Variant: fal.krea3Variant,
+    krea3ReasoningLevel: fal.krea3ReasoningLevel,
+    grokImageAspectRatio: fal.grokImageAspectRatio,
+    grokImageResolution: fal.grokImageResolution,
+    grokImageQuality: fal.grokImageQuality,
+    grokImageOutputFormat: fal.grokImageOutputFormat,
+    grokImagePassthrough: fal.grokImagePassthrough,
+    grokImageEnableSafetyChecker: fal.grokImageEnableSafetyChecker,
     falScaleFactor: fal.falScaleFactor,
     falCreativity: fal.falCreativity,
     falNoiseScale: fal.falNoiseScale,
@@ -284,6 +296,10 @@ const createFooterPromptBarHandlers = (
 ): PromptBarHandlerSet => ({
   onFalVideoDurationChange: fal.handleFalVideoDurationChange,
   onKlingVariantChange: fal.handleKlingVariantChange,
+  onKlingV4VariantChange: fal.handleKlingV4VariantChange,
+  onKlingV4ResolutionChange: fal.handleKlingV4ResolutionChange,
+  onKlingV4AspectRatioChange: fal.handleKlingV4AspectRatioChange,
+  onKlingV4DurationChange: fal.handleKlingV4DurationChange,
   onKlingV3DurationChange: fal.handleKlingV3DurationChange,
   onKlingV3GenerateAudioChange: fal.handleKlingV3GenerateAudioChange,
   onKlingV3CfgScaleChange: fal.handleKlingV3CfgScaleChange,
@@ -357,9 +373,8 @@ const createFooterPromptBarHandlers = (
   onSeedance25ResolutionChange: fal.handleSeedance25ResolutionChange,
   onSeedance25DurationChange: fal.handleSeedance25DurationChange,
   onSeedance25GenerateAudioChange: fal.handleSeedance25GenerateAudioChange,
-  onFlux2MaxImageSizeChange: fal.handleFlux2MaxImageSizeChange,
-  onWan27ImageAspectRatioChange: fal.handleWan27ImageAspectRatioChange,
-  onWan27ImageMaxImagesChange: fal.handleWan27ImageMaxImagesChange,
+  onFlux3ImageAspectRatioChange: fal.handleFlux3ImageAspectRatioChange,
+  onFlux3ImageResolutionChange: fal.handleFlux3ImageResolutionChange,
   onRecraftImageSizeChange: fal.handleRecraftImageSizeChange,
   onRecraftBackgroundColorChange: fal.handleRecraftBackgroundColorChange,
   onRecraftColorChange: fal.handleRecraftColorChange,
@@ -373,8 +388,14 @@ const createFooterPromptBarHandlers = (
   onIdeogram45EditPrecisionChange: fal.handleIdeogram45EditPrecisionChange,
   onGptImage25BackgroundChange: fal.handleGptImage25BackgroundChange,
   onGptImage25VariantChange: fal.handleGptImage25VariantChange,
-  onKrea2AspectRatioChange: fal.handleKrea2AspectRatioChange,
-  onKrea2CreativityChange: fal.handleKrea2CreativityChange,
+  onKrea3VariantChange: fal.handleKrea3VariantChange,
+  onKrea3ReasoningLevelChange: fal.handleKrea3ReasoningLevelChange,
+  onGrokImageAspectRatioChange: fal.handleGrokImageAspectRatioChange,
+  onGrokImageResolutionChange: fal.handleGrokImageResolutionChange,
+  onGrokImageQualityChange: fal.handleGrokImageQualityChange,
+  onGrokImageOutputFormatChange: fal.handleGrokImageOutputFormatChange,
+  onGrokImagePassthroughChange: fal.handleGrokImagePassthroughChange,
+  onGrokImageEnableSafetyCheckerChange: fal.handleGrokImageEnableSafetyCheckerChange,
   onFalScaleFactorChange: fal.handleFalScaleFactorChange,
   onFalCreativityChange: fal.handleFalCreativityChange,
   onFalNoiseScaleChange: fal.handleFalNoiseScaleChange,
@@ -416,6 +437,31 @@ const createEmbeddedPromptBarHandlers = (
   return {
     onFalVideoDurationChange: value => updateFalOption('videoDuration', value),
     onKlingVariantChange: value => updateFalOption('klingVariant', value),
+    onKlingV4VariantChange: value => {
+      if (!isKlingV4Variant(value)) return;
+      updateBar(bar.id, currentBar => ({
+        ...currentBar,
+        falOptions: {
+          ...(currentBar.falOptions ?? {}),
+          klingV4Variant: value,
+          klingV4Duration: value === 'edit' ? 'source'
+            : currentBar.falOptions?.klingV4Duration === 'source' ? KLING_V4_DEFAULTS.klingV4Duration
+              : currentBar.falOptions?.klingV4Duration ?? KLING_V4_DEFAULTS.klingV4Duration,
+        },
+      }));
+    },
+    onKlingV4ResolutionChange: value => {
+      if (isKlingV4Resolution(value)) updateFalOption('klingV4Resolution', value);
+    },
+    onKlingV4AspectRatioChange: value => {
+      if (isKlingV4AspectRatio(value)) updateFalOption('klingV4AspectRatio', value);
+    },
+    onKlingV4DurationChange: value => {
+      if (!isKlingV4Duration(value)) return;
+      updateBar(bar.id, currentBar => value === 'source' && currentBar.falOptions?.klingV4Variant !== 'edit'
+        ? currentBar
+        : { ...currentBar, falOptions: { ...(currentBar.falOptions ?? {}), klingV4Duration: value } });
+    },
     onKlingV3DurationChange: value => updateLegacyAndFal({ klingV3Duration: value as CanvasVideoPromptBar['klingV3Duration'] }, 'klingV3Duration', value),
     onKlingV3GenerateAudioChange: value => updateLegacyAndFal({ klingV3GenerateAudio: value }, 'klingV3GenerateAudio', value),
     onKlingV3CfgScaleChange: value => updateLegacyAndFal({ klingV3CfgScale: value as CanvasVideoPromptBar['klingV3CfgScale'] }, 'klingV3CfgScale', value),
@@ -545,9 +591,8 @@ const createEmbeddedPromptBarHandlers = (
     onSeedance25ResolutionChange: value => updateFalOption('seedance25Resolution', value),
     onSeedance25DurationChange: value => updateFalOption('seedance25Duration', value),
     onSeedance25GenerateAudioChange: value => updateFalOption('seedance25GenerateAudio', value),
-    onFlux2MaxImageSizeChange: NOOP,
-    onWan27ImageAspectRatioChange: NOOP,
-    onWan27ImageMaxImagesChange: NOOP,
+    onFlux3ImageAspectRatioChange: NOOP,
+    onFlux3ImageResolutionChange: NOOP,
     onRecraftImageSizeChange: NOOP,
     onRecraftBackgroundColorChange: NOOP,
     onRecraftColorChange: NOOP,
@@ -561,8 +606,14 @@ const createEmbeddedPromptBarHandlers = (
     onIdeogram45EditPrecisionChange: NOOP,
     onGptImage25BackgroundChange: NOOP,
     onGptImage25VariantChange: NOOP,
-    onKrea2AspectRatioChange: NOOP,
-    onKrea2CreativityChange: NOOP,
+    onKrea3VariantChange: NOOP,
+    onKrea3ReasoningLevelChange: NOOP,
+    onGrokImageAspectRatioChange: NOOP,
+    onGrokImageResolutionChange: NOOP,
+    onGrokImageQualityChange: NOOP,
+    onGrokImageOutputFormatChange: NOOP,
+    onGrokImagePassthroughChange: NOOP,
+    onGrokImageEnableSafetyCheckerChange: NOOP,
     onFalScaleFactorChange: NOOP,
     onFalCreativityChange: NOOP,
     onFalNoiseScaleChange: NOOP,
@@ -624,6 +675,7 @@ export const buildFooterPromptBarControlsInput = ({
     ...values,
     ...deriveFirstFrameFlags('footer', fal.falModelId, flags, values, hasFirstFrameImage),
     ideogram45IsEditing: hasFirstFrameImage,
+    krea3IsEditing: hasFirstFrameImage,
     flux3KeyframeError: flux3.keyframeError,
     isLoading,
     ...createFooterPromptBarHandlers(fal, flux3),

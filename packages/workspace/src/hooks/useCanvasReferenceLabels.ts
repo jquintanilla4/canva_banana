@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 import { useKlingReferenceHelpers } from './useKlingReferenceHelpers';
 import type { ModelUiSelectionFlags } from '../services/modelCapabilities';
+import { normalizeSeedanceReferencePromptMentions } from '../utils/seedancePromptMentions';
 
 type UseCanvasReferenceLabelsArgs = {
   capabilitySelection: ModelUiSelectionFlags;
   klingSuggestionsEnabled: boolean;
   isKlingO3VideoModel: boolean;
+  prompt: string;
   effectiveSeedanceReferenceImageIds: string[];
   effectiveSeedanceReferenceVideoIds: string[];
   effectiveSeedanceReferenceAudioIds: string[];
@@ -33,6 +35,7 @@ export function useCanvasReferenceLabels({
   capabilitySelection,
   klingSuggestionsEnabled,
   isKlingO3VideoModel,
+  prompt,
   effectiveSeedanceReferenceImageIds,
   effectiveSeedanceReferenceVideoIds,
   effectiveSeedanceReferenceAudioIds,
@@ -52,6 +55,11 @@ export function useCanvasReferenceLabels({
   acceptedVideoPromptElementIds,
 }: UseCanvasReferenceLabelsArgs) {
   const isMultimodalReferenceMode = capabilitySelection.multimodalReferenceMode;
+  const hasKlingV4ReferenceInputs = capabilitySelection.klingV4GenerateMode && (
+    referenceImageIds.length > 0 || referenceVideoIds.length > 0
+    || effectiveSeedanceReferenceImageIds.length > 1 || effectiveSeedanceReferenceVideoIds.length > 0
+    || /(?<![A-Za-z0-9_@])@(Image|Video)\d+(?![A-Za-z0-9_])/.test(normalizeSeedanceReferencePromptMentions(prompt))
+  ); // A lone still is a first frame until references or prompt mentions select reference generation.
   const {
     referenceOrderLabels: klingReferenceOrderLabels,
     elementOrderLabels: klingElementOrderLabels,
@@ -66,8 +74,9 @@ export function useCanvasReferenceLabels({
     referenceAudioIds: isMultimodalReferenceMode ? effectiveSeedanceReferenceAudioIds : referenceAudioIds,
     labelElements: isKlingO3VideoModel,
     elementImageIds,
-    isEditMode: capabilitySelection.klingO3VideoInputMode,
+    isEditMode: capabilitySelection.klingO3VideoInputMode || capabilitySelection.klingV4EditMode,
     sourceVideoId,
+    sourceVideoLabel: capabilitySelection.klingV4EditMode ? '@Video1' : 'Video',
     includeTailFrame: capabilitySelection.flux3FflfMode,
     tailImageId: videoLastFrameImageId,
   });
@@ -107,6 +116,7 @@ export function useCanvasReferenceLabels({
   return {
     klingReferenceOrderLabels,
     klingElementOrderLabels,
+    hasKlingV4ReferenceInputs,
     seedance2ReferenceAssetCount,
     canvasElementImageIds,
     canvasReferenceOrderLabels,

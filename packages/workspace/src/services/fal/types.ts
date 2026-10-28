@@ -1,4 +1,7 @@
+import type { Krea3RunSettings } from '../krea3RunSettings';
+import type { Krea3Variant, Krea3ReasoningLevel } from '../krea3Config';
 import type {
+  GenerationFalOptions,
   NanoBananaThinkingLevel,
   FalJobPhase,
   Tool,
@@ -12,13 +15,18 @@ import type {
   Ideogram45EditPrecision,
   FalImageSizeOption,
   FalAspectRatioOption,
-  FalKrea2CreativityOption,
   FalResolutionOption,
   FalVideoDuration,
+  Flux3ImageAspectRatio,
+  Flux3ImageResolution,
   Flux3AspectRatio,
   Flux3Duration,
   Flux3Resolution,
   Flux3Variant,
+  KlingV4Variant,
+  KlingV4Resolution,
+  KlingV4AspectRatio,
+  KlingV4Duration,
 } from '../../types'; // Shared app types.
 import type {
   GrokImagineVideoAspectRatioSelectionValue,
@@ -35,7 +43,6 @@ import type {
   MiniMaxH3Variant,
   RecraftRgbColor,
   RecraftV4ProImageSizeSelectionValue,
-  Wan27ImageAspectRatioSelectionValue,
   Wan27VideoAudioSettingSelectionValue,
   Wan27VideoAspectRatioSelectionValue,
   Wan27VideoDurationSelectionValue,
@@ -46,6 +53,8 @@ import type { Ideogram45EditRunSettings, Ideogram45TextRunSettings } from '../id
 import type { NanoBananaRunSettings } from '../nanoBananaRunSettings';
 import type { GptImage2RunSettings } from '../gptImage2RunSettings';
 import type { GptImage25RunSettings } from '../gptImage25RunSettings';
+import type { RecraftRunSettings } from '../recraftRunSettings';
+import type { GrokImageRunSettings } from '../grokImageRunSettings';
 
 export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'CANCELED'; // Fal queue status enum.
 export type FalQueueLogs = Array<{ message?: string }> | Record<string, unknown> | string | undefined; // Fal log payload shapes.
@@ -99,7 +108,8 @@ export interface GenerateImageEditParams {
   referenceImages?: HTMLImageElement[];
 } // Inputs for image edit workflows.
 
-export interface GenerateImageEditOptions extends FalPhaseOptions {
+export interface GenerateImageEditOptions extends FalPhaseOptions, Pick<GenerationFalOptions,
+  'grokImageAspectRatio' | 'grokImageResolution' | 'grokImageQuality' | 'grokImageOutputFormat' | 'grokImagePassthrough' | 'grokImageEnableSafetyChecker'> {
   onQueueUpdate?: (update: FalQueueUpdate) => void; // Hook for queue updates.
   onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase updates.
   jobId?: string; // UI queue job id for debug correlation.
@@ -108,6 +118,9 @@ export interface GenerateImageEditOptions extends FalPhaseOptions {
   aspectRatio?: FalAspectRatioOption;
   numImages?: number;
   resolution?: FalResolutionOption;
+  flux3ImageAspectRatio?: Flux3ImageAspectRatio;
+  flux3ImageResolution?: Flux3ImageResolution;
+  flux2MaxImageSize?: string; // Legacy callers retain their aspect ratio when migrated.
   gptImage2Quality?: FalGptImage2QualityOption;
   gptImage2RunSettings?: GptImage2RunSettings<'image_edit'>;
   nanoBananaRunSettings?: NanoBananaRunSettings<'image_edit'>;
@@ -117,15 +130,17 @@ export interface GenerateImageEditOptions extends FalPhaseOptions {
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
   gptImage25RunSettings?: GptImage25RunSettings<'image_edit'>;
+  krea3Variant?: Krea3Variant;
+  krea3ReasoningLevel?: Krea3ReasoningLevel;
+  krea3RunSettings?: Krea3RunSettings<'image_edit'>;
+  grokImageRunSettings?: GrokImageRunSettings<'image_edit'>;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
   ideogram45RunSettings?: Ideogram45EditRunSettings; // Resolved settings take precedence over raw picker options.
-  wan27ImageSize?: Wan27ImageAspectRatioSelectionValue;
-  wan27ImageMaxImages?: string;
-  negativePrompt?: string;
 } // Optional controls for image edits.
 
-export interface GenerateImageOptions extends FalPhaseOptions {
+export interface GenerateImageOptions extends FalPhaseOptions, Pick<GenerationFalOptions,
+  'grokImageAspectRatio' | 'grokImageResolution' | 'grokImageQuality' | 'grokImageOutputFormat' | 'grokImagePassthrough' | 'grokImageEnableSafetyChecker'> {
   onQueueUpdate?: (update: FalQueueUpdate) => void;
   onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase updates.
   jobId?: string; // UI queue job id for debug correlation.
@@ -145,15 +160,17 @@ export interface GenerateImageOptions extends FalPhaseOptions {
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
   gptImage25RunSettings?: GptImage25RunSettings<'text_to_image'>;
+  krea3Variant?: Krea3Variant;
+  krea3ReasoningLevel?: Krea3ReasoningLevel;
+  krea3RunSettings?: Krea3RunSettings<'text_to_image'>;
+  grokImageRunSettings?: GrokImageRunSettings<'text_to_image'>;
+  recraftRunSettings?: RecraftRunSettings;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
   ideogram45RunSettings?: Ideogram45TextRunSettings;
-  krea2Creativity?: FalKrea2CreativityOption;
-  imageStyleReferences?: Array<{ image: HTMLImageElement; strength: number }>;
   flux2MaxImageSize?: string;
-  wan27ImageSize?: Wan27ImageAspectRatioSelectionValue;
-  wan27ImageMaxImages?: string;
-  negativePrompt?: string;
+  flux3ImageAspectRatio?: Flux3ImageAspectRatio;
+  flux3ImageResolution?: Flux3ImageResolution;
   recraftImageSize?: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor?: RecraftRgbColor;
   recraftColors?: RecraftRgbColor[];
@@ -197,6 +214,10 @@ export interface GenerateVideoOptions extends FalPhaseOptions {
   klingV3MultiPrompt?: string;
   klingV3Shot1Duration?: KlingV3ShotDurationSelectionValue;
   klingV3Shot2Duration?: KlingV3ShotDurationSelectionValue;
+  klingV4Variant?: KlingV4Variant;
+  klingV4Resolution?: KlingV4Resolution;
+  klingV4AspectRatio?: KlingV4AspectRatio;
+  klingV4Duration?: KlingV4Duration;
   sourceVideoUrl?: string;
   sourceAudioUrl?: string;
   keepAudio?: boolean;

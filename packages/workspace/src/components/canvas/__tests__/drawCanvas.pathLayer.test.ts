@@ -88,7 +88,6 @@ describe('drawCanvas path layer cache', () => {
     isVeo31ExtendMode: false,
     isWanAnimateVideoInputMode: false,
     isWan27VideoMode: false,
-    isKrea2StyleReferenceMode: false,
     showMetadataOverlay: false,
     cropMode: null,
     transformMode: null,

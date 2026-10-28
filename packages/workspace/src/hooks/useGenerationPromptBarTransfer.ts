@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   isFalVideoModelId,
   isVideoNegativePromptModelId,
   normalizeFalModelId,
@@ -9,7 +8,6 @@ import {
 import type { ApiProviderId, CanvasImage, GenerationInputs } from '../types';
 import { cloneCameraSelection, EMPTY_CAMERA_SELECTION, type CameraSettingsSelection } from '../utils/cameraSettings';
 import { getGenerationTransferBlockReason, resolveGenerationInputSelection } from '../utils/generationPromptBarTransfer';
-import { normalizeKrea2StyleStrength } from '../utils/krea2StyleStrength';
 import type { SelectionStateResult } from './useSelectionState';
 
 type TransferSelectionSetters = Pick<
@@ -36,8 +34,6 @@ interface UseGenerationPromptBarTransferArgs {
   setActiveEmbeddedPromptBarId: Dispatch<SetStateAction<string | null>>;
   setSelectedVideoPromptAreaId: Dispatch<SetStateAction<string | null>>;
   setVideoNegativePromptForModel: (modelId: FalVideoModelId, value: string) => void;
-  setWan27ImageNegativePrompt: Dispatch<SetStateAction<string>>;
-  setKrea2StyleReferenceStrengths: Dispatch<SetStateAction<Record<string, number>>>;
   setToastMessage: Dispatch<SetStateAction<string | null>>;
   resetEditContext: () => void;
 }
@@ -72,8 +68,6 @@ export const useGenerationPromptBarTransfer = ({
   setActiveEmbeddedPromptBarId,
   setSelectedVideoPromptAreaId,
   setVideoNegativePromptForModel,
-  setWan27ImageNegativePrompt,
-  setKrea2StyleReferenceStrengths,
   setToastMessage,
   resetEditContext,
 }: UseGenerationPromptBarTransferArgs): UseGenerationPromptBarTransferResult => {
@@ -145,19 +139,9 @@ export const useGenerationPromptBarTransfer = ({
     let skippedNegativePrompt = false;
     if (normalizedModelId && isFalVideoModelId(normalizedModelId) && isVideoNegativePromptModelId(normalizedModelId)) {
       setVideoNegativePromptForModel(normalizedModelId, savedNegativePrompt); // Only models owning a bucket may overwrite it, never a shared fallback.
-    } else if (normalizedModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID) {
-      setWan27ImageNegativePrompt(savedNegativePrompt); // Wan image generations use the dedicated negative prompt field.
     } else {
       skippedNegativePrompt = hasSavedNegativePrompt; // Other settings and inputs still load when this field cannot.
     }
-
-    const restoredReferenceIds = new Set(restoredSelection.referenceImageIds);
-    const restoredKreaStrengths = generation.falOptions?.krea2StyleReferenceStrengths ?? {};
-    setKrea2StyleReferenceStrengths(Object.fromEntries(
-      Object.entries(restoredKreaStrengths)
-        .filter(([referenceId]) => restoredReferenceIds.has(referenceId))
-        .map(([referenceId, strength]) => [referenceId, normalizeKrea2StyleStrength(strength)]),
-    )); // Only surviving Krea references keep their saved strength.
 
     showTransferToast(buildTransferToastMessage(
       restoredSelection.missingInputCount,
@@ -173,7 +157,6 @@ export const useGenerationPromptBarTransfer = ({
     setApiProvider,
     setCameraSettings,
     setElementImageIds,
-    setKrea2StyleReferenceStrengths,
     setPrompt,
     setReferenceAudioIds,
     setReferenceImageIds,
@@ -186,7 +169,6 @@ export const useGenerationPromptBarTransfer = ({
     showTransferToast,
     setVideoLastFrameImageId,
     setVideoNegativePromptForModel,
-    setWan27ImageNegativePrompt,
   ]);
 
   return { handleMetadataToPromptBar, promptFocusRequestToken }; // App only wires the action and focus signal.

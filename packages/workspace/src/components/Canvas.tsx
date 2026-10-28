@@ -90,16 +90,13 @@ interface CanvasProps {
   referenceVideoIds: string[];
   referenceAudioIds: string[];
   referenceImageOrderLabels?: Record<string, string> | null;
-  isKrea2StyleReferenceMode?: boolean;
-  krea2StyleReferenceImageIds?: string[];
-  krea2StyleReferenceStrengths?: Record<string, number>;
-  onKrea2StyleReferenceStrengthChange?: (imageId: string, value: number) => void;
   disabledMediaIds?: string[];
   elementImageIds: string[];
   elementImageOrderLabels?: Record<string, string> | null;
   videoLastFrameImageId: string | null;
   sourceVideoId: string | null;
   tailSelectionEnabled: boolean;
+  frameRoleLabelsEnabled?: boolean; // Frame badges can differ from the available selection gestures.
   isKlingO3VideoInputMode: boolean;
   isKlingO3ReferenceMode: boolean;
   isSeedance15FflfMode: boolean;
@@ -282,16 +279,13 @@ export const Canvas: React.FC<CanvasProps> = ({
   referenceVideoIds,
   referenceAudioIds,
   referenceImageOrderLabels,
-  isKrea2StyleReferenceMode = false,
-  krea2StyleReferenceImageIds,
-  krea2StyleReferenceStrengths = {},
-  onKrea2StyleReferenceStrengthChange,
   disabledMediaIds = [],
   elementImageIds,
   elementImageOrderLabels,
   videoLastFrameImageId,
   sourceVideoId,
   tailSelectionEnabled,
+  frameRoleLabelsEnabled = tailSelectionEnabled,
   isKlingO3VideoInputMode,
   isKlingO3ReferenceMode,
   isSeedance15FflfMode,
@@ -691,7 +685,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       paths,
       selectedImageIds,
       referenceImageIds,
-      krea2StyleReferenceImageIds,
       referenceVideoIds,
       referenceAudioIds,
       referenceImageOrderLabels,
@@ -700,6 +693,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       elementImageOrderLabels,
       videoLastFrameImageId,
       tailSelectionEnabled,
+      frameRoleLabelsEnabled,
       sourceVideoId,
       isKlingO3VideoInputMode,
       isKlingO3ReferenceMode,
@@ -708,7 +702,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       isVeo31ExtendMode,
       isWanAnimateVideoInputMode,
       isWan27VideoMode,
-      isKrea2StyleReferenceMode,
       showMetadataOverlay,
       cropMode: effectiveCropMode,
       transformMode: effectiveTransformMode,
@@ -722,7 +715,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (perfHudEnabled) {
       recordCanvasDraw(performance.now() - drawStart);
     }
-  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
+  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, frameRoleLabelsEnabled, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
 
   useEffect(() => {
     drawRef.current = draw;
@@ -1210,22 +1203,6 @@ export const Canvas: React.FC<CanvasProps> = ({
   const imageBeingCropped = useMemo(() => cropMode ? images.find(img => img.id === cropMode.imageId) : null, [images, cropMode]);
   const imageBeingTransformed = useMemo(() => transformMode ? images.find(img => img.id === transformMode.imageId) : null, [images, transformMode]);
   const selectedImageBounds = useMemo(() => selectedImage ? getImageBounds(selectedImage) : null, [getImageBounds, selectedImage]);
-  const krea2StyleReferenceControls = useMemo(() => {
-    if (!isKrea2StyleReferenceMode) {
-      return [];
-    }
-    const styleReferenceIds = krea2StyleReferenceImageIds ?? referenceImageIds; // Use submitted Krea refs when provided.
-    return styleReferenceIds
-      .slice(0, 10)
-      .map(id => {
-        const image = images.find(img => img.id === id && img.mediaType === 'image');
-        if (!image) {
-          return null;
-        }
-        return { id, bounds: getImageBounds(image), value: krea2StyleReferenceStrengths[id] ?? 1 };
-      })
-      .filter((control): control is { id: string; bounds: ReturnType<typeof getImageBounds>; value: number } => Boolean(control));
-  }, [getImageBounds, images, isKrea2StyleReferenceMode, krea2StyleReferenceImageIds, krea2StyleReferenceStrengths, referenceImageIds]);
   const croppingBounds = useMemo(() => imageBeingCropped ? getImageBounds(imageBeingCropped) : null, [getImageBounds, imageBeingCropped]);
   const transformingBounds = useMemo(() => imageBeingTransformed ? getImageBounds(imageBeingTransformed) : null, [getImageBounds, imageBeingTransformed]);
 
@@ -1692,7 +1669,9 @@ export const Canvas: React.FC<CanvasProps> = ({
           ? '1-to-All Animate (Unavailable)'
           : isRemovedHailuoModelId(selectedEmbeddedModelId)
             ? 'Hailuo 2.3 (Unavailable)'
-            : null; // Restored retired bars must remain identifiable but cannot run.
+            : selectedEmbeddedModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+              ? 'Jimeng Multi-frame (Unavailable)'
+              : null; // Restored retired bars must remain identifiable but cannot run.
         const isRemovedEmbeddedModel = removedEmbeddedModelLabel !== null;
         const removedEmbeddedModelOption = removedEmbeddedModelLabel
           ? { value: selectedEmbeddedModelId, label: removedEmbeddedModelLabel, disabled: true }
@@ -1935,36 +1914,6 @@ export const Canvas: React.FC<CanvasProps> = ({
           </div>
         </div>
       )}
-      {!isPresentationMode && krea2StyleReferenceControls.map(control => (
-        <div
-          key={control.id}
-          className="flex items-center gap-2 rounded-md border border-emerald-400/50 bg-gray-950/90 px-3 py-2 text-xs text-emerald-50 shadow-xl"
-          data-testid={`krea-style-reference-slider-${control.id}`}
-          onMouseDown={event => event.stopPropagation()}
-          onPointerDown={event => event.stopPropagation()}
-          onClick={event => event.stopPropagation()}
-          onKeyDown={event => event.stopPropagation()}
-          style={{
-            position: 'absolute',
-            left: `${((control.bounds.minX + control.bounds.maxX) / 2) * scale + pan.x}px`,
-            top: `${control.bounds.maxY * scale + pan.y + 14}px`,
-            transform: 'translateX(-50%)',
-            zIndex: 105,
-          }}
-        >
-          <span className="font-medium tabular-nums">{control.value.toFixed(1)}</span>
-          <input
-            aria-label="Krea style reference strength"
-            className="h-2 w-36 accent-emerald-400"
-            type="range"
-            min="-2"
-            max="2"
-            step="0.1"
-            value={control.value}
-            onChange={event => onKrea2StyleReferenceStrengthChange?.(control.id, Number(event.target.value))}
-          />
-        </div>
-      ))}
       {!isPresentationMode && selectedImage && !cropMode && !transformMode && (
         <div
           className="flex items-center space-x-2"

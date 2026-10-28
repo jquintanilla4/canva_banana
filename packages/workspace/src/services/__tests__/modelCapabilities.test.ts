@@ -3,7 +3,7 @@ import { getModelUiCapabilities } from '../modelCapabilities';
 import {
   FAL_IMAGE_MODEL_OPTIONS,
   FAL_VIDEO_MODEL_OPTIONS,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   CRYSTAL_UPSCALER_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
@@ -20,14 +20,11 @@ import {
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   KLING_VIDEO_MODEL_ID,
-  KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID,
-  KREA_2_MAX_STYLE_REFERENCES,
   MINIMAX_H3_VIDEO_MODEL_ID,
   SCAIL_VIDEO_MODEL_ID,
-  SEEDREAM_MODEL_ID,
-  SEEDREAM_V45_MODEL_ID,
+  SEEDREAM_V5_LITE_MODEL_ID,
+  SEEDREAM_V5_PRO_MODEL_ID,
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
@@ -57,7 +54,7 @@ describe('getModelUiCapabilities', () => {
     expect(getModelUiCapabilities(JIMENG_SEEDANCE_25_VIDEO_MODEL_ID).provider).toBe('jimeng');
     expect(getModelUiCapabilities(JIMENG_MULTIFRAME_VIDEO_MODEL_ID).provider).toBe('jimeng');
     expect(getModelUiCapabilities(FAL_SEEDANCE_2_VIDEO_MODEL_ID).provider).toBe('fal');
-    expect(getModelUiCapabilities(SEEDREAM_MODEL_ID).provider).toBe('fal');
+    expect(getModelUiCapabilities(SEEDREAM_V5_LITE_MODEL_ID).provider).toBe('fal');
   });
 
   describe('supportsTailFrame truth table', () => {
@@ -96,16 +93,8 @@ describe('getModelUiCapabilities', () => {
 
   describe('reference limit toasts', () => {
     it('keeps the model-specific toast copy', () => {
-      expect(getModelUiCapabilities(GROK_IMAGINE_IMAGE_MODEL_ID).referenceLimitToast?.(0)).toEqual({
-        message: 'Grok Imagine supports only 1 image total. Shift-click reference images aren\'t supported.',
-        durationMs: 4000,
-      });
-      expect(getModelUiCapabilities(WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID).referenceLimitToast?.(3)).toEqual({
-        message: 'Wan 2.7 Pro Image supports up to 4 images total (1 primary + 3 references). Use @Image1, @Image2, etc. in your prompt to reference them.',
-        durationMs: 4000,
-      });
-      expect(getModelUiCapabilities(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID).referenceLimitToast?.(10)).toEqual({
-        message: `Krea 2 Large supports up to ${KREA_2_MAX_STYLE_REFERENCES} style references.`,
+      expect(getModelUiCapabilities(GROK_IMAGINE_IMAGE_MODEL_ID).referenceLimitToast?.(4)).toEqual({
+        message: 'Grok Imagine 2.0 supports up to 5 images total (1 primary + 4 references).',
         durationMs: 4000,
       });
     });
@@ -127,12 +116,6 @@ describe('getModelUiCapabilities', () => {
       const toast = getModelUiCapabilities(GPT_IMAGE_2_EDIT_MODEL_ID).referenceLimitToast;
       expect(toast?.(8)?.message).toBe('GPT Image 2 annotate supports up to 8 references because the annotation canvas counts as an input.');
       expect(toast?.(9)?.message).toBe('GPT Image 2 supports up to 10 images total (1 primary + 9 references).');
-    });
-
-    it('only claims the Seedream 4.5 cap when the limit is high enough', () => {
-      const toast = getModelUiCapabilities(SEEDREAM_V45_MODEL_ID).referenceLimitToast;
-      expect(toast?.(10)).toEqual({ message: 'Seedream 4.5 only accepts up to 10 reference images.', durationMs: 2000 });
-      expect(toast?.(9)).toBeNull(); // Falls back to the generic copy.
     });
 
     it('warns that MiniMax H3 and Seedance smart modes drop tagged references', () => {
@@ -190,13 +173,13 @@ describe('getModelUiCapabilities', () => {
 
     it('falls back to the guards placeholder for models without bespoke copy', () => {
       expect(getModelUiCapabilities(KLING_V3_VIDEO_MODEL_ID).promptPlaceholder).toBeNull();
-      expect(getModelUiCapabilities(SEEDREAM_MODEL_ID).promptPlaceholder).toBeNull();
+      expect(getModelUiCapabilities(SEEDREAM_V5_LITE_MODEL_ID).promptPlaceholder).toBeNull();
     });
   });
 
-  it('gates annotate mode for video, Flux 2 Max, and upscalers', () => {
-    expect(getModelUiCapabilities(SEEDREAM_MODEL_ID).supportsAnnotate).toBe(true);
-    expect(getModelUiCapabilities(FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID).supportsAnnotate).toBe(false);
+  it('gates annotate mode for video, Flux 3 images, and upscalers', () => {
+    expect(getModelUiCapabilities(SEEDREAM_V5_LITE_MODEL_ID).supportsAnnotate).toBe(true);
+    expect(getModelUiCapabilities(FLUX_3_TEXT_TO_IMAGE_MODEL_ID).supportsAnnotate).toBe(false);
     expect(getModelUiCapabilities(CRYSTAL_UPSCALER_MODEL_ID).supportsAnnotate).toBe(false);
     expect(getModelUiCapabilities(SEEDVR_UPSCALER_MODEL_ID).supportsAnnotate).toBe(false);
     for (const option of FAL_VIDEO_MODEL_OPTIONS) {
@@ -205,24 +188,23 @@ describe('getModelUiCapabilities', () => {
   });
 
   it('enables camera settings only for Seedream and Nano Banana', () => {
-    expect(getModelUiCapabilities(SEEDREAM_MODEL_ID).supportsCameraSettings).toBe(true);
-    expect(getModelUiCapabilities(SEEDREAM_V45_MODEL_ID).supportsCameraSettings).toBe(true);
+    expect(getModelUiCapabilities(SEEDREAM_V5_LITE_MODEL_ID).supportsCameraSettings).toBe(true);
+    expect(getModelUiCapabilities(SEEDREAM_V5_PRO_MODEL_ID).supportsCameraSettings).toBe(true);
     expect(getModelUiCapabilities(GROK_IMAGINE_IMAGE_MODEL_ID).supportsCameraSettings).toBe(false);
     expect(getModelUiCapabilities(WAN_27_VIDEO_MODEL_ID).supportsCameraSettings).toBe(false);
   });
 
   it('shows the negative prompt for exactly the models that use one', () => {
-    for (const modelId of [WAN_VISION_ENHANCER_MODEL_ID, WAN_27_VIDEO_MODEL_ID, KLING_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, VEO_31_IMAGE_TO_VIDEO_MODEL_ID, WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID]) {
+    for (const modelId of [WAN_VISION_ENHANCER_MODEL_ID, WAN_27_VIDEO_MODEL_ID, KLING_VIDEO_MODEL_ID, KLING_V3_VIDEO_MODEL_ID, VEO_31_IMAGE_TO_VIDEO_MODEL_ID]) {
       expect(getModelUiCapabilities(modelId).showNegativePrompt).toBe(true);
     }
     expect(getModelUiCapabilities(MINIMAX_H3_VIDEO_MODEL_ID).showNegativePrompt).toBe(false);
-    expect(getModelUiCapabilities(SEEDREAM_MODEL_ID).showNegativePrompt).toBe(false);
+    expect(getModelUiCapabilities(SEEDREAM_V5_LITE_MODEL_ID).showNegativePrompt).toBe(false);
   });
 
   it('enables kling suggestions for @-mention models including multimodal reference modes', () => {
     expect(getModelUiCapabilities(KLING_O3_VIDEO_MODEL_ID, { klingO3Variant: 'edit' }).klingSuggestionsEnabled).toBe(true);
-    expect(getModelUiCapabilities(FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID).klingSuggestionsEnabled).toBe(true);
-    expect(getModelUiCapabilities(WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID).klingSuggestionsEnabled).toBe(true);
+    expect(getModelUiCapabilities(FLUX_3_TEXT_TO_IMAGE_MODEL_ID).klingSuggestionsEnabled).toBe(true);
     expect(getModelUiCapabilities(FLUX_3_VIDEO_MODEL_ID, { flux3Variant: 'smart' }).klingSuggestionsEnabled).toBe(true);
     expect(getModelUiCapabilities(SEEDANCE_2_VIDEO_MODEL_ID, { seedance2Variant: 'reference' }).klingSuggestionsEnabled).toBe(true);
     expect(getModelUiCapabilities(SEEDANCE_2_VIDEO_MODEL_ID, { seedance2Variant: 'edit' }).klingSuggestionsEnabled).toBe(true);
@@ -234,7 +216,6 @@ describe('getModelUiCapabilities', () => {
 
   describe('selection affordance flags', () => {
     it('marks the canvas input modes per model', () => {
-      expect(getModelUiCapabilities(KREA_2_LARGE_TEXT_TO_IMAGE_MODEL_ID).selection.krea2StyleReferenceMode).toBe(true);
       expect(getModelUiCapabilities(KLING_V3_CONTROL_VIDEO_MODEL_ID).selection.klingV3ControlVideoInputMode).toBe(true);
       expect(getModelUiCapabilities(SEEDANCE_15_VIDEO_MODEL_ID).selection.seedance15FflfMode).toBe(true);
       expect(getModelUiCapabilities(WAN_ANIMATE_MODEL_ID).selection.wanAnimateVideoInputMode).toBe(true);

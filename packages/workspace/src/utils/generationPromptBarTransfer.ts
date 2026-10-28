@@ -1,4 +1,4 @@
-import { JIMENG_MULTIFRAME_VIDEO_MODEL_ID, isUnavailableLegacyTransferModelId, normalizeFalModelId } from '../services/modelConfig';
+import { JIMENG_MULTIFRAME_VIDEO_MODEL_ID, isRetiredVideoModelId, isUnavailableLegacyTransferModelId, normalizeFalModelId } from '../services/modelConfig';
 import type { ApiProviderId, CanvasImage, CanvasMediaType, GenerationInputs } from '../types';
 import { resolveGenerationTransferModelId } from './generationTransferSettings';
 
@@ -19,7 +19,7 @@ export const getGenerationTransferBlockReason = (
   if (generation.provider === 'google') {
     return null; // Google generations carry no Fal model to restore.
   }
-  if (isUnavailableLegacyTransferModelId(generation.modelId)) {
+  if (isUnavailableLegacyTransferModelId(generation.modelId) || isRetiredVideoModelId(generation.modelId)) {
     return 'Saved model is no longer available';
   }
   return normalizeFalModelId(resolveGenerationTransferModelId(generation))

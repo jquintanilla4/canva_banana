@@ -1,3 +1,5 @@
+import type { GrokImageAspectRatio, GrokImageResolution, GrokImageQuality, GrokImageOutputFormat } from './services/grokImageConfig';
+
 export enum Tool {
   SELECTION = 'SELECTION',
   PAN = 'PAN',
@@ -100,12 +102,17 @@ export type GptImage25Background = 'auto' | 'transparent' | 'opaque';
 export type GptImage25Quality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type Ideogram45Quality = 'very_low' | 'low' | 'medium' | 'high';
 export type Ideogram45EditPrecision = 'regular' | 'high';
-export type FalKrea2CreativityOption = 'raw' | 'low' | 'medium' | 'high';
 export type Flux2MaxImageSizeOption = Extract<FalImageSizePreset, 'landscape_4_3' | 'landscape_16_9' | 'portrait_4_3' | 'portrait_16_9' | 'square' | 'square_hd'>;
+export type Flux3ImageAspectRatio = 'auto' | '21:9' | '2:1' | '16:9' | '3:2' | '7:5' | '4:3' | '5:4' | '1:1' | '4:5' | '3:4' | '5:7' | '2:3' | '9:16' | '1:2';
+export type Flux3ImageResolution = '768sq' | '1k' | '1.5k' | '2k' | '4k';
 
 export type FalVideoDuration = '5' | '6' | '10';
 
 export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
+export type KlingV4Variant = 'generate' | 'edit';
+export type KlingV4Resolution = '720p' | '1080p';
+export type KlingV4AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '21:9';
+export type KlingV4Duration = 'source' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
 export type Flux3Variant = 'smart' | 'first-last-frame' | 'keyframes' | 'extend';
 export type Flux3AspectRatio = 'auto' | '21:9' | '2:1' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16';
 export type Flux3Resolution = '720p' | '1080p';
@@ -131,17 +138,25 @@ export type GenerationFalOptions = Partial<{
   imageSizeSelection: FalImageSizeOption;
   aspectRatioSelection: FalAspectRatioOption;
   resolutionSelection: FalResolutionOption;
+  krea3Variant: import('./services/krea3Config').Krea3Variant;
+  krea3ReasoningLevel: import('./services/krea3Config').Krea3ReasoningLevel;
   nanoBananaWebSearch: boolean;
   nanoBananaThinkingLevel: NanoBananaThinkingLevel;
-  flux2MaxImageSize: Flux2MaxImageSizeOption; // Flux 2 Max output size replayed by retries.
+  flux2MaxImageSize: Flux2MaxImageSizeOption; // Legacy Flux 2 Max size, migrated to a Flux 3 aspect ratio.
+  flux3ImageAspectRatio: Flux3ImageAspectRatio;
+  flux3ImageResolution: Flux3ImageResolution;
   gptImage2Quality: FalGptImage2QualityOption;
   gptImage25Variant: GptImage25Variant;
   gptImage25Background: GptImage25Background;
   gptImage25Quality: GptImage25Quality;
+  grokImageAspectRatio: GrokImageAspectRatio;
+  grokImageResolution: GrokImageResolution;
+  grokImageQuality: GrokImageQuality;
+  grokImageOutputFormat: GrokImageOutputFormat;
+  grokImagePassthrough: boolean;
+  grokImageEnableSafetyChecker: boolean;
   ideogram45Quality: Ideogram45Quality;
   ideogram45EditPrecision: Ideogram45EditPrecision;
-  krea2Creativity: FalKrea2CreativityOption;
-  krea2StyleReferenceStrengths: Record<string, number>;
   numImages: number;
   scaleFactor: number;
   noiseScale: number;
@@ -161,6 +176,10 @@ export type GenerationFalOptions = Partial<{
   klingV3MultiPrompt: string;
   klingV3Shot1Duration: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
   klingV3Shot2Duration: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15';
+  klingV4Variant: KlingV4Variant;
+  klingV4Resolution: KlingV4Resolution;
+  klingV4AspectRatio: KlingV4AspectRatio;
+  klingV4Duration: KlingV4Duration;
   negativePrompt: string;
   wanTargetResolution: '720p' | '1080p';
   wanCreativity: 0 | 1 | 2 | 3 | 4;
@@ -230,8 +249,6 @@ export type GenerationFalOptions = Partial<{
   recraftImageSize: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
-  wan27ImageAspectRatio: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-  wan27ImageMaxImages: '1' | '2' | '3' | '4' | '5';
 }>;
 
 export type GenerationVolcengineOptions = Partial<{

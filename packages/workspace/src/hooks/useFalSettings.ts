@@ -5,7 +5,14 @@ import { NANO_BANANA_DEFAULTS, isNanoBananaThinkingLevel } from '../services/nan
 import { getNanoBananaAspectRatioOptionsForProvider } from '../services/nanoBananaAspectRatioPolicy';
 import { GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
 import { GPT_IMAGE_25_IMAGE_SIZE_OPTIONS } from '../services/gptImage25Config';
+import { KREA_3_DEFAULTS, KREA_3_IMAGE_SIZE_OPTIONS, isKrea3Model, isKrea3Variant, isKrea3ReasoningLevel, type Krea3Variant, type Krea3ReasoningLevel } from '../services/krea3Config';
+import { GROK_IMAGE_DEFAULTS, isGrokImageAspectRatio, isGrokImageResolution, isGrokImageQuality, isGrokImageOutputFormat, type GrokImageAspectRatio, type GrokImageResolution, type GrokImageQuality, type GrokImageOutputFormat } from '../services/grokImageConfig';
+import { KLING_V4_DEFAULTS, isKlingV4VideoModel as isKlingV4VideoModelId, isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from '../services/klingV4Config';
 import type {
+  KlingV4Variant,
+  KlingV4Resolution,
+  KlingV4AspectRatio,
+  KlingV4Duration,
   NanoBananaThinkingLevel,
   ApiProviderId,
   Ideogram45Quality,
@@ -20,6 +27,8 @@ import type {
   GenerationVolcengineOptions,
   Flux3AspectRatio,
   Flux3Duration,
+  Flux3ImageAspectRatio,
+  Flux3ImageResolution,
   Flux3KeyframeTiming,
   Flux3Resolution,
   Flux3Variant,
@@ -28,15 +37,13 @@ import {
   CRYSTAL_UPSCALER_MODEL_ID,
   DEFAULT_FAL_IMAGE_MODEL_ID,
   DEFAULT_FAL_VIDEO_MODEL_ID,
-  FAL_GROK_ASPECT_RATIO_OPTIONS, // Grok aspect ratio options.
   GPT_IMAGE_25_DEFAULTS,
   isGptImage25Model,
   isGptImage25Variant,
   isGptImage25Background,
   isGptImage25Quality,
-  FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID,
+  FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   GPT_IMAGE_2_EDIT_MODEL_ID,
-  GROK_IMAGINE_IMAGE_MODEL_ID, // Grok model id.
   GROK_IMAGINE_VIDEO_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   KLING_V3_CONTROL_VIDEO_MODEL_ID,
@@ -48,7 +55,6 @@ import {
   WAN_ANIMATE_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
-  WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
   FLUX_3_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -60,15 +66,13 @@ import {
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   SEEDVR_UPSCALER_MODEL_ID,
   getFalNumImageMaxForModel,
-  isFlux2MaxImageSizeSelectionValue,
+  isFlux3ImageAspectRatio,
+  isFlux3ImageResolution,
   isGptImage2Model,
   isGptImage2QualitySelectionValue,
   isGrokImagineVideoAspectRatioSelectionValue,
   isGrokImagineVideoDurationSelectionValue,
   isGrokImagineVideoResolutionSelectionValue,
-  isKrea2AspectRatioSelectionValue,
-  isKrea2CreativitySelectionValue,
-  isKrea2LargeModel as isKrea2LargeModelId,
   isNanoBananaEditModelId,
   isKlingO3DurationSelectionValue,
   isKlingO3VideoModelId,
@@ -77,6 +81,7 @@ import {
   isKlingV3ShotDurationSelectionValue,
   isFalImageModelId,
   isFalVideoModelId,
+  isRetiredVideoModelId,
   isSeedreamModelId,
   isSeedreamV5LiteModelId,
   isSeedreamV5ProModelId,
@@ -109,10 +114,6 @@ import {
   isVolcengineSeedance2VideoModel,
   isRecraftV4ProImageSizeSelectionValue,
   isRecraftV4ProModel,
-  KREA_2_DEFAULT_ASPECT_RATIO,
-  KREA_2_DEFAULT_CREATIVITY,
-  isWan27ImageAspectRatioSelectionValue,
-  isWan27ImageMaxImagesSelectionValue,
   isWan27VideoAspectRatioSelectionValue,
   isWan27VideoDurationSelectionValue,
   isWan27VideoResolutionSelectionValue,
@@ -148,7 +149,6 @@ import type {
   FalModelMode,
   FalResolutionSelectionValue,
   FalVideoModelId,
-  Flux2MaxImageSizeSelectionValue,
   KlingO3DurationSelectionValue,
   KlingO3Variant,
   KlingV3ControlOrientation,
@@ -156,8 +156,6 @@ import type {
   KlingV3DurationSelectionValue,
   KlingV3ShotDurationSelectionValue,
   KlingVariant,
-  Krea2AspectRatioSelectionValue,
-  Krea2CreativitySelectionValue,
   InfinitalkAccelerationSelectionValue,
   InfinitalkDurationSelectionValue,
   InfinitalkResolutionSelectionValue,
@@ -190,8 +188,6 @@ import type {
   MiniMaxH3AspectRatioSelectionValue,
   MiniMaxH3DurationSelectionValue,
   MiniMaxH3Variant,
-  Wan27ImageAspectRatioSelectionValue,
-  Wan27ImageMaxImagesSelectionValue,
   WanAnimateQualitySelectionValue,
   WanAnimateResolutionSelectionValue,
   WanAnimateShiftSelectionValue,
@@ -214,6 +210,7 @@ type UseFalSettingsArgs = {
 type FalDerivedState = {
   falModelId: FalModelId;
   isVideoMode: boolean;
+  isKlingV4VideoModel: boolean;
   isKlingVideoModel: boolean;
   isKlingV3VideoModel: boolean;
   isKlingO3VideoModel: boolean;
@@ -233,10 +230,8 @@ type FalDerivedState = {
   isVolcengineSeedance2VideoModel: boolean;
   isJimengSeedance2VideoModel: boolean;
   isVeo31VideoModel: boolean;
-  isFlux2MaxModel: boolean;
-  isWan27ImageModel: boolean;
+  isFlux3ImageModel: boolean;
   isGptImage2Model: boolean;
-  isKrea2LargeModel: boolean;
   isUpscaleModel: boolean;
   isKlingProVideoSelection: boolean;
   isKlingO3EditMode: boolean;
@@ -246,6 +241,10 @@ type FalHandlers = {
   handleModelModeChange: (mode: FalModelMode) => void;
   handleFalModelChange: (modelId: string) => void;
   handleFalVideoDurationChange: (value: string) => void;
+  handleKlingV4VariantChange: (value: string) => void;
+  handleKlingV4ResolutionChange: (value: string) => void;
+  handleKlingV4AspectRatioChange: (value: string) => void;
+  handleKlingV4DurationChange: (value: string) => void;
   handleKlingVariantChange: (value: string) => void;
   handleKlingV3DurationChange: (value: string) => void;
   handleKlingV3GenerateAudioChange: (value: boolean) => void;
@@ -318,9 +317,8 @@ type FalHandlers = {
   handleSeedance25ResolutionChange: (value: string) => void;
   handleSeedance25DurationChange: (value: string) => void;
   handleSeedance25GenerateAudioChange: (value: boolean) => void;
-  handleFlux2MaxImageSizeChange: (value: string) => void;
-  handleWan27ImageAspectRatioChange: (value: string) => void;
-  handleWan27ImageMaxImagesChange: (value: string) => void;
+  handleFlux3ImageAspectRatioChange: (value: string) => void;
+  handleFlux3ImageResolutionChange: (value: string) => void;
   handleRecraftImageSizeChange: (value: string) => void;
   handleRecraftBackgroundColorChange: (value: string) => void;
   handleRecraftColorChange: (index: number, value: string) => void;
@@ -334,8 +332,14 @@ type FalHandlers = {
   handleIdeogram45EditPrecisionChange: (value: string) => void;
   handleGptImage25BackgroundChange: (value: string) => void;
   handleGptImage25VariantChange: (value: string) => void;
-  handleKrea2AspectRatioChange: (value: string) => void;
-  handleKrea2CreativityChange: (value: string) => void;
+  handleKrea3VariantChange: (value: string) => void;
+  handleKrea3ReasoningLevelChange: (value: string) => void;
+  handleGrokImageAspectRatioChange: (value: string) => void;
+  handleGrokImageResolutionChange: (value: string) => void;
+  handleGrokImageQualityChange: (value: string) => void;
+  handleGrokImageOutputFormatChange: (value: string) => void;
+  handleGrokImagePassthroughChange: (value: boolean) => void;
+  handleGrokImageEnableSafetyCheckerChange: (value: boolean) => void;
   handleFalImageSizeChange: (value: string) => void;
   handleFalAspectRatioChange: (value: string) => void;
   handleFalResolutionChange: (value: string) => void;
@@ -350,6 +354,14 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   falImageModelId: FalImageModelId;
   falVideoModelId: FalVideoModelId;
   falVideoDuration: FalVideoDuration;
+  klingV4Variant: KlingV4Variant;
+  klingV4Resolution: KlingV4Resolution;
+  klingV4AspectRatio: KlingV4AspectRatio;
+  klingV4Duration: KlingV4Duration;
+  setKlingV4Variant: Dispatch<SetStateAction<KlingV4Variant>>;
+  setKlingV4Resolution: Dispatch<SetStateAction<KlingV4Resolution>>;
+  setKlingV4AspectRatio: Dispatch<SetStateAction<KlingV4AspectRatio>>;
+  setKlingV4Duration: Dispatch<SetStateAction<KlingV4Duration>>;
   klingVariant: KlingVariant;
   klingV3Duration: KlingV3DurationSelectionValue;
   klingV3GenerateAudio: boolean;
@@ -426,9 +438,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   jimengMultiframeDuration: JimengMultiframeDurationSelectionValue;
   jimengMultiframeResolution: JimengMultiframeResolutionSelectionValue;
   jimengSessionId: number;
-  flux2MaxImageSize: Flux2MaxImageSizeSelectionValue;
-  wan27ImageAspectRatio: Wan27ImageAspectRatioSelectionValue;
-  wan27ImageMaxImages: Wan27ImageMaxImagesSelectionValue;
+  flux3ImageAspectRatio: Flux3ImageAspectRatio;
+  flux3ImageResolution: Flux3ImageResolution;
   recraftImageSize: RecraftV4ProImageSizeSelectionValue;
   recraftBackgroundColor: RecraftRgbColor;
   recraftColors: RecraftRgbColor[];
@@ -440,8 +451,14 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   ideogram45EditPrecision: Ideogram45EditPrecision;
   gptImage25Background: GptImage25Background;
   gptImage25Variant: GptImage25Variant;
-  krea2AspectRatio: Krea2AspectRatioSelectionValue;
-  krea2Creativity: Krea2CreativitySelectionValue;
+  krea3Variant: Krea3Variant;
+  krea3ReasoningLevel: Krea3ReasoningLevel;
+  grokImageAspectRatio: GrokImageAspectRatio;
+  grokImageResolution: GrokImageResolution;
+  grokImageQuality: GrokImageQuality;
+  grokImageOutputFormat: GrokImageOutputFormat;
+  grokImagePassthrough: boolean;
+  grokImageEnableSafetyChecker: boolean;
   falImageSizeSelection: FalImageSizeSelectionValue;
   falAspectRatioSelection: FalAspectRatioSelectionValue;
   falResolutionSelection: FalResolutionSelectionValue;
@@ -528,9 +545,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setJimengMultiframeDuration: Dispatch<SetStateAction<JimengMultiframeDurationSelectionValue>>;
   setJimengMultiframeResolution: Dispatch<SetStateAction<JimengMultiframeResolutionSelectionValue>>;
   setJimengSessionId: Dispatch<SetStateAction<number>>;
-  setFlux2MaxImageSize: Dispatch<SetStateAction<Flux2MaxImageSizeSelectionValue>>;
-  setWan27ImageAspectRatio: Dispatch<SetStateAction<Wan27ImageAspectRatioSelectionValue>>;
-  setWan27ImageMaxImages: Dispatch<SetStateAction<Wan27ImageMaxImagesSelectionValue>>;
+  setFlux3ImageAspectRatio: Dispatch<SetStateAction<Flux3ImageAspectRatio>>;
+  setFlux3ImageResolution: Dispatch<SetStateAction<Flux3ImageResolution>>;
   setRecraftImageSize: Dispatch<SetStateAction<RecraftV4ProImageSizeSelectionValue>>;
   setRecraftBackgroundColor: Dispatch<SetStateAction<RecraftRgbColor>>;
   setRecraftColors: Dispatch<SetStateAction<RecraftRgbColor[]>>;
@@ -538,8 +554,6 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setGptImage25Quality: Dispatch<SetStateAction<GptImage25Quality>>;
   setGptImage25Background: Dispatch<SetStateAction<GptImage25Background>>;
   setGptImage25Variant: Dispatch<SetStateAction<GptImage25Variant>>;
-  setKrea2AspectRatio: Dispatch<SetStateAction<Krea2AspectRatioSelectionValue>>;
-  setKrea2Creativity: Dispatch<SetStateAction<Krea2CreativitySelectionValue>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -560,6 +574,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [falVideoModelId, setFalVideoModelId] = useState<FalVideoModelId>(DEFAULT_FAL_VIDEO_MODEL_ID);
   const [falVideoDuration, setFalVideoDuration] = useState<FalVideoDuration>('6');
   const [klingVariant, setKlingVariant] = useState<KlingVariant>('standard');
+  const [klingV4Variant, setKlingV4Variant] = useState<KlingV4Variant>(KLING_V4_DEFAULTS.klingV4Variant);
+  const [klingV4Resolution, setKlingV4Resolution] = useState<KlingV4Resolution>(KLING_V4_DEFAULTS.klingV4Resolution);
+  const [klingV4AspectRatio, setKlingV4AspectRatio] = useState<KlingV4AspectRatio>(KLING_V4_DEFAULTS.klingV4AspectRatio);
+  const [klingV4Duration, setKlingV4Duration] = useState<KlingV4Duration>(KLING_V4_DEFAULTS.klingV4Duration);
   const [klingV3Duration, setKlingV3Duration] = useState<KlingV3DurationSelectionValue>('5');
   const [klingV3GenerateAudio, setKlingV3GenerateAudio] = useState<boolean>(true);
   const [klingV3CfgScale, setKlingV3CfgScale] = useState<KlingV3CfgScaleSelectionValue>('0.5');
@@ -635,9 +653,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [jimengMultiframeDuration, setJimengMultiframeDuration] = useState<JimengMultiframeDurationSelectionValue>('3');
   const [jimengMultiframeResolution, setJimengMultiframeResolution] = useState<JimengMultiframeResolutionSelectionValue>('720p');
   const [jimengSessionId, setJimengSessionId] = useState<number>(0);
-  const [flux2MaxImageSize, setFlux2MaxImageSize] = useState<Flux2MaxImageSizeSelectionValue>('landscape_4_3');
-  const [wan27ImageAspectRatio, setWan27ImageAspectRatio] = useState<Wan27ImageAspectRatioSelectionValue>('landscape_16_9');
-  const [wan27ImageMaxImages, setWan27ImageMaxImages] = useState<Wan27ImageMaxImagesSelectionValue>('1');
+  const [flux3ImageAspectRatio, setFlux3ImageAspectRatio] = useState<Flux3ImageAspectRatio>('auto');
+  const [flux3ImageResolution, setFlux3ImageResolution] = useState<Flux3ImageResolution>('1k');
   const [recraftImageSize, setRecraftImageSize] = useState<RecraftV4ProImageSizeSelectionValue>(RECRAFT_V4_PRO_DEFAULT_IMAGE_SIZE);
   const [recraftBackgroundColor, setRecraftBackgroundColor] = useState<RecraftRgbColor>(RECRAFT_V4_PRO_DEFAULT_BACKGROUND_COLOR);
   const [recraftColors, setRecraftColors] = useState<RecraftRgbColor[]>([]);
@@ -652,8 +669,14 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const { quality: ideogram45Quality, editPrecision: ideogram45EditPrecision } = ideogram45Settings;
   const [gptImage25Background, setGptImage25Background] = useState<GptImage25Background>(GPT_IMAGE_25_DEFAULTS.gptImage25Background);
   const [gptImage25Variant, setGptImage25Variant] = useState<GptImage25Variant>(GPT_IMAGE_25_DEFAULTS.gptImage25Variant);
-  const [krea2AspectRatio, setKrea2AspectRatio] = useState<Krea2AspectRatioSelectionValue>(KREA_2_DEFAULT_ASPECT_RATIO);
-  const [krea2Creativity, setKrea2Creativity] = useState<Krea2CreativitySelectionValue>(KREA_2_DEFAULT_CREATIVITY);
+  const [krea3Variant, setKrea3Variant] = useState<Krea3Variant>(KREA_3_DEFAULTS.krea3Variant);
+  const [krea3ReasoningLevel, setKrea3ReasoningLevel] = useState<Krea3ReasoningLevel>(KREA_3_DEFAULTS.krea3ReasoningLevel);
+  const [grokImageAspectRatio, setGrokImageAspectRatio] = useState<GrokImageAspectRatio>(GROK_IMAGE_DEFAULTS.aspectRatio);
+  const [grokImageResolution, setGrokImageResolution] = useState<GrokImageResolution>(GROK_IMAGE_DEFAULTS.resolution);
+  const [grokImageQuality, setGrokImageQuality] = useState<GrokImageQuality>(GROK_IMAGE_DEFAULTS.quality);
+  const [grokImageOutputFormat, setGrokImageOutputFormat] = useState<GrokImageOutputFormat>(GROK_IMAGE_DEFAULTS.outputFormat);
+  const [grokImagePassthrough, setGrokImagePassthrough] = useState<boolean>(GROK_IMAGE_DEFAULTS.imagePassthrough);
+  const [grokImageEnableSafetyChecker, setGrokImageEnableSafetyChecker] = useState<boolean>(GROK_IMAGE_DEFAULTS.enableSafetyChecker);
   const [falImageSizeSelection, setFalImageSizeSelection] = useState<FalImageSizeSelectionValue>('placeholder');
   const [falAspectRatioSelection, setFalAspectRatioSelection] = useState<FalAspectRatioSelectionValue>('placeholder');
   const [falResolutionSelection, setFalResolutionSelection] = useState<FalResolutionSelectionValue>(NANO_BANANA_DEFAULTS.resolutionSelection);
@@ -668,6 +691,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     [falModelMode, falImageModelId, falVideoModelId],
   );
   const isVideoMode = falModelMode === 'video';
+  const isKlingV4VideoModel = isVideoMode && isKlingV4VideoModelId(falVideoModelId);
   const isKlingVideoModel = isVideoMode && falVideoModelId === KLING_VIDEO_MODEL_ID;
   const isKlingV3VideoModel = isVideoMode && falVideoModelId === KLING_V3_VIDEO_MODEL_ID;
   const isKlingO3VideoModel = isVideoMode && isKlingO3VideoModelId(falVideoModelId);
@@ -691,10 +715,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     || falVideoModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
   );
   const isVeo31VideoModel = isVideoMode && falVideoModelId === VEO_31_IMAGE_TO_VIDEO_MODEL_ID;
-  const isFlux2MaxModel = !isVideoMode && falImageModelId === FLUX2_MAX_TEXT_TO_IMAGE_MODEL_ID;
-  const isWan27ImageModel = !isVideoMode && falImageModelId === WAN_27_IMAGE_TEXT_TO_IMAGE_MODEL_ID;
+  const isFlux3ImageModel = !isVideoMode && falImageModelId === FLUX_3_TEXT_TO_IMAGE_MODEL_ID;
   const isGptImage2ModelSelection = !isVideoMode && isGptImage2Model(falImageModelId);
-  const isKrea2LargeModelSelection = !isVideoMode && isKrea2LargeModelId(falImageModelId);
   const isUpscaleModel = !isVideoMode && (falModelId === CRYSTAL_UPSCALER_MODEL_ID || falModelId === SEEDVR_UPSCALER_MODEL_ID);
   const isKlingProVideoSelection = apiProvider === 'fal' && isKlingVideoModel && klingVariant === 'pro';
   const isKlingO3EditMode = isKlingO3VideoModel && klingO3Variant === 'edit';
@@ -864,15 +886,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     }
     const aspectRatioOptions = apiProvider === 'google'
       ? getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider)
-      : falModelId === GROK_IMAGINE_IMAGE_MODEL_ID // Grok model branch.
-        ? FAL_GROK_ASPECT_RATIO_OPTIONS // Grok aspect ratios.
-        : isSeedreamModel
-          ? getSeedreamAspectRatioOptions(falModelId)
-          : getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider);
+      : isSeedreamModel
+        ? getSeedreamAspectRatioOptions(falModelId)
+        : getNanoBananaAspectRatioOptionsForProvider(falModelId, apiProvider);
     const validOptions = aspectRatioOptions.map(option => option.value);
     if (!validOptions.includes(falAspectRatioSelection)) {
-      const fallbackAspectRatio = apiProvider === 'fal' && falModelId === GROK_IMAGINE_IMAGE_MODEL_ID ? '1:1' : 'default'; // Grok uses 1:1 fallback.
-      setFalAspectRatioSelection(fallbackAspectRatio);
+      setFalAspectRatioSelection('default');
     }
   }, [apiProvider, falModelId, falModelMode, falAspectRatioSelection, isSeedreamModel]);
 
@@ -880,8 +899,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (falModelMode === 'video') {
       return;
     }
-    if (falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId)) {
-      const validImageSizeOptions = isGptImage25Model(falModelId) ? GPT_IMAGE_25_IMAGE_SIZE_OPTIONS : GPT_IMAGE_2_IMAGE_SIZE_OPTIONS;
+    if (isKrea3Model(falModelId) || falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId)) {
+      const validImageSizeOptions = isKrea3Model(falModelId) ? KREA_3_IMAGE_SIZE_OPTIONS
+        : isGptImage25Model(falModelId) ? GPT_IMAGE_25_IMAGE_SIZE_OPTIONS : GPT_IMAGE_2_IMAGE_SIZE_OPTIONS;
       if (!validImageSizeOptions.some(option => option.value === falImageSizeSelection)) {
         setFalImageSizeSelection('auto'); // GPT Image 2 defaults to auto size in the UI.
       }
@@ -937,6 +957,24 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     const variant = value === 'pro' ? 'pro' : 'standard';
     setKlingVariant(variant);
   }, []);
+
+  const handleKlingV4VariantChange = useCallback((value: string) => {
+    if (!isKlingV4Variant(value)) return;
+    setKlingV4Variant(value);
+    setKlingV4Duration(current => value === 'edit' ? 'source' : current === 'source' ? KLING_V4_DEFAULTS.klingV4Duration : current);
+  }, []);
+
+  const handleKlingV4ResolutionChange = useCallback((value: string) => {
+    if (isKlingV4Resolution(value)) setKlingV4Resolution(value);
+  }, []);
+
+  const handleKlingV4AspectRatioChange = useCallback((value: string) => {
+    if (isKlingV4AspectRatio(value)) setKlingV4AspectRatio(value);
+  }, []);
+
+  const handleKlingV4DurationChange = useCallback((value: string) => {
+    if (isKlingV4Duration(value) && (value !== 'source' || klingV4Variant === 'edit')) setKlingV4Duration(value);
+  }, [klingV4Variant]);
 
   const handleKlingV3DurationChange = useCallback((value: string) => {
     if (isKlingV3DurationSelectionValue(value)) {
@@ -1338,21 +1376,15 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance25GenerateAudio(Boolean(value));
   }, []);
 
-  const handleFlux2MaxImageSizeChange = useCallback((value: string) => {
-    if (isFlux2MaxImageSizeSelectionValue(value)) {
-      setFlux2MaxImageSize(value);
+  const handleFlux3ImageAspectRatioChange = useCallback((value: string) => {
+    if (isFlux3ImageAspectRatio(value)) {
+      setFlux3ImageAspectRatio(value);
     }
   }, []);
 
-  const handleWan27ImageAspectRatioChange = useCallback((value: string) => {
-    if (isWan27ImageAspectRatioSelectionValue(value)) {
-      setWan27ImageAspectRatio(value);
-    }
-  }, []);
-
-  const handleWan27ImageMaxImagesChange = useCallback((value: string) => {
-    if (isWan27ImageMaxImagesSelectionValue(value)) {
-      setWan27ImageMaxImages(value);
+  const handleFlux3ImageResolutionChange = useCallback((value: string) => {
+    if (isFlux3ImageResolution(value)) {
+      setFlux3ImageResolution(value);
     }
   }, []);
 
@@ -1389,12 +1421,32 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (isGptImage25Variant(value)) setGptImage25Variant(value);
   }, []);
 
+  const handleKrea3VariantChange = useCallback((value: string) => {
+    if (isKrea3Variant(value)) setKrea3Variant(value);
+  }, []);
+
+  const handleKrea3ReasoningLevelChange = useCallback((value: string) => {
+    if (isKrea3ReasoningLevel(value)) setKrea3ReasoningLevel(value);
+  }, []);
+
   const handleGptImage25BackgroundChange = useCallback((value: string) => {
     if (isGptImage25Background(value)) setGptImage25Background(value);
   }, []);
 
   const handleGptImage25QualityChange = useCallback((value: string) => {
     if (isGptImage25Quality(value)) setGptImage25Quality(value);
+  }, []);
+  const handleGrokImageAspectRatioChange = useCallback((value: string) => {
+    if (isGrokImageAspectRatio(value)) setGrokImageAspectRatio(value);
+  }, []);
+  const handleGrokImageResolutionChange = useCallback((value: string) => {
+    if (isGrokImageResolution(value)) setGrokImageResolution(value);
+  }, []);
+  const handleGrokImageQualityChange = useCallback((value: string) => {
+    if (isGrokImageQuality(value)) setGrokImageQuality(value);
+  }, []);
+  const handleGrokImageOutputFormatChange = useCallback((value: string) => {
+    if (isGrokImageOutputFormat(value)) setGrokImageOutputFormat(value);
   }, []);
   const handleIdeogram45QualityChange = useCallback((value: string) => {
     if (isIdeogram45Quality(value)) {
@@ -1417,18 +1469,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const handleGptImage2QualityChange = useCallback((value: string) => {
     if (isGptImage2QualitySelectionValue(value)) {
       setGptImage2Quality(value);
-    }
-  }, []);
-
-  const handleKrea2AspectRatioChange = useCallback((value: string) => {
-    if (isKrea2AspectRatioSelectionValue(value)) {
-      setKrea2AspectRatio(value);
-    }
-  }, []);
-
-  const handleKrea2CreativityChange = useCallback((value: string) => {
-    if (isKrea2CreativitySelectionValue(value)) {
-      setKrea2Creativity(value);
     }
   }, []);
 
@@ -1490,8 +1530,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (generation.provider === 'google') {
       return true; // Google has no Fal controls to restore.
     }
-    if (isUnavailableLegacyTransferModelId(generation.modelId)) {
-      return false; // Removed Kling and Wan models require an explicit new model choice.
+    if (isUnavailableLegacyTransferModelId(generation.modelId) || isRetiredVideoModelId(generation.modelId)) {
+      return false; // Retired models require an explicit new model choice.
     }
 
     const normalizedModelId = normalizeFalModelId(resolveGenerationTransferModelId(generation));
@@ -1516,15 +1556,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
 
     applyGenerationTransferOptions(options, {
       imageSizeSelection: setFalImageSizeSelection,
-      aspectRatioSelection: value => {
-        if (isKrea2LargeModelId(normalizedModelId) && isKrea2AspectRatioSelectionValue(value)) {
-          setKrea2AspectRatio(value); // Krea owns a dedicated aspect-ratio picker.
-          return;
-        }
-        setFalAspectRatioSelection(value);
-      },
+      aspectRatioSelection: setFalAspectRatioSelection,
       resolutionSelection: setFalResolutionSelection,
-      flux2MaxImageSize: setFlux2MaxImageSize,
+      flux3ImageAspectRatio: setFlux3ImageAspectRatio,
+      flux3ImageResolution: setFlux3ImageResolution,
       nanoBananaWebSearch: setNanoBananaWebSearch,
       nanoBananaThinkingLevel: setNanoBananaThinkingLevel,
       gptImage2Quality: setGptImage2Quality,
@@ -1533,7 +1568,14 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       ideogram45EditPrecision: value => setIdeogram45Settings(prev => ({ ...prev, editPrecision: value })),
       gptImage25Background: setGptImage25Background,
       gptImage25Variant: setGptImage25Variant,
-      krea2Creativity: setKrea2Creativity,
+      krea3Variant: setKrea3Variant,
+      krea3ReasoningLevel: setKrea3ReasoningLevel,
+      grokImageAspectRatio: setGrokImageAspectRatio,
+      grokImageResolution: setGrokImageResolution,
+      grokImageQuality: setGrokImageQuality,
+      grokImageOutputFormat: setGrokImageOutputFormat,
+      grokImagePassthrough: setGrokImagePassthrough,
+      grokImageEnableSafetyChecker: setGrokImageEnableSafetyChecker,
       numImages: value => setFalNumImages(
         Math.min(getFalNumImageMaxForModel(normalizedModelId), Math.max(1, Math.floor(value))),
       ), // Respect the restored model's output cap.
@@ -1542,6 +1584,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       creativity: value => setFalCreativity(Math.min(10, Math.max(0, value))),
       videoDuration: setFalVideoDuration,
       klingVariant: setKlingVariant,
+      klingV4Variant: setKlingV4Variant,
+      klingV4Resolution: setKlingV4Resolution,
+      klingV4AspectRatio: setKlingV4AspectRatio,
+      klingV4Duration: setKlingV4Duration,
       klingV3Duration: setKlingV3Duration,
       klingV3GenerateAudio: setKlingV3GenerateAudio,
       klingV3CfgScale: setKlingV3CfgScale,
@@ -1620,8 +1666,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       recraftImageSize: setRecraftImageSize,
       recraftBackgroundColor: value => setRecraftBackgroundColor({ ...value }),
       recraftColors: value => setRecraftColors(value.map(color => ({ ...color }))),
-      wan27ImageAspectRatio: setWan27ImageAspectRatio,
-      wan27ImageMaxImages: setWan27ImageMaxImages,
     }); // Each restorable control names its setter once; the shared walker skips options the metadata omits.
 
     return true; // The supported model and every saved visible control are now restored.
@@ -1633,6 +1677,19 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     falImageModelId,
     falVideoModelId,
     falVideoDuration,
+    klingV4Variant,
+    klingV4Resolution,
+    klingV4AspectRatio,
+    klingV4Duration,
+    setKlingV4Variant,
+    setKlingV4Resolution,
+    setKlingV4AspectRatio,
+    setKlingV4Duration,
+    handleKlingV4VariantChange,
+    handleKlingV4ResolutionChange,
+    handleKlingV4AspectRatioChange,
+    handleKlingV4DurationChange,
+    isKlingV4VideoModel,
     klingVariant,
     klingV3Duration,
     klingV3GenerateAudio,
@@ -1709,9 +1766,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     jimengMultiframeDuration,
     jimengMultiframeResolution,
     jimengSessionId,
-    flux2MaxImageSize,
-    wan27ImageAspectRatio,
-    wan27ImageMaxImages,
+    flux3ImageAspectRatio,
+    flux3ImageResolution,
     recraftImageSize,
     recraftBackgroundColor,
     recraftColors,
@@ -1723,12 +1779,16 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
-    krea2AspectRatio,
-    krea2Creativity,
-    isFlux2MaxModel,
-    isWan27ImageModel,
+    krea3Variant,
+    krea3ReasoningLevel,
+    grokImageAspectRatio,
+    grokImageResolution,
+    grokImageQuality,
+    grokImageOutputFormat,
+    grokImagePassthrough,
+    grokImageEnableSafetyChecker,
+    isFlux3ImageModel,
     isGptImage2Model: isGptImage2ModelSelection,
-    isKrea2LargeModel: isKrea2LargeModelSelection,
     falImageSizeSelection,
     falAspectRatioSelection,
     falResolutionSelection,
@@ -1834,9 +1894,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleSeedance25ResolutionChange,
     handleSeedance25DurationChange,
     handleSeedance25GenerateAudioChange,
-    handleFlux2MaxImageSizeChange,
-    handleWan27ImageAspectRatioChange,
-    handleWan27ImageMaxImagesChange,
+    handleFlux3ImageAspectRatioChange,
+    handleFlux3ImageResolutionChange,
     handleRecraftImageSizeChange,
     handleRecraftBackgroundColorChange,
     handleRecraftColorChange,
@@ -1850,8 +1909,14 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleIdeogram45EditPrecisionChange,
     handleGptImage25BackgroundChange,
     handleGptImage25VariantChange,
-    handleKrea2AspectRatioChange,
-    handleKrea2CreativityChange,
+    handleKrea3VariantChange,
+    handleKrea3ReasoningLevelChange,
+    handleGrokImageAspectRatioChange,
+    handleGrokImageResolutionChange,
+    handleGrokImageQualityChange,
+    handleGrokImageOutputFormatChange,
+    handleGrokImagePassthroughChange: setGrokImagePassthrough,
+    handleGrokImageEnableSafetyCheckerChange: setGrokImageEnableSafetyChecker,
     handleFalImageSizeChange,
     handleFalAspectRatioChange,
     handleFalResolutionChange,
@@ -1938,9 +2003,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setJimengMultiframeDuration,
     setJimengMultiframeResolution,
     setJimengSessionId,
-    setFlux2MaxImageSize,
-    setWan27ImageAspectRatio,
-    setWan27ImageMaxImages,
+    setFlux3ImageAspectRatio,
+    setFlux3ImageResolution,
     setRecraftImageSize,
     setRecraftBackgroundColor,
     setRecraftColors,
@@ -1948,8 +2012,6 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setGptImage25Quality,
     setGptImage25Background,
     setGptImage25Variant,
-    setKrea2AspectRatio,
-    setKrea2Creativity,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,
