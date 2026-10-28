@@ -65,7 +65,8 @@ const parseRuntimeConfigArgument = () => {
     return {};
   }
   try {
-    return JSON.parse(Buffer.from(argument.slice(prefix.length), 'base64').toString('utf8'));
+    const bytes = Uint8Array.from(atob(argument.slice(prefix.length)), character => character.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return {}; // Fall back to process env if the main-process argument is malformed.
   }
