@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import Module from 'node:module';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
@@ -46,6 +48,28 @@ afterEach(() => {
 });
 
 describe('preload desktop bridge', () => {
+  it.each([
+    [Buffer.from(JSON.stringify({ falModelId: 'model/日本語-🎨' })).toString('base64'), 'model/日本語-🎨'],
+    ['invalid%base64', undefined],
+    [Buffer.from('{invalid json').toString('base64'), undefined],
+  ])('reads runtime fallback safely without Node globals: %s', (argument, expectedModel) => {
+    const contextBridge = { exposeInMainWorld: (_name, api) => { exposedApi = api; } };
+    const ipcRenderer = { sendSync: () => undefined };
+
+    runInNewContext(readFileSync(preloadPath, 'utf8'), {
+      require: name => {
+        if (name !== 'electron') throw new Error(`Sandboxed preload cannot require ${name}`);
+        return { contextBridge, ipcRenderer };
+      },
+      process: { argv: [`--canva-banana-runtime-config=${argument}`], env: {} },
+      atob,
+      TextDecoder,
+    }); // Electron 45 provides Web APIs but no Buffer global in sandboxed preloads.
+
+    expect(exposedApi.getRuntimeConfig().falModelId).toBe(expectedModel);
+    expect(exposedApi.getRuntimeConfig().isDesktop).toBe(true);
+  });
+
   it('exposes onOpenManageKeys and removes the IPC listener on cleanup', () => {
     const ipcRenderer = {
       sendSync: vi.fn(),
