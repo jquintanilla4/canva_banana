@@ -20,7 +20,7 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
   - package-ecosystem: uv
-    directory: /apps/python-backend/backend
+    directory: /packages/runtime/python
     schedule:
       interval: weekly
     groups:
