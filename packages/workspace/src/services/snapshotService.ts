@@ -1,3 +1,7 @@
+import { isGifImage } from './gifMedia';
+import { isSvgFile, isSvgImage, normalizeImageFile } from './svgMedia';
+import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from './gptImage26RunSettings';
+import { isGptImage26Quality, isGptImage26Background, isGptImage26ReasoningEffort, isGptImage26OutputFormat } from './gptImage26Config';
 import { normalizeStoryboardSnapshot } from './storyboardSnapshot';
 import { isKrea3Variant, isKrea3ReasoningLevel } from './krea3Config';
 import { isIdeogram45Quality, isIdeogram45EditPrecision } from './ideogram45Config';
@@ -762,6 +766,7 @@ const createAudioWaveformPlaceholderDataUrl = (width: number, height: number): s
 }; // Keeps oversized audio playable without decoding it into renderer memory.
 
 const buildFallbackSnapshotImage = async (img: CanvasImage): Promise<SnapshotBinary['images'][number]> => {
+  if (isSvgImage(img) || isGifImage(img)) throw new Error(`The ${isGifImage(img) ? 'GIF' : 'SVG'} source ${img.file.name} is unreadable. Reconnect its source before saving; ${isGifImage(img) ? 'GIF' : 'SVG'} cannot be replaced by a preview.`);
   const blob = await createMediaPreviewPngBlob(img);
   const manifest = buildSnapshotImageManifest(img);
   return {
@@ -1371,7 +1376,9 @@ export const restoreSnapshotFromFile = async (
           : `snapshot-image-${index + 1}.png`;
         const mediaType = imageManifest.mediaType ?? getMediaTypeFromFileType(fileType);
 
-        const snapshotFile = createRestoredSnapshotFile(blob, fileName, fileType);
+        const retainedFile = createRestoredSnapshotFile(blob, fileName, fileType);
+        const snapshotFile = mediaType === 'image' && isSvgFile(retainedFile)
+          ? await normalizeImageFile(await ensureRealSnapshotFile(retainedFile)) : retainedFile;
         // Audio snapshots are stored as blobs but must be rehydrated as waveform images.
         if (mediaType === 'audio') {
           const objectUrl = getSnapshotMediaObjectUrl(blob);
@@ -1386,7 +1393,9 @@ export const restoreSnapshotFromFile = async (
         const objectUrl = getSnapshotMediaObjectUrl(blob);
         const savedNaturalWidth = getPositiveSnapshotDimension(imageManifest.naturalWidth, getPositiveSnapshotDimension(imageManifest.width)); // Legacy snapshots fall back to display width.
         const savedNaturalHeight = getPositiveSnapshotDimension(imageManifest.naturalHeight, getPositiveSnapshotDimension(imageManifest.height)); // Legacy snapshots fall back to display height.
-        const element = objectUrl && mediaType === 'video'
+        const element = mediaType === 'image' && isSvgFile(snapshotFile)
+          ? await loadMediaFromBlob(snapshotFile, 'image')
+          : objectUrl && mediaType === 'video'
           ? createLazyVideoFromUrl(objectUrl, savedNaturalWidth, savedNaturalHeight)
           : objectUrl
           ? await loadMediaFromUrl(objectUrl, mediaType)
@@ -1468,7 +1477,7 @@ export const restoreSnapshotFromFile = async (
           : `snapshot-image-${index + 1}.png`;
         // V1 snapshots store audio as data URLs; rebuild waveform + audio elements.
         if (mediaType === 'audio') {
-          const snapshotFile = await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType);
+          const snapshotFile = await normalizeImageFile(await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType));
           return restoreAudioImage({
             img: img as SerializedCanvasImageV1,
             file: snapshotFile,
@@ -1484,7 +1493,7 @@ export const restoreSnapshotFromFile = async (
           element.playsInline = true;
         }
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
-        const snapshotFile = await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType);
+        const snapshotFile = await normalizeImageFile(await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType));
         const width = typeof (img as SerializedCanvasImageV1).width === 'number' ? (img as SerializedCanvasImageV1).width : naturalWidth;
         const height = typeof (img as SerializedCanvasImageV1).height === 'number' ? (img as SerializedCanvasImageV1).height : naturalHeight;
         const rawMetadata = (img as SerializedCanvasImageV1).metadata as CanvasImage['metadata'] | undefined;
@@ -1761,6 +1770,15 @@ export const normalizeSnapshotImageMetadata = (
       }
       if (isFlux3ImageAspectRatio(typed.flux3ImageAspectRatio)) normalizedOptions.flux3ImageAspectRatio = typed.flux3ImageAspectRatio;
       if (isFlux3ImageResolution(typed.flux3ImageResolution)) normalizedOptions.flux3ImageResolution = typed.flux3ImageResolution;
+      if (isGptImage26Quality(typed?.gptImage26Quality)) normalizedOptions.gptImage26Quality = typed.gptImage26Quality;
+      if (isGptImage26Background(typed?.gptImage26Background)) normalizedOptions.gptImage26Background = typed.gptImage26Background;
+      if (isGptImage26ReasoningEffort(typed?.gptImage26ReasoningEffort)) normalizedOptions.gptImage26ReasoningEffort = typed.gptImage26ReasoningEffort;
+      if (isGptImage26OutputFormat(typed?.gptImage26OutputFormat)) normalizedOptions.gptImage26OutputFormat = typed.gptImage26OutputFormat;
+      if (typed.gptImage26OutputFormat === 'gif') {
+        const animation = serializeGptImage26GenerationOptions(resolveGptImage26RunSettings({ kind: kind === 'image_edit' ? 'image_edit' : 'text_to_image', outputFormat: 'gif', frameCount: typed.gptImage26FrameCount, frameDurationMs: typed.gptImage26FrameDurationMs }, 'restore'));
+        normalizedOptions.gptImage26FrameCount = animation.gptImage26FrameCount;
+        normalizedOptions.gptImage26FrameDurationMs = animation.gptImage26FrameDurationMs;
+      }
       if (isGptImage25Variant(typed?.gptImage25Variant)) {
         normalizedOptions.gptImage25Variant = typed.gptImage25Variant;
       }

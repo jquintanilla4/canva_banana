@@ -58,6 +58,7 @@ interface ToolbarProps {
   onDownload: () => void;
   selectedMediaCount: number;
   downloadProgress: CanvasMediaDownloadProgress | null;
+  hasSelectedSvg?: boolean;
   isObjectSelected: boolean;
   onDelete: () => void;
   onRemoveBackground: () => void;
@@ -156,6 +157,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onDownload,
   selectedMediaCount,
   downloadProgress,
+  hasSelectedSvg = false,
   isObjectSelected,
   onDelete,
   onRemoveBackground,
@@ -481,6 +483,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       )}
 
       <div className="flex h-full items-center space-x-2">
+        {hasSelectedSvg && <span className="rounded border border-indigo-400/40 px-1.5 py-0.5 text-xs text-indigo-200" aria-label="Selected SVG vector image">SVG</span>}
         <Tooltip label="Resize Selected Image">
           <button
             onClick={onResize}

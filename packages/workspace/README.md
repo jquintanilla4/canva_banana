@@ -46,18 +46,22 @@ The callback receives null on teardown; save work before unmounting. Promise-ret
 
 | Operation | Contract |
 | --- | --- |
-| `loadMedia(file, { prompt })` | Replace the canvas with one still image and its prompt. Video/audio still work through the normal canvas upload controls. Invalidates older host loads and detaches the previous snapshot/autosave destination so a shot edit cannot overwrite an unrelated project. |
+| `loadMedia(file, { prompt })` | Replace the canvas with one image, including SVG or GIF, and its prompt. Video/audio still work through the normal canvas upload controls. Invalidates older host loads and detaches the previous snapshot/autosave destination so a shot edit cannot overwrite an unrelated project. |
 | `setPrompt(text)` | Change the generation prompt. |
 | `createCheckpoint()` | Retain an opaque, session-owned canvas/prompt checkpoint without serializing large media into JavaScript buffers. |
 | `restoreCheckpoint(token)` | Restore canvas content and prompt, clear selection, fit the view and detach the save destination. It does not restore provider controls, camera settings or a previous filesystem save target. |
 | `releaseCheckpoint(token)` | Release a checkpoint when accept/reject is finished. Current history keeps any necessary source leases until the last reference disappears. Owned playback URLs are swept on the next canvas-history change or unmount; releasing a checkpoint while the editor is idle can retain its playback buffer until then. Tokens do not survive unmount. |
-| `exportImage(type?)` | Export the first canvas image as PNG/JPEG/WebP at intrinsic resolution. This matches the existing Storyboard acceptance behavior; it is not a composite of all layers/annotations. |
+| `exportImage(request?)` | Export the first canvas image. No argument and PNG/JPEG/WebP MIME strings preserve intrinsic raster output. `"image/svg+xml"` exports an SVG source at current canvas size, crop and rotation. `{ format: "image/png", geometry: "current" }` explicitly rasterizes current geometry; JPEG/WebP also work. `{ format: "original" }` returns exact original SVG or GIF bytes, including before canonical SVG crops. Raster exports of GIF use the first frame. SVG export of a raster source rejects. This is a single image, without other layers/annotations. |
 | `writeSnapshot(destination)` | Write the complete project through an async `write(chunk)` destination. Handles lazy media and preserves bounded streaming; the host owns commit/abort and final file placement. |
 | `importSnapshot(source)` | Import a File or supported range source. Host API failures reject. A host-managed import does not enable background overwrite of the input file. |
 
 For a future timeline: capture a checkpoint, load the selected shot and prompt, export/save on accept, or restore on reject; then release the checkpoint. Keep timeline entries, output paths and accept/reject UI in the consuming repository.
 
 For native integration, provide the exported `DesktopBridge` contract as `desktopBridge`. It exposes specific clipboard/file/settings operations rather than raw Electron IPC. Native file support includes streaming writes, bounded chunks, range reads, lazy media URLs, leases and backup operations. The host implements and validates those operations in its own preload/main process. The existing Canva Banana app supplies its existing bridge; the library does not take over application menus, app icons, trial policy or process lifecycle. Pass `standalone` only when the workspace owns the entire app window and native chrome.
+
+SVG sources remain vector images through resize, crop, history and snapshots. Download offers SVG at canvas geometry, original SVG, or an explicit PNG/JPEG/WebP copy; in mixed selections the choice applies only to SVG assets. Still-image generation inputs and background removal ask once for the SVG and GIF sources they actually consume. GIF conversion uses the first frame without animation. Background removal appends a PNG beside either source. External SVG resources and fonts still depend on the browser and export consumer. Unreadable SVG or GIF sources cannot be saved as preview replacements.
+
+GIF sources animate on the canvas when the browser supports native GIF `ImageDecoder`. Unsupported browsers or decode failures show the first frame and explain that animated preview is unavailable. Resize changes GIF canvas geometry while original downloads retain source dimensions and animation. Crop asks before creating a first-frame PNG beside the retained GIF. Downloads, ZIP archives, history, and snapshots preserve the original animation.
 
 ## Saved-project compatibility
 

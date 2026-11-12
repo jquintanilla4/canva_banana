@@ -27,6 +27,11 @@ describe('Fal image response downloads', () => {
     vi.restoreAllMocks();
   });
 
+  it('does not apply a model format restriction when only a MIME fallback is supplied', async () => {
+    global.fetch = vi.fn(async () => new Response('GIF89a', { headers: { 'Content-Type': 'image/gif' } }));
+    await expect(extractInlineData('https://example.com/out.gif', undefined, { fallbackContentType: 'image/gif' })).resolves.toBe('data:image/gif;base64,R0lGODlh');
+  });
+
   it('retries transient Fal CDN responses before reading the image', async () => {
     vi.useFakeTimers();
     const cancelBadGateway = vi.fn().mockResolvedValue(undefined);

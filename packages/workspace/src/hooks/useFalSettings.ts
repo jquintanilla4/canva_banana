@@ -1,3 +1,4 @@
+import { GPT_IMAGE_26_DEFAULTS, GPT_IMAGE_26_IMAGE_SIZE_OPTIONS, isGptImage26Model, isGptImage26Quality, isGptImage26Background, isGptImage26ReasoningEffort, isGptImage26OutputFormat, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from '../services/gptImage26Config';
 import { getRuntimeConfig } from '../services/runtimeConfig';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { IDEOGRAM_45_DEFAULTS, IDEOGRAM_45_IMAGE_SIZE_OPTIONS, isIdeogram45Model, isIdeogram45Quality, isIdeogram45EditPrecision, normalizeIdeogram45Quality } from '../services/ideogram45Config';
@@ -327,6 +328,12 @@ type FalHandlers = {
   handleNanoBananaWebSearchChange: (value: string) => void;
   handleNanoBananaThinkingLevelChange: (value: string) => void;
   handleGptImage2QualityChange: (value: string) => void;
+  handleGptImage26QualityChange: (value: string) => void;
+  handleGptImage26BackgroundChange: (value: string) => void;
+  handleGptImage26ReasoningEffortChange: (value: string) => void;
+  handleGptImage26FrameCountChange: (value: string) => void;
+  handleGptImage26FrameDurationMsChange: (value: string) => void;
+  handleGptImage26OutputFormatChange: (value: string) => void;
   handleGptImage25QualityChange: (value: string) => void;
   handleIdeogram45QualityChange: (value: string) => void;
   handleIdeogram45EditPrecisionChange: (value: string) => void;
@@ -446,6 +453,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   nanoBananaWebSearch: boolean;
   nanoBananaThinkingLevel: NanoBananaThinkingLevel;
   gptImage2Quality: FalGptImage2QualitySelectionValue;
+  gptImage26Quality: GptImage26Quality;
+  gptImage26Background: GptImage26Background;
+  gptImage26ReasoningEffort: GptImage26ReasoningEffort;
+  gptImage26FrameCount: number;
+  gptImage26FrameDurationMs: number;
+  gptImage26OutputFormat: GptImage26OutputFormat;
   gptImage25Quality: GptImage25Quality;
   ideogram45Quality: Ideogram45Quality;
   ideogram45EditPrecision: Ideogram45EditPrecision;
@@ -551,6 +564,12 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setRecraftBackgroundColor: Dispatch<SetStateAction<RecraftRgbColor>>;
   setRecraftColors: Dispatch<SetStateAction<RecraftRgbColor[]>>;
   setGptImage2Quality: Dispatch<SetStateAction<FalGptImage2QualitySelectionValue>>;
+  setGptImage26Quality: Dispatch<SetStateAction<GptImage26Quality>>;
+  setGptImage26Background: Dispatch<SetStateAction<GptImage26Background>>;
+  setGptImage26ReasoningEffort: Dispatch<SetStateAction<GptImage26ReasoningEffort>>;
+  setGptImage26FrameCount: Dispatch<SetStateAction<number>>;
+  setGptImage26FrameDurationMs: Dispatch<SetStateAction<number>>;
+  setGptImage26OutputFormat: Dispatch<SetStateAction<GptImage26OutputFormat>>;
   setGptImage25Quality: Dispatch<SetStateAction<GptImage25Quality>>;
   setGptImage25Background: Dispatch<SetStateAction<GptImage25Background>>;
   setGptImage25Variant: Dispatch<SetStateAction<GptImage25Variant>>;
@@ -661,6 +680,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [nanoBananaWebSearch, setNanoBananaWebSearch] = useState<boolean>(NANO_BANANA_DEFAULTS.nanoBananaWebSearch);
   const [nanoBananaThinkingLevel, setNanoBananaThinkingLevel] = useState<NanoBananaThinkingLevel>(NANO_BANANA_DEFAULTS.nanoBananaThinkingLevel);
   const [gptImage2Quality, setGptImage2Quality] = useState<FalGptImage2QualitySelectionValue>(GPT_IMAGE_2_DEFAULTS.gptImage2Quality);
+  const [gptImage26Quality, setGptImage26Quality] = useState<GptImage26Quality>(GPT_IMAGE_26_DEFAULTS.gptImage26Quality);
+  const [gptImage26Background, setGptImage26Background] = useState<GptImage26Background>(GPT_IMAGE_26_DEFAULTS.gptImage26Background);
+  const [gptImage26ReasoningEffort, setGptImage26ReasoningEffort] = useState<GptImage26ReasoningEffort>(GPT_IMAGE_26_DEFAULTS.gptImage26ReasoningEffort);
+  const [gptImage26FrameCount, setGptImage26FrameCount] = useState<number>(GPT_IMAGE_26_DEFAULTS.gptImage26FrameCount);
+  const [gptImage26FrameDurationMs, setGptImage26FrameDurationMs] = useState<number>(GPT_IMAGE_26_DEFAULTS.gptImage26FrameDurationMs);
+  const [gptImage26OutputFormat, setGptImage26OutputFormat] = useState<GptImage26OutputFormat>(GPT_IMAGE_26_DEFAULTS.gptImage26OutputFormat);
   const [gptImage25Quality, setGptImage25Quality] = useState<GptImage25Quality>(GPT_IMAGE_25_DEFAULTS.gptImage25Quality);
   const [ideogram45Settings, setIdeogram45Settings] = useState<{ quality: Ideogram45Quality; editPrecision: Ideogram45EditPrecision }>({
     quality: IDEOGRAM_45_DEFAULTS.ideogram45Quality,
@@ -899,8 +924,9 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (falModelMode === 'video') {
       return;
     }
-    if (isKrea3Model(falModelId) || falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId)) {
+    if (isKrea3Model(falModelId) || falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId) || isGptImage26Model(falModelId)) {
       const validImageSizeOptions = isKrea3Model(falModelId) ? KREA_3_IMAGE_SIZE_OPTIONS
+        : isGptImage26Model(falModelId) ? GPT_IMAGE_26_IMAGE_SIZE_OPTIONS
         : isGptImage25Model(falModelId) ? GPT_IMAGE_25_IMAGE_SIZE_OPTIONS : GPT_IMAGE_2_IMAGE_SIZE_OPTIONS;
       if (!validImageSizeOptions.some(option => option.value === falImageSizeSelection)) {
         setFalImageSizeSelection('auto'); // GPT Image 2 defaults to auto size in the UI.
@@ -1417,6 +1443,24 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setRecraftColors(prev => prev.slice(0, Math.max(0, prev.length - 1)));
   }, []);
 
+  const handleGptImage26QualityChange = useCallback((value: string) => {
+    if (isGptImage26Quality(value)) setGptImage26Quality(value);
+  }, []);
+
+  const handleGptImage26BackgroundChange = useCallback((value: string) => {
+    if (isGptImage26Background(value)) setGptImage26Background(value);
+  }, []);
+
+  const handleGptImage26ReasoningEffortChange = useCallback((value: string) => {
+    if (isGptImage26ReasoningEffort(value)) setGptImage26ReasoningEffort(value);
+  }, []);
+
+  const handleGptImage26FrameCountChange = useCallback((value: string) => { setGptImage26FrameCount(Number(value)); }, []);
+  const handleGptImage26FrameDurationMsChange = useCallback((value: string) => { setGptImage26FrameDurationMs(Number(value)); }, []);
+  const handleGptImage26OutputFormatChange = useCallback((value: string) => {
+    if (isGptImage26OutputFormat(value)) setGptImage26OutputFormat(value);
+  }, []);
+
   const handleGptImage25VariantChange = useCallback((value: string) => {
     if (isGptImage25Variant(value)) setGptImage25Variant(value);
   }, []);
@@ -1554,6 +1598,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       return false; // Keep current settings intact when the model type is invalid.
     }
 
+    if (isGptImage26Model(normalizedModelId) && options.gptImage26OutputFormat !== 'gif') {
+      setGptImage26FrameCount(GPT_IMAGE_26_DEFAULTS.gptImage26FrameCount);
+      setGptImage26FrameDurationMs(GPT_IMAGE_26_DEFAULTS.gptImage26FrameDurationMs);
+    }
     applyGenerationTransferOptions(options, {
       imageSizeSelection: setFalImageSizeSelection,
       aspectRatioSelection: setFalAspectRatioSelection,
@@ -1563,6 +1611,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       nanoBananaWebSearch: setNanoBananaWebSearch,
       nanoBananaThinkingLevel: setNanoBananaThinkingLevel,
       gptImage2Quality: setGptImage2Quality,
+      gptImage26Quality: setGptImage26Quality,
+      gptImage26Background: setGptImage26Background,
+      gptImage26ReasoningEffort: setGptImage26ReasoningEffort,
+      gptImage26FrameCount: setGptImage26FrameCount,
+      gptImage26FrameDurationMs: setGptImage26FrameDurationMs,
+      gptImage26OutputFormat: setGptImage26OutputFormat,
       gptImage25Quality: setGptImage25Quality,
       ideogram45Quality: value => setIdeogram45Settings(prev => ({ ...prev, quality: value })),
       ideogram45EditPrecision: value => setIdeogram45Settings(prev => ({ ...prev, editPrecision: value })),
@@ -1774,6 +1828,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     nanoBananaWebSearch,
     nanoBananaThinkingLevel,
     gptImage2Quality,
+    gptImage26Quality,
+    gptImage26Background,
+    gptImage26ReasoningEffort,
+    gptImage26FrameCount,
+    gptImage26FrameDurationMs,
+    gptImage26OutputFormat,
     gptImage25Quality,
     ideogram45Quality,
     ideogram45EditPrecision,
@@ -1904,6 +1964,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleNanoBananaWebSearchChange,
     handleNanoBananaThinkingLevelChange,
     handleGptImage2QualityChange,
+    handleGptImage26QualityChange,
+    handleGptImage26BackgroundChange,
+    handleGptImage26ReasoningEffortChange,
+    handleGptImage26FrameCountChange,
+    handleGptImage26FrameDurationMsChange,
+    handleGptImage26OutputFormatChange,
     handleGptImage25QualityChange,
     handleIdeogram45QualityChange,
     handleIdeogram45EditPrecisionChange,
@@ -2009,6 +2075,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setRecraftBackgroundColor,
     setRecraftColors,
     setGptImage2Quality,
+    setGptImage26Quality,
+    setGptImage26Background,
+    setGptImage26ReasoningEffort,
+    setGptImage26FrameCount,
+    setGptImage26FrameDurationMs,
+    setGptImage26OutputFormat,
     setGptImage25Quality,
     setGptImage25Background,
     setGptImage25Variant,

@@ -1,3 +1,5 @@
+import { buildGptImage26Controls } from './promptBar/gptImage26Controls';
+import { isGptImage26Model, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from './gptImage26Config';
 import { getNanoBananaAspectRatioOptionsForProvider } from './nanoBananaAspectRatioPolicy';
 import { buildKrea3Controls } from './promptBar/krea3Controls';
 import { isKrea3Model, type Krea3Variant, type Krea3ReasoningLevel } from './krea3Config';
@@ -874,9 +876,16 @@ export type PromptBarControlsInput = {
   nanoBananaWebSearch?: boolean;
   nanoBananaThinkingLevel?: NanoBananaThinkingLevel;
   gptImage2Quality?: FalGptImage2QualitySelectionValue;
+  gptImage26Quality?: GptImage26Quality;
+  gptImage26Background?: GptImage26Background;
+  gptImage26ReasoningEffort?: GptImage26ReasoningEffort;
+  gptImage26FrameCount?: number;
+  gptImage26FrameDurationMs?: number;
+  gptImage26OutputFormat?: GptImage26OutputFormat;
   gptImage25Quality?: GptImage25Quality;
   ideogram45Quality?: Ideogram45Quality;
   ideogram45EditPrecision?: Ideogram45EditPrecision;
+  gptImage26IsEditing?: boolean;
   ideogram45IsEditing?: boolean;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
@@ -986,6 +995,12 @@ export type PromptBarControlsInput = {
   onNanoBananaWebSearchChange?: (value: string) => void;
   onNanoBananaThinkingLevelChange?: (value: string) => void;
   onGptImage2QualityChange?: (value: string) => void;
+  onGptImage26QualityChange?: (value: string) => void;
+  onGptImage26BackgroundChange?: (value: string) => void;
+  onGptImage26ReasoningEffortChange?: (value: string) => void;
+  onGptImage26FrameCountChange?: (value: string) => void;
+  onGptImage26FrameDurationMsChange?: (value: string) => void;
+  onGptImage26OutputFormatChange?: (value: string) => void;
   onGptImage25QualityChange?: (value: string) => void;
   onIdeogram45QualityChange?: (value: string) => void;
   onIdeogram45EditPrecisionChange?: (value: string) => void;
@@ -1130,9 +1145,16 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     recraftColors,
     nanoBananaWebSearch, nanoBananaThinkingLevel, onNanoBananaWebSearchChange, onNanoBananaThinkingLevelChange,
     gptImage2Quality,
+    gptImage26Quality,
+    gptImage26Background,
+    gptImage26ReasoningEffort,
+    gptImage26FrameCount,
+    gptImage26FrameDurationMs,
+    gptImage26OutputFormat,
     gptImage25Quality,
     ideogram45Quality,
     ideogram45EditPrecision,
+    gptImage26IsEditing = false,
     ideogram45IsEditing = false,
     gptImage25Background,
     gptImage25Variant,
@@ -1233,6 +1255,12 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onRecraftAddColor,
     onRecraftRemoveColor,
     onGptImage2QualityChange = () => undefined,
+    onGptImage26QualityChange = () => undefined,
+    onGptImage26BackgroundChange = () => undefined,
+    onGptImage26ReasoningEffortChange = () => undefined,
+    onGptImage26FrameCountChange = () => undefined,
+    onGptImage26FrameDurationMsChange = () => undefined,
+    onGptImage26OutputFormatChange = () => undefined,
     onGptImage25QualityChange = () => undefined,
     onIdeogram45QualityChange = () => undefined,
     onIdeogram45EditPrecisionChange = () => undefined,
@@ -2007,6 +2035,19 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     });
   }
 
+  const isGptImage26 = !isVideoMode && isGptImage26Model(falModelId);
+  const gptImage26SvgOutput = isGptImage26 && !gptImage26IsEditing && gptImage26OutputFormat === 'svg';
+  if (apiProvider === 'fal' && isGptImage26) {
+    controls.push(...buildGptImage26Controls({
+      isLoading, isEditing: gptImage26IsEditing, quality: gptImage26Quality, background: gptImage26Background,
+      frameCount: gptImage26FrameCount, onFrameCountChange: onGptImage26FrameCountChange,
+      frameDurationMs: gptImage26FrameDurationMs, onFrameDurationMsChange: onGptImage26FrameDurationMsChange,
+      reasoningEffort: gptImage26ReasoningEffort, outputFormat: gptImage26OutputFormat,
+      imageSizeSelection: falImageSizeSelection, onSizeChange: onFalImageSizeChange,
+      onQualityChange: onGptImage26QualityChange, onBackgroundChange: onGptImage26BackgroundChange,
+      onReasoningEffortChange: onGptImage26ReasoningEffortChange, onOutputFormatChange: onGptImage26OutputFormatChange,
+    }));
+  }
   const isGptImage25 = !isVideoMode && isGptImage25Model(falModelId);
   const isIdeogram45 = !isVideoMode && isIdeogram45Model(falModelId);
   if (apiProvider === 'fal' && !isVideoMode && isKrea3Model(falModelId)) {
@@ -2068,7 +2109,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isGptImage2Model || isGptImage25 || isIdeogram45);
+    && (isSeedreamModel || isNanoBananaModel || isGptImage2Model || isGptImage25 || isGptImage26 || isIdeogram45);
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
@@ -2077,9 +2118,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       prefixLabel: isSeedreamV5Lite || isSeedreamV5Pro ? 'Images' : (isGrokImagineModel ? 'Num' : undefined), // Seedream 5 uses prefixed controls.
       ariaLabel: 'Select number of images to generate',
       options: falNumImageOptions.map(option => ({ value: `${option}`, label: `${option}` })),
-      value: falNumImages.toString(),
+      value: gptImage26SvgOutput ? '1' : falNumImages.toString(),
       onChange: (value: string) => onFalNumImagesChange(Number(value)),
-      disabled: isLoading,
+      disabled: isLoading || gptImage26SvgOutput,
       errorMessage: shouldValidateFalOptions && isNumImagesInvalid ? `Num images must be between 1 and ${falNumImageMax}.` : undefined,
     });
   }

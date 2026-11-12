@@ -1,3 +1,4 @@
+import type { ImageExportFormat, ImageExportRequest } from './services/imageOperations';
 import type { ReactNode } from 'react';
 import type { WorkspaceRuntimeOptions } from './services/runtimeConfig';
 import type { SnapshotStreamingWritable, SnapshotByteSource } from './services/snapshotService';
@@ -12,7 +13,7 @@ export interface WorkspaceHandle {
   createCheckpoint: () => Promise<WorkspaceCheckpoint>;
   restoreCheckpoint: (checkpoint: WorkspaceCheckpoint) => void;
   releaseCheckpoint: (checkpoint: WorkspaceCheckpoint) => void;
-  exportImage: (type?: 'image/png' | 'image/jpeg' | 'image/webp') => Promise<Blob>;
+  exportImage: (request?: ImageExportFormat | ImageExportRequest) => Promise<Blob>;
   writeSnapshot: (destination: SnapshotStreamingWritable) => Promise<void>;
   importSnapshot: (source: SnapshotByteSource) => Promise<void>;
 }

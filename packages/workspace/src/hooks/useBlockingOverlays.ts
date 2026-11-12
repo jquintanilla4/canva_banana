@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import type { SvgDownloadFormat } from '../services/imageOperations';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebugLogState } from './useDebugLogState';
 
 export type AppBlockingOverlay = 'backups' | 'desktopSettings' | 'desktopAppIcon';
@@ -8,6 +9,16 @@ export type AppBlockingOverlay = 'backups' | 'desktopSettings' | 'desktopAppIcon
 // The debug log panel lives here too because opening it must close the others and
 // opening any other overlay must close it.
 export function useBlockingOverlays() {
+  const [isImageExportOpen, setIsImageExportOpen] = useState(false);
+  const pendingExport = useRef<((format: SvgDownloadFormat | null) => void) | null>(null);
+  const resolveSvgExportFormat = useCallback((format: SvgDownloadFormat | null) => {
+    const resolve = pendingExport.current;
+    pendingExport.current = null;
+    setIsImageExportOpen(false);
+    resolve?.(format);
+  }, []);
+  const cancelSvgExportFormat = useCallback(() => resolveSvgExportFormat(null), [resolveSvgExportFormat]);
+  useEffect(() => () => { pendingExport.current?.(null); pendingExport.current = null; }, []);
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [isBackupsOpen, setIsBackupsOpen] = useState(false);
   const [isDesktopSettingsOpen, setIsDesktopSettingsOpen] = useState(false);
@@ -15,11 +26,12 @@ export function useBlockingOverlays() {
   const [desktopSettingsMode, setDesktopSettingsMode] = useState<'onboarding' | 'manage'>('manage'); // Auto-open hides advanced setup fields.
 
   const closeAppOwnedBlockingOverlays = useCallback(() => {
+    resolveSvgExportFormat(null);
     setIsFileMenuOpen(false);
     setIsBackupsOpen(false);
     setIsDesktopSettingsOpen(false);
     setIsDesktopAppIconOpen(false);
-  }, []); // Keep native menu modal switches single-dialog.
+  }, [resolveSvgExportFormat]);
 
   const {
     isDebugLogOpen,
@@ -43,17 +55,26 @@ export function useBlockingOverlays() {
     }
   }, [closeAppOwnedBlockingOverlays, closeDebugLogPanel]); // Open one blocking modal at a time.
 
-  const hasBlockingOverlay = isFileMenuOpen || isBackupsOpen || isDesktopSettingsOpen || isDesktopAppIconOpen || isDebugLogOpen; // Overlays own focus and pointer input.
+  const requestSvgExportFormat = useCallback((): Promise<SvgDownloadFormat | null> => {
+    closeDebugLogPanel();
+    closeAppOwnedBlockingOverlays();
+    setIsImageExportOpen(true);
+    return new Promise(resolve => { pendingExport.current = resolve; });
+  }, [closeDebugLogPanel, closeAppOwnedBlockingOverlays]);
+
+  const hasBlockingOverlay = isImageExportOpen || isFileMenuOpen || isBackupsOpen || isDesktopSettingsOpen || isDesktopAppIconOpen || isDebugLogOpen; // Overlays own focus and pointer input.
 
   const closeFileMenu = useCallback(() => {
     setIsFileMenuOpen(false);
   }, []);
 
   const toggleFileMenu = useCallback(() => {
+    resolveSvgExportFormat(null);
     setIsFileMenuOpen(prev => !prev);
-  }, []);
+  }, [resolveSvgExportFormat]);
 
   return {
+    isImageExportOpen, requestSvgExportFormat, resolveSvgExportFormat, cancelSvgExportFormat,
     isFileMenuOpen,
     closeFileMenu,
     toggleFileMenu,

@@ -1,3 +1,6 @@
+import { isGifFile } from '../services/gifMedia';
+import { exportCanvasImage } from '../services/imageOperations';
+import { normalizeImageFile, isSvgFile } from '../services/svgMedia';
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import type { AppState } from './useCanvasHistory';
 import type { WorkspaceCheckpoint, WorkspaceHandle, WorkspaceProps } from '../workspaceTypes';
@@ -67,8 +70,9 @@ export const useWorkspaceApi = (options: WorkspaceApiOptions): void => {
     return {
       async loadMedia(file, settings = {}) {
         assertReady();
-        if (!file.type.startsWith('image/')) throw new Error('Host loadMedia currently accepts still images. Use canvas import for video or audio.');
+        if (!file.type.startsWith('image/') && !isSvgFile(file) && !isGifFile(file)) throw new Error('Host loadMedia currently accepts still images. Use canvas import for video or audio.');
         const request = ++operation.current;
+        file = await normalizeImageFile(file);
         const element = await loadMediaFromBlob(file, 'image');
         if (!active.current || request !== operation.current) throw new Error('Media load was superseded or the workspace closed.');
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
@@ -127,19 +131,13 @@ export const useWorkspaceApi = (options: WorkspaceApiOptions): void => {
         if (referenced) pendingReleases.current.push(checkpoint);
         else checkpoint.releases.forEach(release => void release().catch(console.error));
       },
-      async exportImage(type = 'image/png') {
+      async exportImage(request = 'image/png') {
         assertReady();
         const first = current.current.state.images[0];
         if (!first || first.mediaType !== 'image') throw new Error('The first canvas item must be an image.');
-        if (!['image/png', 'image/jpeg', 'image/webp'].includes(type)) throw new Error('Unsupported export image type.');
-        const canvas = document.createElement('canvas');
-        const size = getNaturalSize(first.element);
-        canvas.width = size.naturalWidth;
-        canvas.height = size.naturalHeight;
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Canvas export is unavailable.');
-        context.drawImage(first.element, 0, 0);
-        return new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Image export failed.')), type));
+        return exportCanvasImage(first, typeof request === 'string'
+          ? { format: request, geometry: request === 'image/svg+xml' ? 'current' : 'intrinsic' }
+          : request);
       },
       async writeSnapshot(destination) { assertReady(); return current.current.writeSnapshot(destination); },
       async importSnapshot(source) { assertReady(); operation.current += 1; return current.current.importSnapshot(source); },

@@ -1,3 +1,4 @@
+import { isGptImage26Model } from '../services/gptImage26Config';
 import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
 import type { Flux3InputKind } from '../utils/flux3';
 import type { UseFalSettingsResult } from './useFalSettings';
@@ -146,7 +147,7 @@ export const buildGenerationGuardArgs = ({
   isUpscaleModel: fal.isUpscaleModel,
   isSeedreamModel: !fal.isVideoMode && isSeedreamModelId(fal.falModelId),
   isNanoBananaModel: !fal.isVideoMode && isNanoBananaEditModelId(fal.falModelId),
-  isGptImage2Model: !fal.isVideoMode && (isGptImage2EditModelId(fal.falModelId) || isGptImage25Model(fal.falModelId)),
+  isGptImage2Model: !fal.isVideoMode && (isGptImage2EditModelId(fal.falModelId) || isGptImage25Model(fal.falModelId) || isGptImage26Model(fal.falModelId)),
   isGrokModel: !fal.isVideoMode && fal.falModelId === GROK_IMAGINE_IMAGE_MODEL_ID, // Grok text-to-image.
   isGrokImagineVideoModel: fal.isGrokImagineVideoModel,
   isKlingVideoModel: fal.isKlingVideoModel,

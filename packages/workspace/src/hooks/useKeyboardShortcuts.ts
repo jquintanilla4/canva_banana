@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { AppMode, Tool } from '../types';
 
 type KeyboardShortcutsArgs = {
+  disabled?: boolean;
   onGenerate: () => void;
   appMode: AppMode;
   onToolChange: (tool: Tool) => void;
@@ -20,6 +21,7 @@ type KeyboardShortcutsArgs = {
 };
 
 export function useKeyboardShortcuts({
+  disabled = false,
   onGenerate,
   appMode,
   onToolChange,
@@ -55,6 +57,7 @@ export function useKeyboardShortcuts({
     };
 
     const handleKeyboardShortcuts = (event: KeyboardEvent) => {
+      if (disabled) return;
       if (!isWorkspaceEventTarget(event.target)) return;
       const focusedInTextInput = isTextInput(event.target);
       const key = event.key.toLowerCase();
@@ -175,5 +178,5 @@ export function useKeyboardShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [appMode, isPresentationMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onRedo, onTogglePresentationMode, onToolChange, onUndo, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut]);
+  }, [disabled, appMode, isPresentationMode, onAdjustStrokeSize, onDelete, onGenerate, onRecordToggle, onRedo, onTogglePresentationMode, onToolChange, onUndo, onZoomToFit, onZoomToSelection, requestZoomIn, requestZoomOut]);
 }

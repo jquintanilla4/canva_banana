@@ -1,3 +1,9 @@
+import { exportCanvasImage } from '../services/imageOperations';
+import { isSvgImage } from '../services/svgMedia';
+import { isGifImage } from '../services/gifMedia';
+import { confirmRasterCopies } from '../services/stillImagePolicy';
+import { isGptImage26Model } from '../services/gptImage26Config';
+import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions, type GptImage26RunSettings } from '../services/gptImage26RunSettings';
 import { getWorkspaceSignal, workspaceFetch } from '../services/workspaceSession';
 import { isKrea3Model } from '../services/krea3Config';
 import { resolveKrea3RunSettings, serializeKrea3GenerationOptions, type Krea3RunSettings } from '../services/krea3RunSettings';
@@ -429,6 +435,7 @@ const buildStillImageFile = async (
   image: CanvasImage & { element: HTMLImageElement },
   fileNameBase: string,
 ): Promise<File> => {
+  if (isSvgImage(image) || isGifImage(image)) return exportCanvasImage(image, { format: 'image/png', geometry: 'current' });
   if ((image.rotation ?? 0) === 0) {
     return ensureRealSnapshotFile(image.file);
   }
@@ -583,6 +590,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     nanoBananaWebSearch,
     nanoBananaThinkingLevel,
     gptImage2Quality,
+    gptImage26Quality, gptImage26Background, gptImage26ReasoningEffort, gptImage26OutputFormat, gptImage26FrameDurationMs, gptImage26FrameCount,
     gptImage25Quality,
     ideogram45Quality,
     ideogram45EditPrecision,
@@ -684,7 +692,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return; // Check explicit saved ids before substitution, or the resolved model for provider-only reruns.
     }
     const falModelIdForRun: FalModelId = falModelModeForRun === 'video' ? falVideoModelIdForRun : falImageModelIdForRun;
-    const falOptionsOverride = generationOverride && (isNanoBananaEditModelId(falModelIdForRun) || isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun))
+    const falOptionsOverride = generationOverride && (isNanoBananaEditModelId(falModelIdForRun) || isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun) || isGptImage26Model(falModelIdForRun))
       ? { ...getGenerationTransferOptionDefaults(falModelIdForRun, generationOverride.falOptions ?? {}), ...generationOverride.falOptions }
       : generationOverride?.falOptions ?? {};
     const rawFalImageSizeSelection = falOptionsOverride.imageSizeSelection ?? falImageSizeSelection;
@@ -1025,6 +1033,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : falImageSizeSelectionForRun; // Seedream 5 defaults to auto_2K instead of source-matching.
     const isNanoBananaModel = !isVideoMode && isNanoBananaEditModelId(falModelIdForRun);
     const isGptImage2ModelForRun = !isVideoMode && isGptImage2EditModelId(falModelIdForRun);
+    const isGptImage26ModelForRun = !isVideoMode && isGptImage26Model(falModelIdForRun);
     const isGptImage25ModelForRun = !isVideoMode && isGptImage25Model(falModelIdForRun);
     const isIdeogram45ModelForRun = !isVideoMode && isIdeogram45Model(falModelIdForRun);
     const isKrea3ModelForRun = !isVideoMode && isKrea3Model(falModelIdForRun);
@@ -1105,11 +1114,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     let nanoBananaSettingsForRun: NanoBananaRunSettings | undefined;
     let ideogram45SettingsForRun: Ideogram45RunSettings | undefined;
     let gptImage2SettingsForRun: GptImage2RunSettings | undefined;
+    let gptImage26SettingsForRun: GptImage26RunSettings | undefined;
     let gptImage25SettingsForRun: GptImage25RunSettings | undefined;
     let krea3SettingsForRun: Krea3RunSettings | undefined;
     let grokImageSettingsForRun: GrokImageRunSettings | undefined;
     let recraftSettingsForRun: RecraftRunSettings | undefined;
-    if (usingFal && (isKrea3ModelForRun || isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun || isGrokImagineModel || isRecraftV4ProModelForRun)) {
+    if (usingFal && (isKrea3ModelForRun || isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isGrokImagineModel || isRecraftV4ProModelForRun)) {
       try {
         const commonRunInput = {
           kind: isTextToImage ? 'text_to_image' : 'image_edit',
@@ -1134,6 +1144,18 @@ export const useGeneration = (args: UseGenerationArgs) => {
         } else if (isGptImage2ModelForRun) {
           gptImage2SettingsForRun = resolveGptImage2RunSettings({
             ...commonRunInput, quality: generationOverride ? falOptionsOverride.gptImage2Quality : gptImage2Quality,
+          }, validation);
+        } else if (isGptImage26ModelForRun) {
+          const selectedFormat = generationOverride ? falOptionsOverride.gptImage26OutputFormat : gptImage26OutputFormat;
+          gptImage26SettingsForRun = resolveGptImage26RunSettings({
+            ...commonRunInput,
+            quality: generationOverride ? falOptionsOverride.gptImage26Quality : gptImage26Quality,
+            background: generationOverride ? falOptionsOverride.gptImage26Background : gptImage26Background,
+            reasoningEffort: generationOverride ? falOptionsOverride.gptImage26ReasoningEffort : gptImage26ReasoningEffort,
+            frameCount: generationOverride ? falOptionsOverride.gptImage26FrameCount : gptImage26FrameCount,
+            frameDurationMs: generationOverride ? falOptionsOverride.gptImage26FrameDurationMs : gptImage26FrameDurationMs,
+            outputFormat: !isTextToImage && selectedFormat === 'svg' ? 'png' : selectedFormat,
+            numImages: isTextToImage && selectedFormat === 'svg' ? 1 : commonRunInput.numImages,
           }, validation);
         } else if (isGptImage25ModelForRun) {
           gptImage25SettingsForRun = resolveGptImage25RunSettings({
@@ -1654,6 +1676,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
           return;
         }
 
+        const firstFrameImage = submittedPrimaryImageId ? activePrimary : null;
+        const tailFrameImage = tailFrame && isImageCanvasMedia(tailFrame) ? tailFrame : null;
+        const usedStillImages = [
+          ...(firstFrameImage ? [firstFrameImage] : []),
+          ...(tailFrameImage ? [tailFrameImage] : []),
+          ...referenceImageCanvasItems, ...multiframeCanvasItems,
+        ];
+        if (!confirmRasterCopies(usedStillImages, 'Generate video')) return;
+
         const seedanceRequestKey = buildSeedance2RequestKey({
           provider: generationProviderForRun,
           modelId: falModelIdForRun,
@@ -1708,10 +1739,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
         };
 
         try {
-          const firstFrameImageFile = activePrimary && (usesSmartPrimaryImage || usesJimengReferencePrimaryImage)
-            ? await awaitActive(async () => buildStillImageFile(activePrimary, `seedance2-first-frame-${Date.now()}`))
+          const firstFrameImageFile = firstFrameImage
+            ? await awaitActive(async () => buildStillImageFile(firstFrameImage, `seedance2-first-frame-${Date.now()}`))
             : undefined;
-          const tailFrameImage = tailFrame && isImageCanvasMedia(tailFrame) ? tailFrame : null;
           const lastFrameImageFile = tailFrameImage && localVariant === 'smart' && !isJimengMulti
             ? await awaitActive(async () => buildStillImageFile(tailFrameImage, `seedance2-last-frame-${Date.now()}`))
             : undefined;
@@ -2391,51 +2421,138 @@ export const useGeneration = (args: UseGenerationArgs) => {
               return;
             }
           }
+        }
 
-          if (isFalSeedance2VideoModelForRun) {
-            const seedanceRequestKey = buildSeedance2RequestKey({
-              provider: generationProviderForRun,
-              modelId: falModelIdForRun,
-              prompt: seedancePromptForRun,
-              variant: seedance2VariantForRun,
-              aspectRatio: seedance2AspectRatioForRun,
-              resolution: falSeedance2ResolutionForRun,
-              duration: seedance2DurationForRun,
-              generateAudio: seedance2GenerateAudioForRun,
-              cameraFixed: false,
-              primaryImageId: primaryImageIdForRun,
-              videoLastFrameImageId: videoLastFrameImageIdForRun,
-              referenceImageIds: referenceImageIdsForRun,
-              referenceVideoIds: referenceVideoIdsForRun,
-              referenceAudioIds: referenceAudioIdsForRun,
-              images,
-            });
-
-            if (!confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
-              return;
-            }
+        const videoSourceImage = ((isFalSeedance2VideoModelForRun || isFalSeedance25VideoModelForRun || isMiniMaxH3VideoModelForRun || isFlux3KeyframesModeForRun || isKlingV4VideoModelForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
+          ? null
+          : (isWanAnimateVideoModel || isKlingV3ControlVideoModel || isScailVideoModel)
+            ? activePrimary?.element as HTMLImageElement
+            : (isKlingO3VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) ? null : (activePrimary?.element as HTMLImageElement | undefined) ?? null;
+        const referenceImageCanvasItemsForRun = isSeedance2ReferenceModeForRun || isSeedance25ReferenceModeForRun || isMiniMaxH3ReferenceModeForRun ? seedanceReferenceImageCanvasItems
+          : (isMultimodalReferenceModeForRun || isKlingV4EditModeForRun || isKlingO3VideoModel || isWan27ReferenceModeForRun || isWan27EditModeForRun) ? referenceImageIdsForRun
+          .map(id => images.find(img => img.id === id))
+          .filter(isImageCanvasMedia) : [];
+        const referenceImagesForRun = referenceImageCanvasItemsForRun.map(image => image.element);
+        const elementImageCanvasItemsForRun = isKlingO3VideoModel ? elementImageIdsForRun
+          .map(id => images.find(img => img.id === id))
+          .filter(isImageCanvasMedia) : [];
+        const elementImagesForRun = elementImageCanvasItemsForRun.map(image => image.element);
+        if (isFlux3KeyframesModeForRun && referenceImagesForRun.length !== referenceImageIdsForRun.length) {
+          const message = 'Flux 3 Keyframes supports still images only.';
+          failQueuedJob(message);
+          setError(message);
+          return;
+        }
+        if (isKlingO3VideoModel) {
+          if (referenceImagesForRun.length !== referenceImageIdsForRun.length) {
+            const message = 'Reference images must be still images.';
+            failQueuedJob(message);
+            setError(message);
+            return;
           }
-          if (isFalSeedance25VideoModelForRun) {
-            const seedanceRequestKey = buildSeedance2RequestKey({
-              provider: generationProviderForRun,
-              modelId: falModelIdForRun,
-              prompt: seedancePromptForRun,
-              variant: seedance25VariantForRun,
-              aspectRatio: seedance25AspectRatioForRun,
-              resolution: seedance25ResolutionForRun,
-              duration: seedance25DurationForRun,
-              generateAudio: seedance25GenerateAudioForRun,
-              cameraFixed: false,
-              primaryImageId: primaryImageIdForRun,
-              videoLastFrameImageId: videoLastFrameImageIdForRun,
-              referenceImageIds: referenceImageIdsForRun,
-              referenceVideoIds: referenceVideoIdsForRun,
-              referenceAudioIds: referenceAudioIdsForRun,
-              images,
-            });
-            if (!confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
-              return;
-            }
+          if (elementImagesForRun.length !== elementImageIdsForRun.length) {
+            const message = 'Element images must be still images.';
+            failQueuedJob(message);
+            setError(message);
+            return;
+          }
+          const maxSupportImages = getMaxReferenceImages(falModelIdForRun);
+          const totalImageCount = referenceImagesForRun.length + elementImagesForRun.length;
+          if (totalImageCount > maxSupportImages) {
+            const message = `Kling O3 Video ${isKlingO3EditMode ? 'Edit' : 'Reference'} supports up to 4 images total (references + elements).`;
+            failQueuedJob(message);
+            setError(message);
+            return;
+          }
+        }
+        if (isWan27ReferenceModeForRun && referenceImagesForRun.length !== referenceImageIdsForRun.length) {
+          const message = 'Wan 2.7 image references must be still images.';
+          failQueuedJob(message);
+          setError(message);
+          return;
+        }
+        if (isWan27EditModeForRun) {
+          if (referenceImagesForRun.length !== referenceImageIdsForRun.length) {
+            const message = 'Wan 2.7 Edit reference must be a still image.';
+            failQueuedJob(message);
+            setError(message);
+            return;
+          }
+          if (referenceImagesForRun.length > 1) {
+            const message = 'Wan 2.7 Edit supports one reference image.';
+            failQueuedJob(message);
+            setError(message);
+            return;
+          }
+          if (referenceVideoIdsForRun.length > 0 || referenceAudioIdsForRun.length > 0) {
+            const message = 'Wan 2.7 Edit supports one still reference image.';
+            failQueuedJob(message);
+            setError(message);
+            return;
+          }
+        }
+        let videoTailImage: (CanvasImage & { element: HTMLImageElement }) | null = null;
+        const supportsTailFrame = (isKlingV4GenerateModeForRun && !isKlingV4ReferenceModeForRun) || (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || isFlux3FflfModeForRun || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart') || (isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'smart') || (isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'standard'); // Allow end-frame input for tail-capable variants.
+        if (supportsTailFrame && videoLastFrameImageIdForRun) {
+          const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
+          if (!isImageCanvasMedia(tailFrame)) {
+            const message = 'Select a still image on the canvas to use as the ending frame.';
+            failQueuedJob(message);
+            setError(message);
+            return;
+          }
+          videoTailImage = tailFrame;
+        }
+        const videoTailImageElement = videoTailImage?.element ?? null;
+        if (!confirmRasterCopies([
+          ...(videoSourceImage && activePrimary ? [activePrimary] : []),
+          ...referenceImageCanvasItemsForRun, ...elementImageCanvasItemsForRun,
+          ...(videoTailImage ? [videoTailImage] : []),
+        ], 'Generate video')) return;
+
+        if (isFalSeedance2VideoModelForRun) {
+          const seedanceRequestKey = buildSeedance2RequestKey({
+            provider: generationProviderForRun,
+            modelId: falModelIdForRun,
+            prompt: videoPromptForRequest,
+            variant: seedance2VariantForRun,
+            aspectRatio: seedance2AspectRatioForRun,
+            resolution: falSeedance2ResolutionForRun,
+            duration: seedance2DurationForRun,
+            generateAudio: seedance2GenerateAudioForRun,
+            cameraFixed: false,
+            primaryImageId: primaryImageIdForRun,
+            videoLastFrameImageId: videoLastFrameImageIdForRun,
+            referenceImageIds: referenceImageIdsForRun,
+            referenceVideoIds: referenceVideoIdsForRun,
+            referenceAudioIds: referenceAudioIdsForRun,
+            images,
+          });
+
+          if (!confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
+            return;
+          }
+        }
+        if (isFalSeedance25VideoModelForRun) {
+          const seedanceRequestKey = buildSeedance2RequestKey({
+            provider: generationProviderForRun,
+            modelId: falModelIdForRun,
+            prompt: videoPromptForRequest,
+            variant: seedance25VariantForRun,
+            aspectRatio: seedance25AspectRatioForRun,
+            resolution: seedance25ResolutionForRun,
+            duration: seedance25DurationForRun,
+            generateAudio: seedance25GenerateAudioForRun,
+            cameraFixed: false,
+            primaryImageId: primaryImageIdForRun,
+            videoLastFrameImageId: videoLastFrameImageIdForRun,
+            referenceImageIds: referenceImageIdsForRun,
+            referenceVideoIds: referenceVideoIdsForRun,
+            referenceAudioIds: referenceAudioIdsForRun,
+            images,
+          });
+          if (!confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
+            return;
           }
         }
 
@@ -2541,15 +2658,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
         }
 
-        const videoSourceImage = ((isFalSeedance2VideoModelForRun || isFalSeedance25VideoModelForRun || isMiniMaxH3VideoModelForRun || isFlux3KeyframesModeForRun || isKlingV4VideoModelForRun) && (!activePrimary || isMultimodalReferenceModeForRun)) || isWan27ReferenceModeForRun
-          ? null
-          : (isWanAnimateVideoModel || isKlingV3ControlVideoModel || isScailVideoModel)
-            ? activePrimary?.element as HTMLImageElement
-            : (isKlingO3VideoInputMode || isFalVideoInputMode || isGrokImagineVideoEditMode) ? null : (activePrimary?.element as HTMLImageElement | undefined) ?? null;
-        const referenceImagesForRun = referenceImageIdsForRun
-          .map(id => images.find(img => img.id === id))
-          .filter(isImageCanvasMedia)
-          .map(img => img.element as HTMLImageElement);
         const klingV4ReferenceVideoFilesForRun = isKlingV4ReferenceModeForRun
           ? referenceVideoIdsForRun.map(id => images.find(image => image.id === id)!.file)
           : []; // Fal materializes restored files inside its bounded reference upload pool.
@@ -2579,76 +2687,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
               return new File([realFile], img.file.name || `seedance2-fal-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
             })))
           : [];
-        const elementImagesForRun = elementImageIdsForRun
-          .map(id => images.find(img => img.id === id))
-          .filter(isImageCanvasMedia)
-          .map(img => img.element as HTMLImageElement);
-        if (isFlux3KeyframesModeForRun && referenceImagesForRun.length !== referenceImageIdsForRun.length) {
-          const message = 'Flux 3 Keyframes supports still images only.';
-          failQueuedJob(message);
-          setError(message);
-          return;
-        }
-        if (isKlingO3VideoModel) {
-          if (referenceImagesForRun.length !== referenceImageIdsForRun.length) {
-            const message = 'Reference images must be still images.';
-            failQueuedJob(message);
-            setError(message);
-            return;
-          }
-          if (elementImagesForRun.length !== elementImageIdsForRun.length) {
-            const message = 'Element images must be still images.';
-            failQueuedJob(message);
-            setError(message);
-            return;
-          }
-          const maxSupportImages = getMaxReferenceImages(falModelIdForRun);
-          const totalImageCount = referenceImagesForRun.length + elementImagesForRun.length;
-          if (totalImageCount > maxSupportImages) {
-            const message = `Kling O3 Video ${isKlingO3EditMode ? 'Edit' : 'Reference'} supports up to 4 images total (references + elements).`;
-            failQueuedJob(message);
-            setError(message);
-            return;
-          }
-        }
-        if (isWan27ReferenceModeForRun && referenceImagesForRun.length !== referenceImageIdsForRun.length) {
-          const message = 'Wan 2.7 image references must be still images.';
-          failQueuedJob(message);
-          setError(message);
-          return;
-        }
-        if (isWan27EditModeForRun) {
-          if (referenceImagesForRun.length !== referenceImageIdsForRun.length) {
-            const message = 'Wan 2.7 Edit reference must be a still image.';
-            failQueuedJob(message);
-            setError(message);
-            return;
-          }
-          if (referenceImagesForRun.length > 1) {
-            const message = 'Wan 2.7 Edit supports one reference image.';
-            failQueuedJob(message);
-            setError(message);
-            return;
-          }
-          if (referenceVideoIdsForRun.length > 0 || referenceAudioIdsForRun.length > 0) {
-            const message = 'Wan 2.7 Edit supports one still reference image.';
-            failQueuedJob(message);
-            setError(message);
-            return;
-          }
-        }
-        let videoTailImageElement: HTMLImageElement | null = null;
-        const supportsTailFrame = (isKlingV4GenerateModeForRun && !isKlingV4ReferenceModeForRun) || (isKlingVideoModel && klingVariantForRun === 'pro') || isKlingV3VideoModel || isKlingO3ReferenceMode || isVeo31TailCapable || isFlux3FflfModeForRun || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun) || isSeedance15VideoModel || (isFalSeedance2VideoModelForRun && seedance2VariantForRun === 'smart') || (isFalSeedance25VideoModelForRun && seedance25VariantForRun === 'smart') || (isMiniMaxH3VideoModelForRun && miniMaxH3VariantForRun === 'standard'); // Allow end-frame input for tail-capable variants.
-        if (supportsTailFrame && videoLastFrameImageIdForRun) {
-          const tailFrame = images.find(img => img.id === videoLastFrameImageIdForRun);
-          if (!isImageCanvasMedia(tailFrame)) {
-            const message = 'Select a still image on the canvas to use as the ending frame.';
-            failQueuedJob(message);
-            setError(message);
-            return;
-          }
-          videoTailImageElement = tailFrame.element as HTMLImageElement;
-        }
         const videoLastFrameIdForMetadata = videoTailImageElement ? videoLastFrameImageIdForRun : null;
         const sourceAudioIdForMetadata = requiresAudioInput && sourceAudioIdForRun ? sourceAudioIdForRun : wan27AudioIdForRun; // Persist optional Wan audio too.
 
@@ -3075,9 +3113,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
     const shouldValidateFalOptions = usingFal
-      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun);
+      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isIdeogram45ModelForRun);
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
-    const resolvedImageSettings = krea3SettingsForRun ?? nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? grokImageSettingsForRun;
+    const resolvedImageSettings = krea3SettingsForRun ?? nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? gptImage26SettingsForRun ?? grokImageSettingsForRun;
     const numImagesForValidation = generationOverride && resolvedImageSettings
       ? resolvedImageSettings.numImages ?? 1 : falNumImagesForRun;
     const isNumImagesInvalid =
@@ -3110,6 +3148,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
+    const supportsEditReferenceImages = isKrea3ModelForRun || isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isIdeogram45ModelForRun || isFlux3ImageModelForRun || isGrokImagineModel;
+    const referenceCanvasImages = usingFal && !isTextToImage && !isUpscaleModel && supportsEditReferenceImages
+      ? referenceImageIdsForRun.filter(id => id !== primaryImageIdForRun)
+        .map(id => images.find(image => image.id === id)).filter(isImageCanvasMedia)
+        .slice(0, getModelReferenceCapabilities(falModelIdForRun, editToolForRun).availableReferenceSlots)
+      : [];
+    if (!isTextToImage && activePrimary && !confirmRasterCopies([activePrimary, ...referenceCanvasImages], isUpscaleModel ? 'Upscale image' : 'Edit image')) return;
+
     const falJobId = usingFal ? retryJobId ?? crypto.randomUUID() : null;
     const jobModelLabel = getFalModelLabel(falModelIdForRun);
     const upscaleDetails = usingFal && isUpscaleModel
@@ -3129,6 +3175,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
       ...(nanoBananaSettingsForRun ? serializeNanoBananaGenerationOptions(nanoBananaSettingsForRun) : {}),
       ...(gptImage2SettingsForRun ? serializeGptImage2GenerationOptions(gptImage2SettingsForRun) : {}),
+      ...(gptImage26SettingsForRun ? serializeGptImage26GenerationOptions(gptImage26SettingsForRun) : {}),
       ...(gptImage25SettingsForRun ? serializeGptImage25GenerationOptions(gptImage25SettingsForRun) : {}),
       ...(krea3SettingsForRun ? serializeKrea3GenerationOptions(krea3SettingsForRun) : {}),
       ...(grokImageSettingsForRun ? serializeGrokImageGenerationOptions(grokImageSettingsForRun) : {}),
@@ -3238,7 +3285,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             throw new Error('Unable to create Fal job identifier.');
           }
 
-          const textToImageModelId = krea3SettingsForRun?.endpoint ?? nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? grokImageSettingsForRun?.endpoint ?? recraftSettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
+          const textToImageModelId = krea3SettingsForRun?.endpoint ?? nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? gptImage26SettingsForRun?.endpoint ?? grokImageSettingsForRun?.endpoint ?? recraftSettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
             ? falModelIdForRun
             : isSeedreamModel
               ? getSeedreamTextToImageModelId(falModelIdForRun)
@@ -3268,6 +3315,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(isNanoBananaModel ? { resolution: falResolutionSelectionForRun } : {}),
             ...(nanoBananaSettingsForRun?.kind === 'text_to_image' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
             ...(gptImage2SettingsForRun?.kind === 'text_to_image' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
+            ...(gptImage26SettingsForRun?.kind === 'text_to_image' ? { gptImage26RunSettings: gptImage26SettingsForRun } : {}),
             ...(gptImage25SettingsForRun?.kind === 'text_to_image' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
             ...(krea3SettingsForRun?.kind === 'text_to_image' ? { krea3RunSettings: krea3SettingsForRun } : {}),
             ...(grokImageSettingsForRun?.kind === 'text_to_image' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
@@ -3372,17 +3420,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
               };
             }));
           } else {
-            const hasEditReferences = referenceImageIdsForRun.length > 0;
-            const supportsEditReferenceImages = isKrea3ModelForRun || isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isIdeogram45ModelForRun || isFlux3ImageModelForRun || isGrokImagineModel;
             let editReferenceImages: HTMLImageElement[] | undefined;
-            if (supportsEditReferenceImages && hasEditReferences) {
-              const maxReferenceImages = getModelReferenceCapabilities(falModelIdForRun, editToolForRun).availableReferenceSlots;
-              const referenceCanvasImages = referenceImageIdsForRun
-                .filter(id => id !== primaryImageIdForRun)
-                .map(id => images.find(img => img.id === id))
-                .filter((img): img is CanvasImage & { element: HTMLImageElement } => isImageCanvasMedia(img))
-                .slice(0, maxReferenceImages);
-
+            if (referenceCanvasImages.length > 0) {
               const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
                 if ((img.rotation ?? 0) === 0) {
                   return img.element;
@@ -3413,6 +3452,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
               ...(nanoBananaSettingsForRun?.kind === 'image_edit' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
               ...(gptImage2SettingsForRun?.kind === 'image_edit' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
+              ...(gptImage26SettingsForRun?.kind === 'image_edit' ? { gptImage26RunSettings: gptImage26SettingsForRun } : {}),
               ...(gptImage25SettingsForRun?.kind === 'image_edit' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
               ...(krea3SettingsForRun?.kind === 'image_edit' ? { krea3RunSettings: krea3SettingsForRun } : {}),
               ...(grokImageSettingsForRun?.kind === 'image_edit' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
@@ -3471,7 +3511,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const generatedImageSources = generationResult.imageDataUrls?.length
         ? generationResult.imageDataUrls
         : generatedImages.map(base64 => `${PNG_DATA_URL_PREFIX}${base64}`); // Legacy providers still return raw PNG base64.
-      const outputImageFormatPolicy = grokImageSettingsForRun ? 'preserve-original' : 'png'; // Keep Grok originals; other models retain PNG canvas files.
+      const outputImageFormatPolicy = grokImageSettingsForRun || gptImage26SettingsForRun ? 'preserve-original' : 'png';
       const addGeneratedImages = async () => {
         const newImages: CanvasImage[] = [];
         let lastBounds = images.length > 0 ? getImageBounds(images[images.length - 1]) : null;
@@ -3709,6 +3749,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     nanoBananaWebSearch,
     nanoBananaThinkingLevel,
     gptImage2Quality,
+    gptImage26Quality, gptImage26Background, gptImage26ReasoningEffort, gptImage26OutputFormat, gptImage26FrameDurationMs, gptImage26FrameCount,
     gptImage25Quality,
     ideogram45Quality,
     ideogram45EditPrecision,

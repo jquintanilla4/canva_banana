@@ -3,6 +3,8 @@ import { Tool, type CanvasImage, type CanvasImageMetadata, type CanvasNote, type
 import { CROP_HANDLE_SIZE, NOTE_PIN_BORDER, NOTE_PIN_FILL, NOTE_PIN_LABEL_FONT_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
 import { getImageBounds, getImageCenter, getImageRotation, getNotePinGeometry } from '../geometry';
 import { isVideoImage } from '../mediaGuards';
+import { isGifImage } from '../../../services/gifMedia';
+import type { GifPlayback } from './gifPlayback';
 import { beginLodFrame, endLodFrame, getLodDrawSource, type ImageLodCache } from './imageLodCache';
 import { fitTextWithinBox } from './text';
 
@@ -501,6 +503,7 @@ type DrawCanvasArgs = {
   transformMode: TransformModeState | null;
   renderCache?: CanvasRenderCache;
   imageLodCache?: ImageLodCache;
+  gifPlayback?: GifPlayback;
   audioPlaybackTimes?: Readonly<Record<string, number>>;
   isPresentationMode?: boolean;
   // True while a view gesture (pan or zoom) is in flight; expensive reconciliation (LOD
@@ -540,6 +543,7 @@ export function drawCanvas({
   transformMode,
   renderCache,
   imageLodCache,
+  gifPlayback,
   audioPlaybackTimes,
   isPresentationMode = false,
   isViewGesture = false,
@@ -600,9 +604,9 @@ export function drawCanvas({
     } else {
       // Zoomed out, the LOD cache substitutes a pre-downscaled bitmap so drawImage isn't
       // resampling the full-resolution source per item per frame.
-      const drawSource = imageLodCache
+      const drawSource = gifPlayback?.getSource(image) ?? (imageLodCache
         ? getLodDrawSource(imageLodCache, image, scale)
-        : image.element;
+        : image.element);
       ctx.drawImage(drawSource, baseX, baseY, image.width, image.height);
     }
 
@@ -629,6 +633,8 @@ export function drawCanvas({
       ctx.closePath();
       ctx.fill();
     }
+
+    if (showItemChrome && isGifImage(image)) drawCanvasBadge(ctx, 'GIF', baseX + 8 / scale, baseY + 8 / scale, scale, { fill: 'rgba(17, 24, 39, 0.85)', stroke: '#6b7280', text: '#fff' });
 
     const metadata = image.metadata;
     if (showItemTextOverlay && showMetadataOverlay && metadata && metadata.source !== 'imported') {

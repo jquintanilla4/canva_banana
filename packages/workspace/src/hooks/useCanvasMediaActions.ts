@@ -1,3 +1,7 @@
+import { type SvgDownloadFormat, cropCanvasImage } from '../services/imageOperations';
+import { isGifFile, isGifImage } from '../services/gifMedia';
+import { confirmRasterCopies, preservesOriginalImage } from '../services/stillImagePolicy';
+import { isSvgFile, isSvgImage, normalizeImageFile } from '../services/svgMedia';
 import { getWorkspaceSize } from '../services/runtimeConfig';
 import { useCallback, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type React from 'react';
@@ -22,6 +26,8 @@ type CropModeState = { imageId: string; rect: { x: number; y: number; width: num
 type TransformModeState = { imageId: string; };
 
 type UseCanvasMediaActionsArgs = {
+  requestSvgExportFormat?: () => Promise<SvgDownloadFormat | null>;
+  cancelSvgExportFormat?: () => void;
   images: CanvasImage[];
   displayedImages: CanvasImage[];
   hasSingleImageSelected: boolean;
@@ -59,6 +65,7 @@ const isImageCanvasMedia = (img: CanvasImage | null | undefined): img is CanvasI
   !!img && img.mediaType === 'image';
 
 export function useCanvasMediaActions({
+  requestSvgExportFormat, cancelSvgExportFormat,
   images,
   displayedImages,
   hasSingleImageSelected,
@@ -77,8 +84,16 @@ export function useCanvasMediaActions({
   const [transformMode, setTransformMode] = useState<TransformModeState | null>(null);
   const [isRemovingBackground, setIsRemovingBackground] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<CanvasMediaDownloadProgress | null>(null);
+  const backgroundPendingRef = useRef(false);
+  const cropPendingRef = useRef(false);
   const isDownloadingRef = useRef(false); // A ref blocks a second click before React commits the busy state.
   const downloadToastIdRef = useRef(0); // Only the latest download may expire its toast.
+
+  const committedImagesRef = useRef(images);
+  useLayoutEffect(() => {
+    committedImagesRef.current = images;
+    cancelSvgExportFormat?.();
+  }, [images, cancelSvgExportFormat]);
 
   const uploadLifetimeRef = useRef<AbortController | null>(null);
   const pendingUploadsRef = useRef(new Set<HTMLVideoElement | HTMLAudioElement>());
@@ -108,7 +123,7 @@ export function useCanvasMediaActions({
     const lifetime = uploadLifetimeRef.current;
     if (!lifetime || lifetime.signal.aborted) return;
     const mediaFiles = Array.from(files).filter(file =>
-      file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/')
+      isSvgFile(file) || isGifFile(file) || file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/')
     );
     if (mediaFiles.length === 0) return;
 
@@ -233,47 +248,53 @@ export function useCanvasMediaActions({
         }
       } else {
         // Handle image file
-        const reader = new FileReader();
-        await new Promise<void>((resolve) => {
-          reader.onload = (event) => {
-            if (lifetime.signal.aborted) { resolve(); return; }
-            const img = new Image();
-            img.onload = () => {
+        try {
+          file = await normalizeImageFile(file);
+          const reader = new FileReader();
+          await new Promise<void>((resolve) => {
+            reader.onload = (event) => {
               if (lifetime.signal.aborted) { resolve(); return; }
-              const { naturalWidth, naturalHeight } = getNaturalSize(img);
-              const displayWidth = img.width || naturalWidth;
-              const displayHeight = img.height || naturalHeight;
-              const newCanvasImage: CanvasImage = {
-                id: crypto.randomUUID(),
-                element: img,
-                mediaType: 'image',
-                x: point.x - (displayWidth / 2) + (index * 20),
-                y: point.y - (displayHeight / 2) + (index * 20),
-                width: displayWidth,
-                height: displayHeight,
-                rotation: 0,
-                naturalWidth,
-                naturalHeight,
-                file: file,
-                isPlaying: false,
-                hasAudio: false,
-                metadata: { source: 'imported' },
+              const img = new Image();
+              img.onload = () => {
+                if (lifetime.signal.aborted) { resolve(); return; }
+                const { naturalWidth, naturalHeight } = getNaturalSize(img);
+                const displayWidth = img.width || naturalWidth;
+                const displayHeight = img.height || naturalHeight;
+                const newCanvasImage: CanvasImage = {
+                  id: crypto.randomUUID(),
+                  element: img,
+                  mediaType: 'image',
+                  x: point.x - (displayWidth / 2) + (index * 20),
+                  y: point.y - (displayHeight / 2) + (index * 20),
+                  width: displayWidth,
+                  height: displayHeight,
+                  rotation: 0,
+                  naturalWidth,
+                  naturalHeight,
+                  file: file,
+                  isPlaying: false,
+                  hasAudio: false,
+                  metadata: { source: 'imported' },
+                };
+                newMedia.push(newCanvasImage);
+                lastAddedMediaId = newCanvasImage.id;
+                resolve();
               };
-              newMedia.push(newCanvasImage);
-              lastAddedMediaId = newCanvasImage.id;
-              resolve();
+              img.onerror = () => resolve();
+              img.src = event.target?.result as string;
             };
-            img.onerror = () => resolve();
-            img.src = event.target?.result as string;
-          };
-          reader.onerror = () => resolve();
-          reader.readAsDataURL(file);
-        });
+            reader.onerror = () => resolve();
+            reader.readAsDataURL(file);
+          });
+        } catch (error) {
+          setError(error instanceof Error ? error.message : 'Failed to import SVG.');
+        }
       }
 
       if (lifetime.signal.aborted) return;
       mediaProcessed++;
       if (mediaProcessed === mediaFiles.length) {
+        if (newMedia.length === 0 && mediaFiles.some(isSvgFile)) return;
         setState(prevState => ({
           ...prevState,
           images: [...prevState.images, ...newMedia],
@@ -288,7 +309,7 @@ export function useCanvasMediaActions({
     mediaFiles.forEach((file, index) => {
       processFile(file, index);
     });
-  }, [setReferenceImageIds, setSelectedImageIds, setState, setTool]);
+  }, [setError, setReferenceImageIds, setSelectedImageIds, setState, setTool]);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -310,7 +331,9 @@ export function useCanvasMediaActions({
     isDownloadingRef.current = true;
     try {
       setError(null);
-      const result = await downloadCanvasMediaSelection(selectedMedia, setDownloadProgress);
+      const svgFormat = selectedMedia.some(isSvgImage) && requestSvgExportFormat ? await requestSvgExportFormat() : undefined;
+      if (svgFormat === null) return;
+      const result = await downloadCanvasMediaSelection(selectedMedia, setDownloadProgress, { svgFormat });
       const skippedNames = result.skipped.slice(0, 3).map(item => item.fileName).join(', ');
       const skippedSuffix = result.skipped.length > 3 ? `, +${result.skipped.length - 3} more` : '';
       const successMessage = selectedMedia.length === 1
@@ -334,9 +357,10 @@ export function useCanvasMediaActions({
       isDownloadingRef.current = false;
       setDownloadProgress(null);
     }
-  }, [images, selectedImageIds, setError, setToastMessage]);
+  }, [images, requestSvgExportFormat, selectedImageIds, setError, setToastMessage]);
 
   const handleBackgroundRemoval = useCallback(async () => {
+    if (backgroundPendingRef.current) return;
     if (!hasSingleImageSelected || !primaryImageId) {
       setError('Select an image to remove its background.');
       return;
@@ -347,6 +371,10 @@ export function useCanvasMediaActions({
       return;
     }
 
+    const lifetime = uploadLifetimeRef.current;
+    if (!lifetime || lifetime.signal.aborted || !confirmRasterCopies([targetImage], 'Remove background')) return;
+    handleCommit();
+    backgroundPendingRef.current = true;
     try {
       setIsRemovingBackground(true);
       const { imageBase64 } = await removeFalBackground(targetImage.element);
@@ -359,21 +387,16 @@ export function useCanvasMediaActions({
       const width = element.width || naturalWidth;
       const height = element.height || naturalHeight;
 
-      setState(prev => ({
-        ...prev,
-        images: prev.images.map(img => img.id === targetImage.id
-          ? {
-              ...img,
-              element,
-              width,
-              height,
-              naturalWidth,
-              naturalHeight,
-              file: updatedFile,
-              metadata: { ...img.metadata, source: img.metadata?.source ?? 'derived' },
-            }
-          : img),
-      }));
+      if (lifetime.signal.aborted || !committedImagesRef.current.some(image => image.id === targetImage.id && image.file === targetImage.file)) return;
+      const derived = { ...targetImage, element, width, height, naturalWidth, naturalHeight, file: updatedFile,
+        metadata: { ...targetImage.metadata, source: 'derived' as const } };
+      if (preservesOriginalImage(targetImage)) {
+        const result = { ...derived, id: crypto.randomUUID(), x: targetImage.x + targetImage.width + 32, y: targetImage.y };
+        setState(prev => prev.images.some(image => image.id === targetImage.id && image.file === targetImage.file)
+          ? { ...prev, images: [...prev.images, result] } : prev);
+      } else {
+        setState(prev => ({ ...prev, images: prev.images.map(image => image.id === targetImage.id ? derived : image) }));
+      }
       setLiveImages(null);
       setError(null);
       setToastMessage('Background removed');
@@ -383,12 +406,12 @@ export function useCanvasMediaActions({
       const message = err instanceof Error ? err.message : 'Failed to remove background.';
       setError(message);
     } finally {
+      backgroundPendingRef.current = false;
       setIsRemovingBackground(false);
     }
-  }, [displayedImages, hasSingleImageSelected, primaryImageId, setError, setLiveImages, setState, setToastMessage]);
+  }, [displayedImages, handleCommit, hasSingleImageSelected, primaryImageId, setError, setLiveImages, setState, setToastMessage]);
 
   const handleStartCrop = useCallback((imageId: string) => {
-    handleCommit();
     const targetImage = displayedImages.find(img => img.id === imageId);
     if (!targetImage) {
       return;
@@ -397,6 +420,7 @@ export function useCanvasMediaActions({
       setError('Cropping is only available for images.');
       return;
     }
+    if (!isGifImage(targetImage)) handleCommit();
     setTransformMode(null);
     setCropMode({
       imageId,
@@ -409,63 +433,27 @@ export function useCanvasMediaActions({
     setCropMode(prev => (prev ? { ...prev, rect } : prev));
   }, []);
 
-  // Renders the selected crop into a new image/file and replaces the original.
   const handleConfirmCrop = useCallback(async () => {
-    if (!cropMode) return;
+    if (!cropMode || cropPendingRef.current) return;
     const targetImage = images.find(img => img.id === cropMode.imageId);
     if (!targetImage || !isImageCanvasMedia(targetImage)) {
       setCropMode(null);
       return;
     }
 
+    const lifetime = uploadLifetimeRef.current;
+    if (!lifetime || lifetime.signal.aborted) return;
+    const retainOriginal = isGifImage(targetImage);
+    if (retainOriginal && !confirmRasterCopies([targetImage], 'Crop image')) return;
+    if (retainOriginal) handleCommit();
+    cropPendingRef.current = true;
     try {
-      const { x, y, width, height } = cropMode.rect;
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(width));
-      canvas.height = Math.max(1, Math.round(height));
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        throw new Error('Unable to crop image.');
-      }
-
-      ctx.drawImage(targetImage.element, x, y, width, height, 0, 0, width, height);
-
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(result => {
-          if (result) {
-            resolve(result);
-          } else {
-            reject(new Error('Failed to create cropped image.'));
-          }
-        }, targetImage.file.type || 'image/png');
-      });
-
-      const element = await loadMediaFromBlob(blob, 'image');
-      const { naturalWidth, naturalHeight } = getNaturalSize(element);
-      const fileNameBase = targetImage.file?.name?.replace(/\.[^.]+$/, '') || 'image';
-      const croppedFile = new File([blob], `${fileNameBase}-cropped.png`, { type: blob.type || targetImage.file.type || 'image/png' });
-      const displayWidth = element.width || naturalWidth;
-      const displayHeight = element.height || naturalHeight;
-
-      setState(prev => ({
-        ...prev,
-        images: prev.images.map(img => img.id === targetImage.id
-          ? {
-              ...img,
-              element,
-              x: img.x + x,
-              y: img.y + y,
-              width: displayWidth,
-              height: displayHeight,
-              naturalWidth,
-              naturalHeight,
-              rotation: 0,
-              file: croppedFile,
-              metadata: { ...img.metadata, source: img.metadata?.source ?? 'derived' },
-            }
-          : img),
-      }));
-      setSelectedImageIds([targetImage.id]);
+      const cropped = await cropCanvasImage(targetImage, cropMode.rect);
+      if (lifetime.signal.aborted || !committedImagesRef.current.some(image => image.id === targetImage.id && image.file === targetImage.file)) return;
+      const result = retainOriginal ? { ...cropped, id: crypto.randomUUID(), x: targetImage.x + targetImage.width + 32, y: targetImage.y } : cropped;
+      setState(prev => !prev.images.some(image => image.id === targetImage.id && image.file === targetImage.file) ? prev : { ...prev, images: retainOriginal
+        ? [...prev.images, result] : prev.images.map(image => image.id === targetImage.id ? result : image) });
+      if (!retainOriginal) setSelectedImageIds([targetImage.id]);
       setToastMessage('Cropped image saved');
       setTimeout(() => setToastMessage(null), 2000);
     } catch (err) {
@@ -473,10 +461,11 @@ export function useCanvasMediaActions({
       const message = err instanceof Error ? err.message : 'Failed to crop image.';
       setError(message);
     } finally {
+      cropPendingRef.current = false;
       setCropMode(null);
       setLiveImages(null);
     }
-  }, [cropMode, images, setError, setLiveImages, setSelectedImageIds, setState, setToastMessage]);
+  }, [cropMode, images, handleCommit, setError, setLiveImages, setSelectedImageIds, setState, setToastMessage]);
 
   const handleCancelCrop = useCallback(() => {
     setCropMode(null);

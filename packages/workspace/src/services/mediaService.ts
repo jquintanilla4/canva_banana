@@ -1,3 +1,4 @@
+import { normalizeImageFile, SVG_MIME_TYPE } from './svgMedia';
 import { CanvasMediaType, CanvasImage } from '../types';
 import { getImageBounds, getImageRotation } from '../utils/canvasGeometry';
 
@@ -220,9 +221,25 @@ export const prepareGeneratedImage = async (
   src: string,
   formatPolicy: 'preserve-original' | 'png',
 ): Promise<{ image: HTMLImageElement; file: File }> => {
+  const sourceComma = src.indexOf(',');
+  const sourceHeader = src.slice(0, sourceComma);
+  const sourcePayload = src.slice(sourceComma + 1);
+  const sourcePrefix = /^data:/i.test(src) && sourceComma > 0
+    ? /;base64$/i.test(sourceHeader) ? atob(sourcePayload.slice(0, 512)) : decodeURIComponent(sourcePayload).slice(0, 128)
+    : '';
+  const hasSvgBytes = /^\s*</.test(sourcePrefix) || /^(?:\xef\xbb\xbf|\xff\xfe|\xfe\xff|<\0|\0<)/.test(sourcePrefix);
+  if (/^data:image\/svg\+xml(?:;[^,]*)?,/i.test(src) || hasSvgBytes) {
+    const comma = src.indexOf(',');
+    const payload = src.slice(comma + 1);
+    const bytes = /;base64$/i.test(src.slice(0, comma))
+      ? Uint8Array.from(atob(payload), character => character.charCodeAt(0))
+      : new TextEncoder().encode(decodeURIComponent(payload));
+    const file = await normalizeImageFile(new File([bytes], 'generated.svg', { type: SVG_MIME_TYPE }));
+    return { image: await loadImageFromDataUrl(src.replace(/^data:[^;,]*/i, 'data:image/svg+xml')), file };
+  }
   let image = await loadImageFromDataUrl(src);
-  const originalMimeType = formatPolicy === 'preserve-original'
-    ? /^data:(image\/(?:png|jpeg|webp));base64,/.exec(src)?.[1]
+  const originalMimeType = formatPolicy === 'preserve-original' || /^data:image\/svg\+xml[;,]/i.test(src)
+    ? /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml))(?:;[^,]*)?;base64,/i.exec(src)?.[1].toLowerCase()
     : undefined;
   const commaIndex = src.indexOf(',');
   let base64 = commaIndex === -1 ? '' : src.slice(commaIndex + 1);
@@ -253,8 +270,8 @@ export const prepareGeneratedImage = async (
   }
 
   const mimeType = originalMimeType ?? 'image/png';
-  const file = new File([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], `generated.${mimeType.split('/')[1]}`, { type: mimeType });
-  return { image, file };
+  const file = new File([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], `generated.${mimeType === 'image/svg+xml' ? 'svg' : mimeType.split('/')[1]}`, { type: mimeType });
+  return { image, file: await normalizeImageFile(file) };
 };
 
 export const dataUrlToFile = async (dataUrl: string, fileName: string, fileType: string): Promise<File> => {

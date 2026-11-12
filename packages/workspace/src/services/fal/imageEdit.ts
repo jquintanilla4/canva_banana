@@ -1,3 +1,5 @@
+import { GPT_IMAGE_26_OUTPUT_MIME_TYPES, isGptImage26Model, type GptImage26OutputFormat } from '../gptImage26Config';
+import { resolveGptImage26SettingsForRequest, serializeGptImage26Input } from './gptImage';
 import { getWorkspaceSignal } from '../workspaceSession';
 import { isKrea3Model } from '../krea3Config';
 import { resolveKrea3SettingsForRequest, serializeKrea3Input } from './krea3';
@@ -76,25 +78,28 @@ export const generateImageEdit = async (
 
   const gptImage2Settings = isGptImage2EditModelId(selectedModelId) || isGptImage2TextToImageModelId(selectedModelId)
     ? resolveGptImage2SettingsForRequest('image_edit', options) : undefined;
+  const gptImage26Settings = isGptImage26Model(selectedModelId)
+    ? resolveGptImage26SettingsForRequest('image_edit', options) : undefined;
   const gptImage25Settings = isGptImage25Model(selectedModelId)
     ? resolveGptImage25SettingsForRequest('image_edit', options) : undefined;
   const nanoBananaSettings = getNanoBananaSelectorModelId(selectedModelId)
     ? resolveNanoBananaSettingsForRequest('image_edit', { ...options, modelId: selectedModelId }) : undefined;
   const krea3Settings = isKrea3Model(selectedModelId) ? resolveKrea3SettingsForRequest('image_edit', options) : undefined;
-  const modelId = krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
+  const modelId = krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint ?? gptImage26Settings?.endpoint
     ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_EDIT_MODEL_ID : selectedModelId);
   const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
-    : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings) : undefined;
+    : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings)
+    : gptImage26Settings ? serializeGptImage26Input(gptImage26Settings) : undefined;
   const isIdeogram45 = isIdeogram45Model(modelId);
   const ideogram45Input = isIdeogram45 ? resolveIdeogram45EditInput(options) : undefined;
   const isGptImage25 = isGptImage25Model(modelId);
   const grokSettings = modelId === GROK_IMAGINE_IMAGE_MODEL_ID ? resolveGrokImageSettingsForRequest('image_edit', options) : undefined;
-  if (krea3Settings || isIdeogram45 || isGptImage25 || isGptImage2EditModelId(modelId) || grokSettings) {
+  if (krea3Settings || isIdeogram45 || isGptImage25 || gptImage26Settings || isGptImage2EditModelId(modelId) || grokSettings) {
     const { referenceCapacity, availableReferenceSlots } = getModelReferenceCapabilities(modelId, tool);
     if ((referenceImages?.length ?? 0) > availableReferenceSlots) {
       throw new Error(isIdeogram45
         ? `Ideogram 4.5 supports up to ${referenceCapacity} reference images. The annotation image also counts as a reference.`
-        : `${krea3Settings ? 'Krea 3' : grokSettings ? 'Grok Imagine 2.0' : isGptImage25 ? 'GPT Image 2.5' : 'GPT Image 2'} supports up to ${referenceCapacity + 1} total input images. Please reduce the number of selected images.`);
+        : `${krea3Settings ? 'Krea 3' : grokSettings ? 'Grok Imagine 2.0' : gptImage26Settings ? 'GPT Image 2.6' : isGptImage25 ? 'GPT Image 2.5' : 'GPT Image 2'} supports up to ${referenceCapacity + 1} total input images. Please reduce the number of selected images.`);
     }
   }
   const isSeedreamAnnotateSingle = tool === Tool.ANNOTATE && isSeedreamEditModelId(modelId);
@@ -117,14 +122,14 @@ export const generateImageEdit = async (
   }
 
   if (tool === Tool.ANNOTATE) {
-    const annotationCanvas = buildAnnotationCanvas(image, paths, imageDimensions);
+    const annotationCanvas = buildAnnotationCanvas(image, paths, imageDimensions, gptImage26Settings ? 'transparent' : 'composite');
     annotationImageUrl = await uploadCanvasToFal(annotationCanvas, {
       jobId: options.jobId,
       onPhaseUpdate: options.onPhaseUpdate,
       abortSignal: options.abortSignal,
       label: 'annotation image',
     });
-    imageUrls.push(annotationImageUrl);
+    if (!gptImage26Settings) imageUrls.push(annotationImageUrl);
   }
 
   if (!isFlux3ImageModel && referenceImages && referenceImages.length > 0) {
@@ -381,7 +386,8 @@ export const generateImageEdit = async (
   const body: {
     prompt: string;
     image_urls: string[];
-    output_format?: 'png';
+    output_format?: GptImage26OutputFormat;
+    markup_image_url?: string;
     sync_mode: boolean;
     image_size?: { width: number; height: number } | string;
     quality?: GptImage25Quality;
@@ -393,7 +399,8 @@ export const generateImageEdit = async (
   } = {
     prompt,
     image_urls: orderedImageUrls,
-    sync_mode: !isSeedreamModel && !isNanoBananaModel && !isGptImage2Model && !isGptImage25, // Keep queue history visible for async models.
+    ...(gptImage26Settings && annotationImageUrl ? { markup_image_url: annotationImageUrl } : {}),
+    sync_mode: !isSeedreamModel && !isNanoBananaModel && !isGptImage2Model && !isGptImage25 && !gptImage26Settings, // Keep queue history visible for async models.
   };
 
   if (!isSeedreamModel) {
@@ -500,7 +507,8 @@ export const generateImageEdit = async (
   const downloadRequestId = result?.requestId || latestRequestId; // Keep request id on download failures.
   let inlineDataList: string[] = []; // Preserve provider MIME types for canvas hydration.
   const base64List = await runFalDownloadStep(downloadRequestId, async () => {
-    inlineDataList = await Promise.all(images.map(image => extractInlineData(image.url, options.abortSignal)));
+    inlineDataList = await Promise.all(images.map(image => extractInlineData(image.url, options.abortSignal, gptImage26Settings
+      ? { fallbackContentType: image.content_type, allowedContentTypes: GPT_IMAGE_26_OUTPUT_MIME_TYPES } : undefined)));
     return inlineDataList.map(dataUrl => {
       const base64 = dataUrl.split(',')[1];
       if (!base64) {

@@ -1,3 +1,5 @@
+import { GPT_IMAGE_26_DEFAULTS, isGptImage26Model } from '../services/gptImage26Config';
+import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from '../services/gptImage26RunSettings';
 import { KREA_3_DEFAULTS, isKrea3Model } from '../services/krea3Config';
 import { resolveKrea3RunSettings, serializeKrea3GenerationOptions } from '../services/krea3RunSettings';
 import type {
@@ -183,6 +185,7 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [CRYSTAL_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, creativity: 0 } }, // Crystal defaults.
   { matches: [SEEDVR_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, noiseScale: 0.1 } }, // SeedVR defaults.
   { matches: [FLUX_3_TEXT_TO_IMAGE_MODEL_ID], defaults: restoredOptions => resolveFlux3ImageSettings(restoredOptions) },
+  { matches: (modelId) => isGptImage26Model(modelId), defaults: GPT_IMAGE_26_DEFAULTS },
   { matches: (modelId) => isGptImage25Model(modelId), defaults: GPT_IMAGE_25_DEFAULTS },
   { matches: (modelId) => isKrea3Model(modelId), defaults: KREA_3_DEFAULTS },
   { matches: (modelId) => isIdeogram45Model(modelId), defaults: IDEOGRAM_45_DEFAULTS },
@@ -303,6 +306,21 @@ export const resolveGenerationTransferOptions = (
       imageSizeSelection: resolvedOptions.imageSizeSelection,
     }, 'restore');
     return { ...resolvedOptions, ...serializeKrea3GenerationOptions(settings) };
+  }
+  if (isGptImage26Model(normalizedModelId)) {
+    const settings = resolveGptImage26RunSettings({
+      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
+      quality: resolvedOptions.gptImage26Quality, background: resolvedOptions.gptImage26Background,
+      reasoningEffort: resolvedOptions.gptImage26ReasoningEffort, outputFormat: resolvedOptions.gptImage26OutputFormat,
+      frameCount: resolvedOptions.gptImage26FrameCount, frameDurationMs: resolvedOptions.gptImage26FrameDurationMs,
+      imageSizeSelection: resolvedOptions.imageSizeSelection, numImages: resolvedOptions.numImages,
+    }, 'restore');
+    const options = { ...resolvedOptions, ...serializeGptImage26GenerationOptions(settings) };
+    if (settings.outputFormat !== 'gif') {
+      delete options.gptImage26FrameCount;
+      delete options.gptImage26FrameDurationMs;
+    }
+    return options;
   }
   if (isGptImage25Model(normalizedModelId)) {
     const settings = resolveGptImage25RunSettings({

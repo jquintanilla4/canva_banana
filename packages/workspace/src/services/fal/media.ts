@@ -159,10 +159,10 @@ export const uploadVideoToFal = async (videoFile: File, options?: FalUploadOptio
   return uploadBlobToFal(videoFile, { ...options, label: options?.label ?? 'video' });
 };
 
-const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimensions: ImageDimensions) => { // Render annotations.
+const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimensions: ImageDimensions, rendering: 'composite' | 'transparent' = 'composite') => { // Render annotations.
   const canvas = document.createElement('canvas');
-  const width = dimensions.width || baseImage.naturalWidth || baseImage.width || 1;
-  const height = dimensions.height || baseImage.naturalHeight || baseImage.height || 1;
+  const width = rendering === 'transparent' ? baseImage.naturalWidth || baseImage.width || dimensions.width || 1 : dimensions.width || baseImage.naturalWidth || baseImage.width || 1;
+  const height = rendering === 'transparent' ? baseImage.naturalHeight || baseImage.height || dimensions.height || 1 : dimensions.height || baseImage.naturalHeight || baseImage.height || 1;
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
@@ -172,7 +172,8 @@ const buildAnnotationCanvas = (baseImage: HTMLImageElement, paths: Path[], dimen
 
   const baseWidth = baseImage.naturalWidth || baseImage.width || width;
   const baseHeight = baseImage.naturalHeight || baseImage.height || height;
-  ctx.drawImage(baseImage, 0, 0, baseWidth, baseHeight);
+  if (rendering === 'composite') ctx.drawImage(baseImage, 0, 0, baseWidth, baseHeight);
+  else ctx.scale(width / (dimensions.width || width), height / (dimensions.height || height));
 
   paths.forEach(path => {
     if (path.points.length === 0) return;

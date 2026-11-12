@@ -1,3 +1,4 @@
+import { isGptImage26Model } from './gptImage26Config';
 import {
   isFalVideoModelId as isVideoModelId,
   isKrea3Model,
@@ -214,6 +215,13 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
     base: {
       referenceLimitToast: annotationReferenceToast(GROK_IMAGINE_IMAGE_MODEL_ID, 'Grok Imagine 2.0'),
     },
+  },
+  {
+    matches: (modelId) => isGptImage26Model(modelId),
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: () => ({ message: 'GPT Image 2.6 supports up to 15 reference images. Annotations use a separate markup image.', durationMs: 4000 }),
+    }),
   },
   {
     matches: (modelId) => isGptImage25Model(modelId),

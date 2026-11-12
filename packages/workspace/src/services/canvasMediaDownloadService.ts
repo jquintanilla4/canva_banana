@@ -1,3 +1,5 @@
+import { exportCanvasImage, type SvgDownloadFormat } from './imageOperations';
+import { isSvgImage } from './svgMedia';
 import { getDesktopBridge } from './runtimeConfig';
 import type { CanvasImage } from '../types';
 import {
@@ -32,6 +34,14 @@ export type CanvasMediaDownloadSkippedItem = {
 export type CanvasMediaDownloadResult = {
   downloadedCount: number;
   skipped: CanvasMediaDownloadSkippedItem[];
+};
+
+export interface CanvasMediaDownloadOptions { svgFormat?: SvgDownloadFormat }
+
+const prepareDownloadImage = async (image: CanvasImage, options: CanvasMediaDownloadOptions): Promise<CanvasImage> => {
+  if (!options.svgFormat || !isSvgImage(image)) return image;
+  const file = await exportCanvasImage(image, options.svgFormat === 'original' ? { format: 'original' } : { format: options.svgFormat, geometry: 'current' });
+  return { ...image, file };
 };
 
 type DownloadProgressCallback = (progress: CanvasMediaDownloadProgress) => void;
@@ -170,11 +180,12 @@ export const downloadCanvasMedia = async (image: CanvasImage): Promise<void> => 
 export const downloadCanvasMediaSelection = async (
   images: readonly CanvasImage[],
   onProgress?: DownloadProgressCallback,
+  options: CanvasMediaDownloadOptions = {},
 ): Promise<CanvasMediaDownloadResult> => {
   if (images.length === 0) throw new CanvasMediaDownloadError('Select media to download.');
   if (images.length === 1) {
     onProgress?.({ phase: 'preparing', completedItems: 0, totalItems: 1 });
-    await downloadCanvasMedia(images[0]);
+    await downloadCanvasMedia(await prepareDownloadImage(images[0], options));
     onProgress?.({ phase: 'saving', completedItems: 1, totalItems: 1 });
     return { downloadedCount: 1, skipped: [] };
   }
@@ -203,12 +214,15 @@ export const downloadCanvasMediaSelection = async (
       const usedNames = new Set<string>();
       let downloadedCount = 0;
 
-      for (const image of images) {
+      for (const sourceImage of images) {
+        let image = sourceImage;
         const fallbackName = getDownloadName(image);
         const defaultName = image.mediaType === 'video' ? 'video.mp4' : image.mediaType === 'audio' ? 'audio.webm' : 'download.png';
-        const baseFileName = sanitizeCanvasMediaFileName(fallbackName, defaultName);
+        let baseFileName = sanitizeCanvasMediaFileName(fallbackName, defaultName);
         let staged: StagedMedia;
         try {
+          image = await prepareDownloadImage(sourceImage, options);
+          baseFileName = sanitizeCanvasMediaFileName(getDownloadName(image), defaultName);
           staged = await stageCanvasMedia(image, tempStreams.preferred, tempStreams.fallback);
         } catch (error) {
           skipped.push({

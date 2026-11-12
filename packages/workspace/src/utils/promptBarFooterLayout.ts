@@ -7,3 +7,20 @@ export const PROMPT_BAR_FOOTER_MARGIN_BOTTOM = `${PROMPT_BAR_FOOTER_MARGIN_BOTTO
 export const PROMPT_BAR_FOOTER_PADDING = `${PROMPT_BAR_FOOTER_PADDING_REM}rem`;
 export const FLOATING_EDGE_CONTROL_BOTTOM_OFFSET = `${FLOATING_EDGE_CONTROL_BOTTOM_OFFSET_REM}rem`;
 export const FLOATING_EDGE_CONTROL_SIDE_OFFSET = `${FLOATING_EDGE_CONTROL_SIDE_OFFSET_REM}rem`;
+
+export type PromptBarFooterRect = Pick<DOMRectReadOnly, 'left' | 'right' | 'top' | 'bottom'>;
+
+export const getPromptBarFooterLiftPx = (
+  footer: PromptBarFooterRect,
+  controls: readonly PromptBarFooterRect[],
+  gapPx: number,
+): number => controls.reduce((lift, control) => (
+  control.right > control.left
+  && control.bottom > control.top
+  && footer.left < control.right
+  && footer.right > control.left
+  && footer.top < control.bottom
+  && footer.bottom > control.top
+    ? Math.max(lift, footer.bottom - control.top + gapPx)
+    : lift
+), 0);

@@ -769,3 +769,14 @@ describe('imageLodCache', () => {
     expect([...LOD_TIER_SIZES]).toEqual(sorted);
   });
 });
+
+it('keeps SVG sources sharp by bypassing both prewarm and draw bitmap caches', () => {
+  const factory = vi.fn();
+  const cache = createImageLodCache({ bitmapFactory: factory });
+  const svg = buildImage('vector', { file: new File(['svg'], 'vector.svg', { type: 'image/svg+xml' }) });
+  prewarmImageLodCache(cache, [svg]);
+  for (const scale of [0.01, 1, 10]) expect(getLodDrawSource(cache, svg, scale)).toBe(svg.element);
+  expect(factory).not.toHaveBeenCalled();
+  expect(cache.entries.size).toBe(0);
+  disposeImageLodCache(cache);
+});

@@ -1,3 +1,4 @@
+import type { GptImage26Quality, GptImage26Background, GptImage26ReasoningEffort, GptImage26OutputFormat } from './services/gptImage26Config';
 import type { GrokImageAspectRatio, GrokImageResolution, GrokImageQuality, GrokImageOutputFormat } from './services/grokImageConfig';
 
 export enum Tool {
@@ -146,6 +147,12 @@ export type GenerationFalOptions = Partial<{
   flux3ImageAspectRatio: Flux3ImageAspectRatio;
   flux3ImageResolution: Flux3ImageResolution;
   gptImage2Quality: FalGptImage2QualityOption;
+  gptImage26Quality: GptImage26Quality;
+  gptImage26Background: GptImage26Background;
+  gptImage26ReasoningEffort: GptImage26ReasoningEffort;
+  gptImage26OutputFormat: GptImage26OutputFormat;
+  gptImage26FrameCount: number;
+  gptImage26FrameDurationMs: number;
   gptImage25Variant: GptImage25Variant;
   gptImage25Background: GptImage25Background;
   gptImage25Quality: GptImage25Quality;

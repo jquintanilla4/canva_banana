@@ -1,3 +1,5 @@
+import { GPT_IMAGE_26_MODEL_ID, GPT_IMAGE_26_MAX_OUTPUT_IMAGES, GPT_IMAGE_26_NUM_IMAGE_OPTIONS, isGptImage26Model } from './gptImage26Config';
+export { GPT_IMAGE_26_MODEL_ID, isGptImage26Model } from './gptImage26Config';
 import { NANO_BANANA_PRO_EDIT_MODEL_ID, NANO_BANANA_21_EDIT_MODEL_ID, getNanoBananaSelectorModelId, NANO_BANANA_MAX_OUTPUT_IMAGES, NANO_BANANA_21_ASPECT_RATIO_OPTIONS, FAL_RESOLUTION_OPTIONS } from './nanoBananaConfig';
 export { NANO_BANANA_PRO_EDIT_MODEL_ID, NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID, NANO_BANANA_21_EDIT_MODEL_ID, NANO_BANANA_21_TEXT_TO_IMAGE_MODEL_ID, NANO_BANANA_EDIT_MODEL_IDS, NANO_BANANA_TEXT_TO_IMAGE_MAP, NANO_BANANA_TEXT_TO_IMAGE_MODEL_IDS, isNanoBananaEditModelId, isNanoBananaTextToImageModelId, getNanoBananaTextToImageModelId, FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS } from './nanoBananaConfig';
 export type { NanoBananaEditModelId } from './nanoBananaConfig';
@@ -143,6 +145,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: CRYSTAL_UPSCALER_MODEL_ID, label: 'Crystal Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
   { value: FLUX_3_TEXT_TO_IMAGE_MODEL_ID, label: 'Flux 3' },
   { value: GPT_IMAGE_2_EDIT_MODEL_ID, label: 'GPT Image 2' }, // Selector uses edit id.
+  { value: GPT_IMAGE_26_MODEL_ID, label: 'GPT Image 2.6 Sunburst' },
   { value: GPT_IMAGE_25_MODEL_ID, label: 'GPT Image 2.5' },
   { value: IDEOGRAM_45_MODEL_ID, label: 'Ideogram 4.5' },
   { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine 2.0' },
@@ -1205,6 +1208,7 @@ export const normalizeFalModelId = (value: string | undefined): FalModelId | und
   if (flux3ImageModelId) return flux3ImageModelId;
   const nanoBananaModelId = getNanoBananaSelectorModelId(value);
   if (nanoBananaModelId) return nanoBananaModelId;
+  if (isGptImage26Model(value)) return GPT_IMAGE_26_MODEL_ID;
   if (isGptImage25Model(value)) return GPT_IMAGE_25_MODEL_ID;
   if (isKlingV4VideoModel(value)) return KLING_V4_VIDEO_MODEL_ID;
   if (value === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID) return GPT_IMAGE_2_EDIT_MODEL_ID;
@@ -1298,6 +1302,7 @@ export const getFalNumImageMaxForModel = (modelId: string | undefined): number =
     : getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_MAX_OUTPUT_IMAGES
     : getNanoBananaSelectorModelId(modelId) ? NANO_BANANA_MAX_OUTPUT_IMAGES
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_MAX_OUTPUT_IMAGES
+    : isGptImage26Model(modelId) ? GPT_IMAGE_26_MAX_OUTPUT_IMAGES
     : isGptImage25Model(modelId) ? GPT_IMAGE_25_MAX_OUTPUT_IMAGES
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_MAX_OUTPUT_IMAGES
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 6 : 4;
@@ -1305,6 +1310,7 @@ export const getFalNumImageOptionsForModel = (modelId: string | undefined): Read
   getFlux3ImageSelectorModelId(modelId) || getKrea3SelectorModelId(modelId) ? [1]
     : getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_NUM_IMAGE_OPTIONS
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
+    : isGptImage26Model(modelId) ? GPT_IMAGE_26_NUM_IMAGE_OPTIONS
     : isGptImage25Model(modelId) ? GPT_IMAGE_25_NUM_IMAGE_OPTIONS
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_NUM_IMAGE_OPTIONS
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS;
@@ -1342,6 +1348,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [NANO_BANANA_PRO_EDIT_MODEL_ID]: 14,
   [NANO_BANANA_21_EDIT_MODEL_ID]: 14, // Preserve the family reference cap.
   [GPT_IMAGE_2_EDIT_MODEL_ID]: 9, // GPT Image 2 supports 10 total input images.
+  [GPT_IMAGE_26_MODEL_ID]: 15,
   [GPT_IMAGE_25_MODEL_ID]: 15, // Primary plus references must fit 16 total inputs.
   [IDEOGRAM_45_MODEL_ID]: 4, // Primary source plus four references.
   [KREA_3_MODEL_ID]: KREA_3_MAX_INPUTS - 1, // Primary plus references must fit eight total inputs.

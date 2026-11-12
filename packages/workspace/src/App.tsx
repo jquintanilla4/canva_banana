@@ -1,3 +1,4 @@
+import { isSvgImage } from './services/svgMedia';
 import { useWorkspaceApi } from './hooks/useWorkspaceApi';
 import type { WorkspaceHandle, WorkspaceProps } from './workspaceTypes';
 import React, { useState, useRef, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
@@ -314,6 +315,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     openDebugLogPanel,
     closeDebugLogPanel,
     copyLastEntry,
+    isImageExportOpen, requestSvgExportFormat, resolveSvgExportFormat, cancelSvgExportFormat,
   } = useBlockingOverlays();
   // Autosave is opt-out; user can disable it in the file menu.
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
@@ -532,6 +534,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     handleStartTransform,
     handleExitTransform,
   } = useCanvasMediaActions({
+    requestSvgExportFormat, cancelSvgExportFormat,
     images,
     displayedImages,
     hasSingleImageSelected,
@@ -552,6 +555,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const {
     isOpen: isResizeToastOpen,
     width: resizeWidth,
+    sourceSizeHint: resizeSourceSizeHint,
     height: resizeHeight,
     keepAspect: resizeKeepAspect,
     isProcessing: isResizing,
@@ -906,6 +910,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   }, [generationTick]);
 
   useKeyboardShortcuts({
+    disabled: hasBlockingOverlay,
     onGenerate: handlePromptSubmit,
     appMode,
     onToolChange: handleToolChange,
@@ -1257,6 +1262,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
               onDownload={handleDownload}
               selectedMediaCount={selectedImageIds.length}
               downloadProgress={downloadProgress}
+              hasSelectedSvg={selectedImageIds.some(id => images.some(image => image.id === id && isSvgImage(image)))}
               isObjectSelected={selectedImageIds.length > 0}
               onDelete={handleDelete}
               onResize={openResizeToast}
@@ -1419,6 +1425,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         onDismiss={dismissGenerationNotification}
       />
       <AppModals
+        isImageExportOpen={isImageExportOpen}
+        resolveSvgExportFormat={resolveSvgExportFormat}
         isBackupsOpen={isBackupsOpen}
         setIsBackupsOpen={setIsBackupsOpen}
         importSnapshotFromFile={handleImportSnapshotFromFile}
@@ -1439,6 +1447,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
       {isResizeToastOpen && (
         <ImageResizeToast
           width={resizeWidth}
+          sourceSizeHint={resizeSourceSizeHint}
           height={resizeHeight}
           onWidthChange={setResizeWidth}
           onHeightChange={setResizeHeight}

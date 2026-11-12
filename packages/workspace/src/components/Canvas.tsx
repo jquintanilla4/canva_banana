@@ -41,6 +41,7 @@ import { createImageLodCache, disposeImageLodCache, prewarmImageLodCache, pruneI
 import { drainCanvasPerfStats, isCanvasPerfHudEnabled, recordCanvasDraw } from './canvas/render/perfHud';
 import { DEFAULT_VIDEO_PROMPT_AREA_BORDER_COLOR, VIDEO_PROMPT_AREA_BORDER_COLOR_OPTIONS } from '../utils/canvasColorOptions';
 import { useCanvasInteractions } from './canvas/hooks/useCanvasInteractions';
+import { useGifPlayback } from './canvas/hooks/useGifPlayback';
 import { useCanvasPlaybackLoop } from './canvas/hooks/useCanvasPlaybackLoop';
 import { PromptBar, type PromptBarControlConfig } from './PromptBar';
 import { Tooltip } from './Tooltip';
@@ -650,6 +651,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     scheduleFrame();
   }, [markViewGesture, scheduleFrame]);
 
+  const { playbackRef: gifPlaybackRef, reconcile: reconcileGifs } = useGifPlayback({ images, canvasRef, scaleRef, panRef, scheduleDraw: scheduleFrame, onError });
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = getCanvasContext();
@@ -675,6 +678,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       drawDotGridLayer(gridCtx, gridCanvas, renderCacheRef.current, panRef.current, gridSpacing, gridDotRadius);
     }
 
+    reconcileGifs();
     drawCanvas({
       canvas,
       ctx,
@@ -707,6 +711,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       transformMode: effectiveTransformMode,
       renderCache: renderCacheRef.current,
       imageLodCache: imageLodCacheRef.current ?? undefined,
+      gifPlayback: gifPlaybackRef.current ?? undefined,
       audioPlaybackTimes: audioPlaybackTimesRef.current,
       isPresentationMode,
       isViewGesture: performance.now() < viewGestureUntilRef.current,
@@ -715,7 +720,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (perfHudEnabled) {
       recordCanvasDraw(performance.now() - drawStart);
     }
-  }, [disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, frameRoleLabelsEnabled, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
+  }, [gifPlaybackRef, reconcileGifs, disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, frameRoleLabelsEnabled, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
 
   useEffect(() => {
     drawRef.current = draw;

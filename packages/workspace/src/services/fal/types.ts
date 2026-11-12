@@ -1,3 +1,5 @@
+import type { GptImage26RunSettings } from '../gptImage26RunSettings';
+import type { GptImage26Quality, GptImage26Background, GptImage26ReasoningEffort, GptImage26OutputFormat } from '../gptImage26Config';
 import type { Krea3RunSettings } from '../krea3RunSettings';
 import type { Krea3Variant, Krea3ReasoningLevel } from '../krea3Config';
 import type {
@@ -126,9 +128,16 @@ export interface GenerateImageEditOptions extends FalPhaseOptions, Pick<Generati
   nanoBananaRunSettings?: NanoBananaRunSettings<'image_edit'>;
   nanoBananaWebSearch?: boolean;
   nanoBananaThinkingLevel?: NanoBananaThinkingLevel;
+  gptImage26Quality?: GptImage26Quality;
+  gptImage26Background?: GptImage26Background;
+  gptImage26ReasoningEffort?: GptImage26ReasoningEffort;
+  gptImage26OutputFormat?: GptImage26OutputFormat;
+  gptImage26FrameCount?: number;
+  gptImage26FrameDurationMs?: number;
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  gptImage26RunSettings?: GptImage26RunSettings<'image_edit'>;
   gptImage25RunSettings?: GptImage25RunSettings<'image_edit'>;
   krea3Variant?: Krea3Variant;
   krea3ReasoningLevel?: Krea3ReasoningLevel;
@@ -156,9 +165,16 @@ export interface GenerateImageOptions extends FalPhaseOptions, Pick<GenerationFa
   nanoBananaRunSettings?: NanoBananaRunSettings<'text_to_image'>;
   nanoBananaWebSearch?: boolean;
   nanoBananaThinkingLevel?: NanoBananaThinkingLevel;
+  gptImage26Quality?: GptImage26Quality;
+  gptImage26Background?: GptImage26Background;
+  gptImage26ReasoningEffort?: GptImage26ReasoningEffort;
+  gptImage26OutputFormat?: GptImage26OutputFormat;
+  gptImage26FrameCount?: number;
+  gptImage26FrameDurationMs?: number;
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  gptImage26RunSettings?: GptImage26RunSettings<'text_to_image'>;
   gptImage25RunSettings?: GptImage25RunSettings<'text_to_image'>;
   krea3Variant?: Krea3Variant;
   krea3ReasoningLevel?: Krea3ReasoningLevel;

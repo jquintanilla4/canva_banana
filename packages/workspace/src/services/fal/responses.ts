@@ -79,10 +79,28 @@ const fetchImageWithRetry = async (requestUrl: string, hostedByFal: boolean, sig
   throw new Error('Fal image download retry loop ended unexpectedly.'); // Keep TypeScript aware that every path returns or throws.
 };
 
-export const extractInlineData = async (url: string, signal = getWorkspaceSignal()): Promise<string> => { // Convert URLs to data URIs.
+interface ImageDownloadOptions {
+  fallbackContentType?: string;
+  allowedContentTypes?: readonly string[];
+}
+
+const resolveImageContentType = (contentType: string, options: ImageDownloadOptions): string => {
+  const mimeType = contentType.split(';')[0].trim().toLowerCase();
+  const fallback = options.fallbackContentType?.split(';')[0].trim().toLowerCase();
+  const effectiveMime = mimeType === '' || mimeType === 'application/octet-stream' ? fallback || mimeType : mimeType;
+  if (options.allowedContentTypes && !options.allowedContentTypes.includes(effectiveMime)) {
+    throw new Error('Fal.ai returned an unsupported image format.');
+  }
+  return effectiveMime;
+};
+
+export const extractInlineData = async (url: string, signal = getWorkspaceSignal(), options?: ImageDownloadOptions): Promise<string> => { // Convert URLs to data URIs.
   signal?.throwIfAborted();
   if (url.startsWith('data:')) { // Data URLs are already inline.
-    return url; // Skip network fetch.
+    if (!options) return url;
+    const contentType = url.slice(5).split(/[;,]/, 1)[0];
+    const effectiveMime = resolveImageContentType(contentType, options);
+    return url.replace(/^data:[^;,]*/, `data:${effectiveMime}`);
   }
 
   let requestUrl = url; // Fetch target, proxied when Fal-hosted.
@@ -125,7 +143,11 @@ export const extractInlineData = async (url: string, signal = getWorkspaceSignal
       status: response.status,
     });
   }
-  const blob = await response.blob(); // Convert to blob for FileReader.
+  let blob = await response.blob(); // Convert to blob for FileReader.
+  if (options) {
+    const effectiveMime = resolveImageContentType(blob.type, options);
+    if (blob.type !== effectiveMime) blob = blob.slice(0, blob.size, effectiveMime);
+  }
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

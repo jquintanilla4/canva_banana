@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { preservesOriginalImage } from '../services/stillImagePolicy';
 import type { CanvasImage } from '../types';
 import type { AppState, CommitOverrides } from './useCanvasHistory';
 import { getNaturalSize, loadMediaFromBlob } from '../services/mediaService';
@@ -20,6 +21,7 @@ type UseImageResizeResult = {
   keepAspect: boolean;
   isProcessing: boolean;
   canResize: boolean;
+  sourceSizeHint?: string;
   open: () => void;
   cancel: () => void;
   setWidth: (value: string) => void;
@@ -139,8 +141,10 @@ export function useImageResize({
     setIsProcessing(true);
     try {
       handleCommit();
-      const resizeIds = new Set(resizableImages.map(img => img.id));
       const resized = await Promise.all(resizableImages.map(async (img) => {
+        const centerX = img.x + img.width / 2;
+        const centerY = img.y + img.height / 2;
+        if (preservesOriginalImage(img)) return { ...img, width: nextWidth, height: nextHeight, x: centerX - nextWidth / 2, y: centerY - nextHeight / 2 };
         const canvas = document.createElement('canvas');
         canvas.width = nextWidth;
         canvas.height = nextHeight;
@@ -163,14 +167,12 @@ export function useImageResize({
         const element = await loadMediaFromBlob(blob, 'image');
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
         const baseName = img.file?.name?.replace(/\.[^.]+$/, '') || 'image';
-        const extension = targetType.includes('png')
+        const extension = blob.type.includes('png')
           ? '.png'
-          : targetType.includes('jpeg') || targetType.includes('jpg')
+          : blob.type.includes('jpeg') || blob.type.includes('jpg')
             ? '.jpg'
-            : '.png';
-        const resizedFile = new File([blob], `${baseName}-resized${extension}`, { type: targetType });
-        const centerX = img.x + img.width / 2;
-        const centerY = img.y + img.height / 2;
+            : blob.type === 'image/webp' ? '.webp' : '.png';
+        const resizedFile = new File([blob], `${baseName}-resized${extension}`, { type: blob.type });
 
         return {
           ...img,
@@ -211,6 +213,7 @@ export function useImageResize({
     keepAspect,
     isProcessing,
     canResize,
+    sourceSizeHint: resizableImages.some(preservesOriginalImage) ? 'SVG and GIF resize changes canvas dimensions. Original downloads keep the source dimensions and animation.' : undefined,
     open,
     cancel,
     setWidth: updateWidth,

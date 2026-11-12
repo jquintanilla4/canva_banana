@@ -17,6 +17,7 @@ import { PROMPT_BAR_FOOTER_MARGIN_BOTTOM, PROMPT_BAR_FOOTER_PADDING } from '../u
 import { getIntrinsicElementSize, getViewportMenuPosition, type VerticalMenuPlacement } from '../utils/viewportMenuPosition';
 import { ANCHORED_PORTAL_TRACKING_IGNORE_ATTRIBUTE, useAnchoredPortalTracking } from '../hooks/useAnchoredPortalTracking';
 import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
+import { usePromptBarFooterLift } from '../hooks/usePromptBarFooterLift';
 import { CANVAS_INTERACTION_BOUNDARY_PROPS } from '../utils/canvasInteractionBoundary';
 
 const PROMPT_BAR_BASE_MAX_WIDTH_REM = 69.1; // Keeps the existing desktop prompt bar width as the baseline.
@@ -280,27 +281,29 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     const promptBarOuter = promptBarOuterRef.current;
     const controlsViewport = controlsViewportRef.current;
     const controlsStrip = controlsStripRef.current;
-    const baselineControlsViewportWidthPx = promptBarOuter && controlsViewport
-      ? (() => {
-          const previousWidth = promptBarOuter.style.width;
-          const previousMaxWidth = promptBarOuter.style.maxWidth;
-          const baselineWidthPx = Math.min(baseWidthPx, viewportClampPx); // Measure from the unexpanded shell width.
-
-          if (layout === 'inline') {
-            promptBarOuter.style.width = `${baselineWidthPx}px`;
-          }
-          promptBarOuter.style.maxWidth = `${baselineWidthPx}px`;
-
-          const measuredWidthPx = controlsViewport.clientWidth;
-
-          promptBarOuter.style.width = previousWidth;
-          promptBarOuter.style.maxWidth = previousMaxWidth;
-
-          return measuredWidthPx;
-        })()
-      : controlsViewport?.clientWidth ?? 0;
     const overflowWidthPx = controlsViewport && controlsStrip
-      ? Math.max(0, controlsStrip.scrollWidth - baselineControlsViewportWidthPx)
+      ? (() => {
+          const previousWidth = promptBarOuter?.style.width ?? '';
+          const previousMaxWidth = promptBarOuter?.style.maxWidth ?? '';
+          const baselineWidthPx = Math.min(baseWidthPx, viewportClampPx);
+
+          try {
+            if (promptBarOuter) {
+              if (layout === 'inline') {
+                promptBarOuter.style.width = `${baselineWidthPx}px`;
+              }
+              promptBarOuter.style.maxWidth = `${baselineWidthPx}px`;
+            }
+
+            const measuredWidthPx = controlsViewport.clientWidth;
+            return Math.max(0, controlsStrip.scrollWidth - measuredWidthPx);
+          } finally {
+            if (promptBarOuter) {
+              promptBarOuter.style.width = previousWidth;
+              promptBarOuter.style.maxWidth = previousMaxWidth;
+            }
+          }
+        })()
       : 0; // Treat missing controls as no overflow.
     const desiredWidthPx = baseWidthPx + overflowWidthPx; // Expand the shell only enough to reveal overflowing controls.
     setPromptBarMaxWidthPx(Math.min(desiredWidthPx, viewportClampPx));
@@ -364,8 +367,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     updatePromptBarWidth,
   ]);
 
+  const footerLiftPx = usePromptBarFooterLift(promptBarOuterRef, layout, updatePromptBarWidth);
+
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || layout === 'footer') {
       return;
     }
 
@@ -377,7 +382,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [updatePromptBarWidth]);
+  }, [layout, updatePromptBarWidth]);
 
   const klingOptions = React.useMemo(() => {
     if (!klingSuggestionsEnabled) return [];
@@ -634,7 +639,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const content = (
     <div className={`flex ${leadingAccessory ? `${isMiniMode ? 'items-center' : 'items-end'} gap-3` : ''}`}>
       {leadingAccessory}
-      <div className="flex flex-1 flex-col gap-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
         {!isMiniMode && showMultiPrompt && (
           <div className={multiPromptContainerClass} style={multiPromptContainerStyle}>
             <div className="flex flex-1 flex-col">
@@ -848,6 +853,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       style={{
         width: `calc(100% - ${PROMPT_BAR_HORIZONTAL_GUTTER_REM}rem)`,
         maxWidth: `${promptBarMaxWidthPx}px`,
+        bottom: footerLiftPx,
         marginBottom: PROMPT_BAR_FOOTER_MARGIN_BOTTOM,
         padding: PROMPT_BAR_FOOTER_PADDING,
         ...outerStyle,

@@ -602,6 +602,72 @@ describe('PromptBar layout', () => {
     expect(parseFloat(footer.style.maxWidth)).toBeCloseTo(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320, 1);
   });
 
+  it.each(['footer', 'inline'] as const)('shrinks %s controls after GIF changes to PNG and expands again', async (layout) => {
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.getAttribute?.('data-testid') === 'prompt-bar-control-viewport') {
+          const shell = this.closest<HTMLElement>(`[data-testid="prompt-bar-${layout}"]`);
+          const shellWidth = Number.parseFloat(shell?.style.maxWidth ?? '');
+          return 620 + shellWidth - BASE_PROMPT_BAR_MAX_WIDTH_PX;
+        }
+        return ORIGINAL_CLIENT_WIDTH?.get ? ORIGINAL_CLIENT_WIDTH.get.call(this) : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.getAttribute?.('data-testid') === 'prompt-bar-control-strip') {
+          const format = this.querySelector('#output-format')?.textContent;
+          return Math.max(format?.includes('GIF') ? 940 : 620, this.parentElement?.clientWidth ?? 0);
+        }
+        return ORIGINAL_SCROLL_WIDTH?.get ? ORIGINAL_SCROLL_WIDTH.get.call(this) : 0;
+      },
+    });
+    const Harness = () => {
+      const [format, setFormat] = React.useState('gif');
+      return (
+        <PromptBar
+          layout={layout}
+          prompt="Design an image"
+          onPromptChange={vi.fn()}
+          onSubmit={vi.fn()}
+          isLoading={false}
+          inputDisabled={false}
+          submitDisabled={false}
+          modelOptions={[{ value: 'image-model', label: 'Image model' }]}
+          selectedModel="image-model"
+          onModelChange={vi.fn()}
+          modelSelectDisabled={false}
+          modelMode="image"
+          onModelModeChange={vi.fn()}
+          modelControls={[{
+            id: 'output-format',
+            ariaLabel: 'Select output format',
+            options: [{ value: 'gif', label: 'GIF' }, { value: 'png', label: 'PNG' }],
+            value: format,
+            onChange: setFormat,
+            disabled: false,
+          }]}
+        />
+      );
+    };
+    render(<Harness />);
+    await flushPromptBarLayout();
+    const shell = screen.getByTestId(`prompt-bar-${layout}`);
+    expect(parseFloat(shell.style.maxWidth)).toBeCloseTo(BASE_PROMPT_BAR_MAX_WIDTH_PX + 320, 1);
+
+    for (const format of ['PNG', 'GIF', 'PNG']) {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Select output format' }));
+      fireEvent.click(screen.getByRole('option', { name: format }));
+      await flushPromptBarLayout();
+      expect(screen.getByTestId(`prompt-bar-${layout}`)).toBe(shell);
+      const expectedWidth = BASE_PROMPT_BAR_MAX_WIDTH_PX + (format === 'GIF' ? 320 : 0);
+      expect(parseFloat(shell.style.maxWidth)).toBeCloseTo(expectedWidth, 1);
+      if (layout === 'inline') expect(parseFloat(shell.style.width)).toBeCloseTo(expectedWidth, 1);
+    }
+  });
+
   it('clamps the widened prompt bar to the viewport and keeps the controls scrollable', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1100 });
     installControlWidthMocks({ viewportWidth: 620, stripWidth: 940 });

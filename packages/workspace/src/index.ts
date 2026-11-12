@@ -5,3 +5,5 @@ export type { SnapshotStreamingWritable, SnapshotByteSource } from './services/s
 export { getDebugLogs, subscribeToDebugLogs } from './services/debugLog';
 export type { DebugLogEntry, DebugLogListener } from './services/debugLog';
 import './style.css';
+
+export type { ImageExportFormat, ImageExportRequest, RasterImageExportFormat } from './services/imageOperations';

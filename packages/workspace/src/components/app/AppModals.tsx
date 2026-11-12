@@ -1,3 +1,5 @@
+import { ImageExportDialog } from '../ImageExportDialog';
+import type { SvgDownloadFormat } from '../../services/imageOperations';
 import React from 'react';
 import { BackupsModal } from '../BackupsModal';
 import { DesktopSettingsModal } from '../DesktopSettingsModal';
@@ -9,6 +11,8 @@ import type { SnapshotByteSource } from '../../services/snapshotService';
 import type { DesktopSettingsStatus } from '../../services/runtimeConfig';
 
 type AppModalsProps = {
+  isImageExportOpen: boolean;
+  resolveSvgExportFormat: (format: SvgDownloadFormat | null) => void;
   isBackupsOpen: boolean;
   setIsBackupsOpen: (open: boolean) => void;
   importSnapshotFromFile: (file: SnapshotByteSource) => Promise<void>;
@@ -30,6 +34,7 @@ type AppModalsProps = {
 // Blocking dialogs that only render while open. The backups list state lives here:
 // nothing outside the modal reads it, and it only refreshes while the modal is open.
 export function AppModals({
+  isImageExportOpen, resolveSvgExportFormat,
   isBackupsOpen,
   setIsBackupsOpen,
   importSnapshotFromFile,
@@ -61,6 +66,7 @@ export function AppModals({
 
   return (
     <>
+      {isImageExportOpen && <ImageExportDialog onResolve={resolveSvgExportFormat} />}
       <BackupsModal
         isOpen={isBackupsOpen}
         isLoading={isBackupsLoading}

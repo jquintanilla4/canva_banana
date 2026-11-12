@@ -2,6 +2,7 @@ import React from 'react';
 
 type ImageResizeToastProps = {
   width: string;
+  sourceSizeHint?: string;
   height: string;
   onWidthChange: (value: string) => void;
   onHeightChange: (value: string) => void;
@@ -14,6 +15,7 @@ type ImageResizeToastProps = {
 
 export const ImageResizeToast: React.FC<ImageResizeToastProps> = ({
   width,
+  sourceSizeHint,
   height,
   onWidthChange,
   onHeightChange,
@@ -36,6 +38,7 @@ export const ImageResizeToast: React.FC<ImageResizeToastProps> = ({
   return (
     <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-4 py-3 rounded-md shadow-lg z-30 w-72 border border-gray-700">
       <p className="text-sm font-semibold mb-3">Resize image</p>
+      {sourceSizeHint && <p className="text-xs text-gray-300 mb-3">{sourceSizeHint}</p>}
       <div className="space-y-2">
         <label className="flex items-center space-x-2 text-xs text-gray-300" htmlFor="resize-width">
           <span className="w-14">Width</span>

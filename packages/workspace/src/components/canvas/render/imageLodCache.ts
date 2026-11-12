@@ -1,3 +1,5 @@
+import { isGifImage } from '../../../services/gifMedia';
+import { isSvgImage } from '../../../services/svgMedia';
 import type { CanvasImage } from '../../../types';
 import { isVideoImage } from '../mediaGuards';
 
@@ -482,6 +484,7 @@ export function prewarmImageLodCache(cache: ImageLodCache, images: readonly Canv
   if (cache.disposed) return;
   const queuedIds = new Set(cache.prewarmQueue.map(job => job.imageId));
   images.forEach(image => {
+    if (isSvgImage(image) || isGifImage(image)) return;
     let videoTimeKey: number | null = null;
     if (isVideoImage(image)) {
       // Undecoded videos draw a cheap placeholder (and createImageBitmap on them would
@@ -521,6 +524,7 @@ export function getLodDrawSource(
   image: CanvasImage,
   scale: number,
 ): CanvasImageSource {
+  if (isSvgImage(image) || isGifImage(image)) return image.element;
   let videoTimeKey: number | null = null;
   if (isVideoImage(image)) {
     if (image.isPlaying) {

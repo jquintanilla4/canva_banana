@@ -1,3 +1,5 @@
+import { GPT_IMAGE_26_MODEL_ID } from '../../services/gptImage26Config';
+import * as gptImage26Policy from '../../services/gptImage26RunSettings';
 import { beginWorkspaceSession } from '../../services/workspaceSession';
 import { KREA_3_MODEL_ID } from '../../services/krea3Config';
 import * as mediaService from '../../services/mediaService';
@@ -7,7 +9,7 @@ import { NANO_BANANA_21_EDIT_MODEL_ID } from '../../services/nanoBananaConfig';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID, FAL_SEEDANCE_25_VIDEO_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID, KLING_V4_VIDEO_MODEL_ID, FLUX_3_VIDEO_MODEL_ID, JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   IDEOGRAM_45_MODEL_ID,
@@ -19,7 +21,7 @@ import {
   SEEDANCE_2_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
 } from '../../services/modelConfig';
-import { generateImage as generateGoogleImage } from '../../services/geminiService';
+import { generateImage as generateGoogleImage, generateImageEdit as generateGoogleImageEdit } from '../../services/geminiService';
 import { generateImage as generateFalImage, generateImageEdit as generateFalImageEdit, generateImageToVideo as generateFalImageToVideo, uploadVideoToFal } from '../../services/falService';
 import { generateSeedanceVideo } from '../../services/volcengineService';
 import { loadMediaFromBlob } from '../../services/mediaService';
@@ -136,6 +138,7 @@ class TestImage {
 
 const createFalStub = (overrides: Partial<UseFalSettingsResult> = {}): UseFalSettingsResult => ({
   falModelMode: 'image',
+  flux3KeyframeTimings: [],
   falImageModelId: NANO_BANANA_PRO_EDIT_MODEL_ID,
   falVideoModelId: SEEDANCE_2_VIDEO_MODEL_ID,
   falImageSizeSelection: 'default',
@@ -289,6 +292,115 @@ describe('useGeneration placement notifications', () => {
     vi.unstubAllGlobals();
   });
 
+  it.each((['svg', 'gif'] as const).flatMap(format => (['fal', 'google'] as const).map(apiProvider => ({ format, apiProvider }))))('cancels $apiProvider $format editing before queue, busy state, rasterization or providers', async ({ format, apiProvider }) => {
+    const primary = { ...buildCanvasImage('vector'), file: new File(['source'], `vector.${format}`, { type: format === 'gif' ? 'image/gif' : 'image/svg+xml' }) };
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const args = { appMode: 'CANVAS' as const, tool: Tool.SELECTION, prompt: 'Edit', promptPrefix: '', apiProvider,
+      fal: createFalStub(), selection: createSelectionStub({ primaryImageId: primary.id, selectedImageIds: [primary.id] }), images: [primary],
+      paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn() };
+    const { result } = renderHook(() => useGeneration(args));
+    await act(async () => result.current.handleGenerate());
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(args.setFalJobs).not.toHaveBeenCalled();
+    expect(args.setIsLoading).not.toHaveBeenCalled();
+    expect(args.setState).not.toHaveBeenCalled();
+    expect(generateFalImageEdit).not.toHaveBeenCalled();
+    expect(generateGoogleImageEdit).not.toHaveBeenCalled();
+    expect(uploadVideoToFal).not.toHaveBeenCalled();
+  });
+
+  it('asks once for primary and exact edit references, excluding sliced-out SVGs and unrelated selection', async () => {
+    const primary = buildCanvasImage('primary');
+    const svg = { ...buildCanvasImage('reference'), file: new File(['svg'], 'reference.svg', { type: 'image/svg+xml' }) };
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const args = { appMode: 'CANVAS' as const, tool: Tool.SELECTION, prompt: 'Edit', promptPrefix: '', apiProvider: 'fal' as const,
+      fal: createFalStub({ falImageModelId: GPT_IMAGE_26_MODEL_ID }),
+      selection: createSelectionStub({ primaryImageId: primary.id, selectedImageIds: [primary.id], referenceImageIds: [svg.id] }), images: [primary, svg],
+      paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn() };
+    const { result } = renderHook(() => useGeneration(args));
+    await act(async () => result.current.handleGenerate());
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('1 SVG image'));
+    expect(args.setFalJobs).not.toHaveBeenCalled();
+  });
+
+  it.each(['svg', 'gif'] as const)('does not warn about unused %s references in Google edits or stale inputs in saved text-only runs', async format => {
+    const primary = buildCanvasImage('primary');
+    const svg = { ...buildCanvasImage('unused'), file: new File(['source'], `unused.${format}`, { type: format === 'gif' ? 'image/gif' : 'image/svg+xml' }) };
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(generateGoogleImageEdit).mockResolvedValue({ imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '' });
+    vi.mocked(generateGoogleImage).mockResolvedValue({ imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '' });
+    const args = { appMode: 'CANVAS' as const, tool: Tool.SELECTION, prompt: 'Edit', promptPrefix: '', apiProvider: 'google' as const,
+      fal: createFalStub(), selection: createSelectionStub({ primaryImageId: primary.id, referenceImageIds: [svg.id], selectedImageIds: [svg.id] }), images: [primary, svg],
+      paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn() };
+    const { result } = renderHook(() => useGeneration(args));
+    await act(async () => result.current.handleGenerate());
+    await act(async () => result.current.handleGenerate({ kind: 'text_to_image', provider: 'google', prompt: 'Draw', primaryImageId: svg.id, referenceImageIds: [svg.id] }));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(generateGoogleImageEdit).toHaveBeenCalledOnce();
+    expect(generateGoogleImage).toHaveBeenCalledOnce();
+  });
+
+  it('does not warn about a GIF beyond the GPT26 consumed reference slice', async () => {
+    const primary = buildCanvasImage('primary');
+    const refs = Array.from({ length: 15 }, (_, index) => buildCanvasImage(`ref-${index}`));
+    const gif = { ...buildCanvasImage('unused'), file: new File(['GIF89a'], 'unused.gif', { type: 'image/gif' }) };
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(generateFalImageEdit).mockResolvedValue({ imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '' });
+    const args = { appMode: 'CANVAS' as const, tool: Tool.SELECTION, prompt: 'Edit', promptPrefix: '', apiProvider: 'fal' as const,
+      fal: createFalStub({ falImageModelId: GPT_IMAGE_26_MODEL_ID }), selection: createSelectionStub({ primaryImageId: primary.id, referenceImageIds: [...refs.map(image => image.id), gif.id], selectedImageIds: [gif.id] }), images: [primary, ...refs, gif],
+      paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn() };
+    const { result } = renderHook(() => useGeneration(args));
+    await act(async () => result.current.handleGenerate());
+    expect(confirm).not.toHaveBeenCalled();
+    expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0].referenceImages).toEqual(refs.map(image => image.element));
+  });
+
+  it.each(([
+    { modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID, options: { seedance2Variant: 'smart' }, role: 'tail' },
+    { modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID, options: { seedance2Variant: 'reference' }, role: 'reference' },
+    { modelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID, options: { seedance25Variant: 'reference' }, role: 'reference' },
+    { modelId: MINIMAX_H3_VIDEO_MODEL_ID, options: { miniMaxH3Variant: 'reference' }, role: 'reference' },
+    { modelId: KLING_V4_VIDEO_MODEL_ID, options: { klingV4Variant: 'generate' }, role: 'reference' },
+    { modelId: FLUX_3_VIDEO_MODEL_ID, options: { flux3Variant: 'keyframes', flux3Duration: '5' }, role: 'reference' },
+    { modelId: SEEDANCE_2_VIDEO_MODEL_ID, options: { seedance2Variant: 'smart' }, role: 'tail' },
+    { modelId: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, options: { seedance2Variant: 'reference' }, role: 'reference' },
+    { modelId: JIMENG_MULTIFRAME_VIDEO_MODEL_ID, options: {}, role: 'reference' },
+  ] as const).flatMap(input => (['svg', 'gif'] as const).map(format => ({ ...input, format }))))('cancels actual $format $role for $modelId before any upload or queue', async ({ modelId, options, role, format }) => {
+    const primary = buildCanvasImage('primary');
+    const svg = { ...buildCanvasImage('vector'), file: new File(['source'], `vector.${format}`, { type: format === 'gif' ? 'image/gif' : 'image/svg+xml' }) };
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const args = { appMode: 'CANVAS' as const, tool: Tool.SELECTION, prompt: 'Animate', promptPrefix: '', apiProvider: 'fal' as const,
+      fal: createFalStub({ falModelMode: 'video', falVideoModelId: modelId }), selection: createSelectionStub({ selectedImageIds: modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID ? [primary.id, svg.id] : [primary.id] }), images: [primary, svg],
+      paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn() };
+    const { result } = renderHook(() => useGeneration(args));
+    await act(async () => result.current.handleGenerate(modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID ? undefined : { kind: 'video', provider: 'fal', modelId, modelMode: 'video', prompt: 'Animate', primaryImageId: primary.id,
+      ...(role === 'tail' ? { videoLastFrameImageId: svg.id } : { referenceImageIds: modelId === FLUX_3_VIDEO_MODEL_ID ? [primary.id, svg.id] : [svg.id] }),
+      falOptions: options }));
+    expect(args.setError.mock.calls).toEqual([]);
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(args.setFalJobs).not.toHaveBeenCalled();
+    expect(args.setIsLoading).not.toHaveBeenCalled();
+    expect(args.setState).not.toHaveBeenCalled();
+    expect(generateFalImageToVideo).not.toHaveBeenCalled();
+    expect(generateSeedanceVideo).not.toHaveBeenCalled();
+    expect(uploadVideoToFal).not.toHaveBeenCalled();
+  });
+
+  it.each(['svg', 'gif'] as const)('converts an unrotated %s video File input to real PNG after consent', async format => {
+    const primary = { ...buildCanvasImage('vector'), file: new File(['source'], `vector.${format}`, { type: format === 'gif' ? 'image/gif' : 'image/svg+xml' }) };
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['png-bytes'], { type: 'image/png' })));
+    vi.mocked(generateSeedanceVideo).mockRejectedValue(new Error('stop after input capture'));
+    const args = { appMode: 'CANVAS' as const, tool: Tool.SELECTION, prompt: 'Animate', promptPrefix: '', apiProvider: 'fal' as const,
+      fal: createFalStub({ falModelMode: 'video' }), selection: createSelectionStub({ primaryImageId: primary.id }), images: [primary],
+      paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn() };
+    const { result } = renderHook(() => useGeneration(args));
+    await act(async () => result.current.handleGenerate());
+    const input = vi.mocked(generateSeedanceVideo).mock.calls[0]?.[1].primaryImageFile;
+    expect(input?.type).toBe('image/png');
+    expect(input?.name.endsWith('.png')).toBe(true);
+    expect(primary.file.type).toBe(format === 'gif' ? 'image/gif' : 'image/svg+xml');
+  });
   it.each([
     { flux3ImageAspectRatio: '3:4' as const },
     { flux3ImageResolution: '4k' as const },
@@ -464,6 +576,45 @@ describe('useGeneration placement notifications', () => {
     expect(stateHarness.state.images[0]?.metadata?.generation?.falOptions).toMatchObject(expected);
     expect(jobs[0]?.status).toBe('COMPLETED');
     if (kind === 'image_edit') expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0]?.referenceImages).toEqual([reference.element]);
+  });
+
+  it.each((['text_to_image', 'image_edit'] as const).flatMap(kind => [
+    ...(['live', 'saved'] as const).map(source => ({ kind, source, format: 'svg' as const })),
+    ...(['live', 'saved', 'saved-default'] as const).map(source => ({ kind, source, format: 'gif' as const })),
+  ]))('runs GPT Image 2.6 $kind $source $format with effective format and identical request/history/retry settings', async ({ kind, source, format }) => {
+    const primary = buildCanvasImage('gpt26-source');
+    const reference = buildCanvasImage('gpt26-reference');
+    const stateHarness = createStateHarness();
+    const fal = createFalStub({ falImageModelId: GPT_IMAGE_26_MODEL_ID, gptImage26Quality: 'max', gptImage26Background: 'transparent', gptImage26ReasoningEffort: 'low', gptImage26OutputFormat: format, gptImage26FrameCount: 8, gptImage26FrameDurationMs: 205, falImageSizeSelection: 'auto', falNumImages: 4 });
+    const resolver = vi.spyOn(gptImage26Policy, 'resolveGptImage26RunSettings');
+    let jobs: FalQueueJob[] = [];
+    const svgBase64 = btoa(format === 'gif' ? 'GIF89a-original' : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 48"/>');
+    const output = { imageBase64: svgBase64, imagesBase64: [svgBase64], imageDataUrls: [`data:${format === 'gif' ? 'image/gif' : 'image/svg+xml'};base64,${svgBase64}`], text: '', requestId: 'gpt26-complete' };
+    vi.mocked(generateFalImage).mockResolvedValue(output);
+    vi.mocked(generateFalImageEdit).mockResolvedValue(output);
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A vector poster', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(kind === 'image_edit' ? { primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary, primarySelectionMediaType: 'image', selectedImageIds: [primary.id], referenceImageIds: [reference.id] } : {}),
+      images: [primary, reference], paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(),
+      setFalJobs: value => { jobs = typeof value === 'function' ? value(jobs) : value; }, setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => { await result.current.handleGenerate(source !== 'live' ? {
+      kind, prompt: 'A saved vector', provider: 'fal', modelId: `${GPT_IMAGE_26_MODEL_ID}/${kind === 'image_edit' ? 'edit' : 'text-to-image'}`, modelMode: 'image',
+      primaryImageId: kind === 'image_edit' ? primary.id : undefined, referenceImageIds: kind === 'image_edit' ? [reference.id] : undefined,
+      falOptions: { gptImage26Quality: 'high', gptImage26Background: 'opaque', gptImage26ReasoningEffort: 'medium', gptImage26OutputFormat: format === 'gif' ? 'gif' : 'webp', ...(source === 'saved' ? { gptImage26FrameCount: 12, gptImage26FrameDurationMs: 325 } : {}), numImages: 2 },
+    } : undefined); });
+    const request = kind === 'text_to_image' ? vi.mocked(generateFalImage).mock.calls[0]?.[1] : vi.mocked(generateFalImageEdit).mock.calls[0]?.[1];
+    expect(resolver).toHaveBeenCalledTimes(1);
+    const settings = request?.gptImage26RunSettings;
+    expect(settings).toBe(resolver.mock.results[0]?.value);
+    expect(settings).toMatchObject(source !== 'live'
+      ? { kind, outputFormat: format === 'gif' ? 'gif' : 'webp', ...(format === 'gif' ? { frameCount: source === 'saved' ? 12 : 9, frameDurationMs: source === 'saved' ? 330 : 200 } : {}), numImages: 2, quality: 'high', background: 'opaque', reasoningEffort: 'medium' }
+      : { kind, outputFormat: format === 'gif' ? 'gif' : kind === 'image_edit' ? 'png' : 'svg', numImages: format === 'gif' || kind === 'image_edit' ? 4 : 1, ...(format === 'gif' ? { frameCount: 8, frameDurationMs: 210 } : {}), quality: 'max', background: 'transparent', reasoningEffort: 'low' });
+    expect(stateHarness.state.images[0]?.metadata?.generation?.falOptions).toEqual(jobs[0]?.retryInputs?.falOptions);
+    expect(stateHarness.state.images[0]?.metadata?.generation?.falOptions).toMatchObject(gptImage26Policy.serializeGptImage26GenerationOptions(settings!));
+    expect(stateHarness.state.images[0]?.file.name).toBe(`generated.${format}`);
+    if (kind === 'image_edit') expect(vi.mocked(generateFalImageEdit).mock.calls[0]?.[0].referenceImages).toEqual([reference.element]);
+    expect(jobs[0]?.status).toBe('COMPLETED');
   });
 
   it.each((['2', '2.5'] as const).flatMap(model =>

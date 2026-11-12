@@ -259,6 +259,25 @@ test('Fal proxy forwards allowed Fal targets with the server key', async () => {
   }
 });
 
+test('Fal proxy routes both GPT Image 2.6 endpoints with only the server key', async () => {
+  const calls = [];
+  const server = createSecureBackendServer({ env: { FAL_API_KEY: 'server-key' }, fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+  } });
+  const baseUrl = await listenOnRandomPort(server);
+  try {
+    for (const mode of ['text-to-image', 'edit']) {
+      const target = `https://queue.fal.run/openai/gpt-image-2.6/sunburst/${mode}`;
+      const response = await fetch(`${baseUrl}/api/fal/proxy`, { method: 'POST', headers: { Origin: TRUSTED_ORIGIN, 'x-fal-target-url': target }, body: '{}' });
+      assert.equal(response.status, 200);
+      assert.equal(calls.at(-1).url, target);
+      assert.equal(calls.at(-1).options.headers.get('Authorization'), 'Key server-key');
+      assert.equal((await response.text()).includes('server-key'), false);
+    }
+  } finally { server.close(); }
+});
+
 test('Fal proxy rejects retired video selectors and endpoints without contacting Fal', async () => {
   const calls = [];
   const server = createSecureBackendServer({

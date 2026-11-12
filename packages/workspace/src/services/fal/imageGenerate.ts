@@ -1,3 +1,5 @@
+import { GPT_IMAGE_26_OUTPUT_MIME_TYPES, isGptImage26Model, type GptImage26OutputFormat } from '../gptImage26Config';
+import { resolveGptImage26SettingsForRequest, serializeGptImage26Input } from './gptImage';
 import { getWorkspaceSignal } from '../workspaceSession';
 import { isKrea3Model } from '../krea3Config';
 import { resolveKrea3SettingsForRequest, serializeKrea3Input } from './krea3';
@@ -46,15 +48,18 @@ export const generateImage = async (
 
   const gptImage2Settings = isGptImage2TextToImageModelId(selectedModelId) || isGptImage2EditModelId(selectedModelId)
     ? resolveGptImage2SettingsForRequest('text_to_image', options) : undefined;
+  const gptImage26Settings = isGptImage26Model(selectedModelId)
+    ? resolveGptImage26SettingsForRequest('text_to_image', options) : undefined;
   const gptImage25Settings = isGptImage25Model(selectedModelId)
     ? resolveGptImage25SettingsForRequest('text_to_image', options) : undefined;
   const nanoBananaSettings = getNanoBananaSelectorModelId(selectedModelId)
     ? resolveNanoBananaSettingsForRequest('text_to_image', { ...options, modelId: selectedModelId }) : undefined;
   const krea3Settings = isKrea3Model(selectedModelId) ? resolveKrea3SettingsForRequest('text_to_image', options) : undefined;
-  const modelId = krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint
+  const modelId = krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint ?? gptImage26Settings?.endpoint
     ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_MODEL_ID : selectedModelId);
   const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
-    : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings) : undefined;
+    : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings)
+    : gptImage26Settings ? serializeGptImage26Input(gptImage26Settings) : undefined;
   const ideogram45Input = isIdeogram45Model(modelId) ? resolveIdeogram45TextInput(options) : undefined;
   const isGptImage25 = isGptImage25Model(modelId);
   const isSeedreamTextToImage = isSeedreamTextToImageModelId(modelId);
@@ -80,7 +85,7 @@ export const generateImage = async (
   const body: {
     prompt: string;
     sync_mode?: boolean;
-    output_format?: GrokImageOutputFormat;
+    output_format?: GrokImageOutputFormat | GptImage26OutputFormat;
     num_images?: number;
     aspect_ratio?: string;
     image_size?: { width: number; height: number } | string;
@@ -95,7 +100,7 @@ export const generateImage = async (
     enable_safety_checker?: boolean;
   } = {
     prompt,
-    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isGptImage2TextToImage && !isGptImage25 && !isRecraftV4ProTextToImage, // Keep queue history visible for async models.
+    sync_mode: !isSeedreamTextToImage && !isNanoBananaTextToImage && !isGptImage2TextToImage && !isGptImage25 && !gptImage26Settings && !isRecraftV4ProTextToImage, // Keep queue history visible for async models.
   };
 
   if (recraftSettings) {
@@ -217,7 +222,8 @@ export const generateImage = async (
   });
   const downloadRequestId = result?.requestId || latestRequestId; // Keep request id on download failures.
   const inlineDataList = await runFalDownloadStep(downloadRequestId, async () => (
-    Promise.all(images.map(image => extractInlineData(image.url, options.abortSignal)))
+    Promise.all(images.map(image => extractInlineData(image.url, options.abortSignal, gptImage26Settings
+      ? { fallbackContentType: image.content_type, allowedContentTypes: GPT_IMAGE_26_OUTPUT_MIME_TYPES } : undefined)))
   ));
   const base64List = await runFalDownloadStep(downloadRequestId, async () => (
     inlineDataList.map(dataUrl => {

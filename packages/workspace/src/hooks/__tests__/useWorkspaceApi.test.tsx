@@ -51,6 +51,44 @@ describe('public workspace host operations', () => {
     expect(host.writeSnapshot).toHaveBeenCalledWith(destination);
   });
 
+  it('normalizes host SVG imports and supports current geometry and exact source requests without consent', async () => {
+    const image = document.createElement('img');
+    Object.defineProperties(image, { naturalWidth: { value: 4 }, naturalHeight: { value: 3 } });
+    media.load.mockResolvedValue(image);
+    const host = setup();
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="3"/>';
+    const confirm = vi.spyOn(window, 'confirm');
+    await act(async () => host.ref.current!.loadMedia(new File([svg], 'shot.svg')));
+    act(() => host.result.current.setState(state => ({ ...state, images: state.images.map(image => ({ ...image, width: 40, height: 30, rotation: Math.PI / 2 })) })));
+    expect(host.result.current.images[0].file.type).toBe('image/svg+xml');
+    const output = await host.ref.current!.exportImage('image/svg+xml');
+    expect(output.type).toBe('image/svg+xml');
+    const canvases: HTMLCanvasElement[] = [];
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function(callback) { canvases.push(this); callback(new Blob(['png'], { type: 'image/png' })); });
+    await host.ref.current!.exportImage();
+    await host.ref.current!.exportImage({ format: 'image/png', geometry: 'current' });
+    expect(canvases.map(canvas => [canvas.width, canvas.height])).toEqual([[4, 3], [30, 40]]);
+    expect((await host.ref.current!.exportImage({ format: 'original' })).type).toBe('image/svg+xml');
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('normalizes a filename GIF import and explicitly exports its original while default export stays intrinsic PNG', async () => {
+    const image = document.createElement('img');
+    Object.defineProperties(image, { naturalWidth: { value: 4 }, naturalHeight: { value: 3 } });
+    media.load.mockResolvedValue(image);
+    const host = setup();
+    const gif = new File(['GIF89a-original'], 'shot.gif');
+    await act(async () => host.ref.current!.loadMedia(gif));
+    expect(host.result.current.images[0].file.type).toBe('image/gif');
+    act(() => host.result.current.setState(state => ({ ...state, images: state.images.map(image => ({ ...image, width: 40, height: 30, rotation: Math.PI / 2 })) })));
+    const original = await host.ref.current!.exportImage({ format: 'original' });
+    expect(original).toBe(host.result.current.images[0].file);
+    const canvases: HTMLCanvasElement[] = [];
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function(callback) { canvases.push(this); callback(new Blob(['png'], { type: 'image/png' })); });
+    expect((await host.ref.current!.exportImage()).type).toBe('image/png');
+    expect(canvases.map(canvas => [canvas.width, canvas.height])).toEqual([[4, 3]]);
+  });
+
   it('retains media while checkpoint leases are pending and releases it after replacement', async () => {
     media.load.mockResolvedValue(document.createElement('img'));
     const host = setup();
