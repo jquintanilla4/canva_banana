@@ -38,6 +38,7 @@ const getManualChunk = (id: string): string | undefined => {
 
 export default defineConfig(({ mode }) => {
     const repoRoot = path.resolve(import.meta.dirname, '../..');
+    const workspaceDist = `${normalizeModuleId(path.resolve(repoRoot, 'packages/workspace/dist'))}/`;
     const env = loadEnv(mode, repoRoot, '');
     const isDesktopPackageBuild = process.env.CANVA_BANANA_DESKTOP_PACKAGE === '1'; // Desktop keys come from IPC settings.
     return {
@@ -47,7 +48,16 @@ export default defineConfig(({ mode }) => {
         strictPort: true, // Electron always opens this exact dev URL.
         host: '0.0.0.0',
       },
-      plugins: [react(), tailwindcss()],
+      plugins: [react(), tailwindcss(), {
+        name: 'reload-workspace-build',
+        apply: 'serve',
+        hotUpdate({ file }) {
+          if (this.environment.name === 'client' && file.startsWith(workspaceDist) && file.endsWith('.js')) {
+            this.environment.hot.send({ type: 'full-reload' });
+            return [];
+          }
+        },
+      }],
       define: {
         'process.env.API_KEY': defineOptionalString(isDesktopPackageBuild ? undefined : env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': defineOptionalString(isDesktopPackageBuild ? undefined : env.GEMINI_API_KEY),

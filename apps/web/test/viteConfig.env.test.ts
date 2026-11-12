@@ -1,6 +1,11 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it, vi } from 'vitest';
+import { createServer, normalizePath } from 'vite';
 import type { ConfigEnv, UserConfig } from 'vite';
 import viteConfig from '../vite.config';
 
@@ -55,6 +60,31 @@ describe('vite env defines', () => {
       } else {
         process.env.GEMINI_API_KEY = previousGeminiKey;
       }
+    }
+  });
+});
+
+describe('workspace development rebuilds', () => {
+  it.each(['workspace.js', 'chunks/export-image.js'])('fully reloads after %s changes', async (filename) => {
+    const cacheDir = await mkdtemp(join(tmpdir(), 'canva-banana-vite-test-'));
+    let server: Awaited<ReturnType<typeof createServer>> | undefined;
+
+    try {
+      server = await createServer({
+        configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
+        root: fileURLToPath(new URL('..', import.meta.url)),
+        cacheDir,
+        server: { middlewareMode: true, watch: null, ws: false },
+        optimizeDeps: { noDiscovery: true, include: [] },
+      });
+      const send = vi.spyOn(server.environments.client.hot, 'send');
+      server.watcher.emit('change', normalizePath(fileURLToPath(new URL(`../../../packages/workspace/dist/${filename}`, import.meta.url))));
+
+      await vi.waitFor(() => expect(send).toHaveBeenCalledWith({ type: 'full-reload' }));
+      expect(send).toHaveBeenCalledTimes(1);
+    } finally {
+      await server?.close();
+      await rm(cacheDir, { recursive: true, force: true });
     }
   });
 });
