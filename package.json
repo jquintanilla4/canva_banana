@@ -62,5 +62,14 @@
     "fsevents@2.3.3": true,
     "protobufjs@7.6.6": true,
     "@google/genai@2.31.0": true
+  },
+  "overrides": {
+    "@electron/asar": {
+      "glob": "^14.0.5",
+      "minimatch": "^11.0.8"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.8"
+    }
   }
 }
