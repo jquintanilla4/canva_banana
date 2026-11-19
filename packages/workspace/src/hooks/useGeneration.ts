@@ -19,12 +19,8 @@ import { KLING_V4_REFERENCE_IMAGE_LIMIT, KLING_V4_REFERENCE_VIDEO_LIMIT, isKling
 import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '../services/klingV4RunSettings';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions, type GptImage2RunSettings } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions, type GptImage25RunSettings } from '../services/gptImage25RunSettings';
-import { isTokenHubGptImage25Model } from '../services/tokenHubGptImage25Config';
-import { resolveTokenHubGptImage25RunSettings, serializeTokenHubGptImage25GenerationOptions, type TokenHubGptImage25RunSettings } from '../services/tokenHubGptImage25RunSettings';
-import { generateTokenHubImage, generateTokenHubImageEdit, TokenHubImageRequestError } from '../services/tokenHubImageService';
-import { TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
-import { resolveTokenHubNanoBananaRunSettings, serializeTokenHubNanoBananaGenerationOptions, type TokenHubNanoBananaRunSettings } from '../services/tokenHubNanoBananaRunSettings';
-import { generateTokenHubNanoBanana, generateTokenHubNanoBananaEdit } from '../services/tokenHubNanoBananaService';
+import { TokenHubImageRequestError } from '../services/tokenHubImageService';
+import { isTokenHubImageModel, resolveTokenHubImageOperation, type TokenHubImageOperation } from '../services/tokenHubImageOperation';
 import { resolveRecraftRunSettings, serializeRecraftGenerationOptions, type RecraftRunSettings } from '../services/recraftRunSettings';
 import { resolveGrokImageRunSettings, serializeGrokImageGenerationOptions, type GrokImageRunSettings } from '../services/grokImageRunSettings';
 import { useCallback, useMemo, useRef } from 'react';
@@ -679,7 +675,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isUnsupportedRemovedHailuoRun = isRemovedHailuoModelId(rawOverrideModelId); // Saved Hailuo requests must not fall back to another paid model.
     const isUnsupportedRemovedOneToAllRun = isRemovedOneToAllAnimateModelId(rawOverrideModelId); // Retired 1-to-All reruns must not fall back to another paid model.
     const overrideModelId = normalizeFalModelId(rawOverrideModelId); // Accept legacy saved model ids.
-    const isSavedTokenHubImage = isTokenHubNanoBananaModel(overrideModelId) || isTokenHubGptImage25Model(overrideModelId);
+    const isSavedTokenHubImage = isTokenHubImageModel(overrideModelId);
     if (generationOverride?.provider === 'tokenhub' && !isSavedTokenHubImage) {
       setError('Select a supported TokenHub image model and create a new generation.');
       return;
@@ -709,7 +705,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return; // Check explicit saved ids before substitution, or the resolved model for provider-only reruns.
     }
     const falModelIdForRun: FalModelId = falModelModeForRun === 'video' ? falVideoModelIdForRun : falImageModelIdForRun;
-    const falOptionsOverride = generationOverride && (isNanoBananaEditModelId(falModelIdForRun) || isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun) || isTokenHubGptImage25Model(falModelIdForRun) || isTokenHubNanoBananaModel(falModelIdForRun) || isGptImage26Model(falModelIdForRun))
+    const tokenHubModelForRun = isTokenHubImageModel(falModelIdForRun) ? falModelIdForRun : undefined;
+    const falOptionsOverride = generationOverride && (isNanoBananaEditModelId(falModelIdForRun) || isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun) || tokenHubModelForRun || isGptImage26Model(falModelIdForRun))
       ? { ...getGenerationTransferOptionDefaults(falModelIdForRun, generationOverride.falOptions ?? {}), ...generationOverride.falOptions }
       : generationOverride?.falOptions ?? {};
     const rawFalImageSizeSelection = falOptionsOverride.imageSizeSelection ?? falImageSizeSelection;
@@ -1031,9 +1028,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : typeof legacyKlingOptions.klingO1KeepAudio === 'boolean'
         ? legacyKlingOptions.klingO1KeepAudio
         : klingO3KeepAudio;
+    const usingTokenHub = apiProviderForRun !== 'google' && tokenHubModelForRun !== undefined;
     const generationProviderForRun: GenerationProviderId = apiProviderForRun === 'google'
       ? 'google'
-      : (isTokenHubNanoBananaModel(falModelIdForRun) || isTokenHubGptImage25Model(falModelIdForRun))
+      : usingTokenHub
         ? 'tokenhub'
         : falModelModeForRun === 'video' && (falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_MULTIFRAME_VIDEO_MODEL_ID)
           ? 'jimeng'
@@ -1044,7 +1042,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const usingFal = generationProviderForRun === 'fal';
     const usingVolcengine = generationProviderForRun === 'volcengine';
     const usingJimeng = generationProviderForRun === 'jimeng';
-    const usingTokenHub = generationProviderForRun === 'tokenhub';
     const usesGlobalLoadingLock = generationProviderForRun === 'google';
     const isVideoMode = generationProviderForRun !== 'google' && falModelModeForRun === 'video';
     const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelIdForRun);
@@ -1136,7 +1133,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     let gptImage2SettingsForRun: GptImage2RunSettings | undefined;
     let gptImage26SettingsForRun: GptImage26RunSettings | undefined;
     let gptImage25SettingsForRun: GptImage25RunSettings | undefined;
-    let tokenHubSettingsForRun: TokenHubNanoBananaRunSettings | TokenHubGptImage25RunSettings | undefined;
+    let tokenHubOperation: TokenHubImageOperation | undefined;
     let krea3SettingsForRun: Krea3RunSettings | undefined;
     let grokImageSettingsForRun: GrokImageRunSettings | undefined;
     let recraftSettingsForRun: RecraftRunSettings | undefined;
@@ -1216,24 +1213,22 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
     if (usingTokenHub) {
       try {
-        const kind = isTextToImage ? 'text_to_image' : 'image_edit';
-        const validation = generationOverride ? 'restore' : 'strict';
-        const numImages = generationOverride ? falOptionsOverride.numImages : falNumImagesForRun;
-        tokenHubSettingsForRun = isTokenHubNanoBananaModel(falModelIdForRun)
-          ? resolveTokenHubNanoBananaRunSettings({
-            kind, numImages,
-            aspectRatioSelection: generationOverride ? falOptionsOverride.aspectRatioSelection : falAspectRatioSelectionForRun,
-            resolution: generationOverride ? falOptionsOverride.resolutionSelection : falResolutionSelectionForRun,
-            webSearch: generationOverride ? falOptionsOverride.tokenHubNanoBananaWebSearch : tokenHubNanoBananaWebSearch,
-            thinkingLevel: generationOverride ? falOptionsOverride.tokenHubNanoBananaThinkingLevel : tokenHubNanoBananaThinkingLevel,
-          }, validation)
-          : resolveTokenHubGptImage25RunSettings({
-            kind, numImages,
-            variant: generationOverride ? falOptionsOverride.tokenHubGptImage25Variant : tokenHubGptImage25Variant,
-            quality: generationOverride ? falOptionsOverride.tokenHubGptImage25Quality : tokenHubGptImage25Quality,
-            background: generationOverride ? falOptionsOverride.tokenHubGptImage25Background : tokenHubGptImage25Background,
-            imageSizeSelection: generationOverride ? falOptionsOverride.imageSizeSelection : normalizedFalImageSizeSelectionForRun,
-          }, validation);
+        tokenHubOperation = resolveTokenHubImageOperation({
+          modelId: tokenHubModelForRun,
+          kind: isTextToImage ? 'text_to_image' : 'image_edit',
+          validation: generationOverride ? 'restore' : 'strict',
+          options: generationOverride ? falOptionsOverride : {
+            numImages: falNumImagesForRun,
+            aspectRatioSelection: falAspectRatioSelectionForRun,
+            resolutionSelection: falResolutionSelectionForRun,
+            imageSizeSelection: normalizedFalImageSizeSelectionForRun,
+            tokenHubNanoBananaWebSearch,
+            tokenHubNanoBananaThinkingLevel,
+            tokenHubGptImage25Variant,
+            tokenHubGptImage25Quality,
+            tokenHubGptImage25Background,
+          },
+        });
       } catch (error) {
         setError(error instanceof Error ? error.message : 'Unable to resolve image generation settings.');
         return;
@@ -3161,7 +3156,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const shouldValidateFalOptions = (usingFal || usingTokenHub)
       && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || usingTokenHub || isGptImage26ModelForRun || isIdeogram45ModelForRun);
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
-    const resolvedImageSettings = krea3SettingsForRun ?? nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? tokenHubSettingsForRun ?? gptImage26SettingsForRun ?? grokImageSettingsForRun;
+    const resolvedImageSettings = krea3SettingsForRun ?? nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? tokenHubOperation ?? gptImage26SettingsForRun ?? grokImageSettingsForRun;
     const numImagesForValidation = generationOverride && resolvedImageSettings
       ? resolvedImageSettings.numImages ?? 1 : falNumImagesForRun;
     const isNumImagesInvalid =
@@ -3223,11 +3218,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ...(gptImage2SettingsForRun ? serializeGptImage2GenerationOptions(gptImage2SettingsForRun) : {}),
       ...(gptImage26SettingsForRun ? serializeGptImage26GenerationOptions(gptImage26SettingsForRun) : {}),
       ...(gptImage25SettingsForRun ? serializeGptImage25GenerationOptions(gptImage25SettingsForRun) : {}),
-      ...(tokenHubSettingsForRun
-        ? tokenHubSettingsForRun.model === TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL
-          ? serializeTokenHubNanoBananaGenerationOptions(tokenHubSettingsForRun)
-          : serializeTokenHubGptImage25GenerationOptions(tokenHubSettingsForRun)
-        : {}),
+      ...tokenHubOperation?.savedOptions,
       ...(krea3SettingsForRun ? serializeKrea3GenerationOptions(krea3SettingsForRun) : {}),
       ...(grokImageSettingsForRun ? serializeGrokImageGenerationOptions(grokImageSettingsForRun) : {}),
       ...(recraftSettingsForRun ? serializeRecraftGenerationOptions(recraftSettingsForRun) : {}),
@@ -3255,7 +3246,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
       } : {}),
       falOptions: imageFalOptionsForRun,
     }; // Queue retry mirrors generated-image metadata before output exists.
-    const retryableImageInputs = usingFal || usingTokenHub ? imageRetryInputs : undefined;
     const handleFalPhaseUpdate = (update: FalPhaseUpdate) => {
       if (!falJobId) {
         return;
@@ -3265,14 +3255,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
       )));
     }; // Reflect service phase changes in the queue row.
 
-    if ((usingFal || usingTokenHub) && falJobId) {
+    if (falJobId) {
       const newJob: FalQueueJob = {
         id: falJobId,
         prompt: jobPromptDescription,
         modelId: falModelIdForRun,
         modelLabel: jobModelLabel,
         provider: generationProviderForRun,
-        ...(retryableImageInputs ? { retryInputs: retryableImageInputs } : {}),
+        retryInputs: imageRetryInputs,
         status: 'IN_QUEUE',
         phase: 'submitting',
         phaseMessage: 'Preparing request...',
@@ -3310,16 +3300,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     try {
       let generationResult: FalImageGenerationResult;
       let placementOrigin = { x: 100, y: 100 };
-      let sourceImageForAPI: {
-        element: HTMLImageElement;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        naturalWidth: number;
-        naturalHeight: number;
-        file: File;
-      } | null = null;
+      const tokenHubTransport = { abortSignal: workspaceSignal, onPhaseUpdate: handleFalPhaseUpdate };
+      const handleImageQueueUpdate = (update: FalQueueUpdate) => {
+        setFalJobs(prev => prev.map(job => job.id === falJobId ? applyFalQueueUpdateToJob(job, update) : job));
+      };
 
       if (isTextToImage) {
         const imageBoundsList = images.map(getImageBounds);
@@ -3348,17 +3332,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
                     : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID);
 
-          const falResult = await awaitActive(async () => generateFalImage(trimmedPrompt, {
+          generationResult = await awaitActive(() => generateFalImage(trimmedPrompt, {
             jobId: falJobId,
             onPhaseUpdate: handleFalPhaseUpdate,
-            onQueueUpdate: (update) => {
-              setFalJobs(prev => prev.map(job => {
-                if (job.id !== falJobId) {
-                  return job;
-                }
-                return applyFalQueueUpdateToJob(job, update);
-              }));
-            },
+            onQueueUpdate: handleImageQueueUpdate,
             modelId: textToImageModelId,
             aspectRatio: (isNanoBananaModel || isSeedreamModel)
               ? falAspectRatioSelectionForRun
@@ -3376,45 +3353,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
             ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
           }));
-
-          generationResult = falResult;
-
-          setFalJobs(prev => prev.map(job => {
-            if (job.id !== falJobId) {
-              return job;
-            }
-            if (job.status === 'FAILED') {
-              return job;
-            }
-            return {
-              ...job,
-              status: 'COMPLETED',
-              phase: 'completed',
-              phaseMessage: 'Image ready',
-              requestId: falResult.requestId || job.requestId,
-              description: falResult.text,
-              updatedAt: Date.now(),
-            };
-          }));
-        } else if (usingTokenHub) {
-          const settings = tokenHubSettingsForRun;
-          if (!falJobId || settings?.kind !== 'text_to_image') {
-            throw new Error('Unable to resolve TokenHub text-to-image settings.');
-          }
-          const transport = { abortSignal: workspaceSignal, onPhaseUpdate: handleFalPhaseUpdate };
-          const tokenHubResult = await awaitActive(() => settings.model === TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL
-            ? generateTokenHubNanoBanana(trimmedPrompt, { ...transport, settings })
-            : generateTokenHubImage(trimmedPrompt, { ...transport, settings }));
-          generationResult = tokenHubResult;
-          setFalJobs(prev => prev.map(job => job.id === falJobId && job.status !== 'FAILED' ? {
-            ...job,
-            status: 'COMPLETED',
-            phase: 'completed',
-            phaseMessage: 'Image ready',
-            requestId: tokenHubResult.requestId || job.requestId,
-            description: tokenHubResult.text,
-            updatedAt: Date.now(),
-          } : job));
+        } else if (tokenHubOperation?.kind === 'text_to_image') {
+          generationResult = await awaitActive(() => tokenHubOperation.execute(trimmedPrompt, tokenHubTransport));
         } else {
           generationResult = await awaitActive(async () => generateGoogleImage(trimmedPrompt, {
             aspectRatio: googleAspectRatio,
@@ -3425,20 +3365,25 @@ export const useGeneration = (args: UseGenerationArgs) => {
           throw new Error('Please select an image to edit.');
         }
 
-        sourceImageForAPI = {
-          element: activePrimary.element as HTMLImageElement,
-          x: activePrimary.x,
-          y: activePrimary.y,
-          width: activePrimary.width,
-          height: activePrimary.height,
-          naturalWidth: activePrimary.naturalWidth,
-          naturalHeight: activePrimary.naturalHeight,
-          file: activePrimary.file,
-        };
+        let editReferenceImages: HTMLImageElement[] | undefined;
+        if (referenceCanvasImages.length > 0) {
+          editReferenceImages = await awaitActive(() => Promise.all(referenceCanvasImages.map(async img => {
+            if ((img.rotation ?? 0) === 0) return img.element;
+            const rasterized = await awaitActive(() => rasterizeImages([img]));
+            return rasterized.element;
+          })));
+          referenceIdsUsed = referenceCanvasImages.map(img => img.id);
+        }
 
-        const editImageDimensions = {
-          width: sourceImageForAPI.naturalWidth || sourceImageForAPI.width,
-          height: sourceImageForAPI.naturalHeight || sourceImageForAPI.height,
+        const editParams = {
+          prompt: trimmedPrompt,
+          image: activePrimary.element,
+          tool: editToolForRun,
+          paths: editPathsForRun,
+          imageDimensions: {
+            width: activePrimary.naturalWidth || activePrimary.width,
+            height: activePrimary.naturalHeight || activePrimary.height,
+          },
         };
 
         if (usingFal) {
@@ -3447,71 +3392,22 @@ export const useGeneration = (args: UseGenerationArgs) => {
           }
 
           if (isUpscaleModel) {
-            const onQueueUpdate = (update: FalQueueUpdate) => {
-              setFalJobs(prev => prev.map(job => {
-                if (job.id !== falJobId) {
-                  return job;
-                }
-                return applyFalQueueUpdateToJob(job, update);
-              }));
-            };
-
-            const falUpscaleResult = isSeedvrUpscaleModel
-              ? await awaitActive(async () => upscaleFalSeedvrImage(
-                sourceImageForAPI.element,
+            generationResult = isSeedvrUpscaleModel
+              ? await awaitActive(() => upscaleFalSeedvrImage(
+                activePrimary.element,
                 falScaleFactorForRun,
                 falNoiseScaleForRun,
-                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate },
+                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate: handleImageQueueUpdate },
               ))
-              : await awaitActive(async () => upscaleFalCrystalImage(
-                sourceImageForAPI.element,
+              : await awaitActive(() => upscaleFalCrystalImage(
+                activePrimary.element,
                 falScaleFactorForRun,
                 falCreativityForRun,
-                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate },
+                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate: handleImageQueueUpdate },
               ));
-
-            generationResult = falUpscaleResult;
-
-            setFalJobs(prev => prev.map(job => {
-              if (job.id !== falJobId) {
-                return job;
-              }
-              if (job.status === 'FAILED') {
-                return job;
-              }
-              return {
-                ...job,
-                status: 'COMPLETED',
-                phase: 'completed',
-                phaseMessage: 'Image ready',
-                requestId: falUpscaleResult.requestId || job.requestId,
-                description: falUpscaleResult.text,
-                updatedAt: Date.now(),
-              };
-            }));
           } else {
-            let editReferenceImages: HTMLImageElement[] | undefined;
-            if (referenceCanvasImages.length > 0) {
-              const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
-                if ((img.rotation ?? 0) === 0) {
-                  return img.element;
-                }
-                const rasterized = await awaitActive(async () => rasterizeImages([img]));
-                return rasterized.element;
-              };
-
-              if (referenceCanvasImages.length > 0) {
-                editReferenceImages = await awaitActive(async () => Promise.all(referenceCanvasImages.map(prepareReferenceImage)));
-                referenceIdsUsed = referenceCanvasImages.map(img => img.id);
-              }
-            }
-
-            const falEditResult = await awaitActive(async () => generateFalImageEdit({
-              prompt: trimmedPrompt,
-              image: sourceImageForAPI.element,
-              tool: editToolForRun,
-              paths: editPathsForRun,
-              imageDimensions: editImageDimensions,
+            generationResult = await awaitActive(() => generateFalImageEdit({
+              ...editParams,
               referenceImages: editReferenceImages,
             }, {
               jobId: falJobId,
@@ -3529,88 +3425,36 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(ideogram45SettingsForRun?.kind === 'image_edit' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
               ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
               ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
-              onQueueUpdate: (update) => {
-                setFalJobs(prev => prev.map(job => {
-                  if (job.id !== falJobId) {
-                    return job;
-                  }
-                  return applyFalQueueUpdateToJob(job, update);
-                }));
-              },
-            }));
-
-            generationResult = falEditResult;
-
-            setFalJobs(prev => prev.map(job => {
-              if (job.id !== falJobId) {
-                return job;
-              }
-              if (job.status === 'FAILED') {
-                return job;
-              }
-              return {
-                ...job,
-                status: 'COMPLETED',
-                phase: 'completed',
-                phaseMessage: 'Image ready',
-                requestId: falEditResult.requestId || job.requestId,
-                description: falEditResult.text,
-                updatedAt: Date.now(),
-              };
+              onQueueUpdate: handleImageQueueUpdate,
             }));
           }
-        } else if (usingTokenHub) {
-          const settings = tokenHubSettingsForRun;
-          if (!falJobId || settings?.kind !== 'image_edit') {
-            throw new Error('Unable to resolve TokenHub image-edit settings.');
-          }
-          let editReferenceImages: HTMLImageElement[] | undefined;
-          if (referenceCanvasImages.length > 0) {
-            const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
-              if ((img.rotation ?? 0) === 0) return img.element;
-              const rasterized = await awaitActive(async () => rasterizeImages([img]));
-              return rasterized.element;
-            };
-            editReferenceImages = await awaitActive(async () => Promise.all(referenceCanvasImages.map(prepareReferenceImage)));
-            referenceIdsUsed = referenceCanvasImages.map(img => img.id);
-          }
-          const editParams = {
-            prompt: trimmedPrompt,
-            image: sourceImageForAPI.element,
-            tool: editToolForRun,
-            paths: editPathsForRun,
-            imageDimensions: editImageDimensions,
+        } else if (tokenHubOperation?.kind === 'image_edit') {
+          generationResult = await awaitActive(() => tokenHubOperation.execute({
+            ...editParams,
             referenceImages: editReferenceImages,
-          };
-          const transport = { abortSignal: workspaceSignal, onPhaseUpdate: handleFalPhaseUpdate };
-          const tokenHubResult = await awaitActive(() => settings.model === TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL
-            ? generateTokenHubNanoBananaEdit(editParams, { ...transport, settings })
-            : generateTokenHubImageEdit(editParams, { ...transport, settings }));
-          generationResult = tokenHubResult;
-          setFalJobs(prev => prev.map(job => job.id === falJobId && job.status !== 'FAILED' ? {
-            ...job,
-            status: 'COMPLETED',
-            phase: 'completed',
-            phaseMessage: 'Image ready',
-            requestId: tokenHubResult.requestId || job.requestId,
-            description: tokenHubResult.text,
-            updatedAt: Date.now(),
-          } : job));
+          }, tokenHubTransport));
         } else {
-          const googleResult = await awaitActive(async () => generateGoogleImageEdit({
-            prompt: trimmedPrompt,
-            image: sourceImageForAPI.element,
-            tool: editToolForRun,
-            paths: editPathsForRun,
-            imageDimensions: editImageDimensions,
-            mimeType: sourceImageForAPI.file.type,
+          generationResult = await awaitActive(() => generateGoogleImageEdit({
+            ...editParams,
+            mimeType: activePrimary.file.type,
           }));
-          generationResult = googleResult;
         }
       }
 
       if (!generationResult) {
         throw new Error('No generation result received.');
+      }
+
+      if (falJobId) {
+        setFalJobs(prev => prev.map(job => job.id === falJobId && job.status !== 'FAILED' ? {
+          ...job,
+          status: 'COMPLETED',
+          phase: 'completed',
+          phaseMessage: 'Image ready',
+          requestId: generationResult.requestId || job.requestId,
+          description: generationResult.text,
+          updatedAt: Date.now(),
+        } : job));
       }
 
       const imagesBase64 = generationResult.imagesBase64 || [];
