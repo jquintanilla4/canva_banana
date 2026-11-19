@@ -1,3 +1,4 @@
+import type { VolcengineSettings } from '../services/volcengineSettings';
 import { GPT_IMAGE_26_DEFAULTS, GPT_IMAGE_26_IMAGE_SIZE_OPTIONS, isGptImage26Model, isGptImage26Quality, isGptImage26Background, isGptImage26ReasoningEffort, isGptImage26OutputFormat, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from '../services/gptImage26Config';
 import { getRuntimeConfig } from '../services/runtimeConfig';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
@@ -105,7 +106,6 @@ import {
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
   getProviderSafeSeedance2Variant,
-  getSeedance2VolcengineModelCapabilities,
   getVolcengineSafeSeedance2Settings,
   isSeedance2VideoModel as isSeedance2VideoModelId,
   isFalSeedance25VideoModel,
@@ -444,6 +444,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
   seedance2OutputFormat: Seedance2OutputFormatSelectionValue;
+  seedanceArkSettings: VolcengineSettings;
   seedance25Variant: Seedance25Variant;
   seedance25AspectRatio: Seedance25AspectRatioSelectionValue;
   seedance25Resolution: Seedance25ResolutionSelectionValue;
@@ -562,6 +563,7 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setSeedance2GenerateAudio: Dispatch<SetStateAction<boolean>>;
   setSeedance2CameraFixed: Dispatch<SetStateAction<boolean>>;
   setSeedance2OutputFormat: Dispatch<SetStateAction<Seedance2OutputFormatSelectionValue>>;
+  setSeedanceArkSettings: Dispatch<SetStateAction<VolcengineSettings>>;
   setSeedance25Variant: Dispatch<SetStateAction<Seedance25Variant>>;
   setSeedance25AspectRatio: Dispatch<SetStateAction<Seedance25AspectRatioSelectionValue>>;
   setSeedance25Resolution: Dispatch<SetStateAction<Seedance25ResolutionSelectionValue>>;
@@ -681,6 +683,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [seedance2GenerateAudio, setSeedance2GenerateAudio] = useState<boolean>(false);
   const [seedance2CameraFixed, setSeedance2CameraFixed] = useState<boolean>(false);
   const [seedance2OutputFormat, setSeedance2OutputFormat] = useState<Seedance2OutputFormatSelectionValue>('mp4');
+  const [seedanceArkSettings, setSeedanceArkSettings] = useState<VolcengineSettings>({});
   const [seedance25Variant, setSeedance25Variant] = useState<Seedance25Variant>('reference');
   const [seedance25AspectRatio, setSeedance25AspectRatio] = useState<Seedance25AspectRatioSelectionValue>('adaptive');
   const [seedance25Resolution, setSeedance25Resolution] = useState<Seedance25ResolutionSelectionValue>('720p');
@@ -812,8 +815,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (falVideoModelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID && seedance25Duration === 'auto') {
       setSeedance25Duration(normalizeJimengSeedance25Duration(seedance25Duration));
     }
-    const supportsVolcengineAutoDuration = isVolcengineSeedance2VideoModel(falVideoModelId)
-      && getSeedance2VolcengineModelCapabilities(seedance2VolcengineModel).supportsAutoDuration;
+    const supportsVolcengineAutoDuration = isVolcengineSeedance2VideoModel(falVideoModelId);
     if (isVolcengineSeedance2VideoModel(falVideoModelId)) {
       const safe = getVolcengineSafeSeedance2Settings(seedance2VolcengineModel, {
         seedance2Variant,
@@ -1752,6 +1754,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       seedance2GenerateAudio: setSeedance2GenerateAudio,
       seedance2CameraFixed: setSeedance2CameraFixed,
       seedance2OutputFormat: setSeedance2OutputFormat,
+      seedanceArkSettings: setSeedanceArkSettings,
       seedance25Variant: setSeedance25Variant,
       seedance25AspectRatio: setSeedance25AspectRatio,
       seedance25Resolution: setSeedance25Resolution,
@@ -1855,6 +1858,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     seedance2GenerateAudio,
     seedance2CameraFixed,
     seedance2OutputFormat,
+    seedanceArkSettings,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
@@ -2114,6 +2118,7 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
     setSeedance2OutputFormat,
+    setSeedanceArkSettings,
     setSeedance25Variant,
     setSeedance25AspectRatio,
     setSeedance25Resolution,

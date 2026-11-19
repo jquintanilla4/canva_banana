@@ -38,6 +38,7 @@ export const getEmbeddedBarFalOptions = (bar: CanvasVideoPromptBar): EmbeddedBar
   seedance2GenerateAudio: bar.seedance2GenerateAudio,
   seedance2CameraFixed: bar.seedance2CameraFixed,
   seedance2OutputFormat: bar.seedance2OutputFormat,
+  ...((bar.seedanceArkSettings ?? bar.falOptions?.seedanceArkSettings) ? { seedanceArkSettings: bar.seedanceArkSettings ?? bar.falOptions?.seedanceArkSettings } : {}),
   klingV3MultiPrompt: bar.klingV3MultiPrompt ?? bar.falOptions?.klingV3MultiPrompt,
   klingV3Duration: bar.klingV3Duration ?? bar.falOptions?.klingV3Duration,
   klingV3GenerateAudio: bar.klingV3GenerateAudio ?? bar.falOptions?.klingV3GenerateAudio,
@@ -97,6 +98,7 @@ export const buildEmbeddedVideoGenerationProviderInput = (
         seedance2GenerateAudio: bar.seedance2GenerateAudio,
         seedance2CameraFixed: safe.seedance2CameraFixed,
         seedance2OutputFormat: bar.seedance2OutputFormat,
+        ...((bar.seedanceArkSettings ?? bar.falOptions?.seedanceArkSettings) ? { seedanceArkSettings: bar.seedanceArkSettings ?? bar.falOptions?.seedanceArkSettings } : {}),
       },
     };
   }

@@ -135,7 +135,7 @@ describe('getSeedance2VolcengineReferenceLimits', () => {
         images: 9,
         videos: 3,
         audios: 3,
-        total: 12,
+        total: model ? 15 : 12,
         clipMinDurationSeconds: 2,
         clipMaxDurationSeconds: 15,
       });

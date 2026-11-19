@@ -1,3 +1,4 @@
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { isGptImage26Model } from './gptImage26Config';
 import { isTokenHubGptImage25Model } from './tokenHubGptImage25Config';
 import { isTokenHubNanoBananaModel } from './tokenHubNanoBananaConfig';
@@ -438,14 +439,15 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
     resolve: (ctx, modelId) => {
       const isVolcengineSelector = modelId === SEEDANCE_2_VIDEO_MODEL_ID;
       // Only the Volcengine selector can opt into the larger Seedance 2.5 reference envelope.
-      const limits = getSeedance2VolcengineReferenceLimits(isVolcengineSelector ? (ctx.seedance2VolcengineModel ?? 'standard') : 'standard');
-      const modelLabel = isVolcengineSelector && ctx.seedance2VolcengineModel === 'seedance25' ? 'Seedance 2.5' : 'Seedance 2';
+      const limits = getSeedance2VolcengineReferenceLimits(isVolcengineSelector ? (ctx.seedance2VolcengineModel ?? 'standard') : undefined);
+      const volcengineModel = getSeedance2VolcengineModelCapabilities(ctx.seedance2VolcengineModel);
+      const modelLabel = isVolcengineSelector && volcengineModel.family === '2.5' ? volcengineModel.label : 'Seedance 2';
       return {
         supportsTailFrame: ctx.seedance2Variant === 'smart',
         promptPlaceholder: ctx.seedance2Variant === 'edit'
           ? `Seedance 2 Edit: select a video to edit (@Video1), optionally tag @Image/@Audio replacement clips, then describe the changes... ${GENERATE_SUFFIX}`
           : ctx.seedance2Variant === 'extend'
-            ? `${modelLabel} Extend: select up to ${limits.videos} video clips${isVolcengineSelector && ctx.seedance2VolcengineModel === 'seedance25' ? ' and optional reference images' : ''}, then describe how to chain or extend the clips... ${GENERATE_SUFFIX}`
+            ? `${modelLabel} Extend: select up to ${limits.videos} video clips${isVolcengineSelector && volcengineModel.family === '2.5' ? ' and optional reference images' : ''}, then describe how to chain or extend the clips... ${GENERATE_SUFFIX}`
             : ctx.seedance2Variant === 'reference'
               ? referencePlaceholder(modelLabel, limits.images, limits.videos, limits.audios)
               : `Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... ${GENERATE_SUFFIX}`,

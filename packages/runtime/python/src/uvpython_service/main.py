@@ -7,22 +7,25 @@ import socket
 import tempfile
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from fastapi import FastAPI, File, Form, HTTPException, Request as FastAPIRequest, UploadFile, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from volcenginesdkarkruntime._exceptions import ArkAPIStatusError
 
 from uvpython_service.config import get_settings
 from uvpython_service.jimeng_worker import JIMENG_MODEL_ID, check_jimeng_health, check_jimeng_login, clear_jimeng_cache, create_jimeng_job, get_jimeng_setup_status, install_or_update_jimeng_cli, jimeng_job_store, serialize_jimeng_job, start_jimeng_login
 from uvpython_service.media import get_ffprobe_status, probe_media_duration_seconds
 from uvpython_service.models import JobState
-from uvpython_service.models import DEFAULT_MODEL_ID, MediaInput, SeedanceJobPayload
+from uvpython_service.models import DEFAULT_MODEL_ID, DraftFinalizationPayload, MediaInput, SeedanceJobPayload
+from uvpython_service.ark_references import resolve_reference_sources
 from uvpython_service.store import job_store
-from uvpython_service.worker import create_job, serialize_job
+from uvpython_service.worker import DraftFinalizationNotSubmitted, DraftFinalizationUnavailable, create_draft_finalization, create_job, resume_draft_finalization, serialize_job
 
 app = FastAPI(title="Canva Banana UV Python Service")  # Local dev API surface.
 JIMENG_VIDEO_MEDIA_TYPES = {
@@ -472,6 +475,64 @@ def clear_jimeng_cache_endpoint(request: FastAPIRequest) -> dict[str, object]:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+class DraftFinalizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    draftTaskId: str
+    resolution: Literal["1080p", "4k"]
+    outputFormat: Literal["mp4", "mov"] | None = None
+    returnLastFrame: bool | None = None
+    watermark: bool | None = None
+    priority: int | None = Field(default=None, ge=0, le=9)
+
+
+class DraftResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    requestId: str
+    draftTaskId: str | None = None
+    resolution: Literal["1080p", "4k"] | None = None
+
+
+@app.post("/api/volcengine/draft-finalizations")
+def finalize_seedance_draft(request: FastAPIRequest, body: DraftFinalizationRequest) -> dict[str, object]:
+    _require_trusted_volcengine_submit_request(request)
+    try:
+        job = create_draft_finalization(DraftFinalizationPayload(
+            draft_task_id=body.draftTaskId,
+            resolution=body.resolution,
+            output_format=body.outputFormat,
+            return_last_frame=body.returnLastFrame,
+            watermark=body.watermark,
+            priority=body.priority,
+        ))
+        return _build_job_response(request, job)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DraftFinalizationNotSubmitted as exc:
+        raise HTTPException(status_code=503, detail={"code": "draft-not-submitted", "message": str(exc)}) from exc
+    except ArkAPIStatusError as exc:
+        status_code = exc.status_code if exc.status_code in {400, 401, 403, 404, 422, 429} else 500
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/volcengine/resume")
+def resume_seedance_draft_finalization(request: FastAPIRequest, body: DraftResumeRequest) -> dict[str, object]:
+    _require_trusted_volcengine_submit_request(request)
+    try:
+        return _build_job_response(request, resume_draft_finalization(
+            body.requestId, draft_task_id=body.draftTaskId, resolution=body.resolution,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DraftFinalizationUnavailable as exc:
+        raise HTTPException(status_code=410, detail={
+            "code": "draft-task-unavailable", "message": str(exc), "confirmedRequestId": exc.confirmed_request_id,
+        }) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.post("/api/volcengine/jobs")
 async def submit_seedance_job(
     request: FastAPIRequest,
@@ -484,6 +545,12 @@ async def submit_seedance_job(
     output_format: str | None = Form(None),
     generate_audio: bool = Form(False),
     camera_fixed: bool = Form(False),
+    web_search: bool = Form(False),
+    return_last_frame: bool = Form(False),
+    watermark: bool = Form(False),
+    priority: int | None = Form(None),
+    draft: bool = Form(False),
+    reference_sources: str | None = Form(None),
     primary_image: UploadFile | None = File(None),
     last_frame_image: UploadFile | None = File(None),
     reference_images: list[UploadFile] | None = File(None),
@@ -513,6 +580,11 @@ async def submit_seedance_job(
         reference_audio_media = await _read_uploads(reference_audios, should_probe_duration=True, media_label="reference audio")
         staged_media.extend(reference_audio_media)
 
+        references = resolve_reference_sources(reference_sources, {
+            "image": reference_image_media,
+            "video": reference_video_media,
+            "audio": reference_audio_media,
+        })
         payload = SeedanceJobPayload(
             prompt=prompt,
             model_id=model_id,
@@ -523,11 +595,16 @@ async def submit_seedance_job(
             output_format=output_format,  # type: ignore[arg-type]  # Validated against the mp4/mov whitelist above.
             generate_audio=generate_audio,
             camera_fixed=camera_fixed,
+            web_search=web_search,
+            return_last_frame=return_last_frame,
+            watermark=watermark,
+            priority=priority,
+            draft=draft,
             primary_image=primary_image_media,
             last_frame_image=last_frame_image_media,
-            reference_images=reference_image_media,
-            reference_videos=reference_video_media,
-            reference_audios=reference_audio_media,
+            reference_images=references["image"],
+            reference_videos=references["video"],
+            reference_audios=references["audio"],
         )
         job = create_job(payload)
         payload = None  # The worker now owns the staged media lifecycle.

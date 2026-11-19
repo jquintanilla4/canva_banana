@@ -1,18 +1,12 @@
+import { buildVolcengineReferenceSources, isArkIdentifier, type VolcengineDraft, type VolcengineFinalResolution, type VolcengineSettings } from './volcengineSettings';
 import { getWorkspaceSignal, workspaceDelay, workspaceFetch } from './workspaceSession';
-import type { Seedance2OutputFormat, Seedance2Variant, Seedance2VolcengineDuration, Seedance2VolcengineModel } from '../types';
+import type { Seedance2OutputFormat, Seedance2Variant, Seedance2VolcengineDuration } from '../types';
 import { convertReferencePromptMentionsToVolcengineTokens } from '../utils/seedancePromptMentions';
 import { addDebugLog } from './debugLog';
 import { getPythonBackendAuthHeadersForUrl } from './pythonBackendAuth';
 import { getRuntimeConfig } from './runtimeConfig';
 
 export type VolcengineQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'; // Match the existing queue panel states.
-
-export const SEEDANCE2_VOLCENGINE_MODEL_IDS: Record<Seedance2VolcengineModel, string> = {
-  standard: 'doubao-seedance-2-0-260128',
-  fast: 'doubao-seedance-2-0-fast-260128',
-  mini: 'doubao-seedance-2-0-mini-260615',
-  seedance25: 'doubao-seedance-2-5-260628',
-}; // Single source of truth mapping the UI picker to Ark model ids.
 
 export type VolcengineQueueUpdate = {
   status: VolcengineQueueStatus;
@@ -23,8 +17,20 @@ export type VolcengineQueueUpdate = {
   error?: string;
 };
 
-type GenerateSeedanceVideoOptions = {
+type VolcengineJobOptions = {
   abortSignal?: AbortSignal;
+  onQueueUpdate?: (update: VolcengineQueueUpdate) => void;
+};
+
+export class VolcengineDraftSubmissionRejected extends Error {}
+export class VolcengineDraftTaskUnavailable extends Error {
+  constructor(message: string, readonly confirmedRequestId?: string) {
+    super(message);
+  }
+}
+export class VolcengineRemoteJobFailed extends Error {}
+
+type GenerateSeedanceVideoOptions = VolcengineJobOptions & {
   modelId: string;
   variant: Seedance2Variant;
   aspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
@@ -38,7 +44,7 @@ type GenerateSeedanceVideoOptions = {
   referenceImageFiles?: File[];
   referenceVideoFiles?: File[];
   referenceAudioFiles?: File[];
-  onQueueUpdate?: (update: VolcengineQueueUpdate) => void;
+  settings?: VolcengineSettings;
 };
 
 type VolcengineJobResponse = {
@@ -57,6 +63,8 @@ type VolcengineJobResponse = {
   providerOutputUrl?: string;
   lastFrameUrl?: string;
   providerLastFrameUrl?: string;
+  draftExpiresAt?: number;
+  remoteFailure?: boolean;
   error?: string;
   provider: 'volcengine';
 };
@@ -190,9 +198,17 @@ const parseJobResponse = async (
   response: Response,
   baseUrl: string,
 ): Promise<VolcengineJobResponse> => {
-  const data = await response.json() as VolcengineJobResponse | { detail?: string };
+  const data: unknown = await response.json();
   if (!response.ok) {
-    throw new Error(typeof (data as { detail?: unknown }).detail === 'string' ? (data as { detail?: string }).detail as string : 'Volcengine request failed.');
+    const detail = data && typeof data === 'object' && 'detail' in data ? data.detail : undefined;
+    if (detail && typeof detail === 'object' && 'code' in detail && 'message' in detail && typeof detail.message === 'string') {
+      if (detail.code === 'draft-not-submitted') throw new VolcengineDraftSubmissionRejected(detail.message);
+      if (detail.code === 'draft-task-unavailable') {
+        const confirmedRequestId = 'confirmedRequestId' in detail && isArkIdentifier(detail.confirmedRequestId) ? detail.confirmedRequestId : undefined;
+        throw new VolcengineDraftTaskUnavailable(detail.message, confirmedRequestId);
+      }
+    }
+    throw new Error(typeof detail === 'string' ? detail : 'Volcengine request failed.');
   }
   return parseJobPayload(data, baseUrl);
 };
@@ -271,7 +287,7 @@ const buildSocketDisconnectReason = (
 const streamSeedanceJob = async (
   baseUrl: string,
   jobId: string,
-  options: GenerateSeedanceVideoOptions,
+  options: VolcengineJobOptions,
 ): Promise<VolcengineSocketResult> => {
   const socketUrl = getVolcengineJobSocketUrl(baseUrl, jobId);
 
@@ -352,7 +368,7 @@ const reconnectToSeedanceJob = async (
   baseUrl: string,
   jobId: string,
   reconnectAttempt: number,
-  options: GenerateSeedanceVideoOptions,
+  options: VolcengineJobOptions,
 ): Promise<VolcengineJobResponse> => {
   options.abortSignal?.throwIfAborted();
   const reconnectDelayMs = Math.min(
@@ -383,7 +399,7 @@ const reconnectToSeedanceJob = async (
 export const generateSeedanceVideo = async (
   prompt: string,
   options: GenerateSeedanceVideoOptions,
-): Promise<{ videoUrl: string; providerVideoUrl?: string; requestId?: string; lastFrameUrl?: string; providerLastFrameUrl?: string }> => {
+): Promise<VolcengineVideoResult> => {
   options = { ...options, abortSignal: options.abortSignal ?? getWorkspaceSignal() };
   options.abortSignal?.throwIfAborted();
   const formData = new FormData();
@@ -415,6 +431,21 @@ export const generateSeedanceVideo = async (
     formData.append('reference_audios', file); // Reference variant audio refs.
   });
 
+  const { draft, webSearch, returnLastFrame, watermark, priority, assets } = options.settings ?? {};
+  if (draft) formData.set('draft', 'true');
+  if (webSearch) formData.set('web_search', 'true');
+  if (returnLastFrame) formData.set('return_last_frame', 'true');
+  if (watermark) formData.set('watermark', 'true');
+  if (priority !== undefined) formData.set('priority', String(priority));
+  if (assets?.length) {
+    const sources = buildVolcengineReferenceSources({
+      image: options.referenceImageFiles?.length ?? 0,
+      video: options.referenceVideoFiles?.length ?? 0,
+      audio: options.referenceAudioFiles?.length ?? 0,
+    }, assets);
+    formData.set('reference_sources', JSON.stringify(sources));
+  }
+
   const baseUrl = getVolcengineApiBaseUrl();
   const healthResponse = await fetchVolcengine(baseUrl, '/health', 'health', undefined, { requireOk: true });
   const health = await parseHealthResponse(healthResponse, baseUrl);
@@ -440,14 +471,32 @@ export const generateSeedanceVideo = async (
     headers: getVolcengineActionHeaders(baseUrl),
     body: formData,
   });
-  let job = await parseJobResponse(submitResponse, baseUrl);
-  options.abortSignal?.throwIfAborted();
+  const job = await parseJobResponse(submitResponse, baseUrl);
+  return followSeedanceJob(baseUrl, job, options);
+};
+
+export type VolcengineVideoResult = {
+  videoUrl: string;
+  providerVideoUrl?: string;
+  requestId?: string;
+  lastFrameUrl?: string;
+  providerLastFrameUrl?: string;
+  draft?: VolcengineDraft;
+};
+
+const followSeedanceJob = async (
+  baseUrl: string,
+  initialJob: VolcengineJobResponse,
+  options: VolcengineJobOptions,
+): Promise<VolcengineVideoResult> => {
+  let job = initialJob;
   options.onQueueUpdate?.(mapJobToQueueUpdate(job));
+  options.abortSignal?.throwIfAborted();
 
   addDebugLog({
     direction: 'inbound',
     source: 'volcengine',
-    title: options.modelId,
+    title: job.modelId,
     message: 'Seedance 2 job accepted',
     data: {
       jobId: job.id,
@@ -481,7 +530,7 @@ export const generateSeedanceVideo = async (
   addDebugLog({
     direction: job.status === 'COMPLETED' ? 'inbound' : 'error',
     source: 'volcengine',
-    title: options.modelId,
+    title: job.modelId,
     message: job.status === 'COMPLETED' ? 'Seedance 2 job completed' : 'Seedance 2 job failed',
     data: {
       jobId: job.id,
@@ -492,8 +541,12 @@ export const generateSeedanceVideo = async (
     },
   });
 
-  if (job.status !== 'COMPLETED' || !job.outputUrl) {
-    throw new Error(job.error || 'Volcengine did not return a video URL.');
+  if (job.status === 'FAILED') {
+    const message = job.error || 'Volcengine generation failed.';
+    throw job.remoteFailure ? new VolcengineRemoteJobFailed(message) : new Error(message);
+  }
+  if (!job.outputUrl) {
+    throw new Error('Volcengine did not return a video URL.');
   }
 
   return {
@@ -502,5 +555,45 @@ export const generateSeedanceVideo = async (
     requestId: job.requestId,
     lastFrameUrl: job.lastFrameUrl,
     providerLastFrameUrl: job.providerLastFrameUrl,
+    ...(job.requestId && Number.isSafeInteger(job.draftExpiresAt) && job.draftExpiresAt
+      ? { draft: { requestId: job.requestId, expiresAt: job.draftExpiresAt } }
+      : {}),
   };
+};
+
+type DraftFinalizationCommand =
+  | { kind: 'finalize'; draftTaskId: string; resolution: VolcengineFinalResolution; outputFormat?: Seedance2OutputFormat;
+      returnLastFrame?: boolean; watermark?: boolean; priority?: number }
+  | { kind: 'resume'; requestId: string; draftTaskId?: never; resolution?: never }
+  | { kind: 'resume'; requestId: string; draftTaskId: string; resolution: VolcengineFinalResolution };
+
+export const renderVolcengineDraft = async (
+  command: DraftFinalizationCommand,
+  options: VolcengineJobOptions & { onBeforeSubmit?: () => void },
+): Promise<VolcengineVideoResult> => {
+  const { kind, ...body } = command;
+  const baseUrl = getVolcengineApiBaseUrl();
+  const path = kind === 'resume' ? '/api/volcengine/resume' : '/api/volcengine/draft-finalizations';
+  options.abortSignal?.throwIfAborted();
+  if (kind === 'finalize') {
+    const health = await fetchVolcengine(baseUrl, '/health', 'health', { signal: options.abortSignal }, { requireOk: true });
+    await parseHealthResponse(health, baseUrl);
+    options.abortSignal?.throwIfAborted();
+    options.onBeforeSubmit?.();
+  }
+  const response = await fetchVolcengine(baseUrl, path, 'submit', {
+    method: 'POST',
+    headers: { ...getVolcengineActionHeaders(baseUrl), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let job: VolcengineJobResponse;
+  try {
+    job = await parseJobResponse(response, baseUrl);
+  } catch (error) {
+    if (kind === 'finalize' && [400, 401, 403, 404, 422, 429].includes(response.status) && error instanceof Error) {
+      throw new VolcengineDraftSubmissionRejected(error.message);
+    }
+    throw error;
+  }
+  return followSeedanceJob(baseUrl, job, options);
 };

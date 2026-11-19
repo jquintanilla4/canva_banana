@@ -178,7 +178,7 @@ const VIDEO_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
         seedance2Duration: '5',
         seedance2GenerateAudio: false,
         seedance2CameraFixed: false,
-        ...(isVolcengine ? { seedance2VolcengineModel: 'standard', seedance2OutputFormat: 'mp4' } : {}),
+        ...(isVolcengine ? { seedance2VolcengineModel: 'standard', seedance2OutputFormat: 'mp4', seedanceArkSettings: {} } : {}),
         ...(modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID ? { sessionId: 0 } : {}),
       }; // Provider-owned defaults must not overwrite hidden settings for another provider.
     },

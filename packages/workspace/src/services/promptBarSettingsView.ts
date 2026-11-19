@@ -1,3 +1,4 @@
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import type { PromptBarControlsInput } from './promptBarConfig';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
@@ -133,7 +134,7 @@ const PROMPT_BAR_VALUE_KEYS = [
   'seedance2Variant', 'seedance2JimengModelVersion', 'seedance2VolcengineModel',
   'seedance2AspectRatio', 'seedance2Resolution', 'seedance2Duration',
   'jimengMultiframeDuration', 'jimengMultiframeResolution',
-  'seedance2GenerateAudio', 'seedance2CameraFixed', 'seedance2OutputFormat',
+  'seedance2GenerateAudio', 'seedance2CameraFixed', 'seedance2OutputFormat', 'seedanceArkSettings',
   'seedance25Variant', 'seedance25AspectRatio', 'seedance25Resolution', 'seedance25Duration', 'seedance25GenerateAudio',
   'flux3ImageAspectRatio', 'flux3ImageResolution',
   'recraftImageSize', 'recraftBackgroundColor', 'recraftColors',
@@ -255,6 +256,7 @@ const buildEmbeddedPromptBarValues = (
     seedance2GenerateAudio: bar.seedance2GenerateAudio,
     seedance2CameraFixed: bar.seedance2CameraFixed,
     seedance2OutputFormat: bar.seedance2OutputFormat ?? fal.seedance2OutputFormat,
+    seedanceArkSettings: bar.seedanceArkSettings ?? options.seedanceArkSettings,
     seedance25Variant: options.seedance25Variant ?? 'reference',
     seedance25AspectRatio: options.seedance25AspectRatio ?? 'adaptive',
     seedance25Resolution: options.seedance25Resolution ?? '720p',
@@ -387,6 +389,7 @@ const createFooterPromptBarHandlers = (
   onSeedance2GenerateAudioChange: fal.handleSeedance2GenerateAudioChange,
   onSeedance2CameraFixedChange: fal.handleSeedance2CameraFixedChange,
   onSeedance2OutputFormatChange: fal.handleSeedance2OutputFormatChange,
+  onSeedanceArkSettingsChange: fal.setSeedanceArkSettings,
   onSeedance25VariantChange: fal.handleSeedance25VariantChange,
   onSeedance25AspectRatioChange: fal.handleSeedance25AspectRatioChange,
   onSeedance25ResolutionChange: fal.handleSeedance25ResolutionChange,
@@ -612,6 +615,7 @@ const createEmbeddedPromptBarHandlers = (
     onJimengMultiframeResolutionChange: value => updateFalOption('multiframeResolution', value),
     onSeedance2GenerateAudioChange: value => updateLegacyAndFal({ seedance2GenerateAudio: value }, 'seedance2GenerateAudio', value),
     onSeedance2CameraFixedChange: value => updateBar(bar.id, currentBar => ({ ...currentBar, seedance2CameraFixed: value })),
+    onSeedanceArkSettingsChange: settings => updateLegacyAndFal({ seedanceArkSettings: settings }, 'seedanceArkSettings', settings),
     onSeedance2OutputFormatChange: value => updateBar(bar.id, currentBar => ({
       ...currentBar,
       seedance2OutputFormat: isSeedance2OutputFormatSelectionValue(value) ? value : 'mp4',
@@ -680,7 +684,7 @@ const deriveFirstFrameFlags = (
     && hasFirstFrameImage,
   seedance2HasFirstFrame: modelId === SEEDANCE_2_VIDEO_MODEL_ID
     && values.seedance2Variant === 'smart'
-    && (site === 'embedded' || values.seedance2VolcengineModel === 'seedance25')
+    && (site === 'embedded' || getSeedance2VolcengineModelCapabilities(values.seedance2VolcengineModel).family === '2.5')
     && hasFirstFrameImage,
   seedance25UsesSourceAspectRatio: flags.isSeedance25VideoModel === true
     && values.seedance25Variant === 'smart'

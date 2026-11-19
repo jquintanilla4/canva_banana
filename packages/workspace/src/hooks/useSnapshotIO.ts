@@ -1,3 +1,4 @@
+import { normalizeVolcengineSettings } from '../services/volcengineSettings';
 import { getWorkspaceSignal } from '../services/workspaceSession';
 import { getDesktopBridge } from '../services/runtimeConfig';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -366,6 +367,7 @@ export function useSnapshotIO({
     seedance2GenerateAudio,
     seedance2CameraFixed,
     seedance2OutputFormat,
+    seedanceArkSettings,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
@@ -439,6 +441,7 @@ export function useSnapshotIO({
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
     setSeedance2OutputFormat,
+    setSeedanceArkSettings,
     setSeedance25Variant,
     setSeedance25AspectRatio,
     setSeedance25Resolution,
@@ -547,6 +550,7 @@ export function useSnapshotIO({
       seedance2GenerateAudio,
       seedance2CameraFixed,
       seedance2OutputFormat,
+      seedanceArkSettings,
       seedance25Variant,
       seedance25AspectRatio,
       seedance25Resolution,
@@ -642,6 +646,7 @@ export function useSnapshotIO({
     seedance2GenerateAudio,
     seedance2CameraFixed,
     seedance2OutputFormat,
+    seedanceArkSettings,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
@@ -1093,6 +1098,7 @@ export function useSnapshotIO({
           ? meta.jimengSessionId
           : 0,
       ); // Every imported document owns its Jimeng session; legacy and metadata-free snapshots use zero.
+      setSeedanceArkSettings(normalizeVolcengineSettings(meta?.seedanceArkSettings));
       setFlux3Variant('smart');
       setFlux3AspectRatio('auto');
       setFlux3Resolution('720p');
@@ -1457,6 +1463,7 @@ export function useSnapshotIO({
     setSeedance2GenerateAudio,
     setSeedance2CameraFixed,
     setSeedance2OutputFormat,
+    setSeedanceArkSettings,
     setSeedance25Variant,
     setSeedance25AspectRatio,
     setSeedance25Resolution,

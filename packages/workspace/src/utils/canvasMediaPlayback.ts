@@ -1,5 +1,5 @@
 import type { CanvasImage } from '../types';
-import { prepareVideoForPlayback } from '../services/mediaService';
+import { isVideoPlaybackUnavailable, prepareVideoForPlayback } from '../services/mediaService';
 
 type CanvasMediaPlaybackRejectedHandler = (image: CanvasImage, err: unknown) => void;
 
@@ -28,6 +28,7 @@ export const syncCanvasMediaElementPlayback = (
   onPlaybackRejected?: CanvasMediaPlaybackRejectedHandler,
 ): void => {
   if (image.mediaType === 'video' && image.element instanceof HTMLVideoElement) {
+    if (isVideoPlaybackUnavailable(image.element)) return;
     image.element.loop = true; // Keep restored videos behaving like manually-started canvas videos.
     image.element.playsInline = true; // Avoid fullscreen takeover on mobile browsers.
     if (image.isPlaying && image.element.paused) {

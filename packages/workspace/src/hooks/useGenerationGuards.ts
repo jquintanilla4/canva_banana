@@ -1,3 +1,4 @@
+import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import { isGptImage26Model } from '../services/gptImage26Config';
 import { isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
 import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
@@ -260,9 +261,9 @@ export function useGenerationGuards({
   const isVolcengineSeedance2VideoModel = isSeedance2VideoModel && falModelId === SEEDANCE_2_VIDEO_MODEL_ID; // Edit/Extend only exist on the Volcengine backend.
   const isSeedance2EditMode = isVolcengineSeedance2VideoModel && seedance2Variant === 'edit';
   const isSeedance2ExtendMode = isVolcengineSeedance2VideoModel && seedance2Variant === 'extend';
-  const isVolcengineSeedance25Model = isVolcengineSeedance2VideoModel && seedance2VolcengineModel === 'seedance25';
+  const isVolcengineSeedance25Model = isVolcengineSeedance2VideoModel && getSeedance2VolcengineModelCapabilities(seedance2VolcengineModel).family === '2.5';
   const seedance2VolcengineLabel = isVolcengineSeedance25Model ? 'Seedance 2.5' : 'Seedance 2';
-  const seedance2VolcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance25Model ? 'seedance25' : 'standard'); // Placeholder copy follows the selected sub-model's caps.
+  const seedance2VolcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2VideoModel ? seedance2VolcengineModel : undefined);
   const isSeedance25ReferenceMode = isSeedance25VideoModel && seedance25Variant === 'reference';
   const isJimengReferenceMode = (
     falModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID && isSeedance2ReferenceMode

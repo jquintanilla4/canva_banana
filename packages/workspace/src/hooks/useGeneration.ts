@@ -1,3 +1,6 @@
+import { getActiveVolcengineSettings, getVolcengineAssetCounts } from '../services/volcengineSettings';
+import { downloadVolcengineLastFrame } from '../services/volcengineMedia';
+import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import { exportCanvasImage } from '../services/imageOperations';
 import { isSvgImage } from '../services/svgMedia';
 import { isGifImage } from '../services/gifMedia';
@@ -191,15 +194,14 @@ import type {
   FalVideoDuration,
   FalQueueJob,
   Seedance2Variant,
-  Seedance2VolcengineModel,
 } from '../types';
 import { Tool } from '../types';
-import { getImageBounds, isOverlapping } from '../utils/canvasGeometry';
-import { getNaturalSize, getVideoFileExtension, isVideoFileType, loadMediaFromBlob, prepareGeneratedImage, rasterizeImages, revokeVideoObjectUrl } from '../services/mediaService';
+import { findNonOverlappingPlacement, getImageBounds, isOverlapping } from '../utils/canvasGeometry';
+import { getNaturalSize, getVideoFileExtension, isVideoFileType, isVideoPlaybackUnavailable, loadMediaFromBlob, loadVolcengineVideoFromBlob, prepareGeneratedImage, rasterizeImages, revokeVideoObjectUrl } from '../services/mediaService';
 import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
-import { generateSeedanceVideo, SEEDANCE2_VOLCENGINE_MODEL_IDS, type VolcengineQueueUpdate } from '../services/volcengineService';
+import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/volcengineService';
 import { generateJimengSeedanceVideo, type JimengQueueUpdate } from '../services/jimengService';
 import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
@@ -263,6 +265,7 @@ type UseGenerationArgs = {
   setIsLoading: (value: boolean) => void;
   setFalJobs: Dispatch<SetStateAction<FalQueueJob[]>>;
   setState: (updater: (prevState: AppState) => AppState) => void;
+  getCanvasDocument?: () => { version: number };
   setToastMessage: (message: string | null) => void;
   setTool: (tool: Tool) => void;
   onGenerationComplete?: () => void;
@@ -421,13 +424,6 @@ const applyFalPhaseUpdateToJob = (
 const buildSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant): string =>
   `${baseLabel} ${variant === 'reference' ? 'Reference' : variant === 'edit' ? 'Edit' : variant === 'extend' ? 'Extend' : 'Smart'}`; // Surface the active variant in the queue.
 
-const VOLCENGINE_SEEDANCE2_MODEL_LABELS: Record<Seedance2VolcengineModel, string> = {
-  standard: 'Seedance 2.0 (VE)',
-  fast: 'Seedance 2.0 Fast (VE)',
-  mini: 'Seedance 2.0 Mini (VE)',
-  seedance25: 'Seedance 2.5 (VE)',
-}; // Keep queue and generated-media metadata aligned with the selected Ark sub-model.
-
 const buildJimengSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant, modelVersion: string): string => {
   const channelLabel = modelVersion === 'seedance2.0_vip' ? 'VIP' : modelVersion === 'seedance2.0fast_vip' ? 'VIP Fast' : modelVersion === 'seedance2.0mini' ? 'Mini' : modelVersion === 'seedance2.0' ? 'Standard' : 'Standard Fast';
   return `${buildSeedance2ModelLabel(baseLabel, variant)} ${channelLabel}`;
@@ -466,6 +462,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setFalJobs,
     setState,
     setToastMessage,
+    getCanvasDocument,
     setTool,
     onGenerationComplete,
     onGenerationPlaced,
@@ -575,6 +572,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance2GenerateAudio,
     seedance2CameraFixed,
     seedance2OutputFormat,
+    seedanceArkSettings,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
@@ -627,6 +625,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
   // Centralized generation orchestrator for both providers (Fal/Gemini) across text-to-image, edits, upscales, and video.
   const handleGenerate = useCallback(async (generationOverrideOrEvent?: GenerationInputs | SyntheticEvent, options: HandleGenerateOptions = {}) => {
     if (workspaceSignal?.aborted) return;
+    const originatingDocumentVersion = getCanvasDocument?.().version;
     const awaitActive = async <T,>(operation: () => Promise<T>): Promise<T> => {
       workspaceSignal?.throwIfAborted();
       const result = await operation();
@@ -1429,43 +1428,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   : isFlux3VideoModelForRun
                     ? `${baseModelLabel} ${flux3RunPlan.policy.label}`
                     : baseModelLabel;
-      const findNonOverlappingPlacement = (
-        width: number,
-        height: number,
-        startX: number,
-        startY: number,
-        spacing = 20,
-        maxAttempts = 24,
-      ): { x: number; y: number } => {
-        let x = startX;
-        let y = startY;
-        const overlapsExisting = (minX: number, minY: number, maxX: number, maxY: number) => {
-          return images.some(img => {
-            const bounds = getImageBounds(img);
-            return !(minX > bounds.maxX || maxX < bounds.minX || minY > bounds.maxY || maxY < bounds.minY);
-          });
-        };
-
-        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-          const minX = x;
-          const minY = y;
-          const maxX = x + width;
-          const maxY = y + height;
-          if (!overlapsExisting(minX, minY, maxX, maxY)) {
-            return { x, y };
-          }
-          x += width + spacing;
-        }
-
-        return { x: startX, y: startY + height + spacing };
-      };
-
       if (usingVolcengine || usingJimeng) {
         const queueJobId = retryJobId ?? crypto.randomUUID();
         const localBackendProvider: Extract<GenerationProviderId, 'volcengine' | 'jimeng'> = usingJimeng ? 'jimeng' : 'volcengine';
         const isJimeng25 = usingJimeng && isJimengSeedance25VideoModelForRun;
         const isJimengMulti = usingJimeng && isJimengMultiframeVideoModelForRun;
-        const isVolcengineSeedance25 = usingVolcengine && seedance2VolcengineModelForRun === 'seedance25';
+        const volcengineModel = getSeedance2VolcengineModelCapabilities(seedance2VolcengineModelForRun);
+        const isVolcengineSeedance25 = usingVolcengine && volcengineModel.family === '2.5';
         const safeVolcengineSettings = getVolcengineSafeSeedance2Settings(seedance2VolcengineModelForRun, {
           seedance2Variant: seedance2VariantForRun,
           seedance2AspectRatio: seedance2AspectRatioForRun,
@@ -1478,7 +1447,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const jimengSeedance25DurationForRun = normalizeJimengSeedance25Duration(seedance25DurationForRun); // Legacy metadata must resolve to an explicit CLI duration.
         const localVariant = isJimengMulti ? 'smart' : isJimeng25 ? seedance25VariantForRun : usingJimeng ? seedance2VariantForRun : safeVolcengineSettings.seedance2Variant;
         const localAspectRatio = isJimengMulti ? '16:9' : isJimeng25 ? jimengSeedance25AspectRatioForRun : usingJimeng ? seedance2AspectRatioForRun : safeVolcengineSettings.seedance2AspectRatio;
-        const localResolution = isJimengMulti ? jimengMultiframeResolutionForRun : isJimeng25 ? seedance25ResolutionForRun : usingJimeng ? seedance2ResolutionForRun : safeVolcengineSettings.seedance2Resolution;
+        const arkSettings = usingVolcengine
+          ? getActiveVolcengineSettings(seedance2VolcengineModelForRun, localVariant, generationOverride
+            ? volcengineOptionsOverride.seedanceArkSettings
+            : seedanceArkSettings)
+          : {};
+        const hasArkSettings = Object.keys(arkSettings).length > 0;
+        const arkResolution = arkSettings.draft ? '480p' : safeVolcengineSettings.seedance2Resolution;
+        const localResolution = isJimengMulti ? jimengMultiframeResolutionForRun : isJimeng25 ? seedance25ResolutionForRun : usingJimeng ? seedance2ResolutionForRun : arkResolution;
         const localDuration = isJimengMulti ? jimengMultiframeDurationForRun : isJimeng25 ? jimengSeedance25DurationForRun : seedance2DurationForRun;
         const localModelVersion = isJimeng25 ? 'seedance2.5' : seedance2JimengModelVersionForRun;
         const jobModelLabel = usingJimeng
@@ -1487,7 +1463,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             : isJimeng25
             ? buildSeedance2ModelLabel(baseModelLabel, seedance25VariantForRun)
             : buildJimengSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun, seedance2JimengModelVersionForRun)
-          : buildSeedance2ModelLabel(VOLCENGINE_SEEDANCE2_MODEL_LABELS[seedance2VolcengineModelForRun], seedance2VariantForRun); // Queue labels name the exact sub-model, not the picker entry.
+          : buildSeedance2ModelLabel(`${volcengineModel.label} (VE)`, seedance2VariantForRun);
         const primarySelection = primaryImageIdForRun ? images.find(img => img.id === primaryImageIdForRun) ?? null : null;
         const isSeedance2ReferenceMode = localVariant === 'reference';
         const isSeedance2EditMode = !usingJimeng && localVariant === 'edit';
@@ -1504,8 +1480,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
           && localVariant === 'reference'
           && Boolean(activePrimary)
           && !localReferenceImageIds.includes(activePrimary.id);
-        const localReferenceImageCount = localReferenceImageIds.length + Number(usesJimengReferencePrimaryImage);
-        const referenceAssetCount = localReferenceImageCount + localReferenceVideoIds.length + localReferenceAudioIds.length;
+        const arkAssetCounts = getVolcengineAssetCounts(arkSettings.assets);
+        const localReferenceImageCount = localReferenceImageIds.length + Number(usesJimengReferencePrimaryImage) + arkAssetCounts.image;
+        const localReferenceVideoCount = localReferenceVideoIds.length + arkAssetCounts.video;
+        const localReferenceAudioCount = localReferenceAudioIds.length + arkAssetCounts.audio;
+        const referenceAssetCount = localReferenceImageCount + localReferenceVideoCount + localReferenceAudioCount;
         const submittedPrimaryImageId = usesSmartPrimaryImage || usesJimengReferencePrimaryImage ? primaryImageIdForRun : null;
         const submittedLastFrameImageId = !isJimengMulti && localVariant === 'smart' ? videoLastFrameImageIdForRun : null;
         const multiframeCanvasItems = multiframeImageIds
@@ -1541,10 +1520,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError(`Seedance 2 (JM CLI) ${localResolution} requires the VIP channel.`);
           return;
         }
-        if (isVolcengineSeedance25 && (localResolution === '1080p' || localResolution === '4k')) {
-          setError('Seedance 2.5 supports 480p and 720p only.');
-          return;
-        }
         const seedance25RequiresAdaptiveRatio = isSeedance2EditMode || isSeedance2ExtendMode || (localVariant === 'smart' && Boolean(activePrimary));
         if (isVolcengineSeedance25 && seedance25RequiresAdaptiveRatio && localAspectRatio !== 'adaptive') {
           setError('Seedance 2.5 first-frame, Edit, and Extend tasks require the Adaptive aspect ratio.');
@@ -1566,12 +1541,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2 Reference requires at least one tagged reference asset.');
           return;
         }
-        if ((isSeedance2EditMode || isSeedance2ExtendMode) && localReferenceVideoIds.length === 0) {
+        if ((isSeedance2EditMode || isSeedance2ExtendMode) && localReferenceVideoCount === 0) {
           setError(`Seedance 2 ${isSeedance2EditMode ? 'Edit' : 'Extend'} requires at least one video clip.`);
           return;
         }
         if (isSeedance2ExtendMode && (localReferenceAudioIds.length > 0 || (!isVolcengineSeedance25 && localReferenceImageIds.length > 0))) {
           setError(isVolcengineSeedance25 ? 'Seedance 2.5 Extend accepts video clips and reference images.' : 'Seedance 2 Extend accepts video clips only.');
+          return;
+        }
+        if (usingVolcengine && !isVolcengineSeedance25 && localReferenceAudioCount > 0 && localReferenceImageCount + localReferenceVideoCount === 0) {
+          setError('Seedance 2.0 audio references require an image or a video.');
           return;
         }
         if (usingJimeng && !isJimeng25 && isSeedance2ReferenceMode && localReferenceAudioIds.length > 0 && localReferenceImageCount + localReferenceVideoIds.length === 0) {
@@ -1582,23 +1561,23 @@ export const useGeneration = (args: UseGenerationArgs) => {
         if (isSeedance2MultimodalMode) {
           const promptMentionError = getSeedanceReferencePromptMentionError(seedancePromptForRun, {
             imageCount: localReferenceImageCount,
-            videoCount: localReferenceVideoIds.length,
-            audioCount: localReferenceAudioIds.length,
+            videoCount: localReferenceVideoCount,
+            audioCount: localReferenceAudioCount,
           });
           if (promptMentionError) {
             setError(promptMentionError);
             return;
           }
         }
-        const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance25 ? 'seedance25' : 'standard'); // Volcengine 2.5 raises every reference cap.
+        const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(usingVolcengine ? seedance2VolcengineModelForRun : undefined);
         const seedance25FamilyLabel = isJimeng25 || isVolcengineSeedance25 ? 'Seedance 2.5' : 'Seedance 2';
         const localReferenceImageLimit = isJimeng25 ? SEEDANCE25_REFERENCE_IMAGE_LIMIT : volcengineReferenceLimits.images;
         const localReferenceVideoLimit = isJimeng25 ? SEEDANCE25_REFERENCE_VIDEO_LIMIT : volcengineReferenceLimits.videos;
         const localReferenceAudioLimit = isJimeng25 ? SEEDANCE25_REFERENCE_AUDIO_LIMIT : volcengineReferenceLimits.audios;
         if (!isJimengMulti && (
           localReferenceImageCount > localReferenceImageLimit
-          || localReferenceVideoIds.length > localReferenceVideoLimit
-          || localReferenceAudioIds.length > localReferenceAudioLimit
+          || localReferenceVideoCount > localReferenceVideoLimit
+          || localReferenceAudioCount > localReferenceAudioLimit
         )) {
           setError(`${seedance25FamilyLabel} Reference supports up to ${localReferenceImageLimit} images, ${localReferenceVideoLimit} videos, and ${localReferenceAudioLimit} audio clips.`);
           return;
@@ -1635,6 +1614,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           seedance2VolcengineModel: seedance2VolcengineModelForRun,
           seedance2AspectRatio: safeVolcengineSettings.seedance2AspectRatio,
           seedance2Resolution: safeVolcengineSettings.seedance2Resolution,
+          ...(hasArkSettings ? { seedanceArkSettings: arkSettings } : {}),
           seedance2Duration: seedance2VolcengineDurationForRun,
           seedance2GenerateAudio: seedance2GenerateAudioForRun,
           seedance2CameraFixed: safeVolcengineSettings.seedance2CameraFixed,
@@ -1689,9 +1669,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const localReferenceVideoTotalDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS : volcengineReferenceLimits.videoTotalDurationSeconds;
         const localReferenceAudioTotalDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS : volcengineReferenceLimits.audioTotalDurationSeconds;
         const localReferenceDurationTolerance = usingJimeng ? 0.05 : 0; // Match the backend's allowance for media-probe rounding.
-        const referenceVideoDurations = await Promise.all(referenceVideoCanvasItems.map(resolveCanvasMediaDurationSeconds)); // Legacy snapshots load only selected video metadata.
+        const canProbeInBackend = (item: CanvasImage) => usingVolcengine && item.metadata?.generation?.provider === 'volcengine';
+        const referenceVideoDurations = await Promise.all(referenceVideoCanvasItems.map(item => {
+          if (!canProbeInBackend(item)) return resolveCanvasMediaDurationSeconds(item);
+          if (item.element instanceof HTMLVideoElement && isVideoPlaybackUnavailable(item.element)) return getCanvasMediaDurationSeconds(item);
+          return resolveOptionalCanvasMediaDurationSeconds(item);
+        }));
         if (workspaceSignal?.aborted) return;
-        if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < localReferenceVideoMinDuration - localReferenceDurationTolerance || durationSeconds > localReferenceMaxDuration + localReferenceDurationTolerance)) {
+        if (referenceVideoDurations.some((durationSeconds, index) => durationSeconds === null
+          ? !canProbeInBackend(referenceVideoCanvasItems[index])
+          : durationSeconds < localReferenceVideoMinDuration - localReferenceDurationTolerance || durationSeconds > localReferenceMaxDuration + localReferenceDurationTolerance)) {
           setError(`${seedance25FamilyLabel} reference videos must each be between ${localReferenceVideoMinDuration} and ${localReferenceMaxDuration} seconds.`);
           return;
         }
@@ -1741,6 +1728,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           generateAudio: localSeedance2GenerateAudioForRun,
           cameraFixed: localSeedance2CameraFixedForRun,
           outputFormat: isVolcengineSeedance25 ? seedance2OutputFormatForRun : undefined,
+          ...(hasArkSettings ? { arkSettings } : {}),
           primaryImageId: submittedPrimaryImageId,
           videoLastFrameImageId: submittedLastFrameImageId,
           referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds,
@@ -1865,11 +1853,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
               },
             }))
             : await awaitActive(async () => generateSeedanceVideo(seedancePromptForRun, {
-              modelId: SEEDANCE2_VOLCENGINE_MODEL_IDS[seedance2VolcengineModelForRun],
+              modelId: volcengineModel.id,
               variant: safeVolcengineSettings.seedance2Variant,
               aspectRatio: safeVolcengineSettings.seedance2AspectRatio,
               duration: seedance2VolcengineDurationForRun,
-              resolution: safeVolcengineSettings.seedance2Resolution,
+              resolution: arkResolution,
+              ...(hasArkSettings ? { settings: arkSettings } : {}),
               generateAudio: localSeedance2GenerateAudioForRun,
               cameraFixed: safeVolcengineSettings.seedance2CameraFixed,
               ...(isVolcengineSeedance25 ? { outputFormat: seedance2OutputFormatForRun } : {}), // Only Seedance 2.5 sends a container choice.
@@ -1916,22 +1905,25 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ? videoBlob.type
               : extension === 'mov' ? 'video/quicktime' : 'video/mp4';
             const videoFileName = `generated_seedance2_video.${extension}`;
-            const videoElement = await awaitActive(async () => loadMediaFromBlob(videoBlob, 'video')) as HTMLVideoElement;
-            videoElement.pause();
-            videoElement.currentTime = 0;
-            videoElement.loop = true;
-            videoElement.muted = true;
-            videoElement.playsInline = true;
-            let isPlaying = true;
-            try {
-              const playPromise = videoElement.play();
-              if (playPromise && typeof playPromise.then === 'function') {
-                await awaitActive(async () => playPromise);
-              }
-            } catch {
+            const videoElement = await awaitActive(async () => usingVolcengine
+              ? (await loadVolcengineVideoFromBlob(videoBlob)).element
+              : loadMediaFromBlob(videoBlob, 'video'));
+            if (!(videoElement instanceof HTMLVideoElement)) throw new Error('Expected a video element.');
+            let isPlaying = !isVideoPlaybackUnavailable(videoElement);
+            if (isPlaying) {
               videoElement.pause();
-              if (workspaceSignal?.aborted) { revokeVideoObjectUrl(videoElement); return; }
-              isPlaying = false;
+              videoElement.currentTime = 0;
+              videoElement.loop = true;
+              videoElement.muted = true;
+              videoElement.playsInline = true;
+              try {
+                const playPromise = videoElement.play();
+                if (playPromise) await awaitActive(async () => playPromise);
+              } catch {
+                videoElement.pause();
+                if (workspaceSignal?.aborted) { revokeVideoObjectUrl(videoElement); return; }
+                isPlaying = false;
+              }
             }
 
             const { naturalWidth, naturalHeight } = getNaturalSize(videoElement);
@@ -1947,7 +1939,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const placement = anchorForPlacement
               ? (() => {
                 const anchorBounds = getImageBounds(anchorForPlacement);
-                return findNonOverlappingPlacement(displayWidth, displayHeight, anchorBounds.maxX + 20, anchorBounds.minY);
+                return findNonOverlappingPlacement(images, displayWidth, displayHeight, anchorBounds.maxX + 20, anchorBounds.minY);
               })()
               : { x: 100, y: 100 };
             const audioTrackInfo = (videoElement as unknown as { audioTracks?: { length?: number } }).audioTracks;
@@ -1995,6 +1987,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     : submittedPrimaryImageId ? { originalSourceImageId: submittedPrimaryImageId } : {}),
                   ...(lastFrameImageFile && submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
                   ...localProviderOptionsForRun,
+                  ...('draft' in videoResult && videoResult.draft ? { volcengineDraft: videoResult.draft } : {}),
                 },
               },
             };
@@ -2005,6 +1998,22 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
             logGeneratedMediaAppended(debugContext, 'video', [newVideo.id]);
             onGenerationPlaced?.({ mediaIds: [newVideo.id], mediaType: 'video', modelLabel: jobModelLabel });
+            if (arkSettings.returnLastFrame && 'lastFrameUrl' in videoResult && videoResult.lastFrameUrl) {
+              try {
+                const frame = await downloadVolcengineLastFrame(videoResult.lastFrameUrl, workspaceSignal);
+                if (getCanvasDocument?.().version === originatingDocumentVersion) setState(prev => {
+                  const video = prev.images.find(image => image.id === newVideo.id);
+                  if (!video || getCanvasDocument?.().version !== originatingDocumentVersion) return prev;
+                  const { maxX, minY } = getImageBounds(video);
+                  const position = findNonOverlappingPlacement(prev.images, frame.width, frame.height, maxX + 20, minY);
+                  return { ...prev, images: [...prev.images, { ...frame, ...position }] };
+                });
+              } catch (error) {
+                if (!workspaceSignal?.aborted && getCanvasDocument?.().version === originatingDocumentVersion) {
+                  setToastMessage(error instanceof Error ? error.message : 'Could not save the final frame.');
+                }
+              }
+            }
             onGenerationComplete?.();
           } catch (loadErr) {
             if (workspaceSignal?.aborted) return;
@@ -3008,7 +3017,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               const anchorBounds = getImageBounds(anchorForPlacement);
               const placementX = anchorBounds.maxX + 20;
               const placementY = anchorBounds.minY;
-              return findNonOverlappingPlacement(displayWidth, displayHeight, placementX, placementY);
+              return findNonOverlappingPlacement(images, displayWidth, displayHeight, placementX, placementY);
             })()
             : { x: 100, y: 100 };
           const audioTrackInfo = (videoElement as unknown as { audioTracks?: { length?: number } }).audioTracks;
@@ -3586,6 +3595,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
   }, [
     workspaceSignal,
+    getCanvasDocument,
     appMode,
     tool,
     prompt,
@@ -3670,6 +3680,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance2GenerateAudio,
     seedance2CameraFixed,
     seedance2OutputFormat,
+    seedanceArkSettings,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,

@@ -33,7 +33,7 @@ describe('promptBarConfig (Volcengine Seedance 2.5)', () => {
     expect(ids).not.toContain('seedance2-camera-fixed-select'); // 2.5 hides the unsupported fixed-camera toggle.
 
     const model = controls.find(control => control.id === 'seedance2-volcengine-model-select');
-    expect(model && 'options' in model ? model.options.map(option => option.value) : []).toEqual(['standard', 'fast', 'mini', 'seedance25']);
+    expect(model && 'options' in model ? model.options.map(option => option.value) : []).toEqual(['standard', 'fast', 'mini', 'seedance25', 'seedance25Flash']);
     expect(model && 'value' in model ? model.value : undefined).toBe('seedance25');
 
     const duration = controls.find(control => control.id === 'seedance2-duration-select');
@@ -44,8 +44,8 @@ describe('promptBarConfig (Volcengine Seedance 2.5)', () => {
 
     const resolution = controls.find(control => control.id === 'seedance2-resolution-select');
     const resolutionOptions = resolution && 'options' in resolution ? resolution.options : [];
-    expect(resolutionOptions.find(option => option.value === '1080p')?.disabled).toBe(true);
-    expect(resolutionOptions.find(option => option.value === '4k')?.disabled).toBe(true);
+    expect(resolutionOptions.find(option => option.value === '1080p')?.disabled).toBe(false);
+    expect(resolutionOptions.find(option => option.value === '4k')?.disabled).toBe(false);
 
     const format = controls.find(control => control.id === 'seedance2-output-format-select');
     expect(format && 'options' in format ? format.options.map(option => option.value) : []).toEqual(['mp4', 'mov']);

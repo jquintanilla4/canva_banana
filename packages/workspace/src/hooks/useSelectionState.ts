@@ -1,3 +1,4 @@
+import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_MAX_REFERENCE_IMAGES,
@@ -196,8 +197,11 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && isMiniMaxH3VideoModel
     && miniMaxH3Variant === 'reference';
   const isMultimodalReferenceMode = isKlingV4GenerateMode || isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode || isFlux3KeyframesMode;
-  const multimodalReferenceLabel = isKlingV4GenerateMode ? 'Kling v4' : isFlux3KeyframesMode ? 'Flux 3 Keyframes' : isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && seedance2VolcengineModel === 'seedance25') ? 'Seedance 2.5' : 'Seedance 2';
-  const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2Mode ? seedance2VolcengineModel : 'standard'); // Non-Volcengine Seedance 2 providers share the 2.0 envelope.
+  const multimodalReferenceLabel = isKlingV4GenerateMode ? 'Kling v4' : isFlux3KeyframesMode ? 'Flux 3 Keyframes' : isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && getSeedance2VolcengineModelCapabilities(seedance2VolcengineModel).family === '2.5') ? 'Seedance 2.5' : 'Seedance 2';
+  const volcengineReferenceLimits = useMemo(
+    () => getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2Mode ? seedance2VolcengineModel : undefined),
+    [isVolcengineSeedance2Mode, seedance2VolcengineModel],
+  );
   const extendReferenceLimits = useMemo(() => getSeedance2VolcengineExtendReferenceLimits(seedance2VolcengineModel), [seedance2VolcengineModel]);
   const extendReferenceError = extendReferenceLimits.images > 0
     ? 'Seedance 2.5 Extend supports video clips and reference images.'

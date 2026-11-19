@@ -44,6 +44,7 @@ export interface CanvasImageMetadata {
   noiseScale?: number;
   creativity?: number;
   generation?: GenerationInputs;
+  volcengineLastFrameTaskId?: string;
 }
 
 export type CanvasMediaType = 'image' | 'video' | 'audio';
@@ -132,7 +133,7 @@ export type Seedance25Resolution = '480p' | '720p';
 export type Seedance25Duration = 'auto' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20' | '21' | '22' | '23' | '24' | '25' | '26' | '27' | '28' | '29' | '30';
 export type MiniMaxH3Variant = 'standard' | 'reference';
 export type JimengSeedance2ModelVersion = 'seedance2.0fast' | 'seedance2.0' | 'seedance2.0_vip' | 'seedance2.0fast_vip' | 'seedance2.0mini';
-export type Seedance2VolcengineModel = 'standard' | 'fast' | 'mini' | 'seedance25'; // Volcengine Seedance 2 model picker value; seedance25 is the 2.5 sub-model.
+export type Seedance2VolcengineModel = 'standard' | 'fast' | 'mini' | 'seedance25' | 'seedance25Flash';
 export type Seedance2VolcengineDuration = Seedance25Duration; // 2.0 sub-models clamp to 4-15s; Seedance 2.5 adds Auto and 16-30s.
 export type Seedance2OutputFormat = 'mp4' | 'mov'; // Seedance 2.5 output container selection.
 export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
@@ -254,6 +255,7 @@ export type GenerationFalOptions = Partial<{
   seedance2JimengModelVersion: JimengSeedance2ModelVersion;
   seedance2VolcengineModel: Seedance2VolcengineModel; // Volcengine-only picker value; embedded bars mirror it into falOptions.
   seedance2OutputFormat: Seedance2OutputFormat; // Volcengine Seedance 2.5 only; ignored by 2.0 sub-models.
+  seedanceArkSettings: import('./services/volcengineSettings').VolcengineSettings;
   seedance25Variant: Seedance25Variant;
   seedance25AspectRatio: Seedance25AspectRatio;
   seedance25Resolution: Seedance25Resolution;
@@ -275,6 +277,7 @@ export type GenerationVolcengineOptions = Partial<{
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
   seedance2OutputFormat: Seedance2OutputFormat; // Seedance 2.5 only; omitted for 2.0 sub-models.
+  seedanceArkSettings: import('./services/volcengineSettings').VolcengineSettings;
 }>;
 
 export type GenerationJimengOptions = GenerationVolcengineOptions & Partial<{
@@ -311,6 +314,8 @@ export interface GenerationInputs {
   url?: string;
   falOptions?: GenerationFalOptions;
   volcengineOptions?: GenerationVolcengineOptions;
+  volcengineDraft?: import('./services/volcengineSettings').VolcengineDraft;
+  volcengineFinalizedFrom?: string;
   jimengOptions?: GenerationJimengOptions;
 }
 
@@ -401,6 +406,7 @@ export interface CanvasVideoPromptBar extends CanvasRect {
   seedance2GenerateAudio: boolean;
   seedance2CameraFixed: boolean;
   seedance2OutputFormat?: Seedance2OutputFormat; // Seedance 2.5 embedded bars keep their container choice.
+  seedanceArkSettings?: import('./services/volcengineSettings').VolcengineSettings;
 }
 
 export interface VideoPromptAreaMembership {

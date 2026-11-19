@@ -8,7 +8,7 @@ from typing import Literal
 SeedanceVariant = Literal["smart", "reference", "edit", "extend"]  # UI variant names.
 VolcengineJobStatus = Literal["IN_QUEUE", "IN_PROGRESS", "COMPLETED", "FAILED"]  # Queue statuses expected by the UI.
 SeedanceRatio = Literal["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "adaptive"]  # Supported ratio values.
-SeedanceResolution = Literal["480p", "720p", "1080p", "4k"]  # Supported explicit resolution values; 4k is Seedance 2 only.
+SeedanceResolution = Literal["480p", "720p", "1080p", "4k"]
 SeedanceOutputFormat = Literal["mp4", "mov"]  # Seedance 2.5 output container options.
 JimengSeedanceResolution = Literal["480p", "720p", "1080p", "4k"]  # Dreamina has a VIP-only 4K output option.
 JimengSeedanceModelVersion = Literal["seedance2.0fast", "seedance2.0", "seedance2.0_vip", "seedance2.0fast_vip", "seedance2.0mini", "seedance2.5"]  # Dreamina CLI model_version values.
@@ -20,15 +20,19 @@ MODEL_LABELS = {
     "doubao-seedance-2-0-fast-260128": "Seedance 2 Fast",
     "doubao-seedance-2-0-mini-260615": "Seedance 2 Mini",
     "doubao-seedance-2-5-260628": "Seedance 2.5",
+    "doubao-seedance-2-5-flash-261115": "Seedance 2.5 Flash",
 }  # Known backend model labels.
 MODEL_RESOLUTIONS = {
     "doubao-seedance-2-0-260128": frozenset({"480p", "720p", "1080p", "4k"}),
     "doubao-seedance-2-0-fast-260128": frozenset({"480p", "720p"}),
     "doubao-seedance-2-0-mini-260615": frozenset({"480p", "720p"}),
-    "doubao-seedance-2-5-260628": frozenset({"480p", "720p"}),
-}  # Allowed resolutions per model; only Seedance 2 supports 1080p/4k.
+    "doubao-seedance-2-5-260628": frozenset({"480p", "720p", "1080p", "4k"}),
+    "doubao-seedance-2-5-flash-261115": frozenset({"480p", "720p"}),
+}
 
-SEEDANCE25_MODEL_IDS = frozenset({"doubao-seedance-2-5-260628"})  # Seedance 2.5 models follow different request rules.
+SEEDANCE25_STANDARD_MODEL_ID = "doubao-seedance-2-5-260628"
+SEEDANCE25_FLASH_MODEL_ID = "doubao-seedance-2-5-flash-261115"
+SEEDANCE25_MODEL_IDS = frozenset({SEEDANCE25_STANDARD_MODEL_ID, SEEDANCE25_FLASH_MODEL_ID})
 
 
 def is_seedance25(model_id: str) -> bool:
@@ -51,6 +55,21 @@ class MediaInput:
         self.temp_path.unlink(missing_ok=True)  # Drop the staged file after the job finishes.
 
 
+@dataclass(frozen=True)
+class AssetInput:
+    asset_id: str
+
+
+@dataclass
+class DraftFinalizationPayload:
+    draft_task_id: str
+    resolution: Literal["1080p", "4k"]
+    output_format: SeedanceOutputFormat | None = None
+    return_last_frame: bool | None = None
+    watermark: bool | None = None
+    priority: int | None = None
+
+
 @dataclass
 class SeedanceJobPayload:
     prompt: str
@@ -64,12 +83,17 @@ class SeedanceJobPayload:
     jimeng_mode: JimengGenerationMode = "auto"
     session_id: int = 0
     generate_audio: bool = False
+    web_search: bool = False
+    return_last_frame: bool = False
+    watermark: bool = False
+    priority: int | None = None
+    draft: bool = False
     camera_fixed: bool = False
     primary_image: MediaInput | None = None
     last_frame_image: MediaInput | None = None
-    reference_images: list[MediaInput] = field(default_factory=list)
-    reference_videos: list[MediaInput] = field(default_factory=list)
-    reference_audios: list[MediaInput] = field(default_factory=list)
+    reference_images: list[MediaInput | AssetInput] = field(default_factory=list)
+    reference_videos: list[MediaInput | AssetInput] = field(default_factory=list)
+    reference_audios: list[MediaInput | AssetInput] = field(default_factory=list)
     multiframe_images: list[MediaInput] = field(default_factory=list)
     transition_prompts: list[str] = field(default_factory=list)
     transition_durations: list[float] = field(default_factory=list)
@@ -82,7 +106,7 @@ class SeedanceJobPayload:
             *self.reference_audios,
             *self.multiframe_images,
         ]
-        return tuple(media_items)  # Centralize cleanup over every staged upload.
+        return tuple(media for media in media_items if isinstance(media, MediaInput))
 
     def cleanup(self) -> None:
         for media in self.iter_media_inputs():
@@ -105,3 +129,5 @@ class JobState:
     output_url: str | None = None
     last_frame_url: str | None = None
     error: str | None = None
+    draft_expires_at: int | None = None
+    remote_failure: bool = False

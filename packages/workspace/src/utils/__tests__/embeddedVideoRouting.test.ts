@@ -82,7 +82,7 @@ describe('embeddedVideoRouting', () => {
       seedance2Variant: 'edit',
       seedance2VolcengineModel: 'seedance25',
       seedance2AspectRatio: 'adaptive',
-      seedance2Resolution: '720p',
+      seedance2Resolution: '1080p',
       seedance2Duration: 'auto',
       seedance2GenerateAudio: false,
       seedance2CameraFixed: false,

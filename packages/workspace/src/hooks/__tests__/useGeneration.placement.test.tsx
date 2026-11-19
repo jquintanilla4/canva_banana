@@ -84,9 +84,11 @@ vi.mock('../../services/falService', async () => {
 
 vi.mock('../../services/mediaService', async () => {
   const actual = await vi.importActual<typeof import('../../services/mediaService')>('../../services/mediaService');
+  const loadMediaFromBlob = vi.fn(actual.loadMediaFromBlob);
   return {
     ...actual,
-    loadMediaFromBlob: vi.fn(actual.loadMediaFromBlob),
+    loadMediaFromBlob,
+    loadVolcengineVideoFromBlob: async (blob: Blob) => ({ element: await loadMediaFromBlob(blob, 'video'), canPlay: true }),
   };
 });
 

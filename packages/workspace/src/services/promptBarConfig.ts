@@ -1,3 +1,5 @@
+import { getVolcengineAssetMediaTypes, type VolcengineSettings } from './volcengineSettings';
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { buildGptImage26Controls } from './promptBar/gptImage26Controls';
 import { isGptImage26Model, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from './gptImage26Config';
 import { getNanoBananaAspectRatioOptionsForProvider } from './nanoBananaAspectRatioPolicy';
@@ -286,6 +288,8 @@ type Seedance2PromptBarControlsInput = {
   seedance2OutputFormat?: Seedance2OutputFormatSelectionValue; // Seedance 2.5 container picker value.
   seedance2VolcengineModel?: Seedance2VolcengineModelSelectionValue;
   seedance2HasFirstFrame?: boolean;
+  seedanceArkSettings?: VolcengineSettings;
+  onSeedanceArkSettingsChange?: (settings: VolcengineSettings) => void;
   showJimengModelVersion?: boolean;
   showVolcengineModelPicker?: boolean;
   showAudio?: boolean;
@@ -324,6 +328,8 @@ export const buildSeedance2PromptBarControls = ({
   showAudio = true,
   allowFullResolution = false,
   seedance2HasFirstFrame = false,
+  seedanceArkSettings,
+  onSeedanceArkSettingsChange,
   isLoading,
   onSeedance2VariantChange,
   onSeedance2JimengModelVersionChange,
@@ -334,7 +340,8 @@ export const buildSeedance2PromptBarControls = ({
   onSeedance2GenerateAudioChange,
   onSeedance2OutputFormatChange,
 }: Seedance2PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => {
-  const isSeedance25VolcengineSelection = Boolean(showVolcengineModelPicker && seedance2VolcengineModel === 'seedance25');
+  const selectedVolcengineModel = getSeedance2VolcengineModelCapabilities(seedance2VolcengineModel);
+  const isSeedance25VolcengineSelection = showVolcengineModelPicker && selectedVolcengineModel.family === '2.5';
   const isSeedance25AdaptiveLocked = isSeedance25VolcengineSelection && (
     seedance2Variant === 'edit'
     || seedance2Variant === 'extend'
@@ -344,17 +351,15 @@ export const buildSeedance2PromptBarControls = ({
   const selectedJimengModelVersion = JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS.find(option => option.value === seedance2JimengModelVersion);
   const supportsJimeng1080p = Boolean(showJimengModelVersion && selectedJimengModelVersion?.supports1080p);
   const supportsJimeng4k = Boolean(showJimengModelVersion && selectedJimengModelVersion?.supports4k);
-  const selectedVolcengineModel = SEEDANCE2_VOLCENGINE_MODEL_OPTIONS.find(option => option.value === seedance2VolcengineModel);
-  const supportsVolcengine1080p = Boolean(showVolcengineModelPicker && selectedVolcengineModel?.supports1080p);
-  const supportsVolcengine4k = Boolean(showVolcengineModelPicker && selectedVolcengineModel?.supports4k);
-  const seedance2ResolutionValue = showJimengModelVersion
+  const isDraft = showVolcengineModelPicker && selectedVolcengineModel.supportsDraft && seedanceArkSettings?.draft === true;
+  const seedance2ResolutionValue = isDraft ? '480p' : showJimengModelVersion
     ? seedance2Resolution === '480p'
       || (seedance2Resolution === '1080p' && !supportsJimeng1080p)
       || (seedance2Resolution === '4k' && !supportsJimeng4k)
       ? '720p'
       : seedance2Resolution
     : showVolcengineModelPicker
-      ? (seedance2Resolution === '1080p' && !supportsVolcengine1080p) || (seedance2Resolution === '4k' && !supportsVolcengine4k)
+      ? !selectedVolcengineModel.resolutions.includes(seedance2Resolution)
         ? '720p'
         : seedance2Resolution
       : seedance2Resolution === '4k'
@@ -366,7 +371,7 @@ export const buildSeedance2PromptBarControls = ({
     disabled: showJimengModelVersion
       ? option.value === '480p' || (option.value === '1080p' && !supportsJimeng1080p) || (option.value === '4k' && !supportsJimeng4k)
       : showVolcengineModelPicker
-        ? (option.value === '1080p' && !supportsVolcengine1080p) || (option.value === '4k' && !supportsVolcengine4k)
+        ? !selectedVolcengineModel.resolutions.includes(option.value)
         : option.value === '4k' || (option.value === '1080p' ? !allowFullResolution : option.disabled),
   })); // Keep provider-specific resolution matrices explicit.
   const aspectRatioOptions = SEEDANCE2_ASPECT_RATIO_OPTIONS
@@ -418,7 +423,7 @@ export const buildSeedance2PromptBarControls = ({
       value: seedance2VolcengineModel,
       onChange: (value: string) => onSeedance2VolcengineModelChange?.(value as Seedance2VolcengineModelSelectionValue),
       disabled: isLoading,
-      tooltip: selectedVolcengineModel?.tooltip,
+      tooltip: SEEDANCE2_VOLCENGINE_MODEL_OPTIONS.find(option => option.value === seedance2VolcengineModel)?.tooltip,
     });
   }
 
@@ -456,6 +461,7 @@ export const buildSeedance2PromptBarControls = ({
     value: seedance2ResolutionValue,
     onChange: (value: string) => onSeedance2ResolutionChange(value as Seedance2ResolutionSelectionValue),
     isLoading,
+    disabled: isDraft,
   }));
 
   if (isSeedance25VolcengineSelection) {
@@ -468,6 +474,18 @@ export const buildSeedance2PromptBarControls = ({
       onChange: (value: string) => onSeedance2OutputFormatChange?.(value as Seedance2OutputFormatSelectionValue),
       isLoading,
     }));
+  }
+
+  if (showVolcengineModelPicker && onSeedanceArkSettingsChange) {
+    controls.push({
+      kind: 'volcengine-settings',
+      id: buildSeedance2ControlId('ark-settings', idPrefix),
+      settings: seedanceArkSettings ?? {},
+      supportsDraft: selectedVolcengineModel.supportsDraft,
+      assetMediaTypes: getVolcengineAssetMediaTypes(seedance2VolcengineModel, seedance2Variant),
+      onSettingsChange: onSeedanceArkSettingsChange,
+      disabled: isLoading,
+    });
   }
 
   if (showAudio) {
@@ -849,6 +867,8 @@ export type PromptBarControlsInput = {
   seedance2CameraFixed: boolean;
   seedance2OutputFormat?: Seedance2OutputFormatSelectionValue;
   seedance2HasFirstFrame?: boolean;
+  seedanceArkSettings?: VolcengineSettings;
+  onSeedanceArkSettingsChange?: (settings: VolcengineSettings) => void;
   seedance25Variant?: Seedance25Variant;
   seedance25AspectRatio?: Seedance25AspectRatioSelectionValue;
   seedance25Resolution?: Seedance25ResolutionSelectionValue;
@@ -1129,6 +1149,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     seedance2CameraFixed,
     seedance2OutputFormat = 'mp4',
     seedance2HasFirstFrame = false,
+    seedanceArkSettings,
+    onSeedanceArkSettingsChange,
     seedance25Variant = 'reference',
     seedance25AspectRatio = 'adaptive',
     seedance25Resolution = '720p',
@@ -1866,6 +1888,8 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       seedance2CameraFixed,
       seedance2OutputFormat,
       seedance2HasFirstFrame,
+      seedanceArkSettings,
+      onSeedanceArkSettingsChange,
       showJimengModelVersion: isJimengSeedance2VideoModel,
       showVolcengineModelPicker: !isFalSeedance2VideoModel && !isJimengSeedance2VideoModel,
       showAudio: !isJimengSeedance2VideoModel,

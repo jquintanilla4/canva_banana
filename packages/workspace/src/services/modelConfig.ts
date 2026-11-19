@@ -1,3 +1,5 @@
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
+export { isSeedance2VolcengineModel, SEEDANCE2_VOLCENGINE_MODEL_OPTIONS } from './volcengineModels';
 import { GPT_IMAGE_26_MODEL_ID, GPT_IMAGE_26_MAX_OUTPUT_IMAGES, GPT_IMAGE_26_NUM_IMAGE_OPTIONS, isGptImage26Model } from './gptImage26Config';
 export { GPT_IMAGE_26_MODEL_ID, isGptImage26Model } from './gptImage26Config';
 import { NANO_BANANA_PRO_EDIT_MODEL_ID, NANO_BANANA_21_EDIT_MODEL_ID, getNanoBananaSelectorModelId, NANO_BANANA_MAX_OUTPUT_IMAGES, NANO_BANANA_21_ASPECT_RATIO_OPTIONS, FAL_RESOLUTION_OPTIONS } from './nanoBananaConfig';
@@ -486,46 +488,6 @@ export const JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS: ReadonlyArray<{ value: Jime
   { value: 'seedance2.0mini', label: 'Mini', supports1080p: false, supports4k: false, tooltip: 'Seedance 2.0 Mini channel; 720p only.' },
 ] as const;
 
-export const SEEDANCE2_VOLCENGINE_MODEL_OPTIONS: ReadonlyArray<{ value: Seedance2VolcengineModelSelectionValue; label: string; supports1080p: boolean; supports4k: boolean; tooltip: string }> = [
-  { value: 'standard', label: 'Seedance 2.0', supports1080p: true, supports4k: true, tooltip: 'Volcengine Seedance 2.0; supports 480p, 720p, 1080p, and 4K.' },
-  { value: 'fast', label: 'Seedance 2.0 Fast', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.0 Fast; 480p and 720p only.' },
-  { value: 'mini', label: 'Seedance 2.0 Mini', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.0 Mini; 480p and 720p only.' },
-  { value: 'seedance25', label: 'SD 2.5', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.5; 480p and 720p only, up to 30s or Auto duration, and up to 30 reference images.' },
-] as const;
-
-export type Seedance2VolcengineModelCapabilities = {
-  maxDurationSeconds: number; // Longest explicit clip length the sub-model accepts.
-  supportsAutoDuration: boolean; // Volcengine can let the provider pick the clip length.
-  referenceLimits: { images: number; videos: number; audios: number }; // Per-modality reference caps.
-  supportsOutputFormat: boolean; // Only Seedance 2.5 exposes the mp4/mov picker.
-  requiresAdaptiveRatioForVariants: boolean; // Seedance 2.5 Edit/Extend variants must run at Adaptive ratio.
-};
-
-const SEEDANCE2_VOLCENGINE_20_CAPABILITIES: Seedance2VolcengineModelCapabilities = {
-  maxDurationSeconds: 15,
-  supportsAutoDuration: true,
-  referenceLimits: { images: 9, videos: 3, audios: 3 },
-  supportsOutputFormat: false,
-  requiresAdaptiveRatioForVariants: false,
-}; // All Seedance 2.0 sub-models share the same capability envelope.
-
-export const SEEDANCE2_VOLCENGINE_MODEL_CAPABILITIES: Record<Seedance2VolcengineModelSelectionValue, Seedance2VolcengineModelCapabilities> = {
-  standard: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
-  fast: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
-  mini: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
-  seedance25: {
-    maxDurationSeconds: 30,
-    supportsAutoDuration: true,
-    referenceLimits: { images: 30, videos: 10, audios: 10 },
-    supportsOutputFormat: true,
-    requiresAdaptiveRatioForVariants: true,
-  },
-};
-
-export const getSeedance2VolcengineModelCapabilities = (
-  model: Seedance2VolcengineModelSelectionValue | undefined,
-): Seedance2VolcengineModelCapabilities => SEEDANCE2_VOLCENGINE_MODEL_CAPABILITIES[model ?? 'standard'] ?? SEEDANCE2_VOLCENGINE_20_CAPABILITIES; // Unknown legacy values fall back to the 2.0 envelope.
-
 export type VolcengineSafeSeedance2Settings = {
   seedance2Variant: Seedance2Variant;
   seedance2AspectRatio: Seedance2AspectRatioSelectionValue;
@@ -538,28 +500,24 @@ export const getVolcengineSafeSeedance2Settings = (
   model: Seedance2VolcengineModelSelectionValue,
   current: VolcengineSafeSeedance2Settings,
   hasFirstFrame = false,
-): VolcengineSafeSeedance2Settings => ({
-  seedance2Variant: current.seedance2Variant,
-  seedance2AspectRatio:
-    model === 'seedance25' && (
-      current.seedance2Variant === 'edit'
-      || current.seedance2Variant === 'extend'
-      || (current.seedance2Variant === 'smart' && hasFirstFrame)
-    )
-      ? 'adaptive'
-      : current.seedance2AspectRatio, // Seedance 2.5 keeps the source ratio for first-frame, Edit, and Extend tasks.
-  seedance2Resolution:
-    model !== 'standard' && (current.seedance2Resolution === '1080p' || current.seedance2Resolution === '4k')
-      ? '720p'
-      : current.seedance2Resolution, // Fast/Mini/2.5 cap at 720p; standard keeps 4K.
-  seedance2Duration:
-    model === 'seedance25'
-      ? current.seedance2Variant === 'edit' ? 'auto' : current.seedance2Duration // Edit requires Auto; other 2.5 variants keep explicit 4-30s values.
-      : current.seedance2Duration !== 'auto' && Number(current.seedance2Duration) > 15
-        ? '15'
-        : current.seedance2Duration, // 2.0 sub-models accept Auto or an explicit 4-15s duration.
-  seedance2CameraFixed: false,
-}); // Single clamp used by both the global settings hook and embedded prompt bars.
+): VolcengineSafeSeedance2Settings => {
+  const capabilities = getSeedance2VolcengineModelCapabilities(model);
+  const adaptive = capabilities.family === '2.5' && (
+    current.seedance2Variant === 'edit'
+    || current.seedance2Variant === 'extend'
+    || (current.seedance2Variant === 'smart' && hasFirstFrame)
+  );
+  const forceAutoDuration = capabilities.family === '2.5' && current.seedance2Variant === 'edit';
+  return {
+    ...current,
+    seedance2AspectRatio: adaptive ? 'adaptive' : current.seedance2AspectRatio,
+    seedance2Resolution: capabilities.resolutions.includes(current.seedance2Resolution) ? current.seedance2Resolution : '720p',
+    seedance2Duration: forceAutoDuration ? 'auto' : Number(current.seedance2Duration) > capabilities.maxDurationSeconds
+      ? '15'
+      : current.seedance2Duration,
+    seedance2CameraFixed: false,
+  };
+};
 
 export const SEEDANCE2_OUTPUT_FORMAT_OPTIONS: ReadonlyArray<{ value: Seedance2OutputFormatSelectionValue; label: string }> = [
   { value: 'mp4', label: 'MP4' },
@@ -1005,9 +963,6 @@ export const isMiniMaxH3DurationSelectionValue = (value: unknown): value is Mini
 
 export const isJimengSeedance2ModelVersion = (value: unknown): value is JimengSeedance2ModelVersionSelectionValue =>
   value === 'seedance2.0fast' || value === 'seedance2.0' || value === 'seedance2.0_vip' || value === 'seedance2.0fast_vip' || value === 'seedance2.0mini';
-
-export const isSeedance2VolcengineModel = (value: unknown): value is Seedance2VolcengineModelSelectionValue =>
-  value === 'standard' || value === 'fast' || value === 'mini' || value === 'seedance25';
 
 export const isSeedance2VolcengineDurationSelectionValue = (value: unknown): value is Seedance2VolcengineDurationSelectionValue =>
   isSeedance25DurationSelectionValue(value); // The Volcengine picker spans Auto plus 4-30s; 2.0 sub-models narrow it at submit.

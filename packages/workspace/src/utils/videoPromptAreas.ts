@@ -41,6 +41,7 @@ import {
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
   getSeedance2VolcengineExtendReferenceLimits,
+  getSeedance2VolcengineReferenceLimits,
 } from './seedanceReferences';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
@@ -158,8 +159,8 @@ export const getVideoPromptAreaCapabilityProfile = (
 
   if (resolvedModelId === SEEDANCE_2_VIDEO_MODEL_ID || resolvedModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID) {
     const safeVariant = variant ? getProviderSafeSeedance2Variant(resolvedModelId, variant) : variant; // Bars can carry a stale Edit/Extend pick from Volcengine.
-    const isVolcengineSeedance25 = resolvedModelId === SEEDANCE_2_VIDEO_MODEL_ID && falOptions?.seedance2VolcengineModel === 'seedance25';
-    const referenceProfile = isVolcengineSeedance25 ? SEEDANCE_25_VIDEO_PROMPT_PROFILE : SEEDANCE_2_VIDEO_PROMPT_PROFILE;
+    const limits = getSeedance2VolcengineReferenceLimits(resolvedModelId === SEEDANCE_2_VIDEO_MODEL_ID ? falOptions?.seedance2VolcengineModel ?? 'standard' : undefined);
+    const referenceProfile = { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, maxImages: limits.images, maxVideos: limits.videos, maxAudios: limits.audios };
     if (safeVariant === 'smart') {
       return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: resolvedModelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID });
     }

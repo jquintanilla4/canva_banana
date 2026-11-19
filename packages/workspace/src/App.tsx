@@ -1,3 +1,5 @@
+import { useVolcengineDraftFinalization } from './hooks/useVolcengineDraftFinalization';
+import { getActiveVolcengineSettings, getVolcengineAssetCounts, getVolcengineAssetMentions } from './services/volcengineSettings';
 import { isSvgImage } from './services/svgMedia';
 import { useWorkspaceApi } from './hooks/useWorkspaceApi';
 import type { WorkspaceHandle, WorkspaceProps } from './workspaceTypes';
@@ -23,6 +25,7 @@ import {
   FLUX_3_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
   getFalModelLabel,
 } from './services/modelConfig';
 import {
@@ -171,6 +174,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setLiveVideoPromptBars, // Stage in-progress prompt bar edits
     commit: handleCommit,  // Commit staged (live) edits as a new history entry
     replaceState,          // Replace current snapshot without adding undo depth
+    updateImagesMetadata,
+    getCanvasDocument,
     undo,                  // Undo last committed action
     redo,                  // Redo last undone action
     canUndo,               // Whether undo is currently possible
@@ -873,10 +878,15 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setIsLoading,
     setFalJobs,
     setState,
+    getCanvasDocument,
     setToastMessage,
     setTool,
     onGenerationComplete: handleGenerationComplete,
     onGenerationPlaced: handleGenerationPlaced,
+  });
+
+  const { renderDraft: handleRenderVolcengineDraft, clearUnconfirmedRender, retryLastFrame, downloadingLastFrames } = useVolcengineDraftFinalization({
+    getCanvasDocument, setState, updateImagesMetadata, setFalJobs, setError, onGenerationPlaced: handleGenerationPlaced,
   });
 
   const isEmbeddedPromptBarActive = activeEmbeddedPromptBarId !== null;
@@ -1098,6 +1108,15 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
 
   const hasSourceVideoSelected = Boolean(sourceVideoId);
   const hasSourceAudioSelected = Boolean(sourceAudioId);
+  const arkAssets = fal.isVideoMode && fal.falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID
+    ? getActiveVolcengineSettings(fal.seedance2VolcengineModel, fal.seedance2Variant, fal.seedanceArkSettings).assets
+    : undefined;
+  const arkAssetMentions = getVolcengineAssetMentions(arkAssets, {
+    image: effectiveSeedanceReferenceImageIds.length,
+    video: effectiveSeedanceReferenceVideoIds.length,
+    audio: effectiveSeedanceReferenceAudioIds.length,
+  });
+  const arkAssetCounts = getVolcengineAssetCounts(arkAssets);
 
   // Build prompt mention suggestions for Kling/Wan based on current reference/element selections.
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
@@ -1132,8 +1151,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     flux3RunPlan,
     hasSourceVideo: hasSourceVideoSelected,
     hasSourceAudio: hasSourceAudioSelected,
-    seedance2ReferenceAssetCount,
-    seedance2ReferenceVideoCount: effectiveSeedanceReferenceVideoIds.length,
+    seedance2ReferenceAssetCount: seedance2ReferenceAssetCount + arkAssetMentions.length,
+    seedance2ReferenceVideoCount: effectiveSeedanceReferenceVideoIds.length + arkAssetCounts.video,
     taggedReferenceImageCount: referenceImageIds.length,
     taggedReferenceVideoCount: referenceVideoIds.length,
     activePrimaryImage,
@@ -1362,6 +1381,10 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
           getMetadataTransferBlockReason={getMetadataTransferBlockReason}
           onImageDuplicate={handleDuplicateImage}
           onRerunGeneration={handleRerunGeneration}
+          onRenderVolcengineDraft={handleRenderVolcengineDraft}
+          onClearUnconfirmedVolcengineRender={clearUnconfirmedRender}
+          onRetryVolcengineLastFrame={retryLastFrame}
+          downloadingLastFrames={downloadingLastFrames}
           showMetadataOverlay={showMetadataOverlay}
           transformMode={transformMode}
           onStartTransform={handleStartTransform}
@@ -1525,8 +1548,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         negativePromptOutlineColor={negativePromptOutlineColor}
         cameraThemeActive={isCameraPromptAccentActive}
         klingSuggestionsEnabled={modelCapabilities.klingSuggestionsEnabled}
-        klingReferenceCount={Math.max(klingReferenceCount, flux3PromptMentions.length)}
-        klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : klingPromptMentions}
+        klingReferenceCount={Math.max(klingReferenceCount + arkAssetMentions.length, flux3PromptMentions.length)}
+        klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : [...klingPromptMentions, ...arkAssetMentions]}
         showCreateVideoPromptBarButton={shouldShowVideoPromptBarAccessory}
         onCreateVideoPromptBar={handleCreateVideoPromptBar}
         focusRequestToken={promptFocusRequestToken}

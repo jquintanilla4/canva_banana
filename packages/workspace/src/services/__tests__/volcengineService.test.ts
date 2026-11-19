@@ -5,7 +5,7 @@ vi.mock('../debugLog', () => ({
 }));
 
 import { addDebugLog } from '../debugLog';
-import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../volcengineService';
+import { generateSeedanceVideo, renderVolcengineDraft, VolcengineDraftSubmissionRejected, type VolcengineQueueUpdate } from '../volcengineService';
 
 type GenerateSeedanceVideoOptions = Parameters<typeof generateSeedanceVideo>[1]; // Reuse the runtime signature so tests stay aligned.
 
@@ -506,6 +506,79 @@ describe('volcengineService', () => {
     expect(submitBody.get('camera_fixed')).toBeNull();
     expect(submitBody.get('output_format')).toBeNull(); // 2.0 models never send a container choice.
   });
+
+  it('submits advanced settings and numbers uploaded and Ark asset references together', async () => {
+    const expiresAt = Date.now() + 86400000;
+    global.fetch = vi.fn().mockResolvedValueOnce(createHealthResponse()).mockResolvedValueOnce(createJsonResponse(createJobPayload({
+      status: 'COMPLETED', outputUrl: 'https://example.com/draft.mp4', requestId: 'draft-id', draftExpiresAt: expiresAt,
+    })));
+
+    const result = await generateSeedanceVideo('Use @Image2 and @Video1', createOptions({
+      modelId: 'doubao-seedance-2-5-260628', resolution: '480p', variant: 'reference',
+      referenceImageFiles: [new File(['image'], 'first.png', { type: 'image/png' })],
+      settings: { draft: true, priority: 0, webSearch: true, watermark: true, returnLastFrame: true,
+        assets: [{ mediaType: 'video', assetId: 'video-id' }, { mediaType: 'image', assetId: 'image-id' }] },
+    }));
+
+    const body = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect([...body.entries()]).toEqual(expect.arrayContaining([
+      ['draft', 'true'], ['priority', '0'], ['web_search', 'true'], ['watermark', 'true'], ['return_last_frame', 'true'],
+    ]));
+    expect(JSON.parse(String(body.get('reference_sources')))).toEqual([
+      { kind: 'upload', mediaType: 'image', index: 0 },
+      { kind: 'asset', mediaType: 'image', assetId: 'image-id' },
+      { kind: 'asset', mediaType: 'video', assetId: 'video-id' },
+    ]);
+    expect(body.getAll('reference_videos')).toHaveLength(0);
+    expect(result.draft).toEqual({ requestId: 'draft-id', expiresAt });
+  });
+
+  it('keeps a draft retryable when the local backend cannot be reached', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError('Connection refused'));
+    const onBeforeSubmit = vi.fn();
+    await expect(renderVolcengineDraft({ kind: 'finalize', draftTaskId: 'draft-id', resolution: '4k' }, { onBeforeSubmit }))
+      .rejects.toThrow('could not reach the local Volcengine backend');
+    expect(global.fetch).toHaveBeenCalledOnce();
+    expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/\/health$/), expect.anything());
+    expect(onBeforeSubmit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ kind: 'finalize', draftTaskId: 'draft-id', resolution: '4k', priority: 0 }, '/draft-finalizations', { draftTaskId: 'draft-id', resolution: '4k', priority: 0 }],
+    [{ kind: 'resume', requestId: 'final-id' }, '/resume', { requestId: 'final-id' }],
+  ] satisfies [Parameters<typeof renderVolcengineDraft>[0], string, object][])('sends only the Draft operation fields for %o', async (command, endpoint, expectedBody) => {
+    const fetchMock = vi.fn().mockResolvedValue(createJsonResponse(createJobPayload({
+      status: 'COMPLETED', outputUrl: 'https://example.com/final.mp4', requestId: 'final-id',
+    })));
+    if (command.kind === 'finalize') fetchMock.mockResolvedValueOnce(createHealthResponse());
+    global.fetch = fetchMock;
+    const onQueueUpdate = vi.fn();
+    const onBeforeSubmit = vi.fn();
+    await renderVolcengineDraft(command, { onQueueUpdate, onBeforeSubmit });
+    expect(global.fetch).toHaveBeenCalledTimes(command.kind === 'finalize' ? 2 : 1);
+    expect(onBeforeSubmit).toHaveBeenCalledTimes(command.kind === 'finalize' ? 1 : 0);
+    expect(global.fetch).toHaveBeenLastCalledWith(expect.stringMatching(new RegExp(endpoint + '$')), expect.objectContaining({
+      method: 'POST', body: JSON.stringify(expectedBody),
+    }));
+    expect(onQueueUpdate).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'final-id', status: 'COMPLETED' }));
+  });
+  it.each([[429, true], [408, false], [500, false]])('only treats HTTP %s as rejected when safe to retry', async (status, rejected) => {
+    global.fetch = vi.fn().mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse({ detail: 'Request failed' }, { ok: false, status }));
+    const result = renderVolcengineDraft({ kind: 'finalize', draftTaskId: 'draft-id', resolution: '4k' }, {});
+    if (rejected) await expect(result).rejects.toBeInstanceOf(VolcengineDraftSubmissionRejected);
+    else await expect(result).rejects.not.toBeInstanceOf(VolcengineDraftSubmissionRejected);
+  });
+
+  it('allows retry when Ark was unreachable during draft validation', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(createHealthResponse()).mockResolvedValueOnce(createJsonResponse({
+      detail: { code: 'draft-not-submitted', message: 'Could not check the Ark draft.' },
+    }, { ok: false, status: 503 }));
+
+    await expect(renderVolcengineDraft({ kind: 'finalize', draftTaskId: 'draft-id', resolution: '4k' }, {}))
+      .rejects.toBeInstanceOf(VolcengineDraftSubmissionRejected);
+  });
+
   it('does not submit when the originating session is cancelled during health parsing', async () => {
     const controller = new AbortController();
     let finishHealth!: (value: unknown) => void;

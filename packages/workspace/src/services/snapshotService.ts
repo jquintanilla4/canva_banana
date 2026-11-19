@@ -1,3 +1,5 @@
+import { isArkIdentifier, normalizeVolcengineDraft, normalizeVolcengineSettings, type VolcengineSettings } from './volcengineSettings';
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { isGifImage } from './gifMedia';
 import { isSvgFile, isSvgImage, normalizeImageFile } from './svgMedia';
 import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from './gptImage26RunSettings';
@@ -99,6 +101,9 @@ import {
   dataUrlToFile,
   getMediaTypeFromFileType,
   getNaturalSize,
+  isVideoPlaybackUnavailable,
+  loadVolcengineVideoFromBlob,
+  markVideoPlaybackUnavailable,
   loadMediaFromBlob,
   loadMediaFromDataUrl,
   loadMediaFromUrl,
@@ -131,6 +136,7 @@ const normalizeSnapshotPromptBarFalOptions = (value: unknown): GenerationInputs[
   if ('flux3Duration' in raw && !isFlux3Duration(raw.flux3Duration)) delete normalized.flux3Duration;
   if ('flux3GenerateAudio' in raw && typeof raw.flux3GenerateAudio !== 'boolean') delete normalized.flux3GenerateAudio;
   if ('flux3KeyframeTimings' in raw) normalized.flux3KeyframeTimings = parseFlux3KeyframeTimings(raw.flux3KeyframeTimings);
+  if ('seedanceArkSettings' in raw) normalized.seedanceArkSettings = normalizeVolcengineSettings(raw.seedanceArkSettings);
   return normalized;
 };
 
@@ -153,6 +159,7 @@ export type SnapshotImageManifest = {
   isFavorite?: boolean;
   hasAudio?: boolean;
   videoDuration?: number;
+  videoPlaybackUnavailable?: boolean;
   currentPlaybackTime?: number;
   audioDuration?: number;
   fallbackForMediaType?: CanvasMediaType;
@@ -222,6 +229,7 @@ export type SnapshotManifestV2 = {
         seedance2GenerateAudio?: boolean;
         seedance2CameraFixed?: boolean;
         seedance2OutputFormat?: string;
+        seedanceArkSettings?: VolcengineSettings;
         seedance25Variant?: string;
         seedance25AspectRatio?: string;
         seedance25Resolution?: string;
@@ -336,6 +344,7 @@ export type SerializedCanvasImageV1 = {
   isFavorite?: boolean;
   hasAudio?: boolean;
   videoDuration?: number;
+  videoPlaybackUnavailable?: boolean;
   currentPlaybackTime?: number;
 };
 
@@ -408,6 +417,7 @@ export type SnapshotMetaState = {
   seedance2GenerateAudio?: boolean;
   seedance2CameraFixed?: boolean;
   seedance2OutputFormat?: string;
+  seedanceArkSettings?: VolcengineSettings;
   seedance25Variant?: string;
   seedance25AspectRatio?: string;
   seedance25Resolution?: string;
@@ -746,7 +756,8 @@ const buildSnapshotImageManifest = (img: CanvasImage): SnapshotImageManifest => 
     fileSize: img.file.size,
     metadata: img.metadata ? { ...img.metadata } : undefined,
     mediaType: img.mediaType,
-    isPlaying: img.isPlaying ?? false,
+    isPlaying: img.mediaType === 'video' && img.element instanceof HTMLVideoElement && isVideoPlaybackUnavailable(img.element) ? false : img.isPlaying ?? false,
+    videoPlaybackUnavailable: img.mediaType === 'video' && img.element instanceof HTMLVideoElement && isVideoPlaybackUnavailable(img.element) ? true : undefined,
     isFavorite: img.isFavorite ?? false,
     hasAudio: img.hasAudio,
     videoDuration: img.mediaType === 'video' ? getCanvasMediaDurationSeconds(img) ?? undefined : undefined,
@@ -1395,13 +1406,20 @@ export const restoreSnapshotFromFile = async (
         const objectUrl = getSnapshotMediaObjectUrl(blob);
         const savedNaturalWidth = getPositiveSnapshotDimension(imageManifest.naturalWidth, getPositiveSnapshotDimension(imageManifest.width)); // Legacy snapshots fall back to display width.
         const savedNaturalHeight = getPositiveSnapshotDimension(imageManifest.naturalHeight, getPositiveSnapshotDimension(imageManifest.height)); // Legacy snapshots fall back to display height.
-        const element = mediaType === 'image' && isSvgFile(snapshotFile)
+        const isVolcengineVideo = mediaType === 'video' && imageManifest.metadata?.generation?.provider === 'volcengine';
+        const restoreUnavailableVideo = isVolcengineVideo && imageManifest.videoPlaybackUnavailable === true;
+        const element = restoreUnavailableVideo
+          ? createLazyVideoFromUrl(objectUrl ?? URL.createObjectURL(blob as Blob), savedNaturalWidth, savedNaturalHeight)
+          : mediaType === 'image' && isSvgFile(snapshotFile)
           ? await loadMediaFromBlob(snapshotFile, 'image')
           : objectUrl && mediaType === 'video'
           ? createLazyVideoFromUrl(objectUrl, savedNaturalWidth, savedNaturalHeight)
           : objectUrl
           ? await loadMediaFromUrl(objectUrl, mediaType)
+          : isVolcengineVideo
+          ? (await loadVolcengineVideoFromBlob(blob as Blob)).element
           : await loadMediaFromBlob(blob as Blob, mediaType);
+        if (restoreUnavailableVideo && element instanceof HTMLVideoElement) markVideoPlaybackUnavailable(element);
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
         const width = typeof imageManifest.width === 'number' ? imageManifest.width : naturalWidth;
         const height = typeof imageManifest.height === 'number' ? imageManifest.height : naturalHeight;
@@ -1426,7 +1444,7 @@ export const restoreSnapshotFromFile = async (
           naturalWidth,
           naturalHeight,
           file: snapshotFile,
-          isPlaying: mediaType === 'video' ? Boolean(imageManifest.isPlaying) : false,
+          isPlaying: mediaType === 'video' && element instanceof HTMLVideoElement && !isVideoPlaybackUnavailable(element) ? Boolean(imageManifest.isPlaying) : false,
           isFavorite: imageManifest.isFavorite === true,
           hasAudio: mediaType === 'video' ? imageManifest.hasAudio : false,
           videoDuration: mediaType === 'video' && typeof imageManifest.videoDuration === 'number' && Number.isFinite(imageManifest.videoDuration)
@@ -1486,7 +1504,13 @@ export const restoreSnapshotFromFile = async (
           });
         }
         // Non-audio media can be rehydrated directly from the data URL.
-        const element = await loadMediaFromDataUrl((img as SerializedCanvasImageV1).dataUrl, mediaType);
+        const rawMetadata = (img as SerializedCanvasImageV1).metadata as CanvasImage['metadata'] | undefined;
+        const volcengineFile = mediaType === 'video' && rawMetadata?.generation?.provider === 'volcengine'
+          ? await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType)
+          : undefined;
+        const element = volcengineFile
+          ? (await loadVolcengineVideoFromBlob(volcengineFile)).element
+          : await loadMediaFromDataUrl((img as SerializedCanvasImageV1).dataUrl, mediaType);
         if (element instanceof HTMLVideoElement) {
           element.pause();
           element.currentTime = 0;
@@ -1495,10 +1519,9 @@ export const restoreSnapshotFromFile = async (
           element.playsInline = true;
         }
         const { naturalWidth, naturalHeight } = getNaturalSize(element);
-        const snapshotFile = await normalizeImageFile(await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType));
+        const snapshotFile = volcengineFile ?? await normalizeImageFile(await dataUrlToFile((img as SerializedCanvasImageV1).dataUrl, fileName, fileType));
         const width = typeof (img as SerializedCanvasImageV1).width === 'number' ? (img as SerializedCanvasImageV1).width : naturalWidth;
         const height = typeof (img as SerializedCanvasImageV1).height === 'number' ? (img as SerializedCanvasImageV1).height : naturalHeight;
-        const rawMetadata = (img as SerializedCanvasImageV1).metadata as CanvasImage['metadata'] | undefined;
         const rotation = typeof (img as SerializedCanvasImageV1).rotation === 'number' && Number.isFinite((img as SerializedCanvasImageV1).rotation)
           ? (img as SerializedCanvasImageV1).rotation
           : 0;
@@ -1515,7 +1538,7 @@ export const restoreSnapshotFromFile = async (
           naturalWidth,
           naturalHeight,
           file: snapshotFile,
-          isPlaying: mediaType === 'video' ? Boolean((img as SerializedCanvasImageV1).isPlaying) : false,
+          isPlaying: mediaType === 'video' && element instanceof HTMLVideoElement && !isVideoPlaybackUnavailable(element) ? Boolean((img as SerializedCanvasImageV1).isPlaying) : false,
           isFavorite: (img as SerializedCanvasImageV1).isFavorite === true,
           hasAudio: mediaType === 'video' ? (img as SerializedCanvasImageV1).hasAudio : false,
           videoDuration: mediaType === 'video' && typeof (img as SerializedCanvasImageV1).videoDuration === 'number' && Number.isFinite((img as SerializedCanvasImageV1).videoDuration)
@@ -1631,7 +1654,7 @@ export const restoreSnapshotFromFile = async (
     const seedance2VolcengineModel = isSeedance2VolcengineModel(bar?.seedance2VolcengineModel) ? bar.seedance2VolcengineModel : 'standard';
     const seedance2DurationWide = isSeedance2VolcengineDurationSelectionValue(bar?.seedance2Duration) ? bar.seedance2Duration : '5';
     const isVolcengineBar = modelId === SEEDANCE_2_VIDEO_MODEL_ID;
-    const seedance2Duration = seedance2VolcengineModel === 'seedance25'
+    const seedance2Duration = getSeedance2VolcengineModelCapabilities(seedance2VolcengineModel).maxDurationSeconds === 30
       || isSeedance2DurationSelectionValue(seedance2DurationWide)
       || (isVolcengineBar && seedance2DurationWide === 'auto')
       ? seedance2DurationWide
@@ -1663,6 +1686,7 @@ export const restoreSnapshotFromFile = async (
       seedance2GenerateAudio: Boolean(bar?.seedance2GenerateAudio),
       seedance2CameraFixed: Boolean(bar?.seedance2CameraFixed),
       seedance2OutputFormat: isSeedance2OutputFormatSelectionValue(bar?.seedance2OutputFormat) ? bar.seedance2OutputFormat : 'mp4',
+      ...(bar?.seedanceArkSettings ? { seedanceArkSettings: normalizeVolcengineSettings(bar.seedanceArkSettings) } : {}),
     };
   });
 
@@ -2213,6 +2237,7 @@ export const normalizeSnapshotImageMetadata = (
       falOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
     }
 
+    const volcengineDraft = raw.provider === 'volcengine' ? normalizeVolcengineDraft(raw.volcengineDraft) : undefined;
     const volcengineOptionsRaw = raw.volcengineOptions;
     let volcengineOptions: GenerationInputs['volcengineOptions'] | undefined;
     if (volcengineOptionsRaw && typeof volcengineOptionsRaw === 'object') {
@@ -2244,7 +2269,9 @@ export const normalizeSnapshotImageMetadata = (
       if (isSeedance2OutputFormatSelectionValue((typed as { seedance2OutputFormat?: unknown }).seedance2OutputFormat)) {
         normalizedOptions.seedance2OutputFormat = typed.seedance2OutputFormat;
       }
-      if (normalizedOptions.seedance2VolcengineModel !== 'seedance25') {
+      if (typed?.seedanceArkSettings) normalizedOptions.seedanceArkSettings = normalizeVolcengineSettings(typed.seedanceArkSettings);
+      const capabilities = getSeedance2VolcengineModelCapabilities(normalizedOptions.seedance2VolcengineModel);
+      if (!capabilities.supportsOutputFormat) {
         delete normalizedOptions.seedance2OutputFormat; // 2.0 sub-models never carry a container choice.
         if (normalizedOptions.seedance2Duration !== undefined
           && normalizedOptions.seedance2Duration !== 'auto'
@@ -2252,9 +2279,8 @@ export const normalizeSnapshotImageMetadata = (
           normalizedOptions.seedance2Duration = '5'; // 2.0 reruns keep Auto but drop explicit 16-30s durations.
         }
       }
-      if ((normalizedOptions.seedance2VolcengineModel === 'fast' || normalizedOptions.seedance2VolcengineModel === 'mini' || normalizedOptions.seedance2VolcengineModel === 'seedance25')
-        && (normalizedOptions.seedance2Resolution === '1080p' || normalizedOptions.seedance2Resolution === '4k')) {
-        normalizedOptions.seedance2Resolution = '720p'; // Fast/Mini/2.5 reruns cap at 720p.
+      if (normalizedOptions.seedance2Resolution && !capabilities.resolutions.includes(normalizedOptions.seedance2Resolution)) {
+        normalizedOptions.seedance2Resolution = '720p';
       }
       volcengineOptions = Object.keys(normalizedOptions).length > 0 ? normalizedOptions : undefined;
     }
@@ -2347,6 +2373,10 @@ export const normalizeSnapshotImageMetadata = (
       ...(url ? { url } : {}),
       ...(falOptions ? { falOptions } : {}),
       ...(volcengineOptions ? { volcengineOptions } : {}),
+      ...(volcengineDraft ? { volcengineDraft } : {}),
+      ...(raw.provider === 'volcengine' && typeof raw.volcengineFinalizedFrom === 'string'
+        ? { volcengineFinalizedFrom: raw.volcengineFinalizedFrom }
+        : {}),
       ...(jimengOptions ? { jimengOptions } : {}),
     };
   };
@@ -2385,6 +2415,9 @@ export const normalizeSnapshotImageMetadata = (
     ...(normalizedNoiseScale !== undefined ? { noiseScale: normalizedNoiseScale } : {}),
     ...(normalizedCreativity !== undefined ? { creativity: normalizedCreativity } : {}),
     ...(generation ? { generation } : {}),
+    ...(source === 'generated' && isArkIdentifier(rawMetadata.volcengineLastFrameTaskId)
+      ? { volcengineLastFrameTaskId: rawMetadata.volcengineLastFrameTaskId }
+      : {}),
   };
 
   return metadata;
