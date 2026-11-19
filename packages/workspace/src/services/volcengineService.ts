@@ -387,7 +387,6 @@ export const generateSeedanceVideo = async (
   options = { ...options, abortSignal: options.abortSignal ?? getWorkspaceSignal() };
   options.abortSignal?.throwIfAborted();
   const formData = new FormData();
-  const isSeedance25Model = options.modelId === SEEDANCE2_VOLCENGINE_MODEL_IDS.seedance25;
   const requestPrompt = options.variant === 'smart' ? prompt : convertReferencePromptMentionsToVolcengineTokens(prompt); // Ark mandates 视频1/图片1/音频1 tokens for multimodal prompts.
   formData.set('prompt', requestPrompt);
   formData.set('model_id', options.modelId);
@@ -396,9 +395,6 @@ export const generateSeedanceVideo = async (
   formData.set('duration', options.duration === 'auto' ? '-1' : options.duration); // Seedance 2.5 Auto duration maps to -1.
   formData.set('resolution', options.resolution);
   formData.set('generate_audio', String(options.generateAudio));
-  if (!isSeedance25Model) {
-    formData.set('camera_fixed', String(options.cameraFixed)); // Seedance 2.5 does not support camera_fixed.
-  }
   if (options.outputFormat) {
     formData.set('output_format', options.outputFormat); // Seedance 2.5 container selection; defaults to mp4 backend-side.
   }

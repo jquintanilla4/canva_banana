@@ -490,7 +490,7 @@ describe('volcengineService', () => {
     expect(submitBody.get('camera_fixed')).toBeNull();
   });
 
-  it('keeps the Seedance 2.0 contract unchanged', async () => {
+  it('omits legacy fixed camera and output format from Seedance 2.0 requests', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(createHealthResponse())
       .mockResolvedValueOnce(createJsonResponse(createJobPayload({
@@ -503,7 +503,7 @@ describe('volcengineService', () => {
     const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
     expect(submitBody.get('model_id')).toBe('doubao-seedance-2-0-260128');
     expect(submitBody.get('duration')).toBe('5');
-    expect(submitBody.get('camera_fixed')).toBe('true');
+    expect(submitBody.get('camera_fixed')).toBeNull();
     expect(submitBody.get('output_format')).toBeNull(); // 2.0 models never send a container choice.
   });
   it('does not submit when the originating session is cancelled during health parsing', async () => {

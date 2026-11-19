@@ -198,10 +198,13 @@ def _validate_payload(payload: SeedanceJobPayload) -> None:
     elif payload.variant == "edit":
         if not payload.reference_videos:
             raise ValueError("Edit mode requires a video to edit")
-    else:  # Extend concatenates videos, so other reference media types are not allowed.
+    else:
         if not payload.reference_videos:
             raise ValueError("Extend mode requires at least one reference video")
-        if payload.reference_images or payload.reference_audios:
+        if is_seedance25(payload.model_id):
+            if payload.reference_audios:
+                raise ValueError("Seedance 2.5 Extend accepts reference videos and images")
+        elif payload.reference_images or payload.reference_audios:
             raise ValueError("Extend mode only accepts reference videos")
 
     if is_seedance25(payload.model_id):
@@ -236,8 +239,6 @@ def _create_remote_task(client: Ark, payload: SeedanceJobPayload, content: list[
     if is_seedance25(payload.model_id):
         if payload.output_format is not None:
             extra_body["output_format"] = payload.output_format
-    else:
-        request_payload["camera_fixed"] = payload.camera_fixed  # camera_fixed is not documented for Seedance 2.5.
     if is_seedance25(payload.model_id) and payload.variant in {"edit", "extend"}:
         extra_body["omni_reference_task_type"] = payload.variant  # Seedance 2.5 uses the hint to validate task-specific limits synchronously.
     if extra_body:

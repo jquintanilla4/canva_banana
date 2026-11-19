@@ -445,7 +445,7 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
         promptPlaceholder: ctx.seedance2Variant === 'edit'
           ? `Seedance 2 Edit: select a video to edit (@Video1), optionally tag @Image/@Audio replacement clips, then describe the changes... ${GENERATE_SUFFIX}`
           : ctx.seedance2Variant === 'extend'
-            ? `${modelLabel} Extend: select up to ${limits.videos} video clips and describe how to chain them, e.g. "@Video1 followed by @Video2", or extend @Video1 forward or backward... ${GENERATE_SUFFIX}`
+            ? `${modelLabel} Extend: select up to ${limits.videos} video clips${isVolcengineSelector && ctx.seedance2VolcengineModel === 'seedance25' ? ' and optional reference images' : ''}, then describe how to chain or extend the clips... ${GENERATE_SUFFIX}`
             : ctx.seedance2Variant === 'reference'
               ? referencePlaceholder(modelLabel, limits.images, limits.videos, limits.audios)
               : `Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... ${GENERATE_SUFFIX}`,

@@ -426,8 +426,10 @@ export function useGenerationGuards({
           }
           if (isSeedance2ExtendMode) {
             return seedance2ReferenceVideoCount > 0
-              ? 'Describe how the clips connect, e.g. "@Video1 followed by @Video2", or extend @Video1 forward or backward...'
-              : `${seedance2VolcengineLabel} Extend: select up to ${seedance2VolcengineReferenceLimits.videos} video clips (@Video1, @Video2, ...), then describe how to chain or extend them...`;
+              ? isVolcengineSeedance25Model
+                ? 'Describe how to extend or chain the video clips. You can reference still images such as @Image1...'
+                : 'Describe how the clips connect, e.g. "@Video1 followed by @Video2", or extend @Video1 forward or backward...'
+              : `${seedance2VolcengineLabel} Extend: select up to ${seedance2VolcengineReferenceLimits.videos} video clips (@Video1, @Video2, ...)${isVolcengineSeedance25Model ? ' and optional reference images' : ''}, then describe how to chain or extend the clips...`;
           }
           if (isSeedance2ReferenceMode) {
             return seedance2ReferenceAssetCount > 0

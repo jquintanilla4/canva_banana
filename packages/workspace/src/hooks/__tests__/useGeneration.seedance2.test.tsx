@@ -3823,6 +3823,53 @@ describe('useGeneration (seedance 2)', () => {
     expect(submittedOptions?.referenceAudioFiles).toBeUndefined();
   });
 
+  it('submits a source clip and a reference image in Volcengine Seedance 2.5 Extend', async () => {
+    const fal = createFalStub();
+    fal.seedance2Variant = 'extend';
+    fal.seedance2VolcengineModel = 'seedance25';
+    const video = buildCanvasMedia('video-1', 'video', 5);
+    const image = buildCanvasMedia('image-1', 'image');
+
+    vi.mocked(generateSeedanceVideo).mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'Extend @Video1 with the character in @Image1',
+      promptPrefix: '',
+      apiProvider: 'fal',
+      fal,
+      selection: createSelectionStub({
+        referenceVideoIds: [video.id],
+        referenceImageIds: [image.id],
+        seedanceReferenceOrderIds: [video.id, image.id],
+      }),
+      images: [video, image],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(generateSeedanceVideo)).toHaveBeenCalledWith(
+      'Extend @Video1 with the character in @Image1',
+      expect.objectContaining({
+        variant: 'extend',
+        referenceImageFiles: [expect.any(File)],
+        referenceVideoFiles: [expect.any(File)],
+      }),
+    );
+  });
+
   it('blocks Volcengine Seedance 2 Extend submits that tag image or audio references', async () => {
     const fal = createFalStub();
     fal.seedance2Variant = 'extend';

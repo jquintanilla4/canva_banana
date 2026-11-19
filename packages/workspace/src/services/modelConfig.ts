@@ -357,7 +357,7 @@ export const SEEDANCE2_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant;
 export const SEEDANCE2_VOLCENGINE_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant; label: string; tooltip?: string }> = [
   ...SEEDANCE2_VARIANT_OPTIONS,
   { value: 'edit', label: 'Edit', tooltip: 'Modify an existing video with text instructions and optional image/audio references.' },
-  { value: 'extend', label: 'Extend', tooltip: 'Continue a video or chain up to 3 clips on Seedance 2.0 or 10 clips on Seedance 2.5.' },
+  { value: 'extend', label: 'Extend', tooltip: 'Continue a video or chain clips. Seedance 2.5 also accepts reference images.' },
 ] as const; // Edit/Extend use the reference-style request shape, so only Volcengine exposes them.
 
 export const SEEDANCE25_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance25Variant; label: string }> = [
@@ -558,7 +558,7 @@ export const getVolcengineSafeSeedance2Settings = (
       : current.seedance2Duration !== 'auto' && Number(current.seedance2Duration) > 15
         ? '15'
         : current.seedance2Duration, // 2.0 sub-models accept Auto or an explicit 4-15s duration.
-  seedance2CameraFixed: model === 'seedance25' ? false : current.seedance2CameraFixed, // 2.5 drops the fixed-camera toggle.
+  seedance2CameraFixed: false,
 }); // Single clamp used by both the global settings hook and embedded prompt bars.
 
 export const SEEDANCE2_OUTPUT_FORMAT_OPTIONS: ReadonlyArray<{ value: Seedance2OutputFormatSelectionValue; label: string }> = [

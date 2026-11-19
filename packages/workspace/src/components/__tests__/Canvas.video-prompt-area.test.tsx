@@ -1388,7 +1388,7 @@ describe('Canvas video prompt area tool', () => {
     expect(fireEvent.contextMenu(listbox)).toBe(true); // Canvas must not cancel detached control context menus.
   });
 
-  it('shows the shared Seedance 2 labels and updates embedded audio and camera toggles', () => {
+  it('updates embedded Seedance 2 audio and hides the fixed-camera control', () => {
     const Harness = () => {
       const [bars, setBars] = useState<CanvasVideoPromptBar[]>([{
         id: 'bar-1',
@@ -1417,7 +1417,6 @@ describe('Canvas video prompt area tool', () => {
       return (
         <>
           <output data-testid="seedance2-audio-state">{bars[0]?.seedance2GenerateAudio ? 'true' : 'false'}</output>
-          <output data-testid="seedance2-camera-state">{bars[0]?.seedance2CameraFixed ? 'true' : 'false'}</output>
           <Canvas
             images={[]}
             onImagesChange={vi.fn()}
@@ -1537,7 +1536,7 @@ describe('Canvas video prompt area tool', () => {
     const promptBar = within(screen.getByTestId('prompt-bar-inline'));
     expect(promptBar.getByText('AR')).toBeTruthy();
     expect(promptBar.getByText('Resolution')).toBeTruthy();
-    expect(promptBar.getByText('Camera')).toBeTruthy();
+    expect(promptBar.queryByRole('combobox', { name: 'Toggle Seedance 2 camera fixed' })).toBeNull();
     expect(promptBar.getByText('Audio')).toBeTruthy();
 
     const audioPicker = promptBar.getByRole('combobox', { name: 'Toggle Seedance 2 audio generation' });
@@ -1550,15 +1549,6 @@ describe('Canvas video prompt area tool', () => {
     expect(updatedAudioPicker.textContent).toContain('On');
     expect(screen.getByTestId('seedance2-audio-state').textContent).toBe('true');
 
-    const cameraPicker = promptBar.getByRole('combobox', { name: 'Toggle Seedance 2 camera fixed' });
-    expect(cameraPicker.textContent).toContain('Free');
-
-    fireEvent.click(cameraPicker);
-    fireEvent.click(screen.getByRole('option', { name: 'Fixed' }));
-
-    const updatedCameraPicker = promptBar.getByRole('combobox', { name: 'Toggle Seedance 2 camera fixed' });
-    expect(updatedCameraPicker.textContent).toContain('Fixed');
-    expect(screen.getByTestId('seedance2-camera-state').textContent).toBe('true');
   });
 
   it.each([

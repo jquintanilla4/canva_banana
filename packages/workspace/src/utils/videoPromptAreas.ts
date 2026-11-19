@@ -40,7 +40,7 @@ import {
   SEEDANCE_REFERENCE_AUDIO_LIMIT,
   SEEDANCE_REFERENCE_IMAGE_LIMIT,
   SEEDANCE_REFERENCE_VIDEO_LIMIT,
-  getSeedance2VolcengineReferenceLimits,
+  getSeedance2VolcengineExtendReferenceLimits,
 } from './seedanceReferences';
 import {
   SEEDANCE25_REFERENCE_AUDIO_LIMIT,
@@ -88,7 +88,7 @@ export const SEEDANCE_2_EXTEND_VIDEO_PROMPT_PROFILE: VideoModelCapabilityProfile
   supportedMediaTypes: ['video'],
   maxImages: 0,
   maxAudios: 0,
-}; // Extend chains video clips (3 on 2.0, 10 on 2.5 via the caller override) and ignores image/audio drops.
+};
 
 export const SEEDANCE_25_VIDEO_PROMPT_PROFILE: VideoModelCapabilityProfile = {
   ...SEEDANCE_2_VIDEO_PROMPT_PROFILE,
@@ -167,10 +167,15 @@ export const getVideoPromptAreaCapabilityProfile = (
       return { ...referenceProfile, id: resolvedModelId }; // Edit accepts the selected sub-model's multimodal reference envelope.
     }
     if (safeVariant === 'extend') {
+      const limits = getSeedance2VolcengineExtendReferenceLimits(falOptions?.seedance2VolcengineModel);
       return {
         ...SEEDANCE_2_EXTEND_VIDEO_PROMPT_PROFILE,
         id: resolvedModelId,
-        maxVideos: getSeedance2VolcengineReferenceLimits(falOptions?.seedance2VolcengineModel).videos, // Extend follows the selected Volcengine sub-model's video cap.
+        defaultImageRole: limits.images ? 'reference' : null,
+        shiftImageRole: limits.images ? 'reference' : null,
+        supportedMediaTypes: limits.images ? ['image', 'video'] : ['video'],
+        maxImages: limits.images,
+        maxVideos: limits.videos,
       };
     }
     return { ...referenceProfile, id: resolvedModelId };

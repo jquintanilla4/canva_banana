@@ -1570,8 +1570,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError(`Seedance 2 ${isSeedance2EditMode ? 'Edit' : 'Extend'} requires at least one video clip.`);
           return;
         }
-        if (isSeedance2ExtendMode && (localReferenceImageIds.length > 0 || localReferenceAudioIds.length > 0)) {
-          setError('Seedance 2 Extend accepts video clips only.');
+        if (isSeedance2ExtendMode && (localReferenceAudioIds.length > 0 || (!isVolcengineSeedance25 && localReferenceImageIds.length > 0))) {
+          setError(isVolcengineSeedance25 ? 'Seedance 2.5 Extend accepts video clips and reference images.' : 'Seedance 2 Extend accepts video clips only.');
           return;
         }
         if (usingJimeng && !isJimeng25 && isSeedance2ReferenceMode && localReferenceAudioIds.length > 0 && localReferenceImageCount + localReferenceVideoIds.length === 0) {
@@ -1609,7 +1609,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           return;
         }
         const localSeedance2GenerateAudioForRun = usingJimeng ? false : seedance2GenerateAudioForRun; // Jimeng hides and ignores audio generation.
-        const localSeedance2CameraFixedForRun = usingJimeng ? false : safeVolcengineSettings.seedance2CameraFixed; // Jimeng hides and ignores fixed camera; Volcengine 2.5 clears it.
+        const localSeedance2CameraFixedForRun = false;
         const localProviderOptionsForRun: Pick<GenerationInputs, 'jimengOptions' | 'volcengineOptions'> = usingJimeng ? { jimengOptions: isJimengMulti ? {
           multiframeDuration: jimengMultiframeDurationForRun,
           multiframeResolution: jimengMultiframeResolutionForRun,

@@ -59,7 +59,7 @@ describe('promptBarConfig (Volcengine Seedance 2.5)', () => {
     }));
     const ids = controls.map(control => control.id);
 
-    expect(ids).toContain('seedance2-camera-fixed-select');
+    expect(ids).not.toContain('seedance2-camera-fixed-select');
     expect(ids).not.toContain('seedance2-output-format-select');
 
     const duration = controls.find(control => control.id === 'seedance2-duration-select');

@@ -167,6 +167,13 @@ class WorkerEditExtendValidationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _validate_payload(payload)
 
+    def test_seedance25_extend_with_reference_image_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            payload = build_variant_payload(
+                "extend", Path(tmp_dir), model_id="doubao-seedance-2-5-260628", ratio="adaptive", videos=1, images=1,
+            )
+            _validate_payload(payload)
+
     def test_extend_rejects_first_and_last_frame_images(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -454,14 +461,14 @@ def build_fake_ark_client() -> SimpleNamespace:
 
 
 class CreateRemoteTaskTests(unittest.TestCase):
-    def test_seedance20_smart_request_keeps_camera_fixed_and_omits_25_params(self) -> None:
+    def test_seedance20_smart_request_omits_camera_fixed_and_25_params(self) -> None:
         client = build_fake_ark_client()
-        payload = build_smart_payload("doubao-seedance-2-0-260128")
+        payload = build_smart_payload("doubao-seedance-2-0-260128", camera_fixed=True)
 
         _create_remote_task(client, payload, content=[{"type": "text", "text": "make a video"}])  # type: ignore[arg-type]
 
         kwargs = client.content_generation.tasks.kwargs or {}
-        self.assertIn("camera_fixed", kwargs)
+        self.assertNotIn("camera_fixed", kwargs)
         self.assertNotIn("output_format", kwargs)
         self.assertNotIn("omni_reference_task_type", kwargs)
         self.assertNotIn("extra_body", kwargs)
@@ -483,7 +490,7 @@ class CreateRemoteTaskTests(unittest.TestCase):
 
                     kwargs = client.content_generation.tasks.kwargs or {}
                     self.assertNotIn("extra_body", kwargs)
-                    self.assertIn("camera_fixed", kwargs)
+                    self.assertNotIn("camera_fixed", kwargs)
 
     def test_seedance25_request_omits_camera_fixed(self) -> None:
         client = build_fake_ark_client()

@@ -49,6 +49,12 @@ export const getSeedance2VolcengineReferenceLimits = (
   model === 'seedance25' ? SEEDANCE2_VOLCENGINE_25_REFERENCE_LIMITS : SEEDANCE2_VOLCENGINE_20_REFERENCE_LIMITS
 ); // Pick the reference envelope for the selected Volcengine sub-model.
 
+export const getSeedance2VolcengineExtendReferenceLimits = (model: Seedance2VolcengineModel | undefined) => {
+  const limits = getSeedance2VolcengineReferenceLimits(model);
+  const images = model === 'seedance25' ? limits.images : 0;
+  return { images, videos: limits.videos, audios: 0, total: images + limits.videos };
+};
+
 type BuildEffectiveSeedanceReferenceIdsArgs = {
   enabled: boolean;
   images: CanvasImage[];

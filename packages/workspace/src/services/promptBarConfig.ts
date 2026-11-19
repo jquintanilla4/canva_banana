@@ -157,7 +157,6 @@ import {
   SEEDANCE2_VOLCENGINE_25_DURATION_OPTIONS,
   JIMENG_MULTIFRAME_DURATION_OPTIONS,
   SEEDANCE2_AUDIO_OPTIONS,
-  SEEDANCE2_CAMERA_FIXED_OPTIONS,
   SEEDANCE25_VARIANT_OPTIONS,
   SEEDANCE25_ASPECT_RATIO_OPTIONS,
   SEEDANCE25_RESOLUTION_OPTIONS,
@@ -287,7 +286,6 @@ type Seedance2PromptBarControlsInput = {
   seedance2OutputFormat?: Seedance2OutputFormatSelectionValue; // Seedance 2.5 container picker value.
   seedance2VolcengineModel?: Seedance2VolcengineModelSelectionValue;
   seedance2HasFirstFrame?: boolean;
-  showCameraFixed?: boolean;
   showJimengModelVersion?: boolean;
   showVolcengineModelPicker?: boolean;
   showAudio?: boolean;
@@ -320,9 +318,7 @@ export const buildSeedance2PromptBarControls = ({
   seedance2Resolution,
   seedance2Duration,
   seedance2GenerateAudio,
-  seedance2CameraFixed,
   seedance2OutputFormat = 'mp4',
-  showCameraFixed = true,
   showJimengModelVersion = false,
   showVolcengineModelPicker = false,
   showAudio = true,
@@ -336,7 +332,6 @@ export const buildSeedance2PromptBarControls = ({
   onSeedance2ResolutionChange,
   onSeedance2DurationChange,
   onSeedance2GenerateAudioChange,
-  onSeedance2CameraFixedChange,
   onSeedance2OutputFormatChange,
 }: Seedance2PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => {
   const isSeedance25VolcengineSelection = Boolean(showVolcengineModelPicker && seedance2VolcengineModel === 'seedance25');
@@ -462,18 +457,6 @@ export const buildSeedance2PromptBarControls = ({
     onChange: (value: string) => onSeedance2ResolutionChange(value as Seedance2ResolutionSelectionValue),
     isLoading,
   }));
-
-  if (showCameraFixed && !isSeedance25VolcengineSelection) {
-    controls.push(buildSeedancePickerControl({
-      id: buildSeedance2ControlId('camera-fixed', idPrefix),
-      prefixLabel: 'Camera',
-      ariaLabel: 'Toggle Seedance 2 camera fixed',
-      options: SEEDANCE2_CAMERA_FIXED_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: getSeedance2BooleanSelectionValue(seedance2CameraFixed),
-      onChange: (value: string) => onSeedance2CameraFixedChange(value === 'true'),
-      isLoading,
-    }));
-  }
 
   if (isSeedance25VolcengineSelection) {
     controls.push(buildSeedancePickerControl({
@@ -1883,7 +1866,6 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       seedance2CameraFixed,
       seedance2OutputFormat,
       seedance2HasFirstFrame,
-      showCameraFixed: !isFalSeedance2VideoModel && !isJimengSeedance2VideoModel,
       showJimengModelVersion: isJimengSeedance2VideoModel,
       showVolcengineModelPicker: !isFalSeedance2VideoModel && !isJimengSeedance2VideoModel,
       showAudio: !isJimengSeedance2VideoModel,
