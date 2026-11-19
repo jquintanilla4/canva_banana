@@ -1,6 +1,6 @@
 import { VolcengineDraftActions } from './VolcengineDraftActions';
 import { hasVolcengineLastFrame } from '../services/volcengineMedia';
-import { getActiveVolcengineSettings, getVolcengineAssetCounts, getVolcengineAssetMentions, type VolcengineFinalResolution } from '../services/volcengineSettings';
+import { getActiveVolcengineSettings, getVolcengineAssetCounts, getVolcengineAssetMentions, type VolcengineAssetMention, type VolcengineFinalResolution } from '../services/volcengineSettings';
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob, playVideoFromUserGesture } from '../services/mediaService';
@@ -149,7 +149,7 @@ interface CanvasProps {
   onVideoPromptBarBlur: (barId: string) => void;
   onVideoPromptBarUpdate: (barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => void;
   onVideoPromptBarSubmit: (barId: string) => void;
-  buildVideoPromptBarControls: (bar: CanvasVideoPromptBar) => ReadonlyArray<PromptBarControlConfig>;
+  buildVideoPromptBarControls: (bar: CanvasVideoPromptBar, arkAssetMentions: readonly VolcengineAssetMention[]) => ReadonlyArray<PromptBarControlConfig>;
   getVideoPromptBarSubmitError?: (bar: CanvasVideoPromptBar) => string | null;
   embeddedVideoPromptBarModelOptions: ReadonlyArray<{ value: string; label: string }>;
   onScaleChange?: (scale: number) => void;
@@ -1834,7 +1834,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   onModelModeChange={() => {}}
                   modelModeDisabled
                   showModeSwitch={false}
-                  modelControls={buildVideoPromptBarControls(bar)}
+                  modelControls={buildVideoPromptBarControls(bar, arkAssetMentions)}
                   promptPlaceholder={isKlingV3EmbeddedModel ? 'Describe the first Kling 3.0 Pro shot using staged media... (Cmd/Ctrl + Enter to generate)' : `Describe the ${selectedEmbeddedModelLabel} video using staged media... (Cmd/Ctrl + Enter to generate)`}
                   showMultiPrompt={isKlingV3EmbeddedModel && Boolean(bar.klingV3MultiPromptEnabled)}
                   multiPrompt={bar.klingV3MultiPrompt ?? ''}
@@ -1848,7 +1848,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   negativePromptOutlineColor={showEmbeddedNegativePrompt ? '#f87171' : undefined}
                   klingSuggestionsEnabled
                   klingReferenceCount={barMembership ? Object.keys(barMembership.orderLabels).length + arkAssetMentions.length : 0}
-                  klingSuggestionOptions={barMembership ? [...getMentionOptionsFromMembership(barMembership), ...arkAssetMentions] : []}
+                  klingSuggestionOptions={barMembership ? [...getMentionOptionsFromMembership(barMembership), ...arkAssetMentions.map(({ mention }) => mention)] : []}
                   onPromptFocus={() => onVideoPromptBarFocus(bar.id)}
                   onPromptBlur={() => onVideoPromptBarBlur(bar.id)}
                 />

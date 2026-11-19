@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Flux3KeyframeTiming } from '../types';
-import type { VolcengineAssetReference, VolcengineSettings } from '../services/volcengineSettings';
+import type { VolcengineAssetMention, VolcengineSettings } from '../services/volcengineSettings';
 import { VolcengineSettingsPopover } from './VolcengineSettingsPopover';
 import { Flux3KeyframesPopover } from './Flux3KeyframesPopover';
 import { PromptBarPicker } from './PromptBarPicker';
@@ -66,7 +66,7 @@ export interface PromptBarVolcengineControl {
   ariaLabel?: string;
   settings: VolcengineSettings;
   supportsDraft: boolean;
-  assetMediaTypes: readonly VolcengineAssetReference['mediaType'][];
+  assetMentions?: readonly VolcengineAssetMention[];
   onSettingsChange: (settings: VolcengineSettings) => void;
   disabled: boolean;
 }
@@ -74,7 +74,7 @@ export interface PromptBarVolcengineControl {
 export type PromptBarControl = PromptBarSelectControl | PromptBarColorControl | PromptBarActionControl | PromptBarKeyframesControl | PromptBarVolcengineControl;
 
 export const getPromptBarControlSignature = (control: PromptBarControl): string => {
-  if (control.kind === 'volcengine-settings') return `${control.id}-${JSON.stringify(control.settings)}-${control.supportsDraft}-${control.assetMediaTypes.join('~')}-${control.disabled}`;
+  if (control.kind === 'volcengine-settings') return `${control.id}-${JSON.stringify(control.settings)}-${control.supportsDraft}-${control.disabled}`;
   if (control.kind === 'action') return `${control.id}-${control.disabled}-${control.label}`;
   if (control.kind === 'color') return `${control.id}-${control.value}-${control.disabled}`;
   if (control.kind === 'keyframes') {

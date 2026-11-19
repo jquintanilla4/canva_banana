@@ -9,6 +9,7 @@ import { FAL_VIDEO_MODEL_OPTIONS, FLUX_3_VIDEO_MODEL_ID } from '../services/mode
 import { isKlingV4VideoModel } from '../services/klingV4Config';
 import { buildPromptBarModelControls } from '../services/promptBarConfig';
 import { buildEmbeddedPromptBarControlsInput } from '../services/promptBarSettingsView';
+import type { VolcengineAssetMention } from '../services/volcengineSettings';
 import {
   buildVideoPromptAreaMembership,
   getAreaPromptBarRect,
@@ -172,14 +173,14 @@ export function useVideoPromptBars({
     return buildEmbeddedFlux3PromptState(bar, membership).runPlan.error;
   }, [videoPromptAreaMemberships]);
 
-  const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar) => (
+  const buildEmbeddedVideoPromptBarControls = useCallback((bar: CanvasVideoPromptBar, arkAssetMentions: readonly VolcengineAssetMention[]) => (
     buildPromptBarModelControls(buildEmbeddedPromptBarControlsInput({
       bar,
       barMembership: bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined,
       fal,
       updateBar: handleEmbeddedPromptBarUpdate,
       isLoading,
-    })) ?? []
+    }), arkAssetMentions) ?? []
   ), [fal, handleEmbeddedPromptBarUpdate, isLoading, videoPromptAreaMemberships]);
 
   const handleVideoPromptAreaBorderColorChange = useCallback((areaId: string, color: string) => {

@@ -1,4 +1,4 @@
-import { getVolcengineAssetMediaTypes, type VolcengineSettings } from './volcengineSettings';
+import type { VolcengineAssetMention, VolcengineSettings } from './volcengineSettings';
 import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { buildGptImage26Controls } from './promptBar/gptImage26Controls';
 import { isGptImage26Model, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from './gptImage26Config';
@@ -289,6 +289,7 @@ type Seedance2PromptBarControlsInput = {
   seedance2VolcengineModel?: Seedance2VolcengineModelSelectionValue;
   seedance2HasFirstFrame?: boolean;
   seedanceArkSettings?: VolcengineSettings;
+  arkAssetMentions?: readonly VolcengineAssetMention[];
   onSeedanceArkSettingsChange?: (settings: VolcengineSettings) => void;
   showJimengModelVersion?: boolean;
   showVolcengineModelPicker?: boolean;
@@ -329,6 +330,7 @@ export const buildSeedance2PromptBarControls = ({
   allowFullResolution = false,
   seedance2HasFirstFrame = false,
   seedanceArkSettings,
+  arkAssetMentions,
   onSeedanceArkSettingsChange,
   isLoading,
   onSeedance2VariantChange,
@@ -476,18 +478,6 @@ export const buildSeedance2PromptBarControls = ({
     }));
   }
 
-  if (showVolcengineModelPicker && onSeedanceArkSettingsChange) {
-    controls.push({
-      kind: 'volcengine-settings',
-      id: buildSeedance2ControlId('ark-settings', idPrefix),
-      settings: seedanceArkSettings ?? {},
-      supportsDraft: selectedVolcengineModel.supportsDraft,
-      assetMediaTypes: getVolcengineAssetMediaTypes(seedance2VolcengineModel, seedance2Variant),
-      onSettingsChange: onSeedanceArkSettingsChange,
-      disabled: isLoading,
-    });
-  }
-
   if (showAudio) {
     controls.push(buildSeedancePickerControl({
       id: buildSeedance2ControlId('audio', idPrefix),
@@ -498,6 +488,18 @@ export const buildSeedance2PromptBarControls = ({
       onChange: (value: string) => onSeedance2GenerateAudioChange(value === 'true'),
       isLoading,
     }));
+  }
+
+  if (showVolcengineModelPicker && onSeedanceArkSettingsChange) {
+    controls.push({
+      kind: 'volcengine-settings',
+      id: buildSeedance2ControlId('ark-settings', idPrefix),
+      settings: seedanceArkSettings ?? {},
+      supportsDraft: selectedVolcengineModel.supportsDraft,
+      assetMentions: arkAssetMentions,
+      onSettingsChange: onSeedanceArkSettingsChange,
+      disabled: isLoading,
+    });
   }
 
   return controls;
@@ -1043,7 +1045,10 @@ export type PromptBarControlsInput = {
 };
 
 // Map model/provider state into select configs consumed by PromptBar.
-export const buildPromptBarModelControls = (input: PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> | undefined => {
+export const buildPromptBarModelControls = (
+  input: PromptBarControlsInput,
+  arkAssetMentions?: readonly VolcengineAssetMention[],
+): ReadonlyArray<PromptBarModelControl> | undefined => {
   const {
     apiProvider,
     controlIdPrefix,
@@ -1889,6 +1894,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       seedance2OutputFormat,
       seedance2HasFirstFrame,
       seedanceArkSettings,
+      arkAssetMentions,
       onSeedanceArkSettingsChange,
       showJimengModelVersion: isJimengSeedance2VideoModel,
       showVolcengineModelPicker: !isFalSeedance2VideoModel && !isJimengSeedance2VideoModel,

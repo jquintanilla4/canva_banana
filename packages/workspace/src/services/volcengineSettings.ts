@@ -2,6 +2,7 @@ import type { Seedance2Variant, Seedance2VolcengineModel } from '../types';
 import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 
 export type VolcengineAssetReference = { mediaType: 'image' | 'video' | 'audio'; assetId: string };
+export type VolcengineAssetMention = VolcengineAssetReference & { mention: string };
 
 export type VolcengineReferenceSource = VolcengineAssetReference & { kind: 'asset' }
   | { kind: 'upload'; mediaType: VolcengineAssetReference['mediaType']; index: number };
@@ -98,10 +99,10 @@ export const getVolcengineAssetCounts = (assets: readonly VolcengineAssetReferen
 export const getVolcengineAssetMentions = (
   assets: readonly VolcengineAssetReference[] = [],
   uploaded: { image: number; video: number; audio: number },
-): string[] => {
+): VolcengineAssetMention[] => {
   const counts = { ...uploaded };
   const labels = { image: 'Image', video: 'Video', audio: 'Audio' };
-  return assets.map(({ mediaType }) => `@${labels[mediaType]}${++counts[mediaType]}`);
+  return assets.map(asset => ({ ...asset, mention: `@${labels[asset.mediaType]}${++counts[asset.mediaType]}` }));
 };
 
 export const normalizeVolcengineDraft = (value: unknown): VolcengineDraft | undefined => {

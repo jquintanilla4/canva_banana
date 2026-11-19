@@ -1621,7 +1621,7 @@ describe('Canvas video prompt area tool', () => {
               onVideoPromptBarUpdate: handleVideoPromptBarUpdate,
               buildVideoPromptBarControls: () => [],
               embeddedVideoPromptBarModelOptions: [
-                { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
+                { value: 'volcengine/seedance-2', label: 'Seedance 2/2.5 (VE)' },
                 { value: targetModelId, label: targetLabel },
               ],
             })}
@@ -1691,7 +1691,7 @@ describe('Canvas video prompt area tool', () => {
             onVideoPromptBarUpdate: handleVideoPromptBarUpdate,
             buildVideoPromptBarControls: () => [],
             embeddedVideoPromptBarModelOptions: [
-              { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
+              { value: 'volcengine/seedance-2', label: 'Seedance 2/2.5 (VE)' },
               { value: 'jimeng-cli/multiframe', label: 'Jimeng Multi-frame' },
             ],
           })} />

@@ -1520,7 +1520,7 @@ describe('App video prompt area gating', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
 
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual(expect.arrayContaining([
-      { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
+      { value: 'volcengine/seedance-2', label: 'Seedance 2/2.5 (VE)' },
       { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
       { value: 'kling/v4', label: 'Kling v4' },
       { value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine' },

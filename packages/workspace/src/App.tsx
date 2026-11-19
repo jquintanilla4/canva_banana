@@ -1175,7 +1175,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     isLoading,
     shouldValidateFalOptions,
     isNumImagesInvalid,
-  }));
+  }), arkAssetMentions);
   const promptBarModelOptions = mapModelOptions(getPromptBarModelOptions(fal.falModelMode));
   const providerLabels = useMemo<Record<ApiProviderId, string>>(() => ({
     google: PROVIDER_LABELS.google,
@@ -1549,7 +1549,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         cameraThemeActive={isCameraPromptAccentActive}
         klingSuggestionsEnabled={modelCapabilities.klingSuggestionsEnabled}
         klingReferenceCount={Math.max(klingReferenceCount + arkAssetMentions.length, flux3PromptMentions.length)}
-        klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : [...klingPromptMentions, ...arkAssetMentions]}
+        klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : [...klingPromptMentions, ...arkAssetMentions.map(({ mention }) => mention)]}
         showCreateVideoPromptBarButton={shouldShowVideoPromptBarAccessory}
         onCreateVideoPromptBar={handleCreateVideoPromptBar}
         focusRequestToken={promptFocusRequestToken}

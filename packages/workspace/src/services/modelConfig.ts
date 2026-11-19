@@ -179,7 +179,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: MINIMAX_H3_VIDEO_MODEL_ID, label: 'MiniMax H3' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
-  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2++ (VE)' }, // VE-backed Seedance 2 selector label.
+  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2/2.5 (VE)' }, // VE-backed Seedance 2 selector label.
   { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' }, // Fal-backed Seedance 2.
   { value: FAL_SEEDANCE_25_VIDEO_MODEL_ID, label: 'Seedance 2.5 (FAL)' }, // Fal-backed Seedance 2.5.
   { value: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (JM CLI)' }, // Jimeng CLI-backed Seedance 2.
