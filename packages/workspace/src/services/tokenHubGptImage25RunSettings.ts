@@ -58,6 +58,19 @@ export const resolveTokenHubGptImage25RunSettings = <Kind extends ImageRunKind>(
   } as TokenHubGptImage25RunSettings<Kind>;
 };
 
+export const resolveTokenHubGptImage25RunSettingsFromOptions = (
+  kind: ImageRunKind,
+  options: GenerationFalOptions,
+  validation: ImageRunSettingsValidation,
+): TokenHubGptImage25RunSettings => resolveTokenHubGptImage25RunSettings({
+  kind,
+  numImages: options.numImages,
+  variant: options.tokenHubGptImage25Variant,
+  quality: options.tokenHubGptImage25Quality,
+  background: options.tokenHubGptImage25Background,
+  imageSizeSelection: options.imageSizeSelection,
+}, validation);
+
 export const serializeTokenHubGptImage25GenerationOptions = (settings: TokenHubGptImage25RunSettings): GenerationFalOptions => ({
   tokenHubGptImage25Variant: settings.variant,
   tokenHubGptImage25Quality: settings.quality,

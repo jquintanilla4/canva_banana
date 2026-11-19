@@ -707,7 +707,7 @@ describe('useGeneration placement notifications', () => {
       tokenHubGptImage25Variant: 'sunburst', tokenHubGptImage25Quality: 'max', tokenHubGptImage25Background: 'transparent',
       falImageSizeSelection: '2560x1440', falNumImages: 3,
     });
-    const resolver = vi.spyOn(tokenHubGptImage25Policy, 'resolveTokenHubGptImage25RunSettings');
+    const resolver = vi.spyOn(tokenHubGptImage25Policy, 'resolveTokenHubGptImage25RunSettingsFromOptions');
     let jobs: FalQueueJob[] = [];
     const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
       jobs = typeof value === 'function' ? value(jobs) : value;

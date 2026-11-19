@@ -50,6 +50,19 @@ export const resolveTokenHubNanoBananaRunSettings = <Kind extends ImageRunKind>(
   } as TokenHubNanoBananaRunSettings<Kind>;
 };
 
+export const resolveTokenHubNanoBananaRunSettingsFromOptions = (
+  kind: ImageRunKind,
+  options: GenerationFalOptions,
+  validation: ImageRunSettingsValidation,
+): TokenHubNanoBananaRunSettings => resolveTokenHubNanoBananaRunSettings({
+  kind,
+  numImages: options.numImages,
+  aspectRatioSelection: options.aspectRatioSelection,
+  resolution: options.resolutionSelection,
+  webSearch: options.tokenHubNanoBananaWebSearch,
+  thinkingLevel: options.tokenHubNanoBananaThinkingLevel,
+}, validation);
+
 export const serializeTokenHubNanoBananaGenerationOptions = (settings: TokenHubNanoBananaRunSettings): GenerationFalOptions => ({
   aspectRatioSelection: settings.aspectRatioSelection,
   resolutionSelection: settings.resolution,

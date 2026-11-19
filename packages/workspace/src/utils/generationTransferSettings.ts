@@ -60,9 +60,9 @@ import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '..
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions } from '../services/gptImage25RunSettings';
 import { TOKENHUB_GPT_IMAGE_25_DEFAULTS, isTokenHubGptImage25Model } from '../services/tokenHubGptImage25Config';
-import { resolveTokenHubGptImage25RunSettings, serializeTokenHubGptImage25GenerationOptions } from '../services/tokenHubGptImage25RunSettings';
+import { resolveTokenHubGptImage25RunSettingsFromOptions, serializeTokenHubGptImage25GenerationOptions } from '../services/tokenHubGptImage25RunSettings';
 import { TOKENHUB_NANO_BANANA_DEFAULTS, isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
-import { resolveTokenHubNanoBananaRunSettings, serializeTokenHubNanoBananaGenerationOptions } from '../services/tokenHubNanoBananaRunSettings';
+import { resolveTokenHubNanoBananaRunSettingsFromOptions, serializeTokenHubNanoBananaGenerationOptions } from '../services/tokenHubNanoBananaRunSettings';
 import { resolveRecraftRunSettings, serializeRecraftGenerationOptions } from '../services/recraftRunSettings';
 import { resolveGrokImageRunSettings, serializeGrokImageGenerationOptions } from '../services/grokImageRunSettings';
 
@@ -297,14 +297,9 @@ export const resolveGenerationTransferOptions = (
     }; // Replays cannot inherit live controls or restore Source duration into Generate.
   }
   if (isTokenHubNanoBananaModel(normalizedModelId)) {
-    const settings = resolveTokenHubNanoBananaRunSettings({
-      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
-      aspectRatioSelection: resolvedOptions.aspectRatioSelection,
-      resolution: resolvedOptions.resolutionSelection,
-      webSearch: resolvedOptions.tokenHubNanoBananaWebSearch,
-      thinkingLevel: resolvedOptions.tokenHubNanoBananaThinkingLevel,
-      numImages: resolvedOptions.numImages,
-    }, 'restore');
+    const settings = resolveTokenHubNanoBananaRunSettingsFromOptions(
+      generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image', resolvedOptions, 'restore',
+    );
     return { ...resolvedOptions, ...serializeTokenHubNanoBananaGenerationOptions(settings) };
   }
   if (isNanoBananaEditModelId(normalizedModelId)) {
@@ -340,14 +335,9 @@ export const resolveGenerationTransferOptions = (
     return options;
   }
   if (isTokenHubGptImage25Model(normalizedModelId)) {
-    const settings = resolveTokenHubGptImage25RunSettings({
-      kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image',
-      variant: resolvedOptions.tokenHubGptImage25Variant,
-      quality: resolvedOptions.tokenHubGptImage25Quality,
-      background: resolvedOptions.tokenHubGptImage25Background,
-      imageSizeSelection: resolvedOptions.imageSizeSelection,
-      numImages: resolvedOptions.numImages,
-    }, 'restore');
+    const settings = resolveTokenHubGptImage25RunSettingsFromOptions(
+      generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image', resolvedOptions, 'restore',
+    );
     return { ...resolvedOptions, ...serializeTokenHubGptImage25GenerationOptions(settings) };
   }
   if (isGptImage25Model(normalizedModelId)) {

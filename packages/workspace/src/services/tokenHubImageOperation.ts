@@ -2,10 +2,10 @@ import type { GenerationFalOptions } from '../types';
 import type { FalImageGenerationResult, GenerateImageEditParams } from './fal/types';
 import type { ImageRunKind, ImageRunSettingsValidation } from './imageRunSettings';
 import { TOKENHUB_GPT_IMAGE_25_MODEL_ID } from './tokenHubGptImage25Config';
-import { resolveTokenHubGptImage25RunSettings, serializeTokenHubGptImage25GenerationOptions } from './tokenHubGptImage25RunSettings';
+import { resolveTokenHubGptImage25RunSettingsFromOptions, serializeTokenHubGptImage25GenerationOptions } from './tokenHubGptImage25RunSettings';
 import { generateTokenHubImage, generateTokenHubImageEdit, type TokenHubImageTransportOptions } from './tokenHubImageService';
 import { TOKENHUB_NANO_BANANA_21_MODEL_ID } from './tokenHubNanoBananaConfig';
-import { resolveTokenHubNanoBananaRunSettings, serializeTokenHubNanoBananaGenerationOptions } from './tokenHubNanoBananaRunSettings';
+import { resolveTokenHubNanoBananaRunSettingsFromOptions, serializeTokenHubNanoBananaGenerationOptions } from './tokenHubNanoBananaRunSettings';
 import { generateTokenHubNanoBanana, generateTokenHubNanoBananaEdit } from './tokenHubNanoBananaService';
 
 type TokenHubImageModelId = typeof TOKENHUB_GPT_IMAGE_25_MODEL_ID | typeof TOKENHUB_NANO_BANANA_21_MODEL_ID;
@@ -30,28 +30,14 @@ export const resolveTokenHubImageOperation = ({
   validation: ImageRunSettingsValidation;
 }): TokenHubImageOperation => {
   if (modelId === TOKENHUB_NANO_BANANA_21_MODEL_ID) {
-    const settings = resolveTokenHubNanoBananaRunSettings({
-      kind,
-      numImages: options.numImages,
-      aspectRatioSelection: options.aspectRatioSelection,
-      resolution: options.resolutionSelection,
-      webSearch: options.tokenHubNanoBananaWebSearch,
-      thinkingLevel: options.tokenHubNanoBananaThinkingLevel,
-    }, validation);
+    const settings = resolveTokenHubNanoBananaRunSettingsFromOptions(kind, options, validation);
     const shared = { numImages: settings.numImages, savedOptions: serializeTokenHubNanoBananaGenerationOptions(settings) };
     return settings.kind === 'text_to_image'
       ? { ...shared, kind: settings.kind, execute: (prompt, transport) => generateTokenHubNanoBanana(prompt, { ...transport, settings }) }
       : { ...shared, kind: settings.kind, execute: (params, transport) => generateTokenHubNanoBananaEdit(params, { ...transport, settings }) };
   }
 
-  const settings = resolveTokenHubGptImage25RunSettings({
-    kind,
-    numImages: options.numImages,
-    variant: options.tokenHubGptImage25Variant,
-    quality: options.tokenHubGptImage25Quality,
-    background: options.tokenHubGptImage25Background,
-    imageSizeSelection: options.imageSizeSelection,
-  }, validation);
+  const settings = resolveTokenHubGptImage25RunSettingsFromOptions(kind, options, validation);
   const shared = { numImages: settings.numImages, savedOptions: serializeTokenHubGptImage25GenerationOptions(settings) };
   return settings.kind === 'text_to_image'
     ? { ...shared, kind: settings.kind, execute: (prompt, transport) => generateTokenHubImage(prompt, { ...transport, settings }) }

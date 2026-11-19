@@ -1127,7 +1127,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? videoNegativePromptForRun.trim()
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
-    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun;
+    const requestedImageKind = (overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun)
+      ? 'text_to_image' : 'image_edit';
     let nanoBananaSettingsForRun: NanoBananaRunSettings | undefined;
     let ideogram45SettingsForRun: Ideogram45RunSettings | undefined;
     let gptImage2SettingsForRun: GptImage2RunSettings | undefined;
@@ -1140,7 +1141,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     if (usingFal && (isKrea3ModelForRun || isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isGrokImagineModel || isRecraftV4ProModelForRun)) {
       try {
         const commonRunInput = {
-          kind: isTextToImage ? 'text_to_image' : 'image_edit',
+          kind: requestedImageKind,
           imageSizeSelection: generationOverride ? falOptionsOverride.imageSizeSelection : normalizedFalImageSizeSelectionForRun,
           numImages: generationOverride ? falOptionsOverride.numImages : falNumImagesForRun,
         } as const;
@@ -1172,8 +1173,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             reasoningEffort: generationOverride ? falOptionsOverride.gptImage26ReasoningEffort : gptImage26ReasoningEffort,
             frameCount: generationOverride ? falOptionsOverride.gptImage26FrameCount : gptImage26FrameCount,
             frameDurationMs: generationOverride ? falOptionsOverride.gptImage26FrameDurationMs : gptImage26FrameDurationMs,
-            outputFormat: !isTextToImage && selectedFormat === 'svg' ? 'png' : selectedFormat,
-            numImages: isTextToImage && selectedFormat === 'svg' ? 1 : commonRunInput.numImages,
+            outputFormat: requestedImageKind === 'image_edit' && selectedFormat === 'svg' ? 'png' : selectedFormat,
+            numImages: requestedImageKind === 'text_to_image' && selectedFormat === 'svg' ? 1 : commonRunInput.numImages,
           }, validation);
         } else if (isGptImage25ModelForRun) {
           gptImage25SettingsForRun = resolveGptImage25RunSettings({
@@ -1215,7 +1216,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       try {
         tokenHubOperation = resolveTokenHubImageOperation({
           modelId: tokenHubModelForRun,
-          kind: isTextToImage ? 'text_to_image' : 'image_edit',
+          kind: requestedImageKind,
           validation: generationOverride ? 'restore' : 'strict',
           options: generationOverride ? falOptionsOverride : {
             numImages: falNumImagesForRun,
@@ -1234,6 +1235,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         return;
       }
     }
+    const isTextToImage = (tokenHubOperation?.kind ?? requestedImageKind) === 'text_to_image';
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun && Boolean(activePrimary)));
     const isKlingV3ControlPromptOptional = usingFal && isVideoMode && isKlingV3ControlVideoModel; // Kling Control v3 prompt is optional.
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
@@ -3299,27 +3301,52 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     try {
       let generationResult: FalImageGenerationResult;
-      let placementOrigin = { x: 100, y: 100 };
-      const tokenHubTransport = { abortSignal: workspaceSignal, onPhaseUpdate: handleFalPhaseUpdate };
       const handleImageQueueUpdate = (update: FalQueueUpdate) => {
         setFalJobs(prev => prev.map(job => job.id === falJobId ? applyFalQueueUpdateToJob(job, update) : job));
       };
 
-      if (isTextToImage) {
-        const imageBoundsList = images.map(getImageBounds);
-        const placementX = imageBoundsList.length > 0
-          ? Math.max(...imageBoundsList.map(b => b.maxX)) + 20
-          : 100;
-        const placementY = imageBoundsList.length > 0
-          ? Math.min(...imageBoundsList.map(b => b.minY))
-          : 100;
-        placementOrigin = { x: placementX, y: placementY };
+      const editSource = isTextToImage ? null : activePrimary;
+      const editParams = editSource ? {
+        prompt: trimmedPrompt,
+        image: editSource.element,
+        tool: editToolForRun,
+        paths: editPathsForRun,
+        imageDimensions: {
+          width: editSource.naturalWidth || editSource.width,
+          height: editSource.naturalHeight || editSource.height,
+        },
+      } : undefined;
 
-        if (usingFal) {
-          if (!falJobId) {
-            throw new Error('Unable to create Fal job identifier.');
-          }
+      let editReferenceImages: HTMLImageElement[] | undefined;
+      if (referenceCanvasImages.length > 0) {
+        editReferenceImages = await awaitActive(() => Promise.all(referenceCanvasImages.map(async img => {
+          if ((img.rotation ?? 0) === 0) return img.element;
+          const rasterized = await awaitActive(() => rasterizeImages([img]));
+          return rasterized.element;
+        })));
+        referenceIdsUsed = referenceCanvasImages.map(img => img.id);
+      }
 
+      if (tokenHubOperation) {
+        if (!falJobId) {
+          throw new Error('Unable to create TokenHub job identifier.');
+        }
+        const transport = { abortSignal: workspaceSignal, onPhaseUpdate: handleFalPhaseUpdate };
+        if (tokenHubOperation.kind === 'text_to_image') {
+          generationResult = await awaitActive(() => tokenHubOperation.execute(trimmedPrompt, transport));
+        } else {
+          if (!editParams) throw new Error('Please select an image to edit.');
+          generationResult = await awaitActive(() => tokenHubOperation.execute({
+            ...editParams,
+            referenceImages: editReferenceImages,
+          }, transport));
+        }
+      } else if (usingFal) {
+        if (!falJobId) {
+          throw new Error('Unable to create Fal job identifier.');
+        }
+
+        if (!editParams) {
           const textToImageModelId = krea3SettingsForRun?.endpoint ?? nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? gptImage26SettingsForRun?.endpoint ?? grokImageSettingsForRun?.endpoint ?? recraftSettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
             ? falModelIdForRun
             : isSeedreamModel
@@ -3353,92 +3380,52 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
             ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
           }));
-        } else if (tokenHubOperation?.kind === 'text_to_image') {
-          generationResult = await awaitActive(() => tokenHubOperation.execute(trimmedPrompt, tokenHubTransport));
+        } else if (isUpscaleModel) {
+          generationResult = isSeedvrUpscaleModel
+            ? await awaitActive(() => upscaleFalSeedvrImage(
+              editParams.image,
+              falScaleFactorForRun,
+              falNoiseScaleForRun,
+              { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate: handleImageQueueUpdate },
+            ))
+            : await awaitActive(() => upscaleFalCrystalImage(
+              editParams.image,
+              falScaleFactorForRun,
+              falCreativityForRun,
+              { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate: handleImageQueueUpdate },
+            ));
         } else {
-          generationResult = await awaitActive(async () => generateGoogleImage(trimmedPrompt, {
-            aspectRatio: googleAspectRatio,
-          }));
-        }
-      } else {
-        if (!primaryImageIdForRun || !activePrimary) {
-          throw new Error('Please select an image to edit.');
-        }
-
-        let editReferenceImages: HTMLImageElement[] | undefined;
-        if (referenceCanvasImages.length > 0) {
-          editReferenceImages = await awaitActive(() => Promise.all(referenceCanvasImages.map(async img => {
-            if ((img.rotation ?? 0) === 0) return img.element;
-            const rasterized = await awaitActive(() => rasterizeImages([img]));
-            return rasterized.element;
-          })));
-          referenceIdsUsed = referenceCanvasImages.map(img => img.id);
-        }
-
-        const editParams = {
-          prompt: trimmedPrompt,
-          image: activePrimary.element,
-          tool: editToolForRun,
-          paths: editPathsForRun,
-          imageDimensions: {
-            width: activePrimary.naturalWidth || activePrimary.width,
-            height: activePrimary.naturalHeight || activePrimary.height,
-          },
-        };
-
-        if (usingFal) {
-          if (!falJobId) {
-            throw new Error('Unable to create Fal job identifier.');
-          }
-
-          if (isUpscaleModel) {
-            generationResult = isSeedvrUpscaleModel
-              ? await awaitActive(() => upscaleFalSeedvrImage(
-                activePrimary.element,
-                falScaleFactorForRun,
-                falNoiseScaleForRun,
-                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate: handleImageQueueUpdate },
-              ))
-              : await awaitActive(() => upscaleFalCrystalImage(
-                activePrimary.element,
-                falScaleFactorForRun,
-                falCreativityForRun,
-                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate: handleImageQueueUpdate },
-              ));
-          } else {
-            generationResult = await awaitActive(() => generateFalImageEdit({
-              ...editParams,
-              referenceImages: editReferenceImages,
-            }, {
-              jobId: falJobId,
-              onPhaseUpdate: handleFalPhaseUpdate,
-              modelId: falModelIdForRun,
-              ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
-              ...(!resolvedImageSettings && normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
-              ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
-              ...(nanoBananaSettingsForRun?.kind === 'image_edit' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
-              ...(gptImage2SettingsForRun?.kind === 'image_edit' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
-              ...(gptImage26SettingsForRun?.kind === 'image_edit' ? { gptImage26RunSettings: gptImage26SettingsForRun } : {}),
-              ...(gptImage25SettingsForRun?.kind === 'image_edit' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
-              ...(krea3SettingsForRun?.kind === 'image_edit' ? { krea3RunSettings: krea3SettingsForRun } : {}),
-              ...(grokImageSettingsForRun?.kind === 'image_edit' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
-              ...(ideogram45SettingsForRun?.kind === 'image_edit' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
-              ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
-              ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
-              onQueueUpdate: handleImageQueueUpdate,
-            }));
-          }
-        } else if (tokenHubOperation?.kind === 'image_edit') {
-          generationResult = await awaitActive(() => tokenHubOperation.execute({
+          generationResult = await awaitActive(() => generateFalImageEdit({
             ...editParams,
             referenceImages: editReferenceImages,
-          }, tokenHubTransport));
-        } else {
-          generationResult = await awaitActive(() => generateGoogleImageEdit({
-            ...editParams,
-            mimeType: activePrimary.file.type,
+          }, {
+            jobId: falJobId,
+            onPhaseUpdate: handleFalPhaseUpdate,
+            modelId: falModelIdForRun,
+            ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
+            ...(!resolvedImageSettings && normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
+            ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
+            ...(nanoBananaSettingsForRun?.kind === 'image_edit' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
+            ...(gptImage2SettingsForRun?.kind === 'image_edit' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
+            ...(gptImage26SettingsForRun?.kind === 'image_edit' ? { gptImage26RunSettings: gptImage26SettingsForRun } : {}),
+            ...(gptImage25SettingsForRun?.kind === 'image_edit' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
+            ...(krea3SettingsForRun?.kind === 'image_edit' ? { krea3RunSettings: krea3SettingsForRun } : {}),
+            ...(grokImageSettingsForRun?.kind === 'image_edit' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
+            ...(ideogram45SettingsForRun?.kind === 'image_edit' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
+            ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
+            ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
+            onQueueUpdate: handleImageQueueUpdate,
           }));
         }
+      } else if (generationProviderForRun === 'google') {
+        generationResult = editParams
+          ? await awaitActive(() => generateGoogleImageEdit({
+            ...editParams,
+            mimeType: editSource?.file.type,
+          }))
+          : await awaitActive(() => generateGoogleImage(trimmedPrompt, { aspectRatio: googleAspectRatio }));
+      } else {
+        throw new Error('Unable to resolve the image generation provider.');
       }
 
       if (!generationResult) {
@@ -3472,12 +3459,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
           const { naturalWidth, naturalHeight } = getNaturalSize(img);
           const displayWidth = naturalWidth || 512;
           const displayHeight = naturalHeight || 512;
-          let newX = placementOrigin.x;
-          let newY = placementOrigin.y;
-          if (lastBounds) {
-            newX = lastBounds.maxX + 20;
-            newY = lastBounds.minY;
-          }
+          const newX = lastBounds ? lastBounds.maxX + 20 : 100;
+          const newY = lastBounds ? lastBounds.minY : 100;
 
           const newCanvasImage: CanvasImage = {
             id: crypto.randomUUID(),
