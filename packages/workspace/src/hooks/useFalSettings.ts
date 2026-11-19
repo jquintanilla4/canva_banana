@@ -6,6 +6,8 @@ import { NANO_BANANA_DEFAULTS, isNanoBananaThinkingLevel } from '../services/nan
 import { getNanoBananaAspectRatioOptionsForProvider } from '../services/nanoBananaAspectRatioPolicy';
 import { GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_DEFAULTS } from '../services/gptImage2Config';
 import { GPT_IMAGE_25_IMAGE_SIZE_OPTIONS } from '../services/gptImage25Config';
+import { TOKENHUB_GPT_IMAGE_25_DEFAULTS, TOKENHUB_GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, isTokenHubGptImage25Model, isTokenHubGptImage25Variant, isTokenHubGptImage25Background, isTokenHubGptImage25Quality, type TokenHubGptImage25Variant, type TokenHubGptImage25Background, type TokenHubGptImage25Quality } from '../services/tokenHubGptImage25Config';
+import { TOKENHUB_NANO_BANANA_DEFAULTS, isTokenHubNanoBananaThinkingLevel } from '../services/tokenHubNanoBananaConfig';
 import { KREA_3_DEFAULTS, KREA_3_IMAGE_SIZE_OPTIONS, isKrea3Model, isKrea3Variant, isKrea3ReasoningLevel, type Krea3Variant, type Krea3ReasoningLevel } from '../services/krea3Config';
 import { GROK_IMAGE_DEFAULTS, isGrokImageAspectRatio, isGrokImageResolution, isGrokImageQuality, isGrokImageOutputFormat, type GrokImageAspectRatio, type GrokImageResolution, type GrokImageQuality, type GrokImageOutputFormat } from '../services/grokImageConfig';
 import { KLING_V4_DEFAULTS, isKlingV4VideoModel as isKlingV4VideoModelId, isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from '../services/klingV4Config';
@@ -339,6 +341,11 @@ type FalHandlers = {
   handleIdeogram45EditPrecisionChange: (value: string) => void;
   handleGptImage25BackgroundChange: (value: string) => void;
   handleGptImage25VariantChange: (value: string) => void;
+  handleTokenHubGptImage25QualityChange: (value: string) => void;
+  handleTokenHubGptImage25BackgroundChange: (value: string) => void;
+  handleTokenHubGptImage25VariantChange: (value: string) => void;
+  handleTokenHubNanoBananaWebSearchChange: (value: string) => void;
+  handleTokenHubNanoBananaThinkingLevelChange: (value: string) => void;
   handleKrea3VariantChange: (value: string) => void;
   handleKrea3ReasoningLevelChange: (value: string) => void;
   handleGrokImageAspectRatioChange: (value: string) => void;
@@ -464,6 +471,11 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   ideogram45EditPrecision: Ideogram45EditPrecision;
   gptImage25Background: GptImage25Background;
   gptImage25Variant: GptImage25Variant;
+  tokenHubGptImage25Quality: TokenHubGptImage25Quality;
+  tokenHubGptImage25Background: TokenHubGptImage25Background;
+  tokenHubGptImage25Variant: TokenHubGptImage25Variant;
+  tokenHubNanoBananaWebSearch: boolean;
+  tokenHubNanoBananaThinkingLevel: NanoBananaThinkingLevel;
   krea3Variant: Krea3Variant;
   krea3ReasoningLevel: Krea3ReasoningLevel;
   grokImageAspectRatio: GrokImageAspectRatio;
@@ -573,6 +585,11 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   setGptImage25Quality: Dispatch<SetStateAction<GptImage25Quality>>;
   setGptImage25Background: Dispatch<SetStateAction<GptImage25Background>>;
   setGptImage25Variant: Dispatch<SetStateAction<GptImage25Variant>>;
+  setTokenHubGptImage25Quality: Dispatch<SetStateAction<TokenHubGptImage25Quality>>;
+  setTokenHubGptImage25Background: Dispatch<SetStateAction<TokenHubGptImage25Background>>;
+  setTokenHubGptImage25Variant: Dispatch<SetStateAction<TokenHubGptImage25Variant>>;
+  setTokenHubNanoBananaWebSearch: Dispatch<SetStateAction<boolean>>;
+  setTokenHubNanoBananaThinkingLevel: Dispatch<SetStateAction<NanoBananaThinkingLevel>>;
   setFalImageSizeSelection: Dispatch<SetStateAction<FalImageSizeSelectionValue>>;
   setFalAspectRatioSelection: Dispatch<SetStateAction<FalAspectRatioSelectionValue>>;
   setFalResolutionSelection: Dispatch<SetStateAction<FalResolutionSelectionValue>>;
@@ -694,6 +711,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const { quality: ideogram45Quality, editPrecision: ideogram45EditPrecision } = ideogram45Settings;
   const [gptImage25Background, setGptImage25Background] = useState<GptImage25Background>(GPT_IMAGE_25_DEFAULTS.gptImage25Background);
   const [gptImage25Variant, setGptImage25Variant] = useState<GptImage25Variant>(GPT_IMAGE_25_DEFAULTS.gptImage25Variant);
+  const [tokenHubGptImage25Quality, setTokenHubGptImage25Quality] = useState<TokenHubGptImage25Quality>(TOKENHUB_GPT_IMAGE_25_DEFAULTS.tokenHubGptImage25Quality);
+  const [tokenHubGptImage25Background, setTokenHubGptImage25Background] = useState<TokenHubGptImage25Background>(TOKENHUB_GPT_IMAGE_25_DEFAULTS.tokenHubGptImage25Background);
+  const [tokenHubGptImage25Variant, setTokenHubGptImage25Variant] = useState<TokenHubGptImage25Variant>(TOKENHUB_GPT_IMAGE_25_DEFAULTS.tokenHubGptImage25Variant);
+  const [tokenHubNanoBananaWebSearch, setTokenHubNanoBananaWebSearch] = useState<boolean>(TOKENHUB_NANO_BANANA_DEFAULTS.tokenHubNanoBananaWebSearch);
+  const [tokenHubNanoBananaThinkingLevel, setTokenHubNanoBananaThinkingLevel] = useState<NanoBananaThinkingLevel>(TOKENHUB_NANO_BANANA_DEFAULTS.tokenHubNanoBananaThinkingLevel);
   const [krea3Variant, setKrea3Variant] = useState<Krea3Variant>(KREA_3_DEFAULTS.krea3Variant);
   const [krea3ReasoningLevel, setKrea3ReasoningLevel] = useState<Krea3ReasoningLevel>(KREA_3_DEFAULTS.krea3ReasoningLevel);
   const [grokImageAspectRatio, setGrokImageAspectRatio] = useState<GrokImageAspectRatio>(GROK_IMAGE_DEFAULTS.aspectRatio);
@@ -924,9 +946,10 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (falModelMode === 'video') {
       return;
     }
-    if (isKrea3Model(falModelId) || falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId) || isGptImage26Model(falModelId)) {
+    if (isKrea3Model(falModelId) || falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId) || isGptImage26Model(falModelId) || isTokenHubGptImage25Model(falModelId)) {
       const validImageSizeOptions = isKrea3Model(falModelId) ? KREA_3_IMAGE_SIZE_OPTIONS
         : isGptImage26Model(falModelId) ? GPT_IMAGE_26_IMAGE_SIZE_OPTIONS
+        : isTokenHubGptImage25Model(falModelId) ? TOKENHUB_GPT_IMAGE_25_IMAGE_SIZE_OPTIONS
         : isGptImage25Model(falModelId) ? GPT_IMAGE_25_IMAGE_SIZE_OPTIONS : GPT_IMAGE_2_IMAGE_SIZE_OPTIONS;
       if (!validImageSizeOptions.some(option => option.value === falImageSizeSelection)) {
         setFalImageSizeSelection('auto'); // GPT Image 2 defaults to auto size in the UI.
@@ -1480,6 +1503,21 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const handleGptImage25QualityChange = useCallback((value: string) => {
     if (isGptImage25Quality(value)) setGptImage25Quality(value);
   }, []);
+  const handleTokenHubGptImage25VariantChange = useCallback((value: string) => {
+    if (isTokenHubGptImage25Variant(value)) setTokenHubGptImage25Variant(value);
+  }, []);
+  const handleTokenHubGptImage25BackgroundChange = useCallback((value: string) => {
+    if (isTokenHubGptImage25Background(value)) setTokenHubGptImage25Background(value);
+  }, []);
+  const handleTokenHubGptImage25QualityChange = useCallback((value: string) => {
+    if (isTokenHubGptImage25Quality(value)) setTokenHubGptImage25Quality(value);
+  }, []);
+  const handleTokenHubNanoBananaWebSearchChange = useCallback((value: string) => {
+    if (value === 'true' || value === 'false') setTokenHubNanoBananaWebSearch(value === 'true');
+  }, []);
+  const handleTokenHubNanoBananaThinkingLevelChange = useCallback((value: string) => {
+    if (isTokenHubNanoBananaThinkingLevel(value)) setTokenHubNanoBananaThinkingLevel(value);
+  }, []);
   const handleGrokImageAspectRatioChange = useCallback((value: string) => {
     if (isGrokImageAspectRatio(value)) setGrokImageAspectRatio(value);
   }, []);
@@ -1622,6 +1660,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       ideogram45EditPrecision: value => setIdeogram45Settings(prev => ({ ...prev, editPrecision: value })),
       gptImage25Background: setGptImage25Background,
       gptImage25Variant: setGptImage25Variant,
+      tokenHubGptImage25Quality: setTokenHubGptImage25Quality,
+      tokenHubGptImage25Background: setTokenHubGptImage25Background,
+      tokenHubGptImage25Variant: setTokenHubGptImage25Variant,
+      tokenHubNanoBananaWebSearch: setTokenHubNanoBananaWebSearch,
+      tokenHubNanoBananaThinkingLevel: setTokenHubNanoBananaThinkingLevel,
       krea3Variant: setKrea3Variant,
       krea3ReasoningLevel: setKrea3ReasoningLevel,
       grokImageAspectRatio: setGrokImageAspectRatio,
@@ -1839,6 +1882,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
+    tokenHubGptImage25Quality,
+    tokenHubGptImage25Background,
+    tokenHubGptImage25Variant,
+    tokenHubNanoBananaWebSearch,
+    tokenHubNanoBananaThinkingLevel,
     krea3Variant,
     krea3ReasoningLevel,
     grokImageAspectRatio,
@@ -1975,6 +2023,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleIdeogram45EditPrecisionChange,
     handleGptImage25BackgroundChange,
     handleGptImage25VariantChange,
+    handleTokenHubGptImage25QualityChange,
+    handleTokenHubGptImage25BackgroundChange,
+    handleTokenHubGptImage25VariantChange,
+    handleTokenHubNanoBananaWebSearchChange,
+    handleTokenHubNanoBananaThinkingLevelChange,
     handleKrea3VariantChange,
     handleKrea3ReasoningLevelChange,
     handleGrokImageAspectRatioChange,
@@ -2084,6 +2137,11 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setGptImage25Quality,
     setGptImage25Background,
     setGptImage25Variant,
+    setTokenHubGptImage25Quality,
+    setTokenHubGptImage25Background,
+    setTokenHubGptImage25Variant,
+    setTokenHubNanoBananaWebSearch,
+    setTokenHubNanoBananaThinkingLevel,
     setFalImageSizeSelection,
     setFalAspectRatioSelection,
     setFalResolutionSelection,

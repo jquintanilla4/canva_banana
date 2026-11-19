@@ -34,7 +34,7 @@ export interface ImageDimensions {
 
 export type CanvasImageSource = 'generated' | 'imported' | 'snapshot' | 'derived';
 export type ApiProviderId = 'google' | 'fal';
-export type GenerationProviderId = ApiProviderId | 'volcengine' | 'jimeng';
+export type GenerationProviderId = ApiProviderId | 'volcengine' | 'jimeng' | 'tokenhub';
 
 export interface CanvasImageMetadata {
   source: CanvasImageSource;
@@ -55,6 +55,9 @@ export type FalImageSizePreset =
   | 'portrait_16_9'
   | 'landscape_4_3'
   | 'landscape_16_9'
+  | '1024x1024'
+  | '1536x1024'
+  | '1024x1536'
   | '2048x2048'
   | '2048x1152'
   | '1152x2048'
@@ -156,6 +159,11 @@ export type GenerationFalOptions = Partial<{
   gptImage25Variant: GptImage25Variant;
   gptImage25Background: GptImage25Background;
   gptImage25Quality: GptImage25Quality;
+  tokenHubGptImage25Variant: import('./services/tokenHubGptImage25Config').TokenHubGptImage25Variant;
+  tokenHubGptImage25Background: import('./services/tokenHubGptImage25Config').TokenHubGptImage25Background;
+  tokenHubGptImage25Quality: import('./services/tokenHubGptImage25Config').TokenHubGptImage25Quality;
+  tokenHubNanoBananaWebSearch: boolean;
+  tokenHubNanoBananaThinkingLevel: NanoBananaThinkingLevel;
   grokImageAspectRatio: GrokImageAspectRatio;
   grokImageResolution: GrokImageResolution;
   grokImageQuality: GrokImageQuality;

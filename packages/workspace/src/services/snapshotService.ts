@@ -2,6 +2,8 @@ import { isGifImage } from './gifMedia';
 import { isSvgFile, isSvgImage, normalizeImageFile } from './svgMedia';
 import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from './gptImage26RunSettings';
 import { isGptImage26Quality, isGptImage26Background, isGptImage26ReasoningEffort, isGptImage26OutputFormat } from './gptImage26Config';
+import { isTokenHubGptImage25Quality, isTokenHubGptImage25Background, isTokenHubGptImage25Variant } from './tokenHubGptImage25Config';
+import { isTokenHubNanoBananaThinkingLevel } from './tokenHubNanoBananaConfig';
 import { normalizeStoryboardSnapshot } from './storyboardSnapshot';
 import { isKrea3Variant, isKrea3ReasoningLevel } from './krea3Config';
 import { isIdeogram45Quality, isIdeogram45EditPrecision } from './ideogram45Config';
@@ -1787,6 +1789,21 @@ export const normalizeSnapshotImageMetadata = (
       }
       if (isGptImage25Quality(typed?.gptImage25Quality)) {
         normalizedOptions.gptImage25Quality = typed.gptImage25Quality;
+      }
+      if (isTokenHubGptImage25Variant(typed?.tokenHubGptImage25Variant)) {
+        normalizedOptions.tokenHubGptImage25Variant = typed.tokenHubGptImage25Variant;
+      }
+      if (isTokenHubGptImage25Background(typed?.tokenHubGptImage25Background)) {
+        normalizedOptions.tokenHubGptImage25Background = typed.tokenHubGptImage25Background;
+      }
+      if (isTokenHubGptImage25Quality(typed?.tokenHubGptImage25Quality)) {
+        normalizedOptions.tokenHubGptImage25Quality = typed.tokenHubGptImage25Quality;
+      }
+      if (typeof typed.tokenHubNanoBananaWebSearch === 'boolean') {
+        normalizedOptions.tokenHubNanoBananaWebSearch = typed.tokenHubNanoBananaWebSearch;
+      }
+      if (isTokenHubNanoBananaThinkingLevel(typed.tokenHubNanoBananaThinkingLevel)) {
+        normalizedOptions.tokenHubNanoBananaThinkingLevel = typed.tokenHubNanoBananaThinkingLevel;
       }
       if (isKrea3Variant(typed.krea3Variant)) normalizedOptions.krea3Variant = typed.krea3Variant;
       if (isKrea3ReasoningLevel(typed.krea3ReasoningLevel)) normalizedOptions.krea3ReasoningLevel = typed.krea3ReasoningLevel;

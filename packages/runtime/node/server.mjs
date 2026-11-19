@@ -4,6 +4,13 @@ import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import {
+  TOKENHUB_IMAGE_EDITS_PATH,
+  TOKENHUB_IMAGE_GENERATIONS_PATH,
+  createTokenHubImageHandlers,
+} from './tokenhub.mjs';
+import { DEFAULT_TOKENHUB_BASE_URL } from './tokenhub-gateway.mjs';
+import { MAX_JSON_BODY_BYTES, readJsonBody, readRequestBody } from './http-request-body.mjs';
 
 const DEFAULT_PORT = 8787;
 const DEFAULT_HOST = '127.0.0.1';
@@ -15,7 +22,7 @@ const DEV_SERVICE_HEALTH_PROBE_HEADER = 'x-canva-banana-dev-service-probe'; // D
 const DEV_SERVICE_HEALTH_PROBE_VALUE = 'canva-banana-dev-service-health'; // Keep probe header out of browser CORS allowlist.
 const DEV_SERVICE_HEALTH_TOKEN_HEADER = 'x-canva-banana-dev-service-token'; // Secret token unlocks detailed dev health.
 const DEV_SERVICE_HEALTH_TOKEN_ENV = 'CANVA_BANANA_DEV_SERVICE_HEALTH_TOKEN'; // Env key used only for local dev probing.
-export const DEV_SERVICE_HEALTH_PROTOCOL_VERSION = 2; // Bump when probe payload shape changes.
+export const DEV_SERVICE_HEALTH_PROTOCOL_VERSION = 3; // Bump when probe payload shape changes.
 const MOONSHOT_CHAT_COMPLETIONS_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const MOONSHOT_INTENT_PATH = '/api/moonshot/intent';
 const MOONSHOT_INTENT_MODEL = 'kimi-k2.6';
@@ -34,7 +41,6 @@ const OPENROUTER_SYSTEM_PROMPT = [
   'Preserve the user intent, include concrete visual details when useful, and avoid claiming to run tools.',
 ].join(' ');
 const JSON_CONTENT_TYPE = 'application/json; charset=utf-8';
-const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const CORS_ALLOWED_METHODS = 'GET,POST,PUT,DELETE,OPTIONS';
 const CORS_ALLOWED_HEADERS = `Content-Type, Authorization, x-fal-target-url, x-fal-queue-priority, x-fal-runner-hint, ${DESKTOP_AUTH_TOKEN_HEADER}`;
 export const SECURE_BACKEND_CAPABILITIES = {
@@ -42,6 +48,7 @@ export const SECURE_BACKEND_CAPABILITIES = {
   falAssetFetch: true,
   moonshotIntent: true,
   openrouterChat: true,
+  tokenhubImages: true,
 };
 export const SECURE_BACKEND_REQUIRED_CAPABILITIES = Object.keys(SECURE_BACKEND_CAPABILITIES); // Routes the desktop app needs from a reused backend.
 export const SECURE_BACKEND_REQUIRED_READINESS_KEYS = [
@@ -49,14 +56,17 @@ export const SECURE_BACKEND_REQUIRED_READINESS_KEYS = [
   'falAssetFetch',
   'moonshotIntent',
   'openrouterChat',
+  'tokenhubImages',
 ]; // Key-backed routes must match current launch config.
 const SECURE_BACKEND_SECRET_CONFIG_ENV_KEYS = [
   'FAL_API_KEY',
   'MOONSHOT_API_KEY',
   'OPENROUTER_API_KEY',
+  'TOKENHUB_API_KEY',
 ]; // Secret values cannot be safely compared from shell env.
 export const SECURE_BACKEND_REUSE_CONFIG_ENV_KEYS = [
   ...SECURE_BACKEND_SECRET_CONFIG_ENV_KEYS,
+  'TOKENHUB_BASE_URL',
   'SECURE_BACKEND_ALLOWED_ORIGINS',
   'CANVA_BANANA_DESKTOP_AUTH_TOKEN',
 ]; // Every env key that changes renderer/backend compatibility.
@@ -145,6 +155,8 @@ const shouldRequireDesktopAuth = (request, env) => hasConfiguredDesktopAuthToken
 const isKeyBearingPath = (requestUrl) => (
   requestUrl.pathname === MOONSHOT_INTENT_PATH ||
   requestUrl.pathname === OPENROUTER_CHAT_PATH ||
+  requestUrl.pathname === TOKENHUB_IMAGE_GENERATIONS_PATH ||
+  requestUrl.pathname === TOKENHUB_IMAGE_EDITS_PATH ||
   requestUrl.pathname === '/api/fal/proxy' ||
   requestUrl.pathname === '/api/fal/fetch-asset'
 );
@@ -205,6 +217,11 @@ const readDotenvValues = (rootDir) => {
   return values;
 };
 
+export const resolveEnvWithFiles = (rootDir = repoRoot, env = {}) => ({
+  ...readDotenvValues(rootDir),
+  ...env,
+});
+
 const getEnvFileMetadata = (rootDir) => ['.env.local', '.env'].map(fileName => {
   const envPath = join(rootDir, fileName);
   if (!existsSync(envPath)) {
@@ -234,6 +251,7 @@ export const buildSecureBackendReadiness = (env) => ({
   falAssetFetch: Boolean(env.FAL_API_KEY?.trim()),
   moonshotIntent: Boolean(env.MOONSHOT_API_KEY?.trim()),
   openrouterChat: Boolean(env.OPENROUTER_API_KEY?.trim()),
+  tokenhubImages: Boolean(env.TOKENHUB_API_KEY?.trim()),
 });
 
 const buildSecureBackendReuseConfig = (env) => {
@@ -241,6 +259,8 @@ const buildSecureBackendReuseConfig = (env) => {
     FAL_API_KEY: { present: Boolean(env.FAL_API_KEY?.trim()) },
     MOONSHOT_API_KEY: { present: Boolean(env.MOONSHOT_API_KEY?.trim()) },
     OPENROUTER_API_KEY: { present: Boolean(env.OPENROUTER_API_KEY?.trim()) },
+    TOKENHUB_API_KEY: { present: Boolean(env.TOKENHUB_API_KEY?.trim()) },
+    TOKENHUB_BASE_URL: env.TOKENHUB_BASE_URL?.trim() || DEFAULT_TOKENHUB_BASE_URL,
     SECURE_BACKEND_ALLOWED_ORIGINS: parseAllowedOrigins(env),
     CANVA_BANANA_DESKTOP_AUTH_TOKEN: { present: Boolean(env.CANVA_BANANA_DESKTOP_AUTH_TOKEN?.trim()) },
   }; // Registry-backed compatibility values; secrets expose only presence.
@@ -290,27 +310,6 @@ const sendJson = (response, statusCode, payload, corsHeaders) => {
 const sendEmpty = (response, statusCode = 204, corsHeaders = {}) => {
   response.writeHead(statusCode, corsHeaders);
   response.end();
-};
-
-const readRequestBody = async (request, maxBytes = MAX_JSON_BODY_BYTES) => {
-  const chunks = [];
-  let totalBytes = 0;
-  for await (const chunk of request) {
-    totalBytes += chunk.length;
-    if (totalBytes > maxBytes) {
-      throw new Error('Request body is too large');
-    }
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-};
-
-const readJsonBody = async (request) => {
-  const body = await readRequestBody(request);
-  if (body.length === 0) {
-    return {};
-  }
-  return JSON.parse(body.toString('utf8'));
 };
 
 const isAllowedFalTarget = (url) => (
@@ -737,55 +736,82 @@ const handleFalAssetFetch = async (requestUrl, response, env, fetchImpl, corsHea
   await pipeFetchResponse(response, upstreamResponse, corsHeaders);
 };
 
-export const createSecureBackendServer = ({ env = process.env, fetchImpl = fetch, devConfigState = null } = {}) => http.createServer(async (request, response) => {
-  const { headers: corsHeaders, originAllowed } = resolveCors(request, env);
-  if (!originAllowed) {
-    sendJson(response, 403, { detail: 'Origin is not allowed for the secure backend.' }, corsHeaders);
-    return;
-  }
-  if (request.method === 'OPTIONS') {
-    sendEmpty(response, 204, corsHeaders);
-    return;
-  }
-  const requestUrl = new URL(request.url ?? '/', 'http://localhost');
-  if (isKeyBearingPath(requestUrl) && shouldRequireDesktopAuth(request, env) && !hasValidDesktopAuthToken(request, env)) {
-    sendJson(response, 403, { detail: 'Desktop authorization is required for this secure backend route.' }, corsHeaders);
-    return;
-  }
+const refreshOrKeep = (refresh, current, ...args) => {
+  if (!refresh) return current;
   try {
-    if (requestUrl.pathname === '/health' && request.method === 'GET') {
-      const isDevServiceProbe = devConfigState && getHeaderValue(request, DEV_SERVICE_HEALTH_PROBE_HEADER) === DEV_SERVICE_HEALTH_PROBE_VALUE && hasValidDevServiceHealthToken(request, env);
-      sendJson(response, 200, isDevServiceProbe ? {
-        protocolVersion: DEV_SERVICE_HEALTH_PROTOCOL_VERSION,
-        status: 'ok',
-        service: SECURE_BACKEND_SERVICE_NAME,
-        workspaceRoot: repoRoot,
-        capabilities: SECURE_BACKEND_CAPABILITIES,
-        readiness: devConfigState.readiness,
-        auth: { desktopTokenRequired: hasConfiguredDesktopAuthToken(env) },
-        configState: devConfigState,
-        reuseContract: devConfigState.reuseContract,
-      } : { status: 'ok' }, corsHeaders);
-      return;
-    }
-    if (requestUrl.pathname === MOONSHOT_INTENT_PATH && request.method === 'POST') {
-      await handleMoonshotIntent(request, response, env, fetchImpl, corsHeaders);
-      return;
-    }
-    if (requestUrl.pathname === OPENROUTER_CHAT_PATH && request.method === 'POST') {
-      await handleOpenRouterChat(request, response, env, fetchImpl, corsHeaders);
-      return;
-    }
-    if (requestUrl.pathname === '/api/fal/proxy') {
-      await handleFalProxy(request, response, env, fetchImpl, corsHeaders);
-      return;
-    }
-    if (requestUrl.pathname === '/api/fal/fetch-asset' && request.method === 'GET') {
-      await handleFalAssetFetch(requestUrl, response, env, fetchImpl, corsHeaders);
-      return;
-    }
-    sendJson(response, 404, { detail: 'Not found.' }, corsHeaders);
-  } catch (error) {
-    sendJson(response, 500, { detail: error instanceof Error ? error.message : String(error) }, corsHeaders);
+    return refresh(...args);
+  } catch {
+    return current;
   }
-});
+};
+
+export const createSecureBackendServer = ({ env = process.env, getEnv, fetchImpl = fetch, devConfigState = null, getDevConfigState, openAIClientFactory, nanoBananaClientFactory } = {}) => {
+  const tokenHubHandlers = createTokenHubImageHandlers({ clientFactory: openAIClientFactory, nanoBananaClientFactory, fetchImpl, sendJson });
+  let currentEnv = env;
+  let currentDevConfigState = devConfigState;
+  return http.createServer(async (request, response) => {
+    currentEnv = refreshOrKeep(getEnv, currentEnv);
+    const requestEnv = currentEnv;
+    const { headers: corsHeaders, originAllowed } = resolveCors(request, requestEnv);
+    if (!originAllowed) {
+      sendJson(response, 403, { detail: 'Origin is not allowed for the secure backend.' }, corsHeaders);
+      return;
+    }
+    if (request.method === 'OPTIONS') {
+      sendEmpty(response, 204, corsHeaders);
+      return;
+    }
+    const requestUrl = new URL(request.url ?? '/', 'http://localhost');
+    if (isKeyBearingPath(requestUrl) && shouldRequireDesktopAuth(request, requestEnv) && !hasValidDesktopAuthToken(request, requestEnv)) {
+      sendJson(response, 403, { detail: 'Desktop authorization is required for this secure backend route.' }, corsHeaders);
+      return;
+    }
+    try {
+      if (requestUrl.pathname === '/health' && request.method === 'GET') {
+        const isDevServiceProbe = getHeaderValue(request, DEV_SERVICE_HEALTH_PROBE_HEADER) === DEV_SERVICE_HEALTH_PROBE_VALUE && hasValidDevServiceHealthToken(request, requestEnv);
+        if (isDevServiceProbe) {
+          currentDevConfigState = refreshOrKeep(getDevConfigState, currentDevConfigState, requestEnv);
+        }
+        sendJson(response, 200, isDevServiceProbe && currentDevConfigState ? {
+          protocolVersion: DEV_SERVICE_HEALTH_PROTOCOL_VERSION,
+          status: 'ok',
+          service: SECURE_BACKEND_SERVICE_NAME,
+          workspaceRoot: repoRoot,
+          capabilities: SECURE_BACKEND_CAPABILITIES,
+          readiness: currentDevConfigState.readiness,
+          auth: { desktopTokenRequired: hasConfiguredDesktopAuthToken(requestEnv) },
+          configState: currentDevConfigState,
+          reuseContract: currentDevConfigState.reuseContract,
+        } : { status: 'ok' }, corsHeaders);
+        return;
+      }
+      if (requestUrl.pathname === MOONSHOT_INTENT_PATH && request.method === 'POST') {
+        await handleMoonshotIntent(request, response, requestEnv, fetchImpl, corsHeaders);
+        return;
+      }
+      if (requestUrl.pathname === OPENROUTER_CHAT_PATH && request.method === 'POST') {
+        await handleOpenRouterChat(request, response, requestEnv, fetchImpl, corsHeaders);
+        return;
+      }
+      if (requestUrl.pathname === TOKENHUB_IMAGE_GENERATIONS_PATH && request.method === 'POST') {
+        await tokenHubHandlers.handleGeneration(request, response, requestEnv, corsHeaders);
+        return;
+      }
+      if (requestUrl.pathname === TOKENHUB_IMAGE_EDITS_PATH && request.method === 'POST') {
+        await tokenHubHandlers.handleEdit(request, response, requestEnv, corsHeaders);
+        return;
+      }
+      if (requestUrl.pathname === '/api/fal/proxy') {
+        await handleFalProxy(request, response, requestEnv, fetchImpl, corsHeaders);
+        return;
+      }
+      if (requestUrl.pathname === '/api/fal/fetch-asset' && request.method === 'GET') {
+        await handleFalAssetFetch(requestUrl, response, requestEnv, fetchImpl, corsHeaders);
+        return;
+      }
+      sendJson(response, 404, { detail: 'Not found.' }, corsHeaders);
+    } catch (error) {
+      sendJson(response, 500, { detail: error instanceof Error ? error.message : String(error) }, corsHeaders);
+    }
+  });
+};

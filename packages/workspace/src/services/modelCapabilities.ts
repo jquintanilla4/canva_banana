@@ -1,4 +1,6 @@
 import { isGptImage26Model } from './gptImage26Config';
+import { isTokenHubGptImage25Model } from './tokenHubGptImage25Config';
+import { isTokenHubNanoBananaModel } from './tokenHubNanoBananaConfig';
 import {
   isFalVideoModelId as isVideoModelId,
   isKrea3Model,
@@ -221,6 +223,22 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
     resolve: (_ctx, modelId) => ({
       maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
       referenceLimitToast: () => ({ message: 'GPT Image 2.6 supports up to 15 reference images. Annotations use a separate markup image.', durationMs: 4000 }),
+    }),
+  },
+  {
+    matches: (modelId) => isTokenHubNanoBananaModel(modelId),
+    base: { provider: 'tokenhub', supportsCameraSettings: true },
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: annotationReferenceToast(modelId, 'NanoBanana 2.1 (TokenHub)'),
+    }),
+  },
+  {
+    matches: (modelId) => isTokenHubGptImage25Model(modelId),
+    base: { provider: 'tokenhub' },
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: () => ({ message: 'GPT Image 2.5 (TokenHub) supports up to 15 reference images. Annotations use a separate markup image.', durationMs: 4000 }),
     }),
   },
   {

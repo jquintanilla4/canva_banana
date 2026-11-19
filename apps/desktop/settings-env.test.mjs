@@ -7,6 +7,7 @@ import {
   REQUIRED_DESKTOP_SETTING_KEYS,
   applyDesktopSettings,
   parseDotenvEntry,
+  resolveDesktopSettingsPath,
   writeDesktopSettingsFileAtomic,
 } from './settings-env.mjs';
 
@@ -24,9 +25,16 @@ describe('settings-env', () => {
     expect(parseDotenvEntry('MOONSHOT_API_KEY=')).toEqual({ key: 'MOONSHOT_API_KEY', value: '' });
   });
 
-  it('manages OpenRouter as an optional desktop key', () => {
-    expect(DESKTOP_SETTING_KEYS).toContain('OPENROUTER_API_KEY');
-    expect(REQUIRED_DESKTOP_SETTING_KEYS).not.toContain('OPENROUTER_API_KEY');
+  it('manages OpenRouter and TokenHub as optional desktop settings', () => {
+    for (const key of ['OPENROUTER_API_KEY', 'TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL']) {
+      expect(DESKTOP_SETTING_KEYS).toContain(key);
+      expect(REQUIRED_DESKTOP_SETTING_KEYS).not.toContain(key);
+    }
+  });
+
+  it('writes development settings where the standalone backend reads them', () => {
+    expect(resolveDesktopSettingsPath({ isPackaged: false, userDataPath: '/app-support', repoRoot: '/workspace' })).toBe('/workspace/.env.local');
+    expect(resolveDesktopSettingsPath({ isPackaged: true, userDataPath: '/app-support', repoRoot: '/workspace' })).toBe('/app-support/.env.local');
   });
 
   it('preserves unmanaged lines while updating managed settings', () => {

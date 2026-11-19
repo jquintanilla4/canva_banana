@@ -14,6 +14,7 @@ import {
   applyDesktopSettings,
   parseDotenvEntry,
   readDesktopSettingsFile,
+  resolveDesktopSettingsPath,
   writeDesktopSettingsFileAtomic,
 } from './settings-env.mjs';
 import { APPLICATION_MENU_ITEM_IDS, FILE_MENU_COMMANDS, buildApplicationMenuTemplate } from './application-menu.mjs';
@@ -127,7 +128,11 @@ const setServiceStatus = (serviceName, patch) => {
 
 const getServiceStatusSnapshot = () => JSON.parse(JSON.stringify(serviceStatus)); // Avoid leaking mutable main-process objects.
 
-const getDesktopSettingsPath = () => join(app.getPath('userData'), '.env.local'); // QA-managed settings live in App Support.
+const getDesktopSettingsPath = () => resolveDesktopSettingsPath({
+  isPackaged: app.isPackaged,
+  userDataPath: app.getPath('userData'),
+  repoRoot,
+});
 
 const getChatHistoryPath = () => join(app.getPath('userData'), 'chat-history.json'); // App-level prompt chat history lives in App Support.
 

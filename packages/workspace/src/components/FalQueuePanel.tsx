@@ -45,6 +45,9 @@ const getProviderLabel = (provider: FalQueueJob['provider']): string => {
   if (provider === 'jimeng') {
     return 'JIMENG';
   }
+  if (provider === 'tokenhub') {
+    return 'TOKENHUB';
+  }
   return 'FAL'; // Google jobs do not use this queue today, but keep the fallback readable.
 };
 

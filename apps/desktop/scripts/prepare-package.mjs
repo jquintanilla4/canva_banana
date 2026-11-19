@@ -3,6 +3,7 @@ import { cp, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stageSecureBackend } from './secure-backend-resources.mjs';
 import { APP_ICON_RESOURCE_DIR_NAME, getAppIconResourceSpecs } from '../app-icon-store.mjs';
 import {
   BUILD_VARIANT_FILE_NAME,
@@ -16,11 +17,10 @@ const desktopDir = resolve(scriptsDir, '..');
 const repoRoot = resolve(desktopDir, '../..');
 const webDistDir = resolve(repoRoot, 'apps/web/dist');
 const pythonDistDir = resolve(repoRoot, 'apps/python-backend/dist/canva-banana-python-backend');
-const secureBackendSourcePath = resolve(repoRoot, 'packages/runtime/node/server.mjs');
 const webResourceDir = resolve(desktopDir, 'resources/web');
 const pythonResourceDir = resolve(desktopDir, 'resources/python-backend');
 const appIconResourceDir = resolve(desktopDir, 'resources', APP_ICON_RESOURCE_DIR_NAME);
-const generatedSecureBackendPath = resolve(desktopDir, 'generated/secure-backend/server.mjs');
+const generatedSecureBackendDir = resolve(desktopDir, 'generated/secure-backend');
 const generatedBuildVariantPath = resolve(desktopDir, 'generated', BUILD_VARIANT_FILE_NAME);
 
 const run = (label, command, args, extraEnv = {}) => new Promise((resolveRun, rejectRun) => {
@@ -59,10 +59,10 @@ export const preparePackage = async ({ buildMetadata }) => {
   await resetDir(webResourceDir);
   await resetDir(pythonResourceDir);
   await resetDir(appIconResourceDir);
-  await mkdir(dirname(generatedSecureBackendPath), { recursive: true });
+  await resetDir(generatedSecureBackendDir);
   await cp(webDistDir, webResourceDir, { recursive: true });
   await cp(pythonDistDir, pythonResourceDir, { recursive: true });
-  await cp(secureBackendSourcePath, generatedSecureBackendPath);
+  await stageSecureBackend(generatedSecureBackendDir);
   await writeBuildVariantMetadata(generatedBuildVariantPath, metadata);
   for (const spec of getAppIconResourceSpecs(desktopDir)) {
     await cp(spec.sourcePath, resolve(appIconResourceDir, spec.resourceFileName)); // Keep packaged icon names stable for the registry.

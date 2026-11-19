@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getRequiredSecureBackendResources } from './secure-backend-resources.mjs';
 import { getRequiredAppIconResourcePaths } from '../app-icon-store.mjs';
 import { BUILD_VARIANT_FILE_NAME, parseBuildVariantMetadata } from '../build-variant.mjs';
 
@@ -11,7 +12,7 @@ const desktopDir = resolve(scriptsDir, '..');
 export const getRequiredPackageResources = (targetDesktopDir = desktopDir) => [
   resolve(targetDesktopDir, 'resources/web/index.html'),
   resolve(targetDesktopDir, 'resources/python-backend/canva-banana-python-backend'),
-  resolve(targetDesktopDir, 'generated/secure-backend/server.mjs'),
+  ...getRequiredSecureBackendResources(resolve(targetDesktopDir, 'generated/secure-backend')),
   resolve(targetDesktopDir, 'generated', BUILD_VARIANT_FILE_NAME),
   ...getRequiredAppIconResourcePaths(targetDesktopDir),
 ]; // These files are required by packaged Electron startup paths.

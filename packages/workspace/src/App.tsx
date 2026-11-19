@@ -1162,7 +1162,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     google: PROVIDER_LABELS.google,
     fal: modelCapabilities.provider === 'jimeng'
       ? 'JM CLI'
-      : modelCapabilities.provider === 'volcengine' ? 'VOLCENGINE' : PROVIDER_LABELS.fal,
+      : modelCapabilities.provider === 'volcengine' ? 'VOLCENGINE'
+        : modelCapabilities.provider === 'tokenhub' ? 'TOKENHUB' : PROVIDER_LABELS.fal,
   }), [modelCapabilities.provider]);
   const shouldShowNegativePrompt = modelCapabilities.showNegativePrompt;
   const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);

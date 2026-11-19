@@ -75,6 +75,10 @@ import { buildNanoBananaControls } from './promptBar/nanoBananaControls';
 import { buildGptImage2Controls } from './promptBar/gptImage2Controls';
 import { buildGptImage25Controls } from './promptBar/gptImage25Controls';
 import { isGptImage25Model } from './gptImage25Config';
+import { buildTokenHubGptImage25Controls } from './promptBar/tokenHubGptImage25Controls';
+import { isTokenHubGptImage25Model, type TokenHubGptImage25Variant, type TokenHubGptImage25Background, type TokenHubGptImage25Quality } from './tokenHubGptImage25Config';
+import { buildTokenHubNanoBananaControls } from './promptBar/tokenHubNanoBananaControls';
+import { isTokenHubNanoBananaModel } from './tokenHubNanoBananaConfig';
 import { buildKlingV4Controls } from './promptBar/klingV4Controls';
 import { isKlingV4VideoModel } from './klingV4Config';
 import type {
@@ -889,6 +893,11 @@ export type PromptBarControlsInput = {
   ideogram45IsEditing?: boolean;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  tokenHubGptImage25Quality?: TokenHubGptImage25Quality;
+  tokenHubGptImage25Background?: TokenHubGptImage25Background;
+  tokenHubGptImage25Variant?: TokenHubGptImage25Variant;
+  tokenHubNanoBananaWebSearch?: boolean;
+  tokenHubNanoBananaThinkingLevel?: NanoBananaThinkingLevel;
   krea3Variant?: Krea3Variant;
   krea3ReasoningLevel?: Krea3ReasoningLevel;
   krea3IsEditing?: boolean;
@@ -1006,6 +1015,11 @@ export type PromptBarControlsInput = {
   onIdeogram45EditPrecisionChange?: (value: string) => void;
   onGptImage25BackgroundChange?: (value: string) => void;
   onGptImage25VariantChange?: (value: string) => void;
+  onTokenHubGptImage25QualityChange?: (value: string) => void;
+  onTokenHubGptImage25BackgroundChange?: (value: string) => void;
+  onTokenHubGptImage25VariantChange?: (value: string) => void;
+  onTokenHubNanoBananaWebSearchChange?: (value: string) => void;
+  onTokenHubNanoBananaThinkingLevelChange?: (value: string) => void;
   onKrea3VariantChange?: (value: string) => void;
   onKrea3ReasoningLevelChange?: (value: string) => void;
   onGrokImageAspectRatioChange?: (value: string) => void;
@@ -1158,6 +1172,11 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     ideogram45IsEditing = false,
     gptImage25Background,
     gptImage25Variant,
+    tokenHubGptImage25Quality,
+    tokenHubGptImage25Background,
+    tokenHubGptImage25Variant,
+    tokenHubNanoBananaWebSearch,
+    tokenHubNanoBananaThinkingLevel,
     krea3Variant, krea3ReasoningLevel, krea3IsEditing = false,
     onKrea3VariantChange = () => undefined, onKrea3ReasoningLevelChange = () => undefined,
     grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
@@ -1266,6 +1285,11 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onIdeogram45EditPrecisionChange = () => undefined,
     onGptImage25BackgroundChange = () => undefined,
     onGptImage25VariantChange = () => undefined,
+    onTokenHubGptImage25QualityChange = () => undefined,
+    onTokenHubGptImage25BackgroundChange = () => undefined,
+    onTokenHubGptImage25VariantChange = () => undefined,
+    onTokenHubNanoBananaWebSearchChange = () => undefined,
+    onTokenHubNanoBananaThinkingLevelChange = () => undefined,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -2049,6 +2073,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     }));
   }
   const isGptImage25 = !isVideoMode && isGptImage25Model(falModelId);
+  const isTokenHubGptImage25 = !isVideoMode && isTokenHubGptImage25Model(falModelId);
   const isIdeogram45 = !isVideoMode && isIdeogram45Model(falModelId);
   if (apiProvider === 'fal' && !isVideoMode && isKrea3Model(falModelId)) {
     controls.push(...buildKrea3Controls({
@@ -2071,6 +2096,23 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       imageSizeSelection: falImageSizeSelection, onSizeChange: onFalImageSizeChange,
       onQualityChange: onGptImage25QualityChange, onVariantChange: onGptImage25VariantChange,
       onBackgroundChange: onGptImage25BackgroundChange,
+    }));
+  }
+  if (apiProvider === 'fal' && isTokenHubGptImage25) {
+    controls.push(...buildTokenHubGptImage25Controls({
+      isLoading, quality: tokenHubGptImage25Quality, variant: tokenHubGptImage25Variant, background: tokenHubGptImage25Background,
+      imageSizeSelection: falImageSizeSelection, onSizeChange: onFalImageSizeChange,
+      onQualityChange: onTokenHubGptImage25QualityChange, onVariantChange: onTokenHubGptImage25VariantChange,
+      onBackgroundChange: onTokenHubGptImage25BackgroundChange,
+    }));
+  }
+  if (apiProvider === 'fal' && !isVideoMode && isTokenHubNanoBananaModel(falModelId)) {
+    controls.push(...buildTokenHubNanoBananaControls({
+      isLoading, aspectRatioSelection: falAspectRatioSelection, resolution: falResolutionSelection,
+      webSearch: tokenHubNanoBananaWebSearch, thinkingLevel: tokenHubNanoBananaThinkingLevel,
+      onAspectRatioChange: onFalAspectRatioChange, onResolutionChange: onFalResolutionChange,
+      onWebSearchChange: onTokenHubNanoBananaWebSearchChange,
+      onThinkingLevelChange: onTokenHubNanoBananaThinkingLevelChange,
     }));
   }
 
@@ -2109,7 +2151,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isGptImage2Model || isGptImage25 || isGptImage26 || isIdeogram45);
+    && (isSeedreamModel || isNanoBananaModel || isTokenHubNanoBananaModel(falModelId) || isGptImage2Model || isGptImage25 || isTokenHubGptImage25 || isGptImage26 || isIdeogram45);
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.

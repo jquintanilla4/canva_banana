@@ -1,4 +1,5 @@
 import { isGptImage26Model } from '../services/gptImage26Config';
+import { isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
 import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
 import type { Flux3InputKind } from '../utils/flux3';
 import type { UseFalSettingsResult } from './useFalSettings';
@@ -340,7 +341,8 @@ export function useGenerationGuards({
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
-      && (isSeedreamModel || isNanoBananaModel || isGrokModel || isGptImage2Model || isIdeogram45Model(falModelId));
+      && (isSeedreamModel || isNanoBananaModel || isGrokModel || isGptImage2Model || isIdeogram45Model(falModelId)
+        || isTokenHubNanoBananaModel(falModelId));
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||

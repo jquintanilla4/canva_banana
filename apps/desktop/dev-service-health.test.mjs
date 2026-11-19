@@ -24,6 +24,7 @@ const baseConfigState = {
     falAssetFetch: true,
     moonshotIntent: true,
     openrouterChat: true,
+    tokenhubImages: true,
   },
   allowedOrigins: ['http://localhost:3000', 'http://127.0.0.1:3000', 'file://', 'null'],
   auth: { desktopTokenRequired: false },
@@ -37,12 +38,15 @@ const baseReuseContract = {
     falAssetFetch: true,
     moonshotIntent: true,
     openrouterChat: true,
+    tokenhubImages: true,
   },
   readiness: baseConfigState.readiness,
   config: {
     FAL_API_KEY: { present: true },
     MOONSHOT_API_KEY: { present: true },
     OPENROUTER_API_KEY: { present: true },
+    TOKENHUB_API_KEY: { present: true },
+    TOKENHUB_BASE_URL: 'https://tokenhub.ctclouds.com/v1',
     SECURE_BACKEND_ALLOWED_ORIGINS: baseConfigState.allowedOrigins,
     CANVA_BANANA_DESKTOP_AUTH_TOKEN: { present: false },
   },
@@ -69,6 +73,7 @@ const buildPayload = (overrides = {}) => ({
     falAssetFetch: true,
     moonshotIntent: true,
     openrouterChat: true,
+    tokenhubImages: true,
   },
   readiness: baseConfigState.readiness,
   auth: { desktopTokenRequired: false },
@@ -108,7 +113,7 @@ describe('dev service health validation', () => {
 
   it('rejects services missing any required route capability', () => {
     expect(validateReusableServiceHealth(buildPayload({
-      capabilities: { falProxy: true, moonshotIntent: true, openrouterChat: true },
+      capabilities: { falProxy: true, moonshotIntent: true, openrouterChat: true, tokenhubImages: true },
     }), expectation)).toMatchObject({
       ok: false,
       reason: 'missing capabilities: falAssetFetch',
@@ -179,7 +184,7 @@ describe('dev service health validation', () => {
   it('builds readiness from dotenv files without exposing secret values', () => {
     const rootDir = mkdtempSync(join(tmpdir(), 'canva-banana-health-'));
     tempDirs.push(rootDir);
-    writeFileSync(join(rootDir, '.env'), 'FAL_API_KEY="fal"\nOPENROUTER_API_KEY="openrouter"\n');
+    writeFileSync(join(rootDir, '.env'), 'FAL_API_KEY="fal"\nOPENROUTER_API_KEY="openrouter"\nTOKENHUB_API_KEY="tokenhub"\nTOKENHUB_BASE_URL="https://tokenhub.example/v1"\n');
 
     const configState = buildSecureBackendConfigState(rootDir, {}, {});
 
@@ -191,10 +196,14 @@ describe('dev service health validation', () => {
       falAssetFetch: true,
       moonshotIntent: false,
       openrouterChat: true,
+      tokenhubImages: true,
     });
     expect(configState.allowedOrigins).toEqual(['http://localhost:3000', 'http://127.0.0.1:3000', 'file://', 'null']);
     expect(configState.reuseContract.config.SECURE_BACKEND_ALLOWED_ORIGINS).toEqual(configState.allowedOrigins);
+    expect(configState.reuseContract.config.TOKENHUB_API_KEY).toEqual({ present: true });
+    expect(configState.reuseContract.config.TOKENHUB_BASE_URL).toBe('https://tokenhub.example/v1');
     expect(JSON.stringify(configState)).not.toContain('"openrouter"');
+    expect(JSON.stringify(configState)).not.toContain('"tokenhub"');
     expect(configState.envFiles).toContainEqual(expect.objectContaining({ fileName: '.env', exists: true }));
   });
 
