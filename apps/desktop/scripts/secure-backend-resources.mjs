@@ -52,7 +52,6 @@ export const getRequiredSecureBackendResources = destination => [
   ...runtimeModules.map(path => resolve(destination, path)),
   ...getRuntimePackages().map(({ target }) => resolve(destination, 'node_modules', target, 'package.json')),
   resolve(destination, 'node_modules/openai/index.mjs'),
-  resolve(destination, 'node_modules/@google/genai/dist/node/index.mjs'),
 ];
 
 export const stageSecureBackend = async destination => {

@@ -28,22 +28,20 @@ describe('package resources verifier', () => {
     expect(resources).toContain(join(desktopDir, 'resources/app-icons/monalisa-bionic-preview.png'));
     expect(resources).toContain(join(desktopDir, 'resources/app-icons/monalisa-bionic-dock.png'));
     expect(resources).toContain(join(desktopDir, 'generated/secure-backend/tokenhub.mjs'));
-    expect(resources).toContain(join(desktopDir, 'generated/secure-backend/tokenhub-google.mjs'));
+    expect(resources).toContain(join(desktopDir, 'generated/secure-backend/tokenhub-nano-banana.mjs'));
     expect(resources).toContain(join(desktopDir, 'generated/secure-backend/node_modules/openai/index.mjs'));
-    expect(resources).toContain(join(desktopDir, 'generated/secure-backend/node_modules/@google/genai/dist/node/index.mjs'));
-    expect(resources).toContain(join(desktopDir, 'generated/secure-backend/node_modules/protobufjs/package.json'));
   });
 
-  it('imports the staged secure backend and both SDKs outside the workspace', async () => {
+  it('imports the staged secure backend and Chat Completions SDK outside the workspace', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'canva-banana-staged-backend-'));
     try {
       await stageSecureBackend(directory);
       execFileSync(process.execPath, ['--input-type=module', '-e', [
         "import { createSecureBackendServer } from './server.mjs';",
-        "import { createTokenHubNanoBananaClient } from './tokenhub-google.mjs';",
+        "import OpenAI from 'openai';",
         "const server = createSecureBackendServer({ env: {} });",
-        "const client = createTokenHubNanoBananaClient({ apiKey: 'package-smoke-test' });",
-        "if (!server || typeof client.interactions.create !== 'function') process.exit(1);",
+        "const client = new OpenAI({ apiKey: 'package-smoke-test' });",
+        "if (!server || typeof client.chat.completions.create !== 'function') process.exit(1);",
       ].join('\n')], { cwd: directory, timeout: 10_000 });
     } finally {
       await rm(directory, { recursive: true, force: true });

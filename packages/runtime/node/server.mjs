@@ -745,8 +745,8 @@ const refreshOrKeep = (refresh, current, ...args) => {
   }
 };
 
-export const createSecureBackendServer = ({ env = process.env, getEnv, fetchImpl = fetch, devConfigState = null, getDevConfigState, openAIClientFactory, nanoBananaClientFactory } = {}) => {
-  const tokenHubHandlers = createTokenHubImageHandlers({ clientFactory: openAIClientFactory, nanoBananaClientFactory, fetchImpl, sendJson });
+export const createSecureBackendServer = ({ env = process.env, getEnv, fetchImpl = fetch, devConfigState = null, getDevConfigState, openAIClientFactory } = {}) => {
+  const tokenHubHandlers = createTokenHubImageHandlers({ clientFactory: openAIClientFactory, fetchImpl, sendJson });
   let currentEnv = env;
   let currentDevConfigState = devConfigState;
   return http.createServer(async (request, response) => {

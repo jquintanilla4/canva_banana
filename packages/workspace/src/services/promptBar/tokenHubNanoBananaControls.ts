@@ -7,7 +7,6 @@ interface TokenHubNanoBananaControlsInput extends Omit<TokenHubNanoBananaRunSett
   isLoading: boolean;
   onAspectRatioChange: (value: string) => void;
   onResolutionChange: (value: string) => void;
-  onWebSearchChange: (value: string) => void;
   onThinkingLevelChange: (value: string) => void;
 }
 
@@ -15,7 +14,6 @@ export const buildTokenHubNanoBananaControls = (input: TokenHubNanoBananaControl
   const settings = resolveTokenHubNanoBananaRunSettings({ ...input, kind: 'text_to_image' }, 'restore');
   return [{
     id: 'tokenhub-nano-banana-aspect-ratio-select',
-    prefixLabel: 'Aspect ratio',
     ariaLabel: 'Select NanoBanana 2.1 (TokenHub) aspect ratio',
     options: TOKENHUB_NANO_BANANA_ASPECT_RATIO_OPTIONS,
     value: settings.aspectRatioSelection,
@@ -23,19 +21,10 @@ export const buildTokenHubNanoBananaControls = (input: TokenHubNanoBananaControl
     disabled: input.isLoading,
   }, {
     id: 'tokenhub-nano-banana-resolution-select',
-    prefixLabel: 'Resolution',
     ariaLabel: 'Select NanoBanana 2.1 (TokenHub) resolution',
     options: FAL_RESOLUTION_OPTIONS,
     value: settings.resolution,
     onChange: input.onResolutionChange,
-    disabled: input.isLoading,
-  }, {
-    id: 'tokenhub-nano-banana-web-search-select',
-    prefixLabel: 'Web search',
-    ariaLabel: 'Select NanoBanana 2.1 (TokenHub) web search',
-    options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }],
-    value: String(settings.webSearch),
-    onChange: input.onWebSearchChange,
     disabled: input.isLoading,
   }, {
     id: 'tokenhub-nano-banana-thinking-level-select',

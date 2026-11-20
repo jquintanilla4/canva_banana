@@ -36,7 +36,7 @@ export const resolveTokenHubNanoBananaRunSettings = <Kind extends ImageRunKind>(
   const validAspectRatio = isTokenHubNanoBananaAspectRatio(selectedAspectRatio);
   const resolution = input.resolution ?? TOKENHUB_NANO_BANANA_DEFAULTS.resolutionSelection;
   const validResolution = resolution === '1K' || resolution === '2K' || resolution === '4K';
-  if (validation === 'strict' && (!validAspectRatio || !validResolution)) {
+  if (input.kind === 'image_edit' && validation === 'strict' && (!validAspectRatio || !validResolution)) {
     throw new Error('Please select a supported NanoBanana 2.1 (TokenHub) aspect ratio and resolution.');
   }
   return {
@@ -74,9 +74,7 @@ export const serializeTokenHubNanoBananaGenerationOptions = (settings: TokenHubN
 export const serializeTokenHubNanoBananaInput = (settings: TokenHubNanoBananaRunSettings) => ({
   model: settings.model,
   ...(settings.aspectRatioSelection !== 'default' ? { aspect_ratio: settings.aspectRatioSelection } : {}),
-  resolution: settings.resolution,
-  enable_web_search: settings.webSearch,
+  ...(settings.resolution !== '1K' ? { resolution: settings.resolution } : {}),
   thinking_level: settings.thinkingLevel,
   n: settings.numImages,
-  output_format: 'png' as const,
 });

@@ -24,6 +24,7 @@ import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions, type 
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions, type GptImage25RunSettings } from '../services/gptImage25RunSettings';
 import { TokenHubImageRequestError } from '../services/tokenHubImageService';
 import { isTokenHubImageModel, resolveTokenHubImageOperation, type TokenHubImageOperation } from '../services/tokenHubImageOperation';
+import { isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
 import { resolveRecraftRunSettings, serializeRecraftGenerationOptions, type RecraftRunSettings } from '../services/recraftRunSettings';
 import { resolveGrokImageRunSettings, serializeGrokImageGenerationOptions, type GrokImageRunSettings } from '../services/grokImageRunSettings';
 import { useCallback, useMemo, useRef } from 'react';
@@ -3439,7 +3440,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
         throw new Error('No generation result received.');
       }
 
-      if (falJobId) {
+      const imagesBase64 = generationResult.imagesBase64 || [];
+      const generatedImages = imagesBase64.length > 0 ? imagesBase64 : [generationResult.imageBase64];
+      const generatedImageSources = generationResult.imageDataUrls?.length
+        ? generationResult.imageDataUrls
+        : generatedImages.map(base64 => `${PNG_DATA_URL_PREFIX}${base64}`); // Legacy providers still return raw PNG base64.
+      const preservesTokenHubJpeg = tokenHubOperation !== undefined && isTokenHubNanoBananaModel(falModelIdForRun);
+      const requestedTokenHubCount = preservesTokenHubJpeg ? tokenHubOperation.numImages : 0;
+      const missingTokenHubImages = Math.max(0, requestedTokenHubCount - generatedImageSources.length);
+
+      if (falJobId && missingTokenHubImages === 0) {
         setFalJobs(prev => prev.map(job => job.id === falJobId && job.status !== 'FAILED' ? {
           ...job,
           status: 'COMPLETED',
@@ -3451,12 +3461,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         } : job));
       }
 
-      const imagesBase64 = generationResult.imagesBase64 || [];
-      const generatedImages = imagesBase64.length > 0 ? imagesBase64 : [generationResult.imageBase64];
-      const generatedImageSources = generationResult.imageDataUrls?.length
-        ? generationResult.imageDataUrls
-        : generatedImages.map(base64 => `${PNG_DATA_URL_PREFIX}${base64}`); // Legacy providers still return raw PNG base64.
-      const outputImageFormatPolicy = grokImageSettingsForRun || gptImage26SettingsForRun ? 'preserve-original' : 'png';
+      const outputImageFormatPolicy = grokImageSettingsForRun || gptImage26SettingsForRun || preservesTokenHubJpeg ? 'preserve-original' : 'png';
       const addGeneratedImages = async () => {
         const newImages: CanvasImage[] = [];
         let lastBounds = images.length > 0 ? getImageBounds(images[images.length - 1]) : null;
@@ -3553,6 +3558,20 @@ export const useGeneration = (args: UseGenerationArgs) => {
       };
 
       await awaitActive(async () => addGeneratedImages());
+      if (falJobId && missingTokenHubImages > 0) {
+        const message = `Generated ${generatedImageSources.length} of ${requestedTokenHubCount} images. Retry to generate the remaining images.`;
+        setFalJobs(prev => prev.map(job => job.id === falJobId ? {
+          ...job,
+          status: 'FAILED',
+          phase: 'failed',
+          phaseMessage: 'Some images could not be generated',
+          error: message,
+          requestId: generationResult.requestId || job.requestId,
+          retryInputs: { ...imageRetryInputs, falOptions: { ...imageFalOptionsForRun, numImages: missingTokenHubImages } },
+          updatedAt: Date.now(),
+        } : job));
+        setError(message);
+      }
       // Let autosave know a generation completed successfully.
       onGenerationComplete?.();
     } catch (err) {

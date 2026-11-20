@@ -7,7 +7,7 @@ import test from 'node:test';
 import OpenAI from 'openai';
 
 import { buildSecureBackendConfigState, createSecureBackendServer } from './server.mjs';
-import { createTokenHubNanoBananaClient, TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL } from './tokenhub-google.mjs';
+import { TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL } from './tokenhub-nano-banana.mjs';
 
 const TRUSTED_ORIGIN = 'http://localhost:3000';
 const DESKTOP_AUTH_TOKEN = 'desktop-test-token';
@@ -310,54 +310,222 @@ test('TokenHub desktop routes require the launch nonce', async () => {
   assert.equal(calls.length, 1);
 });
 
-test('TokenHub Nano Banana uses the Google SDK adapter through existing local image routes', async () => {
-  const upstreamCalls = [];
+test('TokenHub Nano Banana text generation extracts JPEGs from Chat Completions', async () => {
+  const requests = [];
   await withServer({
     env: { TOKENHUB_API_KEY: 'tokenhub-test-key' },
-    nanoBananaClientFactory: options => createTokenHubNanoBananaClient({
-      ...options,
-      fetchImpl: async (url, init) => {
-        upstreamCalls.push({ url, init });
-        return new Response(JSON.stringify({ created: 123, request_id: 'nano-request', data: [{ b64_json: 'bmFubw==' }] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      },
-    }),
+    fetchImpl: async (url, init) => {
+      requests.push({ url: String(url), authorization: new Headers(init.headers).get('authorization'), body: JSON.parse(init.body) });
+      return Response.json({
+        id: 'chat-id', created: 123,
+        choices: [
+          { message: { content: 'Here it is\n![image](data:image/jpeg;base64,/9j/2Q==)' } },
+          { message: { content: '![image](data:image/jpeg;base64,/9j/4AAQ)' } },
+        ],
+      }, { headers: { 'x-request-id': 'gateway-request' } });
+    },
   }, async baseUrl => {
-    const noImages = await postJson(baseUrl, '/api/tokenhub/images/edits', {
-      model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL,
-      prompt: 'Edit the source',
-    });
-    assert.equal(noImages.status, 400);
-    const largeImage = `data:image/png;base64,${'YWFh'.repeat(300_000)}`;
-    const response = await postJson(baseUrl, '/api/tokenhub/images/edits', {
-      model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL,
-      prompt: 'Edit the source',
-      images: [largeImage],
-      aspect_ratio: '16:9',
-      resolution: '2K',
-      enable_web_search: true,
-      thinking_level: 'high',
-      n: 1,
+    const response = await postJson(baseUrl, '/api/tokenhub/images/generations', {
+      model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A yellow poster', n: 2,
+      aspect_ratio: '16:9', resolution: '2K', enable_web_search: true, thinking_level: 'high',
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { created: 123, request_id: 'nano-request', data: [{ b64_json: 'bmFubw==' }] });
+    assert.deepEqual(await response.json(), {
+      created: 123, request_id: 'gateway-request', data: [{ b64_json: '/9j/2Q==' }, { b64_json: '/9j/4AAQ' }],
+    });
   });
-  assert.equal(upstreamCalls.length, 1);
-  assert.equal(upstreamCalls[0].url, 'https://tokenhub.ctclouds.com/v1/images/edits');
-  assert.equal(upstreamCalls[0].init.headers.get('authorization'), 'Bearer tokenhub-test-key');
-  assert.deepEqual(JSON.parse(upstreamCalls[0].init.body), {
-    model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL,
-    prompt: 'Edit the source',
-    aspect_ratio: '16:9',
-    resolution: '2K',
-    enable_web_search: true,
-    thinking_level: 'high',
-    n: 1,
-    output_format: 'png',
-    images: [`data:image/png;base64,${'YWFh'.repeat(300_000)}`],
+  assert.deepEqual(requests, [{
+    url: 'https://tokenhub.ctclouds.com/v1/chat/completions', authorization: 'Bearer tokenhub-test-key',
+    body: {
+      model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, messages: [{ role: 'user', content: 'A yellow poster' }], n: 1,
+      extra_body: { google: { image_config: { aspect_ratio: '16:9', image_size: '2K' }, thinking_config: { thinking_level: 'high' } } },
+    },
+  }]);
+});
+
+test('TokenHub Nano Banana text generation validates and fills the requested image count', async () => {
+  const counts = [];
+  const images = ['/9j/2Q==', '/9j/4AAQ'];
+  await withServer({
+    env: { TOKENHUB_API_KEY: 'tokenhub-test-key' },
+    fetchImpl: async (_url, init) => {
+      const base64 = images[counts.length];
+      counts.push(JSON.parse(init.body).n);
+      return Response.json({ choices: [{ message: { content: `![image](data:image/jpeg;base64,${base64})` } }] });
+    },
+  }, async baseUrl => {
+    const path = '/api/tokenhub/images/generations';
+    const payload = { model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster' };
+    const response = await postJson(baseUrl, path, { ...payload, n: 2 });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).data, images.map(base64 => ({ b64_json: base64 })));
+    assert.equal((await postJson(baseUrl, path, { ...payload, n: 5 })).status, 400);
   });
+  assert.deepEqual(counts, [1, 1]);
+});
+
+test('TokenHub Nano Banana text generation forwards all supported ratios and omits Auto overrides', async () => {
+  const ratios = ['21:9', '1:1', '4:3', '3:2', '2:3', '5:4', '4:5', '3:4', '16:9', '9:16', '4:1', '1:4', '8:1', '1:8'];
+  const requests = [];
+  await withServer({
+    env: { TOKENHUB_API_KEY: 'tokenhub-test-key' },
+    fetchImpl: async (_url, init) => {
+      requests.push(JSON.parse(init.body));
+      return Response.json({ choices: [{ message: { content: '![image](data:image/jpeg;base64,/9j/2Q==)' } }] });
+    },
+  }, async baseUrl => {
+    for (const aspectRatio of [...ratios, undefined]) {
+      const response = await postJson(baseUrl, '/api/tokenhub/images/generations', {
+        model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', aspect_ratio: aspectRatio,
+      });
+      assert.equal(response.status, 200);
+    }
+    for (const aspectRatio of ['auto', 'default', 'placeholder', '2:1', '', null, 1, {}]) {
+      const response = await postJson(baseUrl, '/api/tokenhub/images/generations', {
+        model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', aspect_ratio: aspectRatio,
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).detail, 'aspect_ratio is not supported.');
+    }
+  });
+  const common = { model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, messages: [{ role: 'user', content: 'A poster' }], n: 1 };
+  assert.deepEqual(requests, [
+    ...ratios.map(aspectRatio => ({ ...common, extra_body: { google: { image_config: { aspect_ratio: aspectRatio } } } })),
+    common,
+  ]);
+});
+
+test('TokenHub Nano Banana text generation validates optional resolution independently of aspect ratio', async () => {
+  const requests = [];
+  const cases = [
+    { resolution: '1K' },
+    { resolution: '1K', aspect_ratio: '16:9' },
+    { resolution: '2K' },
+    { resolution: '4K' },
+    { resolution: '4K', aspect_ratio: '8:1' },
+  ];
+  await withServer({
+    env: { TOKENHUB_API_KEY: 'tokenhub-test-key' },
+    fetchImpl: async (_url, init) => {
+      requests.push(JSON.parse(init.body));
+      return Response.json({ choices: [{ message: { content: '![image](data:image/jpeg;base64,/9j/2Q==)' } }] });
+    },
+  }, async baseUrl => {
+    for (const settings of cases) {
+      const response = await postJson(baseUrl, '/api/tokenhub/images/generations', {
+        model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', ...settings,
+      });
+      assert.equal(response.status, 200);
+    }
+    for (const resolution of ['default', 'auto', '1k', '8K', '', null, 1, {}]) {
+      const response = await postJson(baseUrl, '/api/tokenhub/images/generations', {
+        model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', resolution,
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).detail, 'resolution must be 1K, 2K, or 4K.');
+    }
+  });
+  const common = { model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, messages: [{ role: 'user', content: 'A poster' }], n: 1 };
+  assert.deepEqual(requests, [
+    common,
+    { ...common, extra_body: { google: { image_config: { aspect_ratio: '16:9' } } } },
+    { ...common, extra_body: { google: { image_config: { image_size: '2K' } } } },
+    { ...common, extra_body: { google: { image_config: { image_size: '4K' } } } },
+    { ...common, extra_body: { google: { image_config: { aspect_ratio: '8:1', image_size: '4K' } } } },
+  ]);
+});
+
+test('TokenHub Nano Banana text generation forwards all thinking levels independently of image options', async () => {
+  const requests = [];
+  const levels = ['minimal', 'medium', 'high'];
+  const imageOptions = [{}, { aspect_ratio: '8:1', resolution: '4K' }];
+  await withServer({
+    env: { TOKENHUB_API_KEY: 'tokenhub-test-key' },
+    fetchImpl: async (_url, init) => {
+      requests.push(JSON.parse(init.body));
+      return Response.json({ choices: [{ message: { content: '![image](data:image/jpeg;base64,/9j/2Q==)' } }] });
+    },
+  }, async baseUrl => {
+    for (const options of imageOptions) {
+      for (const thinkingLevel of levels) {
+        const response = await postJson(baseUrl, '/api/tokenhub/images/generations', {
+          model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', thinking_level: thinkingLevel, ...options,
+        });
+        assert.equal(response.status, 200);
+      }
+    }
+    for (const thinkingLevel of ['low', 'HIGH', '', null, 1, {}]) {
+      const response = await postJson(baseUrl, '/api/tokenhub/images/generations', {
+        model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', thinking_level: thinkingLevel,
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).detail, 'thinking_level is not supported.');
+    }
+  });
+  const common = { model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, messages: [{ role: 'user', content: 'A poster' }], n: 1 };
+  assert.deepEqual(requests, imageOptions.flatMap(options => levels.map(thinkingLevel => ({
+    ...common,
+    extra_body: { google: {
+      ...(options.resolution ? { image_config: { aspect_ratio: options.aspect_ratio, image_size: options.resolution } } : {}),
+      thinking_config: { thinking_level: thinkingLevel },
+    } },
+  }))));
+});
+
+test('TokenHub Nano Banana reports when a chat completion contains no JPEG image', async () => {
+  await withServer({
+    env: { TOKENHUB_API_KEY: 'tokenhub-test-key' },
+    fetchImpl: async () => Response.json({
+      id: 'chat-id',
+      choices: [{ message: { content: '![image](https://example.com/file.jpg) ![image](data:image/jpeg;base64,/9j/2)' } }],
+    }),
+  }, async baseUrl => {
+    const response = await postJson(baseUrl, '/api/tokenhub/images/generations', {
+      model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster',
+    });
+    assert.equal(response.status, 502);
+    const result = await response.json();
+    assert.equal(result.detail, 'TokenHub did not return a JPEG image in the chat response.');
+    assert.equal(result.error.requestID, 'chat-id');
+  });
+});
+
+test('TokenHub Nano Banana edits send ordered multimodal Chat Completions with large inline media', async () => {
+  const requests = [];
+  const images = [
+    'data:image/jpeg;base64,cmVmZXJlbmNl',
+    'data:image/png;base64,YW5ub3RhdGlvbg==',
+    `data:image/webp;base64,${'YWFh'.repeat(300_000)}`,
+  ];
+  await withServer({
+    env: { TOKENHUB_API_KEY: 'tokenhub-test-key' },
+    fetchImpl: async (url, init) => {
+      requests.push({ url: String(url), authorization: new Headers(init.headers).get('authorization'), redirect: init.redirect, body: JSON.parse(init.body) });
+      return Response.json({ id: 'chat-id', created: 123, choices: [{ message: { content: '![image](data:image/jpeg;base64,/9j/2Q==)' } }] }, {
+        headers: { 'x-request-id': 'nano-request' },
+      });
+    },
+  }, async baseUrl => {
+    const response = await postJson(baseUrl, '/api/tokenhub/images/edits', {
+      model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'Edit the source', images,
+      aspect_ratio: '16:9', resolution: '2K', thinking_level: 'high', n: 1,
+      enable_web_search: true, output_format: 'png',
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { created: 123, request_id: 'nano-request', data: [{ b64_json: '/9j/2Q==' }] });
+  });
+  assert.deepEqual(requests, [{
+    url: 'https://tokenhub.ctclouds.com/v1/chat/completions', authorization: 'Bearer tokenhub-test-key',
+    redirect: 'error',
+    body: {
+      model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL,
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: 'Edit the source' },
+        ...images.map(url => ({ type: 'image_url', image_url: { url } })),
+      ] }], n: 1,
+      extra_body: { google: { image_config: { aspect_ratio: '16:9', image_size: '2K' }, thinking_config: { thinking_level: 'high' } } },
+    },
+  }]);
 });
 
 test('TokenHub Nano Banana refreshes credentials and the gateway URL without restarting', async () => {
@@ -365,13 +533,10 @@ test('TokenHub Nano Banana refreshes credentials and the gateway URL without res
   const requests = [];
   await withServer({
     getEnv: () => env,
-    nanoBananaClientFactory: options => createTokenHubNanoBananaClient({
-      ...options,
-      fetchImpl: async (url, { headers }) => {
-        requests.push([url, headers.get('authorization')]);
-        return Response.json({ data: [{ b64_json: 'bmFubw==' }] });
-      },
-    }),
+    fetchImpl: async (url, { headers }) => {
+      requests.push([String(url), new Headers(headers).get('authorization')]);
+      return Response.json({ choices: [{ message: { content: '![image](data:image/jpeg;base64,/9j/2Q==)' } }] });
+    },
   }, async baseUrl => {
     const body = {
       model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', resolution: '1K',
@@ -382,32 +547,37 @@ test('TokenHub Nano Banana refreshes credentials and the gateway URL without res
     assert.equal((await postJson(baseUrl, '/api/tokenhub/images/generations', body)).status, 200);
   });
   assert.deepEqual(requests, [
-    ['https://tokenhub.ctclouds.com/v1/images/generations', 'Bearer first-key'],
-    ['https://tokenhub.example/v1/images/generations', 'Bearer replacement-key'],
+    ['https://tokenhub.ctclouds.com/v1/chat/completions', 'Bearer first-key'],
+    ['https://tokenhub.example/v1/chat/completions', 'Bearer replacement-key'],
   ]);
 });
 
-test('both TokenHub SDKs use the configured transport and preserve the gateway path', async () => {
+test('TokenHub image and chat calls use the configured transport and preserve the gateway path', async () => {
   const baseURL = 'http://127.0.0.1:1/tenant/api';
   const calls = [];
   await withServer({
     env: { TOKENHUB_API_KEY: 'test-key', TOKENHUB_BASE_URL: `${baseURL}/` },
     fetchImpl: async (url, init) => {
       calls.push([String(url), new Headers(init.headers).get('authorization')]);
+      if (String(url).endsWith('/chat/completions')) {
+        return Response.json({ choices: [{ message: { content: '![image](data:image/jpeg;base64,/9j/2Q==)' } }] });
+      }
       return Response.json({ data: [{ b64_json: 'eA==' }] });
     },
   }, async baseUrl => {
     const path = '/api/tokenhub/images/generations';
     assert.equal((await postJson(baseUrl, path, { model: FLARE_MODEL, prompt: 'GPT test' })).status, 200);
-    const nano = await postJson(baseUrl, path, {
+    const nano = {
       model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'Nano test', resolution: '1K',
       enable_web_search: false, thinking_level: 'minimal', n: 1,
-    });
-    assert.equal(nano.status, 200);
+    };
+    assert.equal((await postJson(baseUrl, path, nano)).status, 200);
+    assert.equal((await postJson(baseUrl, '/api/tokenhub/images/edits', { ...nano, images: ['data:image/png;base64,eA=='] })).status, 200);
   });
   assert.deepEqual(calls, [
     [`${baseURL}/images/generations`, 'Bearer test-key'],
-    [`${baseURL}/images/generations`, 'Bearer test-key'],
+    [`${baseURL}/chat/completions`, 'Bearer test-key'],
+    [`${baseURL}/chat/completions`, 'Bearer test-key'],
   ]);
 });
 

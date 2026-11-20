@@ -5,8 +5,6 @@ import { workspaceFetch } from './workspaceSession';
 import { serializeTokenHubGptImage25Input, type TokenHubGptImage25RunSettings } from './tokenHubGptImage25RunSettings';
 import type { FalImageGenerationResult, FalPhaseUpdate, GenerateImageEditParams } from './fal/types';
 
-const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
-
 export type TokenHubImageTransportOptions = {
   abortSignal?: AbortSignal;
   onPhaseUpdate?: (update: FalPhaseUpdate) => void;
@@ -33,6 +31,7 @@ export const requestTokenHubImages = async (
   path: '/api/tokenhub/images/generations' | '/api/tokenhub/images/edits',
   payload: Record<string, unknown>,
   options: TokenHubImageTransportOptions,
+  imageMimeType: 'image/png' | 'image/jpeg' = 'image/png',
 ): Promise<FalImageGenerationResult> => {
   options.abortSignal?.throwIfAborted();
   options.onPhaseUpdate?.({ phase: 'submitting', message: 'Generating with TokenHub; this can take a minute or more...' });
@@ -67,7 +66,7 @@ export const requestTokenHubImages = async (
   return {
     imageBase64: imagesBase64[0],
     imagesBase64,
-    imageDataUrls: imagesBase64.map(image => `${PNG_DATA_URL_PREFIX}${image}`),
+    imageDataUrls: imagesBase64.map(image => `data:${imageMimeType};base64,${image}`),
     text: images.find(item => item.revisedPrompt)?.revisedPrompt ?? '',
     requestId,
   };

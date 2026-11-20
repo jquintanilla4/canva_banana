@@ -133,8 +133,58 @@ describe('tokenHubImageService', () => {
     })).rejects.toThrow('TokenHub returned no base64 image data.');
   });
 
+  it('preserves the Nano Banana text generation JPEG and only sends the supported fields', async () => {
+    global.fetch = vi.fn().mockResolvedValue(response({ data: [{ b64_json: '/9j/2Q==' }], request_id: 'nano-chat' }));
+    const result = await generateTokenHubNanoBanana('A poster', {
+      settings: resolveTokenHubNanoBananaRunSettings({ kind: 'text_to_image', aspectRatioSelection: '16:9', resolution: '2K', webSearch: true }),
+    });
+    expect(result.imageDataUrls).toEqual(['data:image/jpeg;base64,/9j/2Q==']);
+    expect(result.requestId).toBe('nano-chat');
+    const [url, request] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe('http://localhost:8787/api/tokenhub/images/generations');
+    if (typeof request?.body !== 'string') throw new Error('Missing Nano Banana generation JSON');
+    expect(JSON.parse(request.body)).toEqual({ model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', n: 1, thinking_level: 'medium', aspect_ratio: '16:9', resolution: '2K' });
+  });
+
+  it.each([undefined, 'default', 'auto'])('omits the Nano Banana text generation ratio for Auto (%s)', async aspectRatioSelection => {
+    global.fetch = vi.fn().mockResolvedValue(response({ data: [{ b64_json: '/9j/2Q==' }] }));
+    await generateTokenHubNanoBanana('A poster', {
+      settings: resolveTokenHubNanoBananaRunSettings({ kind: 'text_to_image', aspectRatioSelection }),
+    });
+    const [, request] = vi.mocked(global.fetch).mock.calls[0];
+    if (typeof request?.body !== 'string') throw new Error('Missing Nano Banana generation JSON');
+    expect(JSON.parse(request.body)).toEqual({ model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', n: 1, thinking_level: 'medium' });
+  });
+
+  it.each([
+    { resolution: '1K', aspectRatioSelection: '16:9', expected: { aspect_ratio: '16:9' } },
+    { resolution: '2K', expected: { resolution: '2K' } },
+    { resolution: '4K', expected: { resolution: '4K' } },
+    { resolution: '4K', aspectRatioSelection: '8:1', expected: { aspect_ratio: '8:1', resolution: '4K' } },
+  ])('sends independently selected Nano Banana text generation options ($resolution, $aspectRatioSelection)', async ({ resolution, aspectRatioSelection, expected }) => {
+    global.fetch = vi.fn().mockResolvedValue(response({ data: [{ b64_json: '/9j/2Q==' }] }));
+    await generateTokenHubNanoBanana('A poster', {
+      settings: resolveTokenHubNanoBananaRunSettings({ kind: 'text_to_image', aspectRatioSelection, resolution }),
+    });
+    const [, request] = vi.mocked(global.fetch).mock.calls[0];
+    if (typeof request?.body !== 'string') throw new Error('Missing Nano Banana generation JSON');
+    expect(JSON.parse(request.body)).toEqual({ model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', n: 1, thinking_level: 'medium', ...expected });
+  });
+
+  it.each(['minimal', 'medium', 'high'])('sends the resolved Nano Banana text generation thinking level (%s)', async thinkingLevel => {
+    global.fetch = vi.fn().mockResolvedValue(response({ data: [{ b64_json: '/9j/2Q==' }] }));
+    await generateTokenHubNanoBanana('A poster', {
+      settings: resolveTokenHubNanoBananaRunSettings({ kind: 'text_to_image', thinkingLevel, webSearch: true, numImages: 4 }),
+    });
+    const [, request] = vi.mocked(global.fetch).mock.calls[0];
+    if (typeof request?.body !== 'string') throw new Error('Missing Nano Banana generation JSON');
+    expect(JSON.parse(request.body)).toEqual({
+      model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, prompt: 'A poster', n: 1, thinking_level: thinkingLevel,
+    });
+  });
+
   it('sends Nano edit references, the annotated composite, and the source in fal Nano order', async () => {
-    global.fetch = vi.fn().mockResolvedValue(response({ data: [{ b64_json: 'ZWRpdA==' }] }));
+    global.fetch = vi.fn().mockResolvedValue(response({ data: [{ b64_json: '/9j/2Q==' }] }));
     const image = document.createElement('img');
     image.id = 'c291cmNl';
     const firstReference = document.createElement('img');
@@ -146,7 +196,7 @@ describe('tokenHubImageService', () => {
       imageDimensions: { width: 64, height: 64 }, referenceImages: [firstReference, secondReference],
     } satisfies GenerateImageEditParams;
     const abort = new AbortController();
-    await generateTokenHubNanoBananaEdit(params, {
+    const result = await generateTokenHubNanoBananaEdit(params, {
       settings: resolveTokenHubNanoBananaRunSettings({ kind: 'image_edit', aspectRatioSelection: '4:1', numImages: 2 }),
       abortSignal: abort.signal,
     });
@@ -158,7 +208,8 @@ describe('tokenHubImageService', () => {
     expect(JSON.parse(request.body)).toEqual({
       prompt: 'Apply the marked edit', model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL,
       images: ['c2Vjb25k', 'Zmlyc3Q=', 'bWFya3Vw', 'c291cmNl'].map(bytes => `data:image/png;base64,${bytes}`),
-      aspect_ratio: '4:1', resolution: '1K', enable_web_search: false, thinking_level: 'medium', n: 2, output_format: 'png',
+      aspect_ratio: '4:1', thinking_level: 'medium', n: 2,
     });
+    expect(result.imageDataUrls).toEqual(['data:image/jpeg;base64,/9j/2Q==']);
   });
 });

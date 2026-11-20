@@ -43,14 +43,56 @@ describe('TokenHub NanoBanana 2.1', () => {
       result.current.handleFalResolutionChange('4K');
       result.current.handleFalNumImagesChange(4);
     });
-    const controls = buildPromptBarModelControls(buildFooterPromptBarControlsInput({
+    const getControls = (hasFirstFrameImage: boolean) => buildPromptBarModelControls(buildFooterPromptBarControlsInput({
       apiProvider: 'fal', fal: result.current,
       flux3: { onFlux3DurationChange: vi.fn(), onFlux3KeyframeTimingChange: vi.fn() },
-      hasFirstFrameImage: false, isLoading: false, shouldValidateFalOptions: true, isNumImagesInvalid: false,
+      hasFirstFrameImage, isLoading: false, shouldValidateFalOptions: true, isNumImagesInvalid: false,
     })) ?? [];
-    const selects = controls.filter(control => control.id.startsWith('tokenhub-nano-banana-'));
-    expect(selects.map(control => 'value' in control ? control.value : undefined)).toEqual(['8:1', '4K', 'true', 'high']);
-    const count = controls.find(control => control.id === 'fal-num-images-select');
+    const editControls = getControls(true);
+    const selects = editControls.filter(control => control.id.startsWith('tokenhub-nano-banana-'));
+    expect(selects.map(control => 'value' in control ? control.value : undefined)).toEqual(['8:1', '4K', 'high']);
+    const generationControls = getControls(false);
+    const generationSelects = generationControls.filter(control => control.id.startsWith('tokenhub-nano-banana-'));
+    expect(generationSelects).toHaveLength(3);
+    expect(generationSelects[0]).toMatchObject({
+      id: 'tokenhub-nano-banana-aspect-ratio-select', value: '8:1', disabled: false,
+      options: [
+        { value: 'placeholder', label: 'Aspect Ratio' }, { value: 'default', label: 'Auto (default)' },
+        ...['21:9', '1:1', '4:3', '3:2', '2:3', '5:4', '4:5', '3:4', '16:9', '9:16', '4:1', '1:4', '8:1', '1:8'].map(value => ({ value, label: value })),
+      ],
+    });
+    const generationResolution = generationSelects[1];
+    expect(generationResolution).toMatchObject({
+      id: 'tokenhub-nano-banana-resolution-select', value: '4K', disabled: false,
+      options: [{ value: '1K', label: '1K (default)' }, { value: '2K', label: '2K' }, { value: '4K', label: '4K' }],
+    });
+    if (!generationResolution || !('onChange' in generationResolution)) throw new Error('Missing generation resolution control');
+    for (const resolution of ['1K', '2K', '4K']) {
+      act(() => generationResolution.onChange(resolution));
+      expect(getControls(false).find(control => control.id === 'tokenhub-nano-banana-resolution-select')).toMatchObject({ value: resolution });
+      expect(getControls(false).find(control => control.id === 'tokenhub-nano-banana-aspect-ratio-select')).toMatchObject({ value: '8:1' });
+    }
+    const generationThinkingLevel = generationSelects[2];
+    expect(generationThinkingLevel).toMatchObject({
+      id: 'tokenhub-nano-banana-thinking-level-select', value: 'high', disabled: false,
+      options: [{ value: 'minimal', label: 'Minimal' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }],
+    });
+    if (!generationThinkingLevel || !('onChange' in generationThinkingLevel)) throw new Error('Missing generation thinking level control');
+    for (const thinkingLevel of ['minimal', 'medium', 'high']) {
+      act(() => generationThinkingLevel.onChange(thinkingLevel));
+      expect(getControls(false).find(control => control.id === 'tokenhub-nano-banana-thinking-level-select')).toMatchObject({ value: thinkingLevel });
+      expect(getControls(true).find(control => control.id === 'tokenhub-nano-banana-thinking-level-select')).toMatchObject({ value: thinkingLevel });
+    }
+    expect(generationControls.find(control => control.id === 'tokenhub-nano-banana-web-search-select')).toBeUndefined();
+    expect(editControls.find(control => control.id === 'tokenhub-nano-banana-web-search-select')).toBeUndefined();
+    const generationAspectRatio = generationSelects[0];
+    if (!generationAspectRatio || !('onChange' in generationAspectRatio)) throw new Error('Missing generation aspect ratio control');
+    act(() => generationAspectRatio.onChange('default'));
+    expect(getControls(false).find(control => control.id === 'tokenhub-nano-banana-aspect-ratio-select')).toMatchObject({ value: 'default' });
+    expect(generationControls.find(control => control.id === 'fal-num-images-select')).toMatchObject({
+      value: '4', options: ['1', '2', '3', '4'].map(value => ({ value, label: value })),
+    });
+    const count = editControls.find(control => control.id === 'fal-num-images-select');
     expect(count).toMatchObject({ value: '4', options: ['1', '2', '3', '4'].map(value => ({ value, label: value })) });
     expect(result.current).toMatchObject({ nanoBananaWebSearch: false, nanoBananaThinkingLevel: 'minimal' });
   });
@@ -63,8 +105,15 @@ describe('TokenHub NanoBanana 2.1', () => {
     expect(serializeTokenHubNanoBananaGenerationOptions(settings)).toEqual(options);
     expect(serializeTokenHubNanoBananaInput(settings)).toEqual({
       model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL, aspect_ratio: '8:1', resolution: '4K',
-      enable_web_search: true, thinking_level: 'high', n: 4, output_format: 'png',
+      thinking_level: 'high', n: 4,
     });
+  });
+
+  it.each(['text_to_image', 'image_edit'] as const)('normalizes output counts for %s', kind => {
+    for (const [numImages, expected] of [[undefined, 1], [0, 1], [2.9, 2], [9, 4], [NaN, 1]] as const) {
+      expect(resolveTokenHubNanoBananaRunSettings({ kind, numImages }).numImages).toBe(expected);
+      expect(resolveTokenHubNanoBananaRunSettings({ kind, numImages }, 'restore').numImages).toBe(expected);
+    }
   });
 
   it('restores invalid or older settings under the TokenHub model', () => {

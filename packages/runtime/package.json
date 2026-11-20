@@ -10,7 +10,7 @@
     "node/server.mjs",
     "node/tokenhub.mjs",
     "node/tokenhub-gateway.mjs",
-    "node/tokenhub-google.mjs",
+    "node/tokenhub-nano-banana.mjs",
     "python/src/**/*.py",
     "python/pyproject.toml",
     "python/uv.lock",
@@ -27,7 +27,6 @@
     "test": "node --test node/*.node-test.mjs"
   },
   "dependencies": {
-    "@google/genai": "^2.31.0",
     "openai": "^7.59.0"
   }
 }
