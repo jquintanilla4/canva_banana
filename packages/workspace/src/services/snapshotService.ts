@@ -2271,14 +2271,13 @@ export const normalizeSnapshotImageMetadata = (
       }
       if (typed?.seedanceArkSettings) normalizedOptions.seedanceArkSettings = normalizeVolcengineSettings(typed.seedanceArkSettings);
       const capabilities = getSeedance2VolcengineModelCapabilities(normalizedOptions.seedance2VolcengineModel);
-      if (!capabilities.supportsOutputFormat) {
-        delete normalizedOptions.seedance2OutputFormat; // 2.0 sub-models never carry a container choice.
-        if (normalizedOptions.seedance2Duration !== undefined
-          && normalizedOptions.seedance2Duration !== 'auto'
-          && !isSeedance2DurationSelectionValue(normalizedOptions.seedance2Duration)) {
-          normalizedOptions.seedance2Duration = '5'; // 2.0 reruns keep Auto but drop explicit 16-30s durations.
-        }
+      if (!capabilities.supportsOutputFormat) delete normalizedOptions.seedance2OutputFormat;
+      if (capabilities.maxDurationSeconds === 15 && normalizedOptions.seedance2Duration !== undefined
+        && normalizedOptions.seedance2Duration !== 'auto'
+        && !isSeedance2DurationSelectionValue(normalizedOptions.seedance2Duration)) {
+        normalizedOptions.seedance2Duration = '5';
       }
+      if (capabilities.provider === 'tokenhub') delete normalizedOptions.seedanceArkSettings;
       if (normalizedOptions.seedance2Resolution && !capabilities.resolutions.includes(normalizedOptions.seedance2Resolution)) {
         normalizedOptions.seedance2Resolution = '720p';
       }

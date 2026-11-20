@@ -1,4 +1,4 @@
-import type { CanvasVideoPromptBar, GenerationInputs, GenerationProviderId } from '../types';
+import type { CanvasVideoPromptBar, GenerationInputs, GenerationProviderId, Seedance2VolcengineModel } from '../types';
 import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
@@ -26,12 +26,15 @@ export const getJimengSafeSeedance2Resolution = (
   resolution === '480p' || ((resolution === '1080p' || resolution === '4k') && modelVersion !== 'seedance2.0_vip') ? '720p' : resolution
 ); // Jimeng Seedance 2 is 720p except for VIP 1080p/4K.
 
+export const getEmbeddedSeedanceModel = (bar: CanvasVideoPromptBar): Seedance2VolcengineModel =>
+  bar.seedance2VolcengineModel ?? bar.falOptions?.seedance2VolcengineModel ?? 'standard';
+
 export const getEmbeddedBarFalOptions = (bar: CanvasVideoPromptBar): EmbeddedBarFalOptions => ({
   ...(bar.falOptions ?? {}),
   negativePrompt: bar.negativePrompt,
   seedance2Variant: bar.seedance2Variant,
   seedance2JimengModelVersion: bar.seedance2JimengModelVersion ?? bar.falOptions?.seedance2JimengModelVersion,
-  seedance2VolcengineModel: bar.seedance2VolcengineModel,
+  seedance2VolcengineModel: getEmbeddedSeedanceModel(bar),
   seedance2AspectRatio: bar.seedance2AspectRatio,
   seedance2Resolution: bar.seedance2Resolution,
   seedance2Duration: bar.seedance2Duration,
@@ -47,6 +50,18 @@ export const getEmbeddedBarFalOptions = (bar: CanvasVideoPromptBar): EmbeddedBar
   klingV3Shot1Duration: bar.klingV3Shot1Duration ?? bar.falOptions?.klingV3Shot1Duration,
   klingV3Shot2Duration: bar.klingV3Shot2Duration ?? bar.falOptions?.klingV3Shot2Duration,
 }); // Legacy top-level fields keep existing embedded bars compatible.
+
+export const applyEmbeddedSeedanceModel = (bar: CanvasVideoPromptBar, model: Seedance2VolcengineModel): CanvasVideoPromptBar => {
+  const safe = getVolcengineSafeSeedance2Settings(model, bar);
+  const settings = {
+    seedance2VolcengineModel: model,
+    seedance2AspectRatio: safe.seedance2AspectRatio,
+    seedance2Resolution: safe.seedance2Resolution,
+    seedance2Duration: safe.seedance2Duration,
+    seedance2CameraFixed: safe.seedance2CameraFixed,
+  };
+  return { ...bar, ...settings, falOptions: { ...bar.falOptions, ...settings } };
+};
 
 export const isJimengEmbeddedVideoModel = (modelId: string): boolean =>
   modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID || modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID; // Shared guard for setup checks and routing.
@@ -86,12 +101,13 @@ export const buildEmbeddedVideoGenerationProviderInput = (
 ): EmbeddedVideoGenerationProviderInput => {
   const provider = getEmbeddedVideoProvider(modelId);
   if (modelId === SEEDANCE_2_VIDEO_MODEL_ID) {
-    const safe = getVolcengineSafeSeedance2Settings(bar.seedance2VolcengineModel, bar, hasFirstFrame);
+    const model = getEmbeddedSeedanceModel(bar);
+    const safe = getVolcengineSafeSeedance2Settings(model, bar, hasFirstFrame);
     return {
       provider,
       volcengineOptions: {
         seedance2Variant: safe.seedance2Variant,
-        seedance2VolcengineModel: bar.seedance2VolcengineModel,
+        seedance2VolcengineModel: model,
         seedance2AspectRatio: safe.seedance2AspectRatio,
         seedance2Resolution: safe.seedance2Resolution,
         seedance2Duration: safe.seedance2Duration,

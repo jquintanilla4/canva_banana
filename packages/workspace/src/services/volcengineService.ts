@@ -5,11 +5,13 @@ import { convertReferencePromptMentionsToVolcengineTokens } from '../utils/seeda
 import { addDebugLog } from './debugLog';
 import { getPythonBackendAuthHeadersForUrl } from './pythonBackendAuth';
 import { getRuntimeConfig } from './runtimeConfig';
+import { isTokenHubSeedanceModelId } from './volcengineModels';
 
 export type VolcengineQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'; // Match the existing queue panel states.
 
 export type VolcengineQueueUpdate = {
   status: VolcengineQueueStatus;
+  providerJobId?: string;
   requestId?: string;
   logs?: string[];
   outputUrl?: string;
@@ -29,9 +31,11 @@ export class VolcengineDraftTaskUnavailable extends Error {
   }
 }
 export class VolcengineRemoteJobFailed extends Error {}
+export class TokenHubSeedanceJobUnavailable extends Error {}
 
 type GenerateSeedanceVideoOptions = VolcengineJobOptions & {
   modelId: string;
+  resumeJobId?: string;
   variant: Seedance2Variant;
   aspectRatio: '21:9' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | 'adaptive';
   duration: Seedance2VolcengineDuration; // 'auto' maps to the backend's -1 sentinel.
@@ -133,6 +137,9 @@ const normalizeJobAssetUrls = (
 
 const mapJobToQueueUpdate = (job: VolcengineJobResponse): VolcengineQueueUpdate => ({
   status: job.status,
+  ...(isTokenHubSeedanceModelId(job.modelId) ? {
+    providerJobId: job.status === 'FAILED' && (job.remoteFailure || !job.remoteTaskId) ? undefined : job.id,
+  } : {}),
   requestId: job.requestId,
   logs: job.logs,
   outputUrl: job.outputUrl,
@@ -402,8 +409,19 @@ export const generateSeedanceVideo = async (
 ): Promise<VolcengineVideoResult> => {
   options = { ...options, abortSignal: options.abortSignal ?? getWorkspaceSignal() };
   options.abortSignal?.throwIfAborted();
+  const baseUrl = getVolcengineApiBaseUrl();
+  if (options.resumeJobId) {
+    const response = await fetchVolcengine(baseUrl, `/api/volcengine/jobs/${encodeURIComponent(options.resumeJobId)}/resume`, 'resync', {
+      method: 'POST', headers: getVolcengineActionHeaders(baseUrl), signal: options.abortSignal,
+    });
+    if (response.status === 404) {
+      throw new TokenHubSeedanceJobUnavailable('The original TokenHub job is no longer available. Retry again to submit a new generation, which may incur a charge.');
+    }
+    return followSeedanceJob(baseUrl, await parseJobResponse(response, baseUrl), options);
+  }
   const formData = new FormData();
-  const requestPrompt = options.variant === 'smart' ? prompt : convertReferencePromptMentionsToVolcengineTokens(prompt); // Ark mandates 视频1/图片1/音频1 tokens for multimodal prompts.
+  const requestPrompt = options.variant === 'smart' || isTokenHubSeedanceModelId(options.modelId)
+    ? prompt : convertReferencePromptMentionsToVolcengineTokens(prompt);
   formData.set('prompt', requestPrompt);
   formData.set('model_id', options.modelId);
   formData.set('variant', options.variant);
@@ -446,7 +464,6 @@ export const generateSeedanceVideo = async (
     formData.set('reference_sources', JSON.stringify(sources));
   }
 
-  const baseUrl = getVolcengineApiBaseUrl();
   const healthResponse = await fetchVolcengine(baseUrl, '/health', 'health', undefined, { requireOk: true });
   const health = await parseHealthResponse(healthResponse, baseUrl);
   await maybeLogFfprobeFallback(health, options);

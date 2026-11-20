@@ -47,7 +47,10 @@ export const requestTokenHubImages = async (
   const error = isRecord(result?.error) ? result.error : undefined;
   const requestId = nonemptyText(error?.requestID) ?? nonemptyText(result?.request_id);
   if (!response.ok) {
-    const message = nonemptyText(result?.detail) ?? nonemptyText(error?.message) ?? `TokenHub image request failed with HTTP ${response.status}.`;
+    const statusText = nonemptyText(response.statusText) ?? (response.status === 502 ? 'Bad Gateway' : '');
+    const status = `HTTP ${response.status}${statusText ? ` ${statusText}` : ''}`;
+    const detail = nonemptyText(result?.detail) ?? nonemptyText(error?.message);
+    const message = detail ? `${status}: ${detail}` : `TokenHub image request failed with ${status}.`;
     throw new TokenHubImageRequestError(message, requestId);
   }
   const data = Array.isArray(result?.data) ? result.data : [];

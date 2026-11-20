@@ -215,6 +215,7 @@ const runtimeConfig = {
   falApiUrl: mainRuntimeConfig.falApiUrl || process.env.FAL_API_URL,
   falModelId: mainRuntimeConfig.falModelId || process.env.FAL_MODEL_ID,
   volcengineApiBaseUrl: normalizeBaseUrl(mainRuntimeConfig.volcengineApiBaseUrl || process.env.VOLCENGINE_API_BASE_URL, 'http://localhost:8000'),
+  tokenHubSeedanceEnabled: mainRuntimeConfig.tokenHubSeedanceEnabled === true,
   jimengApiBaseUrl: normalizeBaseUrl(mainRuntimeConfig.jimengApiBaseUrl || process.env.JIMENG_API_BASE_URL, 'http://localhost:8000'),
 };
 

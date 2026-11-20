@@ -11,6 +11,7 @@ export type RuntimeConfig = {
   falApiUrl?: string;
   falModelId?: string;
   volcengineApiBaseUrl?: string;
+  tokenHubSeedanceEnabled?: boolean;
   jimengApiBaseUrl?: string;
 };
 

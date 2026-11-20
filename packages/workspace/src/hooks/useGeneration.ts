@@ -201,7 +201,7 @@ import { getNaturalSize, getVideoFileExtension, isVideoFileType, isVideoPlayback
 import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
-import { generateSeedanceVideo, type VolcengineQueueUpdate } from '../services/volcengineService';
+import { generateSeedanceVideo, TokenHubSeedanceJobUnavailable, type VolcengineQueueUpdate } from '../services/volcengineService';
 import { generateJimengSeedanceVideo, type JimengQueueUpdate } from '../services/jimengService';
 import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
@@ -256,6 +256,7 @@ type UseGenerationArgs = {
   prompt: string;
   promptPrefix?: string;
   apiProvider: ApiProviderId;
+  tokenHubSeedanceEnabled?: boolean;
   fal: UseFalSettingsResult;
   selection: SelectionStateResult;
   images: CanvasImage[];
@@ -274,6 +275,7 @@ type UseGenerationArgs = {
 
 type HandleGenerateOptions = {
   retryJobId?: string; // Existing queue row to replace during retry.
+  resumeSeedanceJobId?: string;
 };
 
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
@@ -452,6 +454,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     prompt,
     promptPrefix,
     apiProvider,
+    tokenHubSeedanceEnabled,
     fal,
     selection,
     images,
@@ -1434,7 +1437,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const isJimeng25 = usingJimeng && isJimengSeedance25VideoModelForRun;
         const isJimengMulti = usingJimeng && isJimengMultiframeVideoModelForRun;
         const volcengineModel = getSeedance2VolcengineModelCapabilities(seedance2VolcengineModelForRun);
+        const resumeJobId = usingVolcengine && volcengineModel.provider === 'tokenhub' ? options.resumeSeedanceJobId : undefined;
         const isVolcengineSeedance25 = usingVolcengine && volcengineModel.family === '2.5';
+        const supportsOutputFormat = usingVolcengine && volcengineModel.supportsOutputFormat;
+        if (usingVolcengine && volcengineModel.provider === 'tokenhub' && !tokenHubSeedanceEnabled) {
+          setError('TokenHub Seedance is unavailable. Configure TokenHub on the backend to use this model.');
+          return;
+        }
         const safeVolcengineSettings = getVolcengineSafeSeedance2Settings(seedance2VolcengineModelForRun, {
           seedance2Variant: seedance2VariantForRun,
           seedance2AspectRatio: seedance2AspectRatioForRun,
@@ -1463,7 +1472,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             : isJimeng25
             ? buildSeedance2ModelLabel(baseModelLabel, seedance25VariantForRun)
             : buildJimengSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun, seedance2JimengModelVersionForRun)
-          : buildSeedance2ModelLabel(`${volcengineModel.label} (VE)`, seedance2VariantForRun);
+          : buildSeedance2ModelLabel(volcengineModel.provider === 'tokenhub' ? volcengineModel.label : `${volcengineModel.label} (VE)`, seedance2VariantForRun);
         const primarySelection = primaryImageIdForRun ? images.find(img => img.id === primaryImageIdForRun) ?? null : null;
         const isSeedance2ReferenceMode = localVariant === 'reference';
         const isSeedance2EditMode = !usingJimeng && localVariant === 'edit';
@@ -1533,15 +1542,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2 Smart uses a still image as the first frame. Select an image or clear the selection.');
           return;
         }
-        if (!isJimengMulti && !isSeedance2MultimodalMode && videoLastFrameImageIdForRun && !activePrimary) {
+        if (!resumeJobId && !isJimengMulti && !isSeedance2MultimodalMode && videoLastFrameImageIdForRun && !activePrimary) {
           setError('Seedance 2 first/last-frame mode requires a starting still image.');
           return;
         }
-        if (isSeedance2ReferenceMode && referenceAssetCount === 0) {
+        if (!resumeJobId && isSeedance2ReferenceMode && referenceAssetCount === 0) {
           setError('Seedance 2 Reference requires at least one tagged reference asset.');
           return;
         }
-        if ((isSeedance2EditMode || isSeedance2ExtendMode) && localReferenceVideoCount === 0) {
+        if (!resumeJobId && (isSeedance2EditMode || isSeedance2ExtendMode) && localReferenceVideoCount === 0) {
           setError(`Seedance 2 ${isSeedance2EditMode ? 'Edit' : 'Extend'} requires at least one video clip.`);
           return;
         }
@@ -1549,7 +1558,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError(isVolcengineSeedance25 ? 'Seedance 2.5 Extend accepts video clips and reference images.' : 'Seedance 2 Extend accepts video clips only.');
           return;
         }
-        if (usingVolcengine && !isVolcengineSeedance25 && localReferenceAudioCount > 0 && localReferenceImageCount + localReferenceVideoCount === 0) {
+        if (!resumeJobId && usingVolcengine && !isVolcengineSeedance25 && localReferenceAudioCount > 0 && localReferenceImageCount + localReferenceVideoCount === 0) {
           setError('Seedance 2.0 audio references require an image or a video.');
           return;
         }
@@ -1558,7 +1567,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setTimeout(() => setToastMessage(null), 4000);
           return;
         }
-        if (isSeedance2MultimodalMode) {
+        if (!resumeJobId && isSeedance2MultimodalMode) {
           const promptMentionError = getSeedanceReferencePromptMentionError(seedancePromptForRun, {
             imageCount: localReferenceImageCount,
             videoCount: localReferenceVideoCount,
@@ -1618,9 +1627,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
           seedance2Duration: seedance2VolcengineDurationForRun,
           seedance2GenerateAudio: seedance2GenerateAudioForRun,
           seedance2CameraFixed: safeVolcengineSettings.seedance2CameraFixed,
-          ...(isVolcengineSeedance25 ? { seedance2OutputFormat: seedance2OutputFormatForRun } : {}), // 2.0 sub-models never persist the container choice.
+          ...(supportsOutputFormat ? { seedance2OutputFormat: seedance2OutputFormatForRun } : {}),
         } }; // One source of truth shared by queue-retry inputs and saved-video metadata.
-        const localSeedanceRetryInputs: GenerationInputs = {
+        const tailFrame = submittedLastFrameImageId
+          ? images.find(img => img.id === submittedLastFrameImageId) ?? null
+          : null;
+        const localSeedanceRetryInputs: GenerationInputs = resumeJobId && generationOverride ? generationOverride : {
           kind: 'video',
           prompt: seedancePromptForRun,
           provider: localBackendProvider,
@@ -1634,13 +1646,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ...(submittedPrimaryImageId && activePrimary?.metadata?.generation?.originalSourceImageId
             ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
             : submittedPrimaryImageId ? { originalSourceImageId: submittedPrimaryImageId } : {}),
-          ...(submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
+          ...(tailFrame && submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
           ...localProviderOptionsForRun,
         }; // Queue retry uses the same request metadata as saved videos.
 
-        const tailFrame = submittedLastFrameImageId
-          ? images.find(img => img.id === submittedLastFrameImageId) ?? null
-          : null;
         if (tailFrame && !isImageCanvasMedia(tailFrame)) {
           setError('Select a still image on the canvas to use as the ending frame.');
           return;
@@ -1649,7 +1658,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const referenceImageCanvasItems = localReferenceImageIds
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia);
-        if (referenceImageCanvasItems.length !== localReferenceImageIds.length) {
+        if (!resumeJobId && referenceImageCanvasItems.length !== localReferenceImageIds.length) {
           setError('Seedance 2 image references must be still images.');
           return;
         }
@@ -1657,7 +1666,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const referenceVideoCanvasItems = localReferenceVideoIds
           .map(id => images.find(img => img.id === id))
           .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'video'));
-        if (referenceVideoCanvasItems.length !== localReferenceVideoIds.length) {
+        if (!resumeJobId && referenceVideoCanvasItems.length !== localReferenceVideoIds.length) {
           setError('Seedance 2 video references must be videos on the canvas.');
           return;
         }
@@ -1670,7 +1679,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const localReferenceAudioTotalDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS : volcengineReferenceLimits.audioTotalDurationSeconds;
         const localReferenceDurationTolerance = usingJimeng ? 0.05 : 0; // Match the backend's allowance for media-probe rounding.
         const canProbeInBackend = (item: CanvasImage) => usingVolcengine && item.metadata?.generation?.provider === 'volcengine';
-        const referenceVideoDurations = await Promise.all(referenceVideoCanvasItems.map(item => {
+        const referenceVideoDurations = resumeJobId ? [] : await Promise.all(referenceVideoCanvasItems.map(item => {
           if (!canProbeInBackend(item)) return resolveCanvasMediaDurationSeconds(item);
           if (item.element instanceof HTMLVideoElement && isVideoPlaybackUnavailable(item.element)) return getCanvasMediaDurationSeconds(item);
           return resolveOptionalCanvasMediaDurationSeconds(item);
@@ -1691,11 +1700,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const referenceAudioCanvasItems = localReferenceAudioIds
           .map(id => images.find(img => img.id === id))
           .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'audio'));
-        if (referenceAudioCanvasItems.length !== localReferenceAudioIds.length) {
+        if (!resumeJobId && referenceAudioCanvasItems.length !== localReferenceAudioIds.length) {
           setError('Seedance 2 audio references must be audio clips on the canvas.');
           return;
         }
-        const referenceAudioDurations = referenceAudioCanvasItems.map(getCanvasMediaDurationSeconds); // Seedance validates reference audio duration per clip and in total.
+        const referenceAudioDurations = resumeJobId ? [] : referenceAudioCanvasItems.map(getCanvasMediaDurationSeconds);
         if (referenceAudioDurations.some(durationSeconds => durationSeconds === null || durationSeconds < localReferenceMinDuration - localReferenceDurationTolerance || durationSeconds > localReferenceMaxDuration + localReferenceDurationTolerance)) {
           setError(`${seedance25FamilyLabel} reference audio clips must each be between ${localReferenceMinDuration} and ${localReferenceMaxDuration} seconds.`);
           return;
@@ -1713,7 +1722,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ...(tailFrameImage ? [tailFrameImage] : []),
           ...referenceImageCanvasItems, ...multiframeCanvasItems,
         ];
-        if (!confirmRasterCopies(usedStillImages, 'Generate video')) return;
+        if (!resumeJobId && !confirmRasterCopies(usedStillImages, 'Generate video')) return;
 
         const seedanceRequestKey = buildSeedance2RequestKey({
           provider: generationProviderForRun,
@@ -1727,7 +1736,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           duration: usingJimeng ? localDuration : seedance2VolcengineDurationForRun,
           generateAudio: localSeedance2GenerateAudioForRun,
           cameraFixed: localSeedance2CameraFixedForRun,
-          outputFormat: isVolcengineSeedance25 ? seedance2OutputFormatForRun : undefined,
+          outputFormat: supportsOutputFormat ? seedance2OutputFormatForRun : undefined,
           ...(hasArkSettings ? { arkSettings } : {}),
           primaryImageId: submittedPrimaryImageId,
           videoLastFrameImageId: submittedLastFrameImageId,
@@ -1737,7 +1746,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           images,
         });
 
-        if (!confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
+        if (!resumeJobId && !confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
           return;
         }
 
@@ -1752,6 +1761,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             modelId: falModelIdForRun,
             modelLabel: jobModelLabel,
             provider: localBackendProvider,
+            ...(resumeJobId ? { providerJobId: resumeJobId } : {}),
             retryInputs: localSeedanceRetryInputs,
             status: 'IN_QUEUE',
             logs: [],
@@ -1770,21 +1780,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
         };
 
         try {
-          const firstFrameImageFile = firstFrameImage
+          const firstFrameImageFile = !resumeJobId && firstFrameImage
             ? await awaitActive(async () => buildStillImageFile(firstFrameImage, `seedance2-first-frame-${Date.now()}`))
             : undefined;
-          const lastFrameImageFile = tailFrameImage && localVariant === 'smart' && !isJimengMulti
+          const lastFrameImageFile = !resumeJobId && tailFrameImage && localVariant === 'smart' && !isJimengMulti
             ? await awaitActive(async () => buildStillImageFile(tailFrameImage, `seedance2-last-frame-${Date.now()}`))
             : undefined;
 
-          const referenceImageFiles = isJimengMulti ? [] : await awaitActive(async () => Promise.all(
+          const referenceImageFiles = resumeJobId || isJimengMulti ? [] : await awaitActive(async () => Promise.all(
             referenceImageCanvasItems.map((img, index) => buildStillImageFile(img, `seedance2-reference-image-${index + 1}-${Date.now()}`)),
           )); // Multi-frame images use their dedicated form field and must not be uploaded twice.
-          const referenceVideoFiles = await awaitActive(async () => Promise.all(referenceVideoCanvasItems.map(async (img, index) => {
+          const referenceVideoFiles = resumeJobId ? [] : await awaitActive(async () => Promise.all(referenceVideoCanvasItems.map(async (img, index) => {
             const realFile = await awaitActive(async () => ensureRealSnapshotFile(img.file));
             return new File([realFile], img.file.name || `seedance2-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
           })));
-          const referenceAudioFiles = await awaitActive(async () => Promise.all(referenceAudioCanvasItems.map(async (img, index) => {
+          const referenceAudioFiles = resumeJobId ? [] : await awaitActive(async () => Promise.all(referenceAudioCanvasItems.map(async (img, index) => {
             const realFile = await awaitActive(async () => ensureRealSnapshotFile(img.file));
             if (realFile.type === 'audio/webm') {
               const wavBlob = await awaitActive(async () => convertAudioBlobToWav(realFile));
@@ -1854,6 +1864,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }))
             : await awaitActive(async () => generateSeedanceVideo(seedancePromptForRun, {
               modelId: volcengineModel.id,
+              ...(resumeJobId ? { resumeJobId } : {}),
               variant: safeVolcengineSettings.seedance2Variant,
               aspectRatio: safeVolcengineSettings.seedance2AspectRatio,
               duration: seedance2VolcengineDurationForRun,
@@ -1861,7 +1872,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               ...(hasArkSettings ? { settings: arkSettings } : {}),
               generateAudio: localSeedance2GenerateAudioForRun,
               cameraFixed: safeVolcengineSettings.seedance2CameraFixed,
-              ...(isVolcengineSeedance25 ? { outputFormat: seedance2OutputFormatForRun } : {}), // Only Seedance 2.5 sends a container choice.
+              ...(supportsOutputFormat ? { outputFormat: seedance2OutputFormatForRun } : {}),
               ...(firstFrameImageFile ? { primaryImageFile: firstFrameImageFile } : {}),
               ...(lastFrameImageFile ? { lastFrameImageFile } : {}),
               ...(referenceImageFiles.length ? { referenceImageFiles } : {}),
@@ -1900,7 +1911,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const hasVideoFileType = videoBlob.type.trim().toLowerCase().startsWith('video/');
             const extension = hasVideoFileType
               ? getVideoFileExtension(videoBlob.type)
-              : isVolcengineSeedance25 ? seedance2OutputFormatForRun : 'mp4';
+              : supportsOutputFormat ? seedance2OutputFormatForRun : 'mp4';
             const fileType = hasVideoFileType
               ? videoBlob.type
               : extension === 'mov' ? 'video/quicktime' : 'video/mp4';
@@ -1971,22 +1982,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 modelLabel: jobModelLabel,
                 prompt: seedancePromptForRun,
                 generation: {
-                  kind: 'video',
-                  prompt: seedancePromptForRun,
-                  provider: localBackendProvider,
-                  modelId: falModelIdForRun,
-                  modelLabel: jobModelLabel,
-                  modelMode: falModelModeForRun,
+                  ...localSeedanceRetryInputs,
                   url: videoResult.videoUrl,
-                  ...(submittedPrimaryImageId ? { primaryImageId: submittedPrimaryImageId } : {}),
-                  ...((isJimengMulti ? multiframeImageIds : localReferenceImageIds).length ? { referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds } : {}),
-                  ...(localReferenceVideoIds.length ? { referenceVideoIds: localReferenceVideoIds } : {}),
-                  ...(localReferenceAudioIds.length ? { referenceAudioIds: localReferenceAudioIds } : {}),
-                  ...(submittedPrimaryImageId && activePrimary?.metadata?.generation?.originalSourceImageId
-                    ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
-                    : submittedPrimaryImageId ? { originalSourceImageId: submittedPrimaryImageId } : {}),
-                  ...(lastFrameImageFile && submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
-                  ...localProviderOptionsForRun,
                   ...('draft' in videoResult && videoResult.draft ? { volcengineDraft: videoResult.draft } : {}),
                 },
               },
@@ -2031,6 +2028,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...job,
                   status: 'FAILED',
                   error: message,
+                  ...(err instanceof TokenHubSeedanceJobUnavailable ? { providerJobId: undefined } : {}),
                   updatedAt: Date.now(),
                 }
                 : job
@@ -3681,6 +3679,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance2CameraFixed,
     seedance2OutputFormat,
     seedanceArkSettings,
+    tokenHubSeedanceEnabled,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,

@@ -5,9 +5,9 @@ import type {
   CanvasVideoPromptBar,
   VideoPromptAreaMembership,
 } from '../types';
-import { FAL_VIDEO_MODEL_OPTIONS, FLUX_3_VIDEO_MODEL_ID } from '../services/modelConfig';
+import { FLUX_3_VIDEO_MODEL_ID } from '../services/modelConfig';
 import { isKlingV4VideoModel } from '../services/klingV4Config';
-import { buildPromptBarModelControls } from '../services/promptBarConfig';
+import { buildPromptBarModelControls, getPromptBarModelOptions } from '../services/promptBarConfig';
 import { buildEmbeddedPromptBarControlsInput } from '../services/promptBarSettingsView';
 import type { VolcengineAssetMention } from '../services/volcengineSettings';
 import {
@@ -32,6 +32,7 @@ type UseVideoPromptBarsArgs = {
   setState: (updater: (prevState: AppState) => AppState) => void;
   setError: (message: string | null) => void;
   fal: UseFalSettingsResult;
+  tokenHubSeedanceEnabled?: boolean;
   isLoading: boolean;
 };
 
@@ -47,6 +48,7 @@ export function useVideoPromptBars({
   setState,
   setError,
   fal,
+  tokenHubSeedanceEnabled,
   isLoading,
 }: UseVideoPromptBarsArgs) {
   const [selectedVideoPromptAreaId, setSelectedVideoPromptAreaId] = useState<string | null>(null);
@@ -157,10 +159,10 @@ export function useVideoPromptBars({
   ), [videoPromptAreaMembershipList]);
 
   const embeddedVideoPromptBarModelOptions = useMemo(() => (
-    FAL_VIDEO_MODEL_OPTIONS
+    getPromptBarModelOptions('video', tokenHubSeedanceEnabled)
       .filter(option => isUsableVideoPromptAreaModel(option.value))
       .map(option => ({ value: option.value, label: option.label }))
-  ), []);
+  ), [tokenHubSeedanceEnabled]);
 
   const getEmbeddedVideoPromptBarSubmitError = useCallback((bar: CanvasVideoPromptBar): string | null => {
     const membership = bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined;
@@ -179,9 +181,10 @@ export function useVideoPromptBars({
       barMembership: bar.assignedAreaId ? videoPromptAreaMemberships[bar.assignedAreaId] : undefined,
       fal,
       updateBar: handleEmbeddedPromptBarUpdate,
+      tokenHubSeedanceEnabled,
       isLoading,
     }), arkAssetMentions) ?? []
-  ), [fal, handleEmbeddedPromptBarUpdate, isLoading, videoPromptAreaMemberships]);
+  ), [fal, handleEmbeddedPromptBarUpdate, isLoading, tokenHubSeedanceEnabled, videoPromptAreaMemberships]);
 
   const handleVideoPromptAreaBorderColorChange = useCallback((areaId: string, color: string) => {
     setState(prevState => {

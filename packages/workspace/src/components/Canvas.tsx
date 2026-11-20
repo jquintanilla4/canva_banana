@@ -1,6 +1,7 @@
 import { VolcengineDraftActions } from './VolcengineDraftActions';
 import { hasVolcengineLastFrame } from '../services/volcengineMedia';
 import { getActiveVolcengineSettings, getVolcengineAssetCounts, getVolcengineAssetMentions, type VolcengineAssetMention, type VolcengineFinalResolution } from '../services/volcengineSettings';
+import { getSeedanceVideoPickerModelId, resolveSeedanceVideoPickerSelection, withSelectedSeedanceVideoPickerOption } from '../services/seedanceVideoPicker';
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
 import { getNaturalSize, loadImageFromBlob, playVideoFromUserGesture } from '../services/mediaService';
@@ -38,7 +39,7 @@ import { getImageBounds } from './canvas/geometry';
 import { getCanvasWheelZoomMultiplier } from './canvas/wheelZoom';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { createCanvasRenderCache, drawCanvas, drawDotGridLayer } from './canvas/render/drawCanvas';
-import { getJimengSafeSeedance2Resolution, isEmbeddedSeedanceEditMode, isEmbeddedSeedanceReferenceMode } from '../utils/embeddedVideoRouting';
+import { applyEmbeddedSeedanceModel, getEmbeddedSeedanceModel, getJimengSafeSeedance2Resolution, isEmbeddedSeedanceEditMode, isEmbeddedSeedanceReferenceMode } from '../utils/embeddedVideoRouting';
 import { getJimengMultiframeDisabledReason } from '../utils/jimengMultiframe';
 import { createImageLodCache, disposeImageLodCache, prewarmImageLodCache, pruneImageLodCache, type ImageLodCache } from './canvas/render/imageLodCache';
 import { drainCanvasPerfStats, isCanvasPerfHudEnabled, recordCanvasDraw } from './canvas/render/perfHud';
@@ -167,6 +168,8 @@ const VIEW_GESTURE_SETTLE_MS = 160;
 const WHEEL_RECT_TTL_MS = 300;
 
 const normalizeEmbeddedPromptBarForModel = (bar: CanvasVideoPromptBar, modelId: string): CanvasVideoPromptBar => {
+  const seedance = resolveSeedanceVideoPickerSelection(modelId, getEmbeddedSeedanceModel(bar));
+  if (seedance) return applyEmbeddedSeedanceModel({ ...bar, modelId: seedance.modelId }, seedance.model);
   if (modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
     return {
       ...bar,
@@ -1681,6 +1684,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             height: bar.height,
           };
         const selectedEmbeddedModelId = bar.modelId ?? SEEDANCE_2_VIDEO_MODEL_ID; // Legacy bars default to Volcengine Seedance 2.
+        const selectedSeedanceModel = getEmbeddedSeedanceModel(bar);
+        const selectedPickerId = getSeedanceVideoPickerModelId(selectedEmbeddedModelId, selectedSeedanceModel);
         const removedEmbeddedModelLabel = isRemovedOneToAllAnimateModelId(selectedEmbeddedModelId)
           ? '1-to-All Animate (Unavailable)'
           : isRemovedHailuoModelId(selectedEmbeddedModelId)
@@ -1694,12 +1699,10 @@ export const Canvas: React.FC<CanvasProps> = ({
           : null; // Keep the retired choice visible while supported choices remain selectable.
         const embeddedModelOptionsForBar = removedEmbeddedModelOption
           ? [removedEmbeddedModelOption, ...embeddedVideoPromptBarModelOptions]
-          : embeddedVideoPromptBarModelOptions;
-        const selectedEmbeddedModelLabel = removedEmbeddedModelOption?.label
-          ?? embeddedVideoPromptBarModelOptions.find(option => option.value === selectedEmbeddedModelId)?.label
-          ?? 'Seedance 2';
+          : withSelectedSeedanceVideoPickerOption(embeddedVideoPromptBarModelOptions, selectedPickerId);
+        const selectedEmbeddedModelLabel = embeddedModelOptionsForBar.find(option => option.value === selectedPickerId)?.label ?? 'Seedance 2';
         const arkAssets = selectedEmbeddedModelId === SEEDANCE_2_VIDEO_MODEL_ID
-          ? getActiveVolcengineSettings(bar.seedance2VolcengineModel, bar.seedance2Variant, bar.seedanceArkSettings ?? bar.falOptions?.seedanceArkSettings).assets
+          ? getActiveVolcengineSettings(selectedSeedanceModel, bar.seedance2Variant, bar.seedanceArkSettings ?? bar.falOptions?.seedanceArkSettings).assets
           : undefined;
         const arkAssetCounts = getVolcengineAssetCounts(arkAssets);
         const arkAssetMentions = getVolcengineAssetMentions(arkAssets, {
@@ -1827,7 +1830,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   )}
                   submitDisabledReason={videoPromptBarSubmitError ?? jimengMultiframeDisabledReason}
                   modelOptions={embeddedModelOptionsForBar}
-                  selectedModel={selectedEmbeddedModelId}
+                  selectedModel={selectedPickerId}
                   onModelChange={(modelId) => onVideoPromptBarUpdate(bar.id, currentBar => normalizeEmbeddedPromptBarForModel(currentBar, modelId))}
                   modelSelectDisabled={isLoading}
                   modelMode="video"

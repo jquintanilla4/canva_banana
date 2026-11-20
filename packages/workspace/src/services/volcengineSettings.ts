@@ -80,8 +80,10 @@ export const getActiveVolcengineSettings = (
   variant: Seedance2Variant,
   value: unknown,
 ): VolcengineSettings => {
+  const capabilities = getSeedance2VolcengineModelCapabilities(model);
+  if (capabilities.provider === 'tokenhub') return {};
   const settings = normalizeVolcengineSettings(value);
-  if (!getSeedance2VolcengineModelCapabilities(model).supportsDraft) delete settings.draft;
+  if (!capabilities.supportsDraft) delete settings.draft;
   if (settings.assets) {
     const mediaTypes = getVolcengineAssetMediaTypes(model, variant);
     settings.assets = settings.assets.filter(asset => mediaTypes.includes(asset.mediaType));

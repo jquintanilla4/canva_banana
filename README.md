@@ -82,6 +82,7 @@ Different features use different AI providers. You only need credentials for the
 | TokenHub GPT Image 2.5 and NanoBanana 2.1 generation and edits | `TOKENHUB_API_KEY` |
 | HeyGen prompt timing assistance | `MOONSHOT_API_KEY` |
 | Direct Volcengine Seedance 2 | `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` |
+| TokenHub Seedance 2.0 and 2.5 | `TOKENHUB_API_KEY`. Uploaded frames and references also use `VOLCENGINE_ACCESS_KEY`, `VOLCENGINE_SECRET_KEY`, and your TOS bucket. |
 | Seedance 2, Seedance 2.5, and Multi-frame through Jimeng | Complete the Jimeng CLI setup shown inside the app; CLI 1.4.15+ is required |
 
 In the desktop app, open Settings and enter the credentials there. For browser development, create a file named `.env.local` in the project folder and add each credential on its own line:

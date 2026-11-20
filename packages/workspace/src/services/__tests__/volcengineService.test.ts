@@ -5,7 +5,7 @@ vi.mock('../debugLog', () => ({
 }));
 
 import { addDebugLog } from '../debugLog';
-import { generateSeedanceVideo, renderVolcengineDraft, VolcengineDraftSubmissionRejected, type VolcengineQueueUpdate } from '../volcengineService';
+import { generateSeedanceVideo, renderVolcengineDraft, TokenHubSeedanceJobUnavailable, VolcengineDraftSubmissionRejected, type VolcengineQueueUpdate } from '../volcengineService';
 
 type GenerateSeedanceVideoOptions = Parameters<typeof generateSeedanceVideo>[1]; // Reuse the runtime signature so tests stay aligned.
 
@@ -236,6 +236,39 @@ describe('volcengineService', () => {
 
     const submitBody = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
     expect(submitBody.get('prompt')).toBe('Swap the product in 视频1 for 图片2, keep 音频1.');
+  });
+
+  it('preserves documented reference mentions when sending to TokenHub', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createHealthResponse())
+      .mockResolvedValueOnce(createJsonResponse(createJobPayload({
+        status: 'COMPLETED', outputUrl: 'https://example.com/output.mp4',
+      })));
+    const prompt = 'Swap @Video1 for @Image2 and keep @Audio1.';
+    await generateSeedanceVideo(prompt, createOptions({ variant: 'edit', modelId: 'doubao-seedance-2-5-os-standard' }));
+    const body = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body;
+    expect(body instanceof FormData && body.get('prompt')).toBe(prompt);
+  });
+
+  it('resumes the accepted TokenHub job without another generation submission', async () => {
+    const onQueueUpdate = vi.fn();
+    global.fetch = vi.fn().mockResolvedValueOnce(createJsonResponse(createJobPayload({
+      id: 'existing-job', modelId: 'doubao-seedance-2-5-os-standard',
+      status: 'COMPLETED', outputUrl: 'https://example.com/output.mp4',
+    })));
+    await expect(generateSeedanceVideo('Resume', createOptions({
+      modelId: 'doubao-seedance-2-5-os-standard', resumeJobId: 'existing-job', onQueueUpdate,
+    }))).resolves.toMatchObject({ videoUrl: 'https://example.com/output.mp4' });
+    expect(global.fetch).toHaveBeenCalledExactlyOnceWith(`${DEFAULT_BASE_URL}/api/volcengine/jobs/existing-job/resume`, expect.objectContaining({ method: 'POST' }));
+    expect(onQueueUpdate).toHaveBeenCalledWith(expect.objectContaining({ providerJobId: 'existing-job' }));
+  });
+
+  it('surfaces an expired resume record without another generation submission', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(createJsonResponse({ detail: 'Job is no longer available' }, { ok: false, status: 404 }));
+    await expect(generateSeedanceVideo('Resume', createOptions({
+      modelId: 'doubao-seedance-2-5-os-standard', resumeJobId: 'expired-job',
+    }))).rejects.toBeInstanceOf(TokenHubSeedanceJobUnavailable);
+    expect(global.fetch).toHaveBeenCalledExactlyOnceWith(`${DEFAULT_BASE_URL}/api/volcengine/jobs/expired-job/resume`, expect.objectContaining({ method: 'POST' }));
   });
 
   it('leaves mention-like email addresses and longer handles unchanged', async () => {

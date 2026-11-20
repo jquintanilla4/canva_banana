@@ -22,7 +22,6 @@ import {
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
-  getVolcengineSafeSeedance2Settings,
   isGptImage2EditModelId,
   isJimengSeedance2VideoModel,
   isKlingO3VideoModelId,
@@ -44,7 +43,7 @@ import {
   updateEmbeddedFlux3Variant,
 } from '../utils/embeddedFlux3';
 import { getEmbeddedVideoPromptBarModelId } from '../utils/videoPromptAreas';
-import { getJimengSafeSeedance2Resolution } from '../utils/embeddedVideoRouting';
+import { applyEmbeddedSeedanceModel, getEmbeddedSeedanceModel, getJimengSafeSeedance2Resolution } from '../utils/embeddedVideoRouting';
 import { KLING_V4_DEFAULTS, isKlingV4VideoModel, isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from './klingV4Config';
 
 // -----------------------------------------------------------------------------------
@@ -247,7 +246,7 @@ const buildEmbeddedPromptBarValues = (
     seedance15Audio: options.seedance15Audio ?? fal.seedance15Audio,
     seedance2Variant: bar.seedance2Variant,
     seedance2JimengModelVersion: bar.seedance2JimengModelVersion ?? options.seedance2JimengModelVersion ?? fal.seedance2JimengModelVersion,
-    seedance2VolcengineModel: bar.seedance2VolcengineModel ?? options.seedance2VolcengineModel ?? fal.seedance2VolcengineModel,
+    seedance2VolcengineModel: getEmbeddedSeedanceModel(bar),
     seedance2AspectRatio: bar.seedance2AspectRatio ?? '16:9',
     seedance2Resolution: bar.seedance2Resolution ?? '720p',
     seedance2Duration: bar.seedance2Duration ?? '5',
@@ -586,28 +585,9 @@ const createEmbeddedPromptBarHandlers = (
         };
       }); // Keep the channel and its compatible resolution in one history update.
     },
-    onSeedance2VolcengineModelChange: value => {
-      updateBar(bar.id, currentBar => {
-        const nextModel = isSeedance2VolcengineModel(value) ? value : 'standard';
-        const safe = getVolcengineSafeSeedance2Settings(nextModel, currentBar); // Shared clamp keeps embedded bars in step with the global hook.
-        return {
-          ...currentBar,
-          seedance2VolcengineModel: nextModel,
-          seedance2AspectRatio: safe.seedance2AspectRatio,
-          seedance2Resolution: safe.seedance2Resolution,
-          seedance2Duration: safe.seedance2Duration,
-          seedance2CameraFixed: safe.seedance2CameraFixed,
-          falOptions: {
-            ...(currentBar.falOptions ?? {}),
-            seedance2VolcengineModel: nextModel,
-            seedance2AspectRatio: safe.seedance2AspectRatio,
-            seedance2Resolution: safe.seedance2Resolution,
-            seedance2Duration: safe.seedance2Duration,
-            seedance2CameraFixed: safe.seedance2CameraFixed,
-          },
-        };
-      }); // Keep the Volcengine model and its compatible settings in one history update.
-    },
+    onSeedance2VolcengineModelChange: value => updateBar(bar.id, currentBar => (
+      applyEmbeddedSeedanceModel(currentBar, isSeedance2VolcengineModel(value) ? value : 'standard')
+    )),
     onSeedance2AspectRatioChange: value => updateLegacyAndFal({ seedance2AspectRatio: value as CanvasVideoPromptBar['seedance2AspectRatio'] }, 'seedance2AspectRatio', value),
     onSeedance2ResolutionChange: value => updateLegacyAndFal({ seedance2Resolution: value as CanvasVideoPromptBar['seedance2Resolution'] }, 'seedance2Resolution', value),
     onSeedance2DurationChange: value => updateLegacyAndFal({ seedance2Duration: value as CanvasVideoPromptBar['seedance2Duration'] }, 'seedance2Duration', value),
@@ -693,6 +673,7 @@ const deriveFirstFrameFlags = (
 
 export type FooterPromptBarInputParams = {
   apiProvider: 'google' | 'fal';
+  tokenHubSeedanceEnabled?: boolean;
   fal: UseFalSettingsResult;
   flux3: FooterFlux3Handlers & { keyframeError?: string };
   hasFirstFrameImage: boolean;
@@ -703,6 +684,7 @@ export type FooterPromptBarInputParams = {
 
 export const buildFooterPromptBarControlsInput = ({
   apiProvider,
+  tokenHubSeedanceEnabled,
   fal,
   flux3,
   hasFirstFrameImage,
@@ -714,6 +696,7 @@ export const buildFooterPromptBarControlsInput = ({
   const values = pickFooterPromptBarValues(fal);
   return {
     apiProvider,
+    tokenHubSeedanceEnabled,
     falModelId: fal.falModelId,
     falModelMode: fal.falModelMode,
     ...flags,
@@ -732,6 +715,7 @@ export const buildFooterPromptBarControlsInput = ({
 
 export type EmbeddedPromptBarInputParams = {
   bar: CanvasVideoPromptBar;
+  tokenHubSeedanceEnabled?: boolean;
   barMembership: VideoPromptAreaMembership | undefined;
   fal: UseFalSettingsResult;
   updateBar: EmbeddedPromptBarUpdate;
@@ -740,6 +724,7 @@ export type EmbeddedPromptBarInputParams = {
 
 export const buildEmbeddedPromptBarControlsInput = ({
   bar,
+  tokenHubSeedanceEnabled,
   barMembership,
   fal,
   updateBar,
@@ -760,6 +745,7 @@ export const buildEmbeddedPromptBarControlsInput = ({
   };
   return {
     apiProvider: 'fal',
+    tokenHubSeedanceEnabled,
     controlIdPrefix: bar.id, // Scope control ids to this embedded bar.
     falModelId: modelId,
     falModelMode: 'video',

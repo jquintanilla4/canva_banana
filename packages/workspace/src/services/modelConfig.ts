@@ -507,14 +507,15 @@ export const getVolcengineSafeSeedance2Settings = (
     || current.seedance2Variant === 'extend'
     || (current.seedance2Variant === 'smart' && hasFirstFrame)
   );
-  const forceAutoDuration = capabilities.family === '2.5' && current.seedance2Variant === 'edit';
+  const forceAutoDuration = capabilities.editUsesSourceDuration && current.seedance2Variant === 'edit';
+  const duration = current.seedance2Duration === 'auto' && !capabilities.supportsAutoDuration ? '5' : current.seedance2Duration;
   return {
     ...current,
     seedance2AspectRatio: adaptive ? 'adaptive' : current.seedance2AspectRatio,
     seedance2Resolution: capabilities.resolutions.includes(current.seedance2Resolution) ? current.seedance2Resolution : '720p',
-    seedance2Duration: forceAutoDuration ? 'auto' : Number(current.seedance2Duration) > capabilities.maxDurationSeconds
+    seedance2Duration: forceAutoDuration ? 'auto' : Number(duration) > capabilities.maxDurationSeconds
       ? '15'
-      : current.seedance2Duration,
+      : duration,
     seedance2CameraFixed: false,
   };
 };

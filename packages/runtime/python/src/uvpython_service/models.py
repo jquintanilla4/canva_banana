@@ -15,7 +15,18 @@ JimengSeedanceModelVersion = Literal["seedance2.0fast", "seedance2.0", "seedance
 JimengGenerationMode = Literal["auto", "multiframe"]  # Auto derives text/image/frames/reference commands from the attached media.
 
 DEFAULT_MODEL_ID = "doubao-seedance-2-0-260128"  # Seedance 2 production model.
+TOKENHUB_SEEDANCE20_MODEL_ID = "doubao-seedance-2-0-os-standard"
+TOKENHUB_SEEDANCE25_MODEL_ID = "doubao-seedance-2-5-os-standard"
+TOKENHUB_MODEL_IDS = frozenset({TOKENHUB_SEEDANCE20_MODEL_ID, TOKENHUB_SEEDANCE25_MODEL_ID})
+
+
+def is_tokenhub(model_id: str) -> bool:
+    return model_id in TOKENHUB_MODEL_IDS
+
+
 MODEL_LABELS = {
+    TOKENHUB_SEEDANCE20_MODEL_ID: "Seedance 2 (TokenHub)",
+    TOKENHUB_SEEDANCE25_MODEL_ID: "Seedance 2.5 (TokenHub)",
     "doubao-seedance-2-0-260128": "Seedance 2",
     "doubao-seedance-2-0-fast-260128": "Seedance 2 Fast",
     "doubao-seedance-2-0-mini-260615": "Seedance 2 Mini",
@@ -23,6 +34,8 @@ MODEL_LABELS = {
     "doubao-seedance-2-5-flash-261115": "Seedance 2.5 Flash",
 }  # Known backend model labels.
 MODEL_RESOLUTIONS = {
+    TOKENHUB_SEEDANCE20_MODEL_ID: frozenset({"480p", "720p", "1080p"}),
+    TOKENHUB_SEEDANCE25_MODEL_ID: frozenset({"480p", "720p", "1080p"}),
     "doubao-seedance-2-0-260128": frozenset({"480p", "720p", "1080p", "4k"}),
     "doubao-seedance-2-0-fast-260128": frozenset({"480p", "720p"}),
     "doubao-seedance-2-0-mini-260615": frozenset({"480p", "720p"}),
@@ -32,7 +45,7 @@ MODEL_RESOLUTIONS = {
 
 SEEDANCE25_STANDARD_MODEL_ID = "doubao-seedance-2-5-260628"
 SEEDANCE25_FLASH_MODEL_ID = "doubao-seedance-2-5-flash-261115"
-SEEDANCE25_MODEL_IDS = frozenset({SEEDANCE25_STANDARD_MODEL_ID, SEEDANCE25_FLASH_MODEL_ID})
+SEEDANCE25_MODEL_IDS = frozenset({SEEDANCE25_STANDARD_MODEL_ID, SEEDANCE25_FLASH_MODEL_ID, TOKENHUB_SEEDANCE25_MODEL_ID})
 
 
 def is_seedance25(model_id: str) -> bool:

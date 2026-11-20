@@ -991,6 +991,79 @@ describe('useGeneration (seedance 2)', () => {
     expect(submittedOptions?.outputFormat).toBe('mov');
   });
 
+  it.each([
+    ['tokenhub20', 'doubao-seedance-2-0-os-standard'],
+    ['tokenhub25', 'doubao-seedance-2-5-os-standard'],
+  ] as const)('routes %s through the shared Seedance service and strips inherited Ark options', async (model, modelId) => {
+    const fal = createFalStub();
+    fal.seedance2VolcengineModel = model;
+    fal.seedance2Duration = 'auto';
+    fal.seedance2OutputFormat = 'mov';
+    fal.seedanceArkSettings = { draft: true, watermark: true, returnLastFrame: true };
+    vi.mocked(generateSeedanceVideo).mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS',
+      tool: Tool.FREE_SELECTION,
+      prompt: 'A boat crossing a lake',
+      apiProvider: 'fal',
+      tokenHubSeedanceEnabled: true,
+      fal,
+      selection: createSelectionStub(),
+      images: [],
+      paths: [],
+      videoNegativePrompt: '',
+      setError: vi.fn(),
+      setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(),
+      setState: vi.fn(),
+      setToastMessage: vi.fn(),
+      setTool: vi.fn(),
+    }));
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      await Promise.resolve();
+    });
+
+    const [prompt, options] = vi.mocked(generateSeedanceVideo).mock.calls[0] ?? [];
+    expect(prompt).toBe('A boat crossing a lake');
+    expect(options).toMatchObject({ modelId, duration: '5' });
+    expect(options).not.toHaveProperty('settings');
+    expect(options).not.toHaveProperty('outputFormat');
+  });
+
+  it.each([
+    { variant: 'reference', prompt: 'Animate @Image1', sources: { referenceImageIds: ['removed-image'] } },
+    { variant: 'smart', prompt: 'Animate the first frame', sources: { primaryImageId: 'removed-image', originalSourceImageId: 'source-image' } },
+  ] as const)('resumes a TokenHub $variant job even when its source is gone', async ({ variant, prompt, sources }) => {
+    const videoUrl = 'https://example.com/resumed.mp4';
+    vi.mocked(generateSeedanceVideo).mockResolvedValueOnce({ videoUrl });
+    const video = document.createElement('video');
+    markVideoPlaybackUnavailable(video);
+    vi.mocked(loadMediaFromBlob).mockResolvedValueOnce(video);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('video', { headers: { 'Content-Type': 'video/mp4' } })));
+    let state: AppState = { images: [], paths: [], notes: [], videoPromptAreas: [], videoPromptBars: [] };
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.FREE_SELECTION, prompt: '', apiProvider: 'fal',
+      tokenHubSeedanceEnabled: true, fal: createFalStub(), selection: createSelectionStub(),
+      images: [], paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(),
+      setFalJobs: vi.fn(), setState: updater => { state = updater(state); }, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+
+    await act(async () => result.current.handleGenerate({
+      kind: 'video', modelId: SEEDANCE_2_VIDEO_MODEL_ID, modelMode: 'video', provider: 'volcengine',
+      prompt, ...sources, referenceImageIds: 'referenceImageIds' in sources ? [...sources.referenceImageIds] : undefined,
+      volcengineOptions: { seedance2VolcengineModel: 'tokenhub25', seedance2Variant: variant },
+    }, { retryJobId: 'queue-job', resumeSeedanceJobId: 'backend-job' }));
+
+    expect(generateSeedanceVideo).toHaveBeenCalledExactlyOnceWith(prompt, expect.objectContaining({
+      modelId: 'doubao-seedance-2-5-os-standard', resumeJobId: 'backend-job',
+    }));
+    expect(vi.mocked(generateSeedanceVideo).mock.calls[0][1]).not.toHaveProperty('referenceImageFiles');
+    expect(state.images[0]?.metadata?.generation).toMatchObject({ ...sources, url: videoUrl });
+  });
+
   it('preserves explicit Seedance 2.5 text-to-video aspect ratios', async () => {
     const fal = createFalStub();
     fal.seedance2VolcengineModel = 'seedance25'; // Smart variant and 16:9 ratio come from the stub defaults.

@@ -10,8 +10,8 @@ from volcenginesdkarkruntime import Ark
 from volcenginesdkarkruntime._exceptions import ArkAPIError, ArkAPIStatusError
 from volcenginesdkarkruntime.types.content_generation.content_generation_task_id import ContentGenerationTaskID
 
-from uvpython_service.config import Settings, get_settings
-from uvpython_service.media import media_to_data_url, upload_video_to_tos
+from uvpython_service.config import Settings, get_settings, get_tokenhub_settings
+from uvpython_service.media import media_to_data_url, upload_video_to_tos, upload_media_to_tos
 from uvpython_service.models import (
     MediaInput,
     AssetInput,
@@ -23,7 +23,9 @@ from uvpython_service.models import (
     JobState,
     SeedanceJobPayload,
     is_seedance25,
+    is_tokenhub,
 )
+from uvpython_service.tokenhub_seedance import TokenHubClient, TokenHubTemporaryError, redact_error, validate_configuration
 from uvpython_service.store import job_store
 from uvpython_service.ark_references import validate_ark_identifier
 
@@ -118,6 +120,12 @@ def get_client(settings: Settings) -> Ark:
     )
 
 
+def _media_url(media: MediaInput, payload: SeedanceJobPayload, settings: Settings) -> str:
+    if is_tokenhub(payload.model_id):
+        return upload_media_to_tos(media, settings, signed=True)
+    return media_to_data_url(media)
+
+
 def _build_content(job_id: str, payload: SeedanceJobPayload, settings: Settings) -> list[dict[str, object]]:
     content: list[dict[str, object]] = [{"type": "text", "text": payload.prompt}]  # Prompt is always the first content item.
 
@@ -125,13 +133,13 @@ def _build_content(job_id: str, payload: SeedanceJobPayload, settings: Settings)
         if payload.primary_image:
             content.append({
                 "type": "image_url",
-                "image_url": {"url": media_to_data_url(payload.primary_image)},
+                "image_url": {"url": _media_url(payload.primary_image, payload, settings)},
                 "role": "first_frame",
             })
         if payload.last_frame_image:
             content.append({
                 "type": "image_url",
-                "image_url": {"url": media_to_data_url(payload.last_frame_image)},
+                "image_url": {"url": _media_url(payload.last_frame_image, payload, settings)},
                 "role": "last_frame",
             })
         return content
@@ -139,7 +147,7 @@ def _build_content(job_id: str, payload: SeedanceJobPayload, settings: Settings)
     for reference_image in payload.reference_images:
         content.append({
             "type": "image_url",
-            "image_url": {"url": f"asset://{reference_image.asset_id}" if isinstance(reference_image, AssetInput) else media_to_data_url(reference_image)},
+            "image_url": {"url": f"asset://{reference_image.asset_id}" if isinstance(reference_image, AssetInput) else _media_url(reference_image, payload, settings)},
             "role": "reference_image",
         })
 
@@ -148,7 +156,7 @@ def _build_content(job_id: str, payload: SeedanceJobPayload, settings: Settings)
             public_url = f"asset://{reference_video.asset_id}"
         else:
             _log(job_id, f"Uploading reference video {index} to TOS")
-            public_url = upload_video_to_tos(reference_video, settings)
+            public_url = upload_media_to_tos(reference_video, settings, signed=True) if is_tokenhub(payload.model_id) else upload_video_to_tos(reference_video, settings)
         content.append({
             "type": "video_url",
             "video_url": {"url": public_url},
@@ -158,7 +166,7 @@ def _build_content(job_id: str, payload: SeedanceJobPayload, settings: Settings)
     for reference_audio in payload.reference_audios:
         content.append({
             "type": "audio_url",
-            "audio_url": {"url": f"asset://{reference_audio.asset_id}" if isinstance(reference_audio, AssetInput) else media_to_data_url(reference_audio)},
+            "audio_url": {"url": f"asset://{reference_audio.asset_id}" if isinstance(reference_audio, AssetInput) else _media_url(reference_audio, payload, settings)},
             "role": "reference_audio",
         })
 
@@ -166,6 +174,9 @@ def _build_content(job_id: str, payload: SeedanceJobPayload, settings: Settings)
 
 
 def _validate_payload(payload: SeedanceJobPayload) -> None:
+    tokenhub = is_tokenhub(payload.model_id)
+    if tokenhub:
+        _validate_tokenhub_options(payload)
     if payload.model_id not in MODEL_LABELS:
         raise ValueError(f"Unsupported Seedance model: {payload.model_id}")  # Keep backend model choices explicit.
     allowed_resolutions = MODEL_RESOLUTIONS.get(payload.model_id, frozenset())
@@ -179,7 +190,7 @@ def _validate_payload(payload: SeedanceJobPayload) -> None:
     else:
         if payload.duration != -1 and (payload.duration < 4 or payload.duration > 15):
             raise ValueError("Duration must be between 4 and 15 seconds, or -1 for model auto-select")  # Seedance 2.0 series also supports Auto.
-        if payload.output_format is not None:
+        if payload.output_format is not None and not tokenhub:
             raise ValueError("output_format is only supported by Seedance 2.5")
 
     if payload.priority is not None and (type(payload.priority) is not int or not 0 <= payload.priority <= 9):
@@ -193,9 +204,9 @@ def _validate_payload(payload: SeedanceJobPayload) -> None:
             validate_ark_identifier(media.asset_id)
 
     requires_adaptive_ratio = payload.variant in {"edit", "extend"} or (payload.variant == "smart" and payload.primary_image)
-    if is_seedance25(payload.model_id) and requires_adaptive_ratio and payload.ratio != "adaptive":
+    if not tokenhub and is_seedance25(payload.model_id) and requires_adaptive_ratio and payload.ratio != "adaptive":
         raise ValueError("Seedance 2.5 requires an adaptive ratio for first-frame, edit, and extend tasks")
-    if is_seedance25(payload.model_id) and payload.variant == "edit" and payload.duration != -1:
+    if not tokenhub and is_seedance25(payload.model_id) and payload.variant == "edit" and payload.duration != -1:
         raise ValueError("Seedance 2.5 edit tasks require duration -1 (model auto-select)")
 
     if payload.variant == "smart":
@@ -260,7 +271,28 @@ def _validate_payload(payload: SeedanceJobPayload) -> None:
         _validate_reference_media_durations(payload.reference_audios, media_kind="audio")
 
 
-def _create_remote_task(client: Ark, payload: SeedanceJobPayload, content: list[dict[str, object]]) -> object:
+def _validate_tokenhub_options(payload: SeedanceJobPayload) -> None:
+    if payload.variant not in {"smart", "reference", "edit", "extend"}:
+        raise ValueError("Unsupported TokenHub generation mode")
+    if payload.duration == -1 and payload.variant != "edit":
+        raise ValueError("TokenHub supports automatic duration only for edit tasks")
+    if payload.variant == "edit" and payload.duration != -1:
+        raise ValueError("TokenHub edit tasks require duration -1")
+    if payload.output_format not in {None, "mp4"}:
+        raise ValueError("TokenHub supports MP4 output only")
+    if payload.web_search or payload.return_last_frame or payload.watermark or payload.draft or payload.priority is not None or payload.camera_fixed:
+        raise ValueError("TokenHub does not support Ark generation settings")
+    if payload.jimeng_model_version is not None or payload.session_id or payload.jimeng_mode != "auto" or payload.multiframe_images or payload.transition_prompts or payload.transition_durations:
+        raise ValueError("TokenHub does not support Jimeng generation settings")
+    if any(isinstance(media, AssetInput) for media in (*payload.reference_images, *payload.reference_videos, *payload.reference_audios)):
+        raise ValueError("TokenHub does not support Ark asset references")
+    if not is_seedance25(payload.model_id) and payload.reference_audios and not payload.reference_images and not payload.reference_videos:
+        raise ValueError("TokenHub Seedance 2 requires an image or video with audio references")
+
+
+def _create_remote_task(client: Ark | TokenHubClient, payload: SeedanceJobPayload, content: list[dict[str, object]]) -> object:
+    if isinstance(client, TokenHubClient):
+        return client.create(payload, content)
     request_payload: dict[str, object] = {
         "model": payload.model_id,
         "content": content,
@@ -287,13 +319,30 @@ def _create_remote_task(client: Ark, payload: SeedanceJobPayload, content: list[
     return client.post("/contents/generations/tasks", body=request_payload, cast_to=ContentGenerationTaskID)
 
 
-def _poll_remote_task(job_id: str, client: Ark, remote_task_id: str, settings: Settings) -> None:
+def _poll_remote_task(job_id: str, client: Ark | TokenHubClient, remote_task_id: str, settings: Settings) -> None:
+    tokenhub = isinstance(client, TokenHubClient)
+    provider = "TokenHub" if tokenhub else "Volcengine"
+    deadline = time.monotonic() + settings.tokenhub_timeout_seconds if tokenhub else None
+    last_poll_error: TokenHubTemporaryError | None = None
     last_provider_status: str | None = None
     while True:
-        task = client.content_generation.tasks.get(task_id=remote_task_id)
-        provider_status = getattr(task, "status", "") or "unknown"
+        remaining = deadline - time.monotonic() if deadline is not None else None
+        if remaining is not None and remaining <= 0:
+            if last_poll_error is not None:
+                raise RuntimeError(f"TokenHub task timed out while checking status: {last_poll_error}") from None
+            raise RuntimeError("TokenHub task timed out")
+        try:
+            task = client.get(remote_task_id, timeout=min(60, remaining)) if remaining is not None else client.content_generation.tasks.get(task_id=remote_task_id)
+            provider_status = getattr(task, "status", "") or "unknown"
+            last_poll_error = None
+        except TokenHubTemporaryError as exc:
+            last_poll_error = exc
+            task = None
+            provider_status = "waiting to retry status check"
+        if deadline is not None and time.monotonic() >= deadline:
+            continue
         if provider_status != last_provider_status:
-            _log(job_id, f"Volcengine status: {provider_status}")
+            _log(job_id, f"{provider} status: {provider_status}")
             last_provider_status = provider_status
 
         if provider_status == "succeeded":
@@ -301,7 +350,7 @@ def _poll_remote_task(job_id: str, client: Ark, remote_task_id: str, settings: S
             video_url = getattr(content_result, "video_url", None) if content_result else None
             last_frame_url = getattr(content_result, "last_frame_url", None) if content_result else None
             if not video_url:
-                raise RuntimeError("Volcengine completed without a video URL")
+                raise RuntimeError(f"{provider} completed without a video URL")
             job_store.update(
                 job_id,
                 status="COMPLETED",
@@ -314,7 +363,7 @@ def _poll_remote_task(job_id: str, client: Ark, remote_task_id: str, settings: S
             return
 
         if provider_status in {"failed", "expired", "cancelled"}:
-            error = getattr(task, "error", None) or f"Volcengine task {provider_status}"
+            error = getattr(task, "error", None) or f"{provider} task {provider_status}"
             job_store.update(
                 job_id,
                 status="FAILED",
@@ -322,25 +371,27 @@ def _poll_remote_task(job_id: str, client: Ark, remote_task_id: str, settings: S
                 remote_failure=True,
                 updated_at=_now_ms(),
             )
-            _log(job_id, "Volcengine task failed")
+            _log(job_id, f"{provider} task failed")
             return
 
-        time.sleep(settings.poll_interval_seconds)
+        interval = settings.tokenhub_poll_interval_seconds if tokenhub else settings.poll_interval_seconds
+        time.sleep(min(interval, max(0, deadline - time.monotonic())) if deadline is not None else interval)
 
 
-def _execute_job(job_id: str, payload: SeedanceJobPayload) -> None:
-    settings = get_settings()  # Read env once per worker.
+def _execute_job(job_id: str, payload: SeedanceJobPayload, settings: Settings | None = None) -> None:
+    settings = settings if settings is not None else get_settings()
+    provider = "TokenHub" if is_tokenhub(payload.model_id) else "Volcengine"
     try:
         job_store.update(job_id, status="IN_PROGRESS", updated_at=_now_ms())
-        _log(job_id, "Preparing Volcengine request")
+        _log(job_id, f"Preparing {provider} request")
         if _uses_duration_validation_fallback(payload.reference_videos) or _uses_duration_validation_fallback(payload.reference_audios):
             _log(job_id, "ffprobe unavailable; skipping backend reference duration validation and relying on frontend/provider checks")  # Keep degraded installs debuggable.
-        client = get_client(settings)
+        client = TokenHubClient(settings) if is_tokenhub(payload.model_id) else get_client(settings)
         content = _build_content(job_id, payload, settings)
         remote_task = _create_remote_task(client, payload, content)
         remote_task_id = getattr(remote_task, "id", None)
         if not isinstance(remote_task_id, str) or not remote_task_id:
-            raise RuntimeError("Volcengine did not return a task id")
+            raise RuntimeError(f"{provider} did not return a task id")
 
         job_store.update(
             job_id,
@@ -348,23 +399,28 @@ def _execute_job(job_id: str, payload: SeedanceJobPayload) -> None:
             remote_task_id=remote_task_id,
             updated_at=_now_ms(),
         )
-        _log(job_id, "Task submitted to Volcengine")
+        _log(job_id, f"Task submitted to {provider}")
 
         _poll_remote_task(job_id, client, remote_task_id, settings)
     except Exception as exc:
+        error = redact_error(str(exc), settings) if is_tokenhub(payload.model_id) else str(exc)
         job_store.update(
             job_id,
             status="FAILED",
-            error=str(exc),
+            error=error,
             updated_at=_now_ms(),
         )
-        _log(job_id, f"Worker error: {exc}")
+        _log(job_id, f"Worker error: {error}")
     finally:
         payload.cleanup()  # Remove staged uploads once Volcengine has accepted or rejected the job.
 
 
 def create_job(payload: SeedanceJobPayload) -> JobState:
     _validate_payload(payload)  # Reject invalid jobs before the worker starts and before temp files linger.
+    settings = None
+    if is_tokenhub(payload.model_id):
+        settings = get_tokenhub_settings(get_settings())
+        validate_configuration(settings, has_media=bool(payload.iter_media_inputs()))
     job_id = str(uuid4())  # Local queue id shown in the frontend list.
     created_at = _now_ms()
     job = JobState(
@@ -378,7 +434,7 @@ def create_job(payload: SeedanceJobPayload) -> JobState:
         updated_at=created_at,
     )
     job_store.create(job)
-    Thread(target=_execute_job, args=(job_id, payload), daemon=True).start()  # Run the poll loop off the request thread.
+    Thread(target=_execute_job, args=(job_id, payload, settings), daemon=True).start()  # Run the poll loop off the request thread.
     return job
 
 
@@ -434,12 +490,35 @@ def _create_draft_finalization_task(client: Ark, payload: DraftFinalizationPaylo
     return client.post("/contents/generations/tasks", body=request_payload, cast_to=ContentGenerationTaskID, options={"max_retries": 0})
 
 
-def _execute_remote_poll(job_id: str, client: Ark, remote_task_id: str, settings: Settings) -> None:
+def _execute_remote_poll(job_id: str, client: Ark | TokenHubClient, remote_task_id: str, settings: Settings) -> None:
     try:
         _poll_remote_task(job_id, client, remote_task_id, settings)
     except Exception as exc:
-        job_store.update(job_id, status="FAILED", error=str(exc), updated_at=_now_ms())
-        _log(job_id, f"Worker error: {exc}")
+        error = redact_error(str(exc), settings) if isinstance(client, TokenHubClient) else str(exc)
+        job_store.update(job_id, status="FAILED", error=error, updated_at=_now_ms())
+        _log(job_id, f"Worker error: {error}")
+
+
+def resume_tokenhub_job(job_id: str) -> JobState | None:
+    job = job_store.get(job_id)
+    if not job or not is_tokenhub(job.model_id):
+        return None
+    if job.status != "FAILED" or job.remote_failure or not job.remote_task_id:
+        return job
+
+    settings = get_tokenhub_settings(get_settings())
+    client = TokenHubClient(settings)
+    resumed = job_store.update(
+        job_id,
+        when=lambda current: current.status == "FAILED" and not current.remote_failure,
+        status="IN_PROGRESS",
+        error=None,
+        updated_at=_now_ms(),
+    )
+    if not resumed:
+        return job_store.get(job_id)
+    Thread(target=_execute_remote_poll, args=(job.id, client, job.remote_task_id, settings), daemon=True).start()
+    return resumed
 
 
 def _track_remote_task(client: Ark, task: object, settings: Settings) -> JobState:
@@ -528,8 +607,8 @@ def serialize_job(
         "logs": list(job.logs),
         "requestId": job.request_id,
         "remoteTaskId": job.remote_task_id,
-        "outputUrl": output_url if output_url is not None else job.output_url,
-        "providerOutputUrl": job.output_url,
+        "outputUrl": output_url if output_url is not None else (None if is_tokenhub(job.model_id) else job.output_url),
+        "providerOutputUrl": None if is_tokenhub(job.model_id) else job.output_url,
         "lastFrameUrl": last_frame_url if last_frame_url is not None else job.last_frame_url,
         "providerLastFrameUrl": job.last_frame_url,
         "error": job.error,

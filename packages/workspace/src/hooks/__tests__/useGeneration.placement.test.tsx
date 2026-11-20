@@ -893,8 +893,8 @@ describe('useGeneration placement notifications', () => {
       referenceImageIds: references, editAppMode: 'ANNOTATE', editTool: Tool.ANNOTATE, editPaths: paths,
     }));
     const failed = jobs[0];
-    expect(failed).toMatchObject({ provider: 'tokenhub', status: 'FAILED', error: 'TokenHub is busy', requestId: 'gateway-failed' });
-    expect(setError).toHaveBeenLastCalledWith('TokenHub is busy');
+    expect(failed).toMatchObject({ provider: 'tokenhub', status: 'FAILED', error: 'HTTP 429: TokenHub is busy', requestId: 'gateway-failed' });
+    expect(setError).toHaveBeenLastCalledWith('HTTP 429: TokenHub is busy');
     expect(state.state.images).toHaveLength(0);
     if (!failed?.retryInputs) throw new Error('Missing TokenHub retry inputs');
 

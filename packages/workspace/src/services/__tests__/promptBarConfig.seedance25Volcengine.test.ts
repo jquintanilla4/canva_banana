@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildSeedance2PromptBarControls } from '../promptBarConfig';
+import { buildSeedance2PromptBarControls, getPromptBarModelOptions } from '../promptBarConfig';
 
 type Seedance2ControlsInput = Parameters<typeof buildSeedance2PromptBarControls>[0]; // Reuse the runtime signature so tests stay aligned.
 
@@ -135,5 +135,51 @@ describe('promptBarConfig (Volcengine Seedance 2.5)', () => {
     }
 
     expect(onSeedance2OutputFormatChange).toHaveBeenCalledWith('mov');
+  });
+
+  it('offers the two TokenHub models with their documented options when enabled', () => {
+    const controls = buildSeedance2PromptBarControls(buildInput({
+      tokenHubSeedanceEnabled: true,
+      seedance2VolcengineModel: 'tokenhub25',
+      seedance2Resolution: '4k',
+      onSeedanceArkSettingsChange: vi.fn(),
+    }));
+
+    const model = controls.find(control => control.id === 'seedance2-volcengine-model-select');
+    expect(model && 'options' in model ? model.options.map(({ value, label }) => [value, label]) : []).toEqual([
+      ['tokenhub20', 'Seedance 2.0'], ['tokenhub25', 'Seedance 2.5'],
+    ]);
+    const duration = controls.find(control => control.id === 'seedance2-duration-select');
+    expect(duration && 'options' in duration ? duration.options.map(option => option.value) : []).toEqual(
+      Array.from({ length: 27 }, (_, index) => `${index + 4}`),
+    );
+    const resolution = controls.find(control => control.id === 'seedance2-resolution-select');
+    const resolutionOptions = resolution && 'options' in resolution ? resolution.options : [];
+    expect(resolutionOptions.find(option => option.value === '1080p')?.disabled).toBe(false);
+    expect(resolutionOptions.find(option => option.value === '4k')?.disabled).toBe(true);
+    expect(controls.some(control => control.kind === 'volcengine-settings' || control.id === 'seedance2-output-format-select')).toBe(false);
+  });
+
+  it('lists Volcengine and TokenHub separately and keeps TokenHub choices out of the Volcengine controls', () => {
+    const videoOptions = getPromptBarModelOptions('video', true);
+    expect(videoOptions.filter(option => option.label.startsWith('Seedance 2/2.5'))).toEqual([
+      { value: 'volcengine/seedance-2', label: 'Seedance 2/2.5 (VE)' },
+      { value: 'tokenhub/seedance-2', label: 'Seedance 2/2.5 (TokenHub)' },
+    ]);
+    expect(getPromptBarModelOptions('video')).not.toContainEqual({ value: 'tokenhub/seedance-2', label: 'Seedance 2/2.5 (TokenHub)' });
+    const model = buildSeedance2PromptBarControls(buildInput({ tokenHubSeedanceEnabled: true }))
+      .find(control => control.id === 'seedance2-volcengine-model-select');
+    expect(model && 'options' in model ? model.options.map(option => option.value) : []).toEqual(['standard', 'fast', 'mini', 'seedance25', 'seedance25Flash']);
+  });
+
+  it.each(['tokenhub20', 'tokenhub25'] as const)('uses the source duration when editing with %s', seedance2VolcengineModel => {
+    const controls = buildSeedance2PromptBarControls(buildInput({
+      tokenHubSeedanceEnabled: true,
+      seedance2VolcengineModel,
+      seedance2Variant: 'edit',
+      seedance2Duration: '10',
+    }));
+    const duration = controls.find(control => control.id === 'seedance2-duration-select');
+    expect(duration).toMatchObject({ disabled: true, value: 'auto' });
   });
 });

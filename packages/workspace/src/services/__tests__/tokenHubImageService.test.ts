@@ -7,7 +7,7 @@ import { generateTokenHubImage, generateTokenHubImageEdit } from '../tokenHubIma
 import { buildAnnotationCanvas } from '../fal/media';
 import { TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL } from '../tokenHubNanoBananaConfig';
 import { resolveTokenHubNanoBananaRunSettings } from '../tokenHubNanoBananaRunSettings';
-import { generateTokenHubNanoBananaEdit } from '../tokenHubNanoBananaService';
+import { generateTokenHubNanoBanana, generateTokenHubNanoBananaEdit } from '../tokenHubNanoBananaService';
 
 vi.mock('../fal/media', () => ({
   imageToCanvas: vi.fn((image: HTMLImageElement) => ({
@@ -113,7 +113,17 @@ describe('tokenHubImageService', () => {
     }, false, 429));
     await expect(generateTokenHubImage('A poster', {
       settings: resolveTokenHubGptImage25RunSettings({ kind: 'text_to_image' }),
-    })).rejects.toMatchObject({ message: 'TokenHub is busy', requestId: 'gateway-123' });
+    })).rejects.toMatchObject({ message: 'HTTP 429: TokenHub is busy', requestId: 'gateway-123' });
+  });
+
+  it.each(['Bad Gateway', ''])('shows the HTTP status and TokenHub message for a Nano Banana gateway failure (%j)', async statusText => {
+    global.fetch = vi.fn().mockResolvedValue(Response.json({
+      detail: 'openai_error', error: { requestID: 'gateway-502' },
+    }, { status: 502, statusText }));
+
+    await expect(generateTokenHubNanoBanana('A poster', {
+      settings: resolveTokenHubNanoBananaRunSettings({ kind: 'text_to_image' }),
+    })).rejects.toMatchObject({ message: 'HTTP 502 Bad Gateway: openai_error', requestId: 'gateway-502' });
   });
 
   it.each([null, { data: [null] }, { data: {} }])('surfaces a concise error for malformed TokenHub success JSON', async body => {

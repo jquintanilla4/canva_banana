@@ -443,6 +443,7 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
       const volcengineModel = getSeedance2VolcengineModelCapabilities(ctx.seedance2VolcengineModel);
       const modelLabel = isVolcengineSelector && volcengineModel.family === '2.5' ? volcengineModel.label : 'Seedance 2';
       return {
+        ...(isVolcengineSelector ? { provider: volcengineModel.provider } : {}),
         supportsTailFrame: ctx.seedance2Variant === 'smart',
         promptPlaceholder: ctx.seedance2Variant === 'edit'
           ? `Seedance 2 Edit: select a video to edit (@Video1), optionally tag @Image/@Audio replacement clips, then describe the changes... ${GENERATE_SUFFIX}`
