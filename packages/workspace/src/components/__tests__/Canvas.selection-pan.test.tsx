@@ -3,7 +3,7 @@ import { StrictMode, type ComponentProps } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Canvas } from '../Canvas';
 import { Tool, type CanvasImage, type CanvasNote, type CanvasVideoPromptArea, type CanvasVideoPromptBar } from '../../types';
-import { createLazyVideoFromUrl } from '../../services/mediaService';
+import { createLazyVideoFromUrl, isVideoPlaybackUnavailable, markVideoPlaybackUnavailable } from '../../services/mediaService';
 import { getGenerationTransferBlockReason } from '../../utils/generationPromptBarTransfer';
 import * as imageLodCache from '../canvas/render/imageLodCache';
 
@@ -902,6 +902,36 @@ describe('Canvas selection temporary pan', () => {
     expect(load).toHaveBeenCalledTimes(1);
     expect(play).toHaveBeenCalledTimes(1);
     expect(onImagesChange).toHaveBeenCalledWith([expect.objectContaining({ id: videoImage.id, isPlaying: true })]);
+  });
+
+  it('retries a previously unavailable video from the Play button', async () => {
+    const element = createLazyVideoFromUrl('blob:restored-video', 100, 80);
+    const load = vi.spyOn(element, 'load').mockImplementation(() => {});
+    const play = vi.spyOn(element, 'play').mockResolvedValue(undefined);
+    markVideoPlaybackUnavailable(element);
+    const image = { ...buildVideo(), element, isPlaying: false };
+    render(<Canvas {...buildCanvasProps({ images: [image], selectedImageIds: [image.id] })} />);
+    expect(load).not.toHaveBeenCalled();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Play$/ })); });
+    expect(load).toHaveBeenCalledOnce();
+    expect(play).toHaveBeenCalledOnce();
+    expect(isVideoPlaybackUnavailable(element)).toBe(false);
+  });
+
+  it('offers last-frame retry only while the requested frame is missing', () => {
+    const video = { ...buildVideo(), isPlaying: false, metadata: { source: 'generated', volcengineLastFrameTaskId: 'ark-final' } } satisfies CanvasImage;
+    const frame = { ...buildImage('last-frame'), metadata: video.metadata };
+    const onRetryVolcengineLastFrame = vi.fn();
+    const props = buildCanvasProps({ images: [video], selectedImageIds: [video.id], onRetryVolcengineLastFrame });
+    const { rerender } = render(<Canvas {...props} />);
+    const retry = () => screen.getByRole('button', { name: 'Retry last frame' }) as HTMLButtonElement;
+    fireEvent.click(retry());
+    expect(onRetryVolcengineLastFrame).toHaveBeenCalledWith(video.id);
+    rerender(<Canvas {...props} downloadingLastFrames={new Set(['ark-final'])} />);
+    expect(retry().disabled).toBe(true);
+    rerender(<Canvas {...props} images={[video, frame]} />);
+    expect(screen.queryByRole('button', { name: 'Retry last frame' })).toBeNull();
   });
 
   it('reports restored audio autoplay rejection so history can replace the playing state', async () => {

@@ -17,6 +17,7 @@ type NewVideoPromptBarSettingsSource = Pick<UseFalSettingsResult,
   | 'seedance2JimengModelVersion'
   | 'seedance2VolcengineModel'
   | 'seedance2OutputFormat'
+  | 'seedanceArkSettings'
 >;
 
 export type NewVideoPromptBarDefaults = Omit<CanvasVideoPromptBar, 'id' | 'assignedAreaId' | 'x' | 'y' | 'width' | 'height'>;
@@ -56,6 +57,7 @@ export const getNewVideoPromptBarDefaults = (fal: NewVideoPromptBarSettingsSourc
   seedance2GenerateAudio: false,
   seedance2CameraFixed: false,
   seedance2OutputFormat: fal.seedance2OutputFormat,
+  ...(fal.seedanceArkSettings ? { seedanceArkSettings: fal.seedanceArkSettings } : {}),
   klingV3MultiPrompt: '',
   klingV3Duration: '5',
   klingV3GenerateAudio: true,

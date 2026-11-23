@@ -65,6 +65,7 @@ export default defineConfig(({ mode }) => {
         'process.env.FAL_API_URL': JSON.stringify(env.FAL_API_URL),
         'process.env.FAL_MODEL_ID': JSON.stringify(env.FAL_MODEL_ID),
         'process.env.VOLCENGINE_API_BASE_URL': JSON.stringify(env.VOLCENGINE_API_BASE_URL),
+        'process.env.TOKENHUB_VIDEO_ENABLED': JSON.stringify(env.TOKENHUB_VIDEO_ENABLED ?? (env.TOKENHUB_API_KEY?.trim() ? 'true' : 'false')),
         'process.env.JIMENG_API_BASE_URL': JSON.stringify(env.JIMENG_API_BASE_URL),
       },
       build: {

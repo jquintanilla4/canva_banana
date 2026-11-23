@@ -8,6 +8,8 @@ const keys: DesktopSettingsKey[] = [
   'FAL_API_KEY',
   'MOONSHOT_API_KEY',
   'OPENROUTER_API_KEY',
+  'TOKENHUB_API_KEY',
+  'TOKENHUB_BASE_URL',
   'ARK_API_KEY',
   'VOLCENGINE_ACCESS_KEY',
   'VOLCENGINE_SECRET_KEY',
@@ -16,14 +18,16 @@ const keys: DesktopSettingsKey[] = [
   'JIMENG_CLI_PATH',
 ];
 
+const optionalKeys: DesktopSettingsKey[] = ['JIMENG_CLI_PATH', 'OPENROUTER_API_KEY', 'TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL'];
+
 const buildStatus = (presentKeys: DesktopSettingsKey[] = []): DesktopSettingsStatus => ({
   configPath: '/Users/qa/Library/Application Support/The Institute/.env.local',
   fields: Object.fromEntries(keys.map(key => [key, {
     present: presentKeys.includes(key),
-    required: key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY',
+    required: !optionalKeys.includes(key),
     secret: key.endsWith('_KEY') || key.includes('API_KEY'),
   }])) as DesktopSettingsStatus['fields'],
-  missingKeys: keys.filter(key => key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY' && !presentKeys.includes(key)),
+  missingKeys: keys.filter(key => !optionalKeys.includes(key) && !presentKeys.includes(key)),
   isPackaged: true,
   serviceStatus: {
     secureBackend: { state: 'ready', url: 'http://localhost:8787' },
@@ -125,6 +129,31 @@ describe('DesktopSettingsModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply settings/i }));
 
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ JIMENG_CLI_PATH: '/usr/local/bin/dreamina' }));
+  });
+
+  it('saves optional TokenHub credentials and advanced base URL settings', async () => {
+    const saveSettings = vi.fn().mockResolvedValue(buildStatus(['TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL']));
+    window.canvaBananaDesktop = { saveSettings };
+
+    render(
+      <DesktopSettingsModal
+        isOpen
+        mode="manage"
+        onClose={vi.fn()}
+        initialStatus={buildStatus([])}
+        onStatusChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText('TokenHub API Key', { selector: 'input' }).getAttribute('type')).toBe('password');
+    fireEvent.change(screen.getByLabelText('TokenHub API Key', { selector: 'input' }), { target: { value: ' tokenhub-secret ' } });
+    fireEvent.change(screen.getByLabelText('TokenHub Base URL', { selector: 'input' }), { target: { value: ' https://tokenhub.example/v1 ' } });
+    fireEvent.click(screen.getByRole('button', { name: /apply settings/i }));
+
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({
+      TOKENHUB_API_KEY: 'tokenhub-secret',
+      TOKENHUB_BASE_URL: 'https://tokenhub.example/v1',
+    }));
   });
 
   it('clears a saved field through the desktop bridge', async () => {

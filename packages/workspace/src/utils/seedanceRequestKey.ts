@@ -1,3 +1,4 @@
+import type { VolcengineSettings } from '../services/volcengineSettings';
 import type { CanvasImage, Seedance2Variant } from '../types';
 
 type Seedance2RequestKeyArgs = {
@@ -13,6 +14,7 @@ type Seedance2RequestKeyArgs = {
   generateAudio: boolean;
   cameraFixed: boolean;
   outputFormat?: string; // Seedance 2.5 container choice separates repeat keys.
+  arkSettings?: VolcengineSettings;
   primaryImageId: string | null;
   videoLastFrameImageId: string | null;
   referenceImageIds: string[];
@@ -64,6 +66,7 @@ export const buildSeedance2RequestKey = ({
   generateAudio,
   cameraFixed,
   outputFormat,
+  arkSettings,
   primaryImageId,
   videoLastFrameImageId,
   referenceImageIds,
@@ -83,6 +86,7 @@ export const buildSeedance2RequestKey = ({
   generateAudio,
   cameraFixed,
   outputFormat: outputFormat ?? null, // Older 2.0 calls never set a container choice.
+  ...(arkSettings ? { arkSettings } : {}),
   primaryAsset: buildCanvasAssetToken(primaryImageId, images),
   lastFrameAsset: buildCanvasAssetToken(videoLastFrameImageId, images),
   referenceImageAssets: buildCanvasAssetTokenList(referenceImageIds, images),

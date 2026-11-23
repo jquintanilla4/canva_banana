@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import type { CanvasImage } from '../types';
 import { loadAudioFromBlob, loadAudioFromUrl, revokeAudioObjectUrl } from '../services/audioService';
-import { loadMediaFromBlob, loadMediaFromUrl, revokeVideoObjectUrl } from '../services/mediaService';
+import { createLazyVideoFromUrl, isVideoPlaybackUnavailable, loadMediaFromBlob, loadMediaFromUrl, markVideoPlaybackUnavailable, revokeVideoObjectUrl } from '../services/mediaService';
 import { ensureRealSnapshotFile, getSnapshotMediaObjectUrl } from '../services/snapshotService';
 import type { AppState } from './useCanvasHistory';
 
@@ -117,6 +117,13 @@ export function useDuplicateCanvasMedia({
         const mediaType = sourceImage.mediaType === 'video' ? 'video' : 'image';
         const realFile = snapshotObjectUrl ? sourceImage.file : await ensureRealSnapshotFile(sourceImage.file);
         if (lifetime.signal.aborted) return;
+        if (mediaType === 'video' && sourceImage.element instanceof HTMLVideoElement && isVideoPlaybackUnavailable(sourceImage.element)) {
+          const element = createLazyVideoFromUrl(snapshotObjectUrl ?? URL.createObjectURL(realFile), sourceImage.naturalWidth, sourceImage.naturalHeight);
+          markVideoPlaybackUnavailable(element);
+          if (!snapshotObjectUrl) pendingMediaRef.current.add(element);
+          commitDuplicate({ element, isPlaying: false, currentPlaybackTime: 0, file: realFile });
+          return;
+        }
         const element = snapshotObjectUrl
           ? await loadMediaFromUrl(snapshotObjectUrl, mediaType)
           : await loadMediaFromBlob(realFile, mediaType);

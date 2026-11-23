@@ -14,6 +14,7 @@ const run = (args, cwd = repoRoot, capture = false) => {
 };
 
 run(['run', 'build:workspace']);
+const sourceLock = JSON.parse(await readFile(join(repoRoot, 'package-lock.json'), 'utf8'));
 const packages = {};
 const packedEntries = {};
 for (const name of ['workspace', 'runtime']) {
@@ -21,11 +22,19 @@ for (const name of ['workspace', 'runtime']) {
   assert(packed.files.length > 0);
   assert(!packed.files.some(file => /(?:^|\/)\.env(?:\.|$)|node_modules|\.venv|__pycache__/.test(file.path)));
   if (name === 'workspace') assert(packed.files.some(file => file.path === 'dist/style.css'));
-  packedEntries[`node_modules/@canva-banana/${name}`] = { version: packed.version, resolved: `file:${join(directory, packed.filename)}`, integrity: packed.integrity };
+  const { dependencies, optionalDependencies, peerDependencies, peerDependenciesMeta } = sourceLock.packages[`packages/${name}`];
+  packedEntries[`node_modules/@canva-banana/${name}`] = {
+    version: packed.version,
+    resolved: `file:${join(directory, packed.filename)}`,
+    integrity: packed.integrity,
+    dependencies,
+    optionalDependencies,
+    peerDependencies,
+    peerDependenciesMeta,
+  };
   packages[`@canva-banana/${name}`] = `file:${join(directory, packed.filename)}`;
 }
 await cp(join(repoRoot, 'test/consumer'), directory, { recursive: true });
-const sourceLock = JSON.parse(await readFile(join(repoRoot, 'package-lock.json'), 'utf8'));
 const exact = name => sourceLock.packages[`node_modules/${name}`].version;
 const consumerPackage = { name: 'canva-banana-independent-smoke', version: '1.0.0', private: true, type: 'module',
   scripts: { build: 'vite build', dev: 'vite --host 127.0.0.1 --port 3100 --strictPort', typecheck: 'tsc --noEmit' },

@@ -153,6 +153,10 @@ def media_to_data_url(media: MediaInput) -> str:
 
 
 def upload_video_to_tos(media: MediaInput, settings: Settings) -> str:
+    return upload_media_to_tos(media, settings)
+
+
+def upload_media_to_tos(media: MediaInput, settings: Settings, *, signed: bool = False) -> str:
     if not settings.volcengine_access_key or not settings.volcengine_secret_key:
         raise ValueError("VOLCENGINE_ACCESS_KEY and VOLCENGINE_SECRET_KEY must be set")  # TOS uploads require credentials.
 
@@ -163,14 +167,25 @@ def upload_video_to_tos(media: MediaInput, settings: Settings) -> str:
         endpoint,
         settings.tos_region,
     )
-    suffix = Path(media.file_name).suffix or ".mp4"  # Keep the original video extension.
+    file_name = Path(media.file_name)
+    content_type = media.content_type.strip() or mimetypes.guess_type(media.file_name)[0] or "application/octet-stream"
+    default_suffix = (mimetypes.guess_extension(content_type) or ".bin") if signed else ".mp4"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")  # Include microseconds so same-second uploads do not collide.
-    object_key = f"seedance_refs/{timestamp}_{uuid4().hex}_{Path(media.file_name).stem}{suffix}"  # Keep each reference asset on its own object key.
+    prefix = "tokenhub_seedance_refs" if signed else "seedance_refs"
+    object_key = f"{prefix}/{timestamp}_{uuid4().hex}_{file_name.stem}{file_name.suffix or default_suffix}"
+    upload_options = {"acl": tos.ACLType.ACL_Private, "content_type": content_type} if signed else {"acl": tos.ACLType.ACL_Public_Read}
     client.put_object_from_file(
         settings.tos_bucket_name,
         object_key,
         str(media.temp_path),
-        acl=tos.ACLType.ACL_Public_Read,
+        **upload_options,
     )  # Upload the staged file directly instead of rewriting it to another temp file.
 
+    if signed:
+        return client.pre_signed_url(
+            tos.HttpMethodType.Http_Method_Get,
+            settings.tos_bucket_name,
+            object_key,
+            expires=max(3600, settings.tokenhub_timeout_seconds + 900),
+        ).signed_url
     return f"https://{settings.tos_bucket_name}.{endpoint}/{object_key}"

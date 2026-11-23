@@ -1,3 +1,6 @@
+import { getActiveVolcengineSettings, getVolcengineAssetCounts } from '../services/volcengineSettings';
+import { downloadVolcengineLastFrame } from '../services/volcengineMedia';
+import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import { exportCanvasImage } from '../services/imageOperations';
 import { isSvgImage } from '../services/svgMedia';
 import { isGifImage } from '../services/gifMedia';
@@ -19,6 +22,9 @@ import { KLING_V4_REFERENCE_IMAGE_LIMIT, KLING_V4_REFERENCE_VIDEO_LIMIT, isKling
 import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '../services/klingV4RunSettings';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions, type GptImage2RunSettings } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions, type GptImage25RunSettings } from '../services/gptImage25RunSettings';
+import { TokenHubImageRequestError } from '../services/tokenHubImageService';
+import { isTokenHubImageModel, resolveTokenHubImageOperation, type TokenHubImageOperation } from '../services/tokenHubImageOperation';
+import { isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
 import { resolveRecraftRunSettings, serializeRecraftGenerationOptions, type RecraftRunSettings } from '../services/recraftRunSettings';
 import { resolveGrokImageRunSettings, serializeGrokImageGenerationOptions, type GrokImageRunSettings } from '../services/grokImageRunSettings';
 import { useCallback, useMemo, useRef } from 'react';
@@ -189,15 +195,14 @@ import type {
   FalVideoDuration,
   FalQueueJob,
   Seedance2Variant,
-  Seedance2VolcengineModel,
 } from '../types';
 import { Tool } from '../types';
-import { getImageBounds, isOverlapping } from '../utils/canvasGeometry';
-import { getNaturalSize, getVideoFileExtension, isVideoFileType, loadMediaFromBlob, prepareGeneratedImage, rasterizeImages, revokeVideoObjectUrl } from '../services/mediaService';
+import { findNonOverlappingPlacement, getImageBounds, isOverlapping } from '../utils/canvasGeometry';
+import { getNaturalSize, getVideoFileExtension, isVideoFileType, isVideoPlaybackUnavailable, loadMediaFromBlob, loadVolcengineVideoFromBlob, prepareGeneratedImage, rasterizeImages, revokeVideoObjectUrl } from '../services/mediaService';
 import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
-import { generateSeedanceVideo, SEEDANCE2_VOLCENGINE_MODEL_IDS, type VolcengineQueueUpdate } from '../services/volcengineService';
+import { generateSeedanceVideo, TokenHubSeedanceJobUnavailable, type VolcengineQueueUpdate } from '../services/volcengineService';
 import { generateJimengSeedanceVideo, type JimengQueueUpdate } from '../services/jimengService';
 import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
@@ -252,6 +257,7 @@ type UseGenerationArgs = {
   prompt: string;
   promptPrefix?: string;
   apiProvider: ApiProviderId;
+  tokenHubSeedanceEnabled?: boolean;
   fal: UseFalSettingsResult;
   selection: SelectionStateResult;
   images: CanvasImage[];
@@ -261,6 +267,7 @@ type UseGenerationArgs = {
   setIsLoading: (value: boolean) => void;
   setFalJobs: Dispatch<SetStateAction<FalQueueJob[]>>;
   setState: (updater: (prevState: AppState) => AppState) => void;
+  getCanvasDocument?: () => { version: number };
   setToastMessage: (message: string | null) => void;
   setTool: (tool: Tool) => void;
   onGenerationComplete?: () => void;
@@ -269,6 +276,7 @@ type UseGenerationArgs = {
 
 type HandleGenerateOptions = {
   retryJobId?: string; // Existing queue row to replace during retry.
+  resumeSeedanceJobId?: string;
 };
 
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
@@ -419,13 +427,6 @@ const applyFalPhaseUpdateToJob = (
 const buildSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant): string =>
   `${baseLabel} ${variant === 'reference' ? 'Reference' : variant === 'edit' ? 'Edit' : variant === 'extend' ? 'Extend' : 'Smart'}`; // Surface the active variant in the queue.
 
-const VOLCENGINE_SEEDANCE2_MODEL_LABELS: Record<Seedance2VolcengineModel, string> = {
-  standard: 'Seedance 2.0 (VE)',
-  fast: 'Seedance 2.0 Fast (VE)',
-  mini: 'Seedance 2.0 Mini (VE)',
-  seedance25: 'Seedance 2.5 (VE)',
-}; // Keep queue and generated-media metadata aligned with the selected Ark sub-model.
-
 const buildJimengSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant, modelVersion: string): string => {
   const channelLabel = modelVersion === 'seedance2.0_vip' ? 'VIP' : modelVersion === 'seedance2.0fast_vip' ? 'VIP Fast' : modelVersion === 'seedance2.0mini' ? 'Mini' : modelVersion === 'seedance2.0' ? 'Standard' : 'Standard Fast';
   return `${buildSeedance2ModelLabel(baseLabel, variant)} ${channelLabel}`;
@@ -454,6 +455,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     prompt,
     promptPrefix,
     apiProvider,
+    tokenHubSeedanceEnabled,
     fal,
     selection,
     images,
@@ -464,6 +466,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setFalJobs,
     setState,
     setToastMessage,
+    getCanvasDocument,
     setTool,
     onGenerationComplete,
     onGenerationPlaced,
@@ -573,6 +576,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance2GenerateAudio,
     seedance2CameraFixed,
     seedance2OutputFormat,
+    seedanceArkSettings,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
@@ -596,6 +600,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
+    tokenHubGptImage25Quality,
+    tokenHubGptImage25Background,
+    tokenHubGptImage25Variant,
+    tokenHubNanoBananaWebSearch,
+    tokenHubNanoBananaThinkingLevel,
     krea3Variant, krea3ReasoningLevel,
     grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
     grokImagePassthrough, grokImageEnableSafetyChecker,
@@ -620,6 +629,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
   // Centralized generation orchestrator for both providers (Fal/Gemini) across text-to-image, edits, upscales, and video.
   const handleGenerate = useCallback(async (generationOverrideOrEvent?: GenerationInputs | SyntheticEvent, options: HandleGenerateOptions = {}) => {
     if (workspaceSignal?.aborted) return;
+    const originatingDocumentVersion = getCanvasDocument?.().version;
     const awaitActive = async <T,>(operation: () => Promise<T>): Promise<T> => {
       workspaceSignal?.throwIfAborted();
       const result = await operation();
@@ -668,7 +678,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const isUnsupportedRemovedHailuoRun = isRemovedHailuoModelId(rawOverrideModelId); // Saved Hailuo requests must not fall back to another paid model.
     const isUnsupportedRemovedOneToAllRun = isRemovedOneToAllAnimateModelId(rawOverrideModelId); // Retired 1-to-All reruns must not fall back to another paid model.
     const overrideModelId = normalizeFalModelId(rawOverrideModelId); // Accept legacy saved model ids.
-    const falModelModeForRun = isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode
+    const isSavedTokenHubImage = isTokenHubImageModel(overrideModelId);
+    if (generationOverride?.provider === 'tokenhub' && !isSavedTokenHubImage) {
+      setError('Select a supported TokenHub image model and create a new generation.');
+      return;
+    }
+    const falModelModeForRun = isSavedTokenHubImage ? 'image'
+      : isFalModelMode(generationOverride?.modelMode) ? generationOverride.modelMode
       : isKlingV4VideoModel(rawOverrideModelId) ? 'video' : falModelMode;
     const falImageModelIdForRun = isFalImageModelId(overrideModelId) ? overrideModelId : falImageModelId;
     const isJimengOverrideModelId = overrideModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
@@ -692,7 +708,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return; // Check explicit saved ids before substitution, or the resolved model for provider-only reruns.
     }
     const falModelIdForRun: FalModelId = falModelModeForRun === 'video' ? falVideoModelIdForRun : falImageModelIdForRun;
-    const falOptionsOverride = generationOverride && (isNanoBananaEditModelId(falModelIdForRun) || isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun) || isGptImage26Model(falModelIdForRun))
+    const tokenHubModelForRun = isTokenHubImageModel(falModelIdForRun) ? falModelIdForRun : undefined;
+    const falOptionsOverride = generationOverride && (isNanoBananaEditModelId(falModelIdForRun) || isIdeogram45Model(falModelIdForRun) || isGptImage2EditModelId(falModelIdForRun) || isGptImage25Model(falModelIdForRun) || tokenHubModelForRun || isGptImage26Model(falModelIdForRun))
       ? { ...getGenerationTransferOptionDefaults(falModelIdForRun, generationOverride.falOptions ?? {}), ...generationOverride.falOptions }
       : generationOverride?.falOptions ?? {};
     const rawFalImageSizeSelection = falOptionsOverride.imageSizeSelection ?? falImageSizeSelection;
@@ -1014,13 +1031,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
       : typeof legacyKlingOptions.klingO1KeepAudio === 'boolean'
         ? legacyKlingOptions.klingO1KeepAudio
         : klingO3KeepAudio;
+    const usingTokenHub = apiProviderForRun !== 'google' && tokenHubModelForRun !== undefined;
     const generationProviderForRun: GenerationProviderId = apiProviderForRun === 'google'
       ? 'google'
-      : falModelModeForRun === 'video' && (falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_MULTIFRAME_VIDEO_MODEL_ID)
-        ? 'jimeng'
-        : falModelModeForRun === 'video' && falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID
-        ? 'volcengine'
-        : 'fal';
+      : usingTokenHub
+        ? 'tokenhub'
+        : falModelModeForRun === 'video' && (falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_MULTIFRAME_VIDEO_MODEL_ID)
+          ? 'jimeng'
+          : falModelModeForRun === 'video' && falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID
+            ? 'volcengine'
+            : 'fal';
 
     const usingFal = generationProviderForRun === 'fal';
     const usingVolcengine = generationProviderForRun === 'volcengine';
@@ -1110,19 +1130,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ? videoNegativePromptForRun.trim()
         : '';
     const hasVideoNegativePrompt = normalizedVideoNegativePrompt.length > 0;
-    const isTextToImage = overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun;
+    const requestedImageKind = (overrideKind ? overrideKind === 'text_to_image' : !activePrimary || isRecraftV4ProModelForRun)
+      ? 'text_to_image' : 'image_edit';
     let nanoBananaSettingsForRun: NanoBananaRunSettings | undefined;
     let ideogram45SettingsForRun: Ideogram45RunSettings | undefined;
     let gptImage2SettingsForRun: GptImage2RunSettings | undefined;
     let gptImage26SettingsForRun: GptImage26RunSettings | undefined;
     let gptImage25SettingsForRun: GptImage25RunSettings | undefined;
+    let tokenHubOperation: TokenHubImageOperation | undefined;
     let krea3SettingsForRun: Krea3RunSettings | undefined;
     let grokImageSettingsForRun: GrokImageRunSettings | undefined;
     let recraftSettingsForRun: RecraftRunSettings | undefined;
     if (usingFal && (isKrea3ModelForRun || isNanoBananaModel || isIdeogram45ModelForRun || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isGrokImagineModel || isRecraftV4ProModelForRun)) {
       try {
         const commonRunInput = {
-          kind: isTextToImage ? 'text_to_image' : 'image_edit',
+          kind: requestedImageKind,
           imageSizeSelection: generationOverride ? falOptionsOverride.imageSizeSelection : normalizedFalImageSizeSelectionForRun,
           numImages: generationOverride ? falOptionsOverride.numImages : falNumImagesForRun,
         } as const;
@@ -1154,8 +1176,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             reasoningEffort: generationOverride ? falOptionsOverride.gptImage26ReasoningEffort : gptImage26ReasoningEffort,
             frameCount: generationOverride ? falOptionsOverride.gptImage26FrameCount : gptImage26FrameCount,
             frameDurationMs: generationOverride ? falOptionsOverride.gptImage26FrameDurationMs : gptImage26FrameDurationMs,
-            outputFormat: !isTextToImage && selectedFormat === 'svg' ? 'png' : selectedFormat,
-            numImages: isTextToImage && selectedFormat === 'svg' ? 1 : commonRunInput.numImages,
+            outputFormat: requestedImageKind === 'image_edit' && selectedFormat === 'svg' ? 'png' : selectedFormat,
+            numImages: requestedImageKind === 'text_to_image' && selectedFormat === 'svg' ? 1 : commonRunInput.numImages,
           }, validation);
         } else if (isGptImage25ModelForRun) {
           gptImage25SettingsForRun = resolveGptImage25RunSettings({
@@ -1193,6 +1215,30 @@ export const useGeneration = (args: UseGenerationArgs) => {
         return;
       }
     }
+    if (usingTokenHub) {
+      try {
+        tokenHubOperation = resolveTokenHubImageOperation({
+          modelId: tokenHubModelForRun,
+          kind: requestedImageKind,
+          validation: generationOverride ? 'restore' : 'strict',
+          options: generationOverride ? falOptionsOverride : {
+            numImages: falNumImagesForRun,
+            aspectRatioSelection: falAspectRatioSelectionForRun,
+            resolutionSelection: falResolutionSelectionForRun,
+            imageSizeSelection: normalizedFalImageSizeSelectionForRun,
+            tokenHubNanoBananaWebSearch,
+            tokenHubNanoBananaThinkingLevel,
+            tokenHubGptImage25Variant,
+            tokenHubGptImage25Quality,
+            tokenHubGptImage25Background,
+          },
+        });
+      } catch (error) {
+        setError(error instanceof Error ? error.message : 'Unable to resolve image generation settings.');
+        return;
+      }
+    }
+    const isTextToImage = (tokenHubOperation?.kind ?? requestedImageKind) === 'text_to_image';
     const isWanPromptOptional = usingFal && isVideoMode && (isWanVisionEnhancerVideoModel || isWanAnimateVideoModel || (isWan27VideoModelForRun && !isWan27ReferenceModeForRun && !isWan27EditModeForRun && Boolean(activePrimary)));
     const isKlingV3ControlPromptOptional = usingFal && isVideoMode && isKlingV3ControlVideoModel; // Kling Control v3 prompt is optional.
     const isLipsyncPromptOptional = usingFal && isVideoMode && (isLipsyncVideoModel || isHeygenV3LipsyncVideoModel);
@@ -1386,43 +1432,19 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   : isFlux3VideoModelForRun
                     ? `${baseModelLabel} ${flux3RunPlan.policy.label}`
                     : baseModelLabel;
-      const findNonOverlappingPlacement = (
-        width: number,
-        height: number,
-        startX: number,
-        startY: number,
-        spacing = 20,
-        maxAttempts = 24,
-      ): { x: number; y: number } => {
-        let x = startX;
-        let y = startY;
-        const overlapsExisting = (minX: number, minY: number, maxX: number, maxY: number) => {
-          return images.some(img => {
-            const bounds = getImageBounds(img);
-            return !(minX > bounds.maxX || maxX < bounds.minX || minY > bounds.maxY || maxY < bounds.minY);
-          });
-        };
-
-        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-          const minX = x;
-          const minY = y;
-          const maxX = x + width;
-          const maxY = y + height;
-          if (!overlapsExisting(minX, minY, maxX, maxY)) {
-            return { x, y };
-          }
-          x += width + spacing;
-        }
-
-        return { x: startX, y: startY + height + spacing };
-      };
-
       if (usingVolcengine || usingJimeng) {
         const queueJobId = retryJobId ?? crypto.randomUUID();
         const localBackendProvider: Extract<GenerationProviderId, 'volcengine' | 'jimeng'> = usingJimeng ? 'jimeng' : 'volcengine';
         const isJimeng25 = usingJimeng && isJimengSeedance25VideoModelForRun;
         const isJimengMulti = usingJimeng && isJimengMultiframeVideoModelForRun;
-        const isVolcengineSeedance25 = usingVolcengine && seedance2VolcengineModelForRun === 'seedance25';
+        const volcengineModel = getSeedance2VolcengineModelCapabilities(seedance2VolcengineModelForRun);
+        const resumeJobId = usingVolcengine && volcengineModel.provider === 'tokenhub' ? options.resumeSeedanceJobId : undefined;
+        const isVolcengineSeedance25 = usingVolcengine && volcengineModel.family === '2.5';
+        const supportsOutputFormat = usingVolcengine && volcengineModel.supportsOutputFormat;
+        if (usingVolcengine && volcengineModel.provider === 'tokenhub' && !tokenHubSeedanceEnabled) {
+          setError('TokenHub Seedance is unavailable. Configure TokenHub on the backend to use this model.');
+          return;
+        }
         const safeVolcengineSettings = getVolcengineSafeSeedance2Settings(seedance2VolcengineModelForRun, {
           seedance2Variant: seedance2VariantForRun,
           seedance2AspectRatio: seedance2AspectRatioForRun,
@@ -1435,7 +1457,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const jimengSeedance25DurationForRun = normalizeJimengSeedance25Duration(seedance25DurationForRun); // Legacy metadata must resolve to an explicit CLI duration.
         const localVariant = isJimengMulti ? 'smart' : isJimeng25 ? seedance25VariantForRun : usingJimeng ? seedance2VariantForRun : safeVolcengineSettings.seedance2Variant;
         const localAspectRatio = isJimengMulti ? '16:9' : isJimeng25 ? jimengSeedance25AspectRatioForRun : usingJimeng ? seedance2AspectRatioForRun : safeVolcengineSettings.seedance2AspectRatio;
-        const localResolution = isJimengMulti ? jimengMultiframeResolutionForRun : isJimeng25 ? seedance25ResolutionForRun : usingJimeng ? seedance2ResolutionForRun : safeVolcengineSettings.seedance2Resolution;
+        const arkSettings = usingVolcengine
+          ? getActiveVolcengineSettings(seedance2VolcengineModelForRun, localVariant, generationOverride
+            ? volcengineOptionsOverride.seedanceArkSettings
+            : seedanceArkSettings)
+          : {};
+        const hasArkSettings = Object.keys(arkSettings).length > 0;
+        const arkResolution = arkSettings.draft ? '480p' : safeVolcengineSettings.seedance2Resolution;
+        const localResolution = isJimengMulti ? jimengMultiframeResolutionForRun : isJimeng25 ? seedance25ResolutionForRun : usingJimeng ? seedance2ResolutionForRun : arkResolution;
         const localDuration = isJimengMulti ? jimengMultiframeDurationForRun : isJimeng25 ? jimengSeedance25DurationForRun : seedance2DurationForRun;
         const localModelVersion = isJimeng25 ? 'seedance2.5' : seedance2JimengModelVersionForRun;
         const jobModelLabel = usingJimeng
@@ -1444,7 +1473,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             : isJimeng25
             ? buildSeedance2ModelLabel(baseModelLabel, seedance25VariantForRun)
             : buildJimengSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun, seedance2JimengModelVersionForRun)
-          : buildSeedance2ModelLabel(VOLCENGINE_SEEDANCE2_MODEL_LABELS[seedance2VolcengineModelForRun], seedance2VariantForRun); // Queue labels name the exact sub-model, not the picker entry.
+          : buildSeedance2ModelLabel(volcengineModel.provider === 'tokenhub' ? volcengineModel.label : `${volcengineModel.label} (VE)`, seedance2VariantForRun);
         const primarySelection = primaryImageIdForRun ? images.find(img => img.id === primaryImageIdForRun) ?? null : null;
         const isSeedance2ReferenceMode = localVariant === 'reference';
         const isSeedance2EditMode = !usingJimeng && localVariant === 'edit';
@@ -1461,8 +1490,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
           && localVariant === 'reference'
           && Boolean(activePrimary)
           && !localReferenceImageIds.includes(activePrimary.id);
-        const localReferenceImageCount = localReferenceImageIds.length + Number(usesJimengReferencePrimaryImage);
-        const referenceAssetCount = localReferenceImageCount + localReferenceVideoIds.length + localReferenceAudioIds.length;
+        const arkAssetCounts = getVolcengineAssetCounts(arkSettings.assets);
+        const localReferenceImageCount = localReferenceImageIds.length + Number(usesJimengReferencePrimaryImage) + arkAssetCounts.image;
+        const localReferenceVideoCount = localReferenceVideoIds.length + arkAssetCounts.video;
+        const localReferenceAudioCount = localReferenceAudioIds.length + arkAssetCounts.audio;
+        const referenceAssetCount = localReferenceImageCount + localReferenceVideoCount + localReferenceAudioCount;
         const submittedPrimaryImageId = usesSmartPrimaryImage || usesJimengReferencePrimaryImage ? primaryImageIdForRun : null;
         const submittedLastFrameImageId = !isJimengMulti && localVariant === 'smart' ? videoLastFrameImageIdForRun : null;
         const multiframeCanvasItems = multiframeImageIds
@@ -1498,10 +1530,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError(`Seedance 2 (JM CLI) ${localResolution} requires the VIP channel.`);
           return;
         }
-        if (isVolcengineSeedance25 && (localResolution === '1080p' || localResolution === '4k')) {
-          setError('Seedance 2.5 supports 480p and 720p only.');
-          return;
-        }
         const seedance25RequiresAdaptiveRatio = isSeedance2EditMode || isSeedance2ExtendMode || (localVariant === 'smart' && Boolean(activePrimary));
         if (isVolcengineSeedance25 && seedance25RequiresAdaptiveRatio && localAspectRatio !== 'adaptive') {
           setError('Seedance 2.5 first-frame, Edit, and Extend tasks require the Adaptive aspect ratio.');
@@ -1515,20 +1543,24 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2 Smart uses a still image as the first frame. Select an image or clear the selection.');
           return;
         }
-        if (!isJimengMulti && !isSeedance2MultimodalMode && videoLastFrameImageIdForRun && !activePrimary) {
+        if (!resumeJobId && !isJimengMulti && !isSeedance2MultimodalMode && videoLastFrameImageIdForRun && !activePrimary) {
           setError('Seedance 2 first/last-frame mode requires a starting still image.');
           return;
         }
-        if (isSeedance2ReferenceMode && referenceAssetCount === 0) {
+        if (!resumeJobId && isSeedance2ReferenceMode && referenceAssetCount === 0) {
           setError('Seedance 2 Reference requires at least one tagged reference asset.');
           return;
         }
-        if ((isSeedance2EditMode || isSeedance2ExtendMode) && localReferenceVideoIds.length === 0) {
+        if (!resumeJobId && (isSeedance2EditMode || isSeedance2ExtendMode) && localReferenceVideoCount === 0) {
           setError(`Seedance 2 ${isSeedance2EditMode ? 'Edit' : 'Extend'} requires at least one video clip.`);
           return;
         }
-        if (isSeedance2ExtendMode && (localReferenceImageIds.length > 0 || localReferenceAudioIds.length > 0)) {
-          setError('Seedance 2 Extend accepts video clips only.');
+        if (isSeedance2ExtendMode && (localReferenceAudioIds.length > 0 || (!isVolcengineSeedance25 && localReferenceImageIds.length > 0))) {
+          setError(isVolcengineSeedance25 ? 'Seedance 2.5 Extend accepts video clips and reference images.' : 'Seedance 2 Extend accepts video clips only.');
+          return;
+        }
+        if (!resumeJobId && usingVolcengine && !isVolcengineSeedance25 && localReferenceAudioCount > 0 && localReferenceImageCount + localReferenceVideoCount === 0) {
+          setError('Seedance 2.0 audio references require an image or a video.');
           return;
         }
         if (usingJimeng && !isJimeng25 && isSeedance2ReferenceMode && localReferenceAudioIds.length > 0 && localReferenceImageCount + localReferenceVideoIds.length === 0) {
@@ -1536,26 +1568,26 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setTimeout(() => setToastMessage(null), 4000);
           return;
         }
-        if (isSeedance2MultimodalMode) {
+        if (!resumeJobId && isSeedance2MultimodalMode) {
           const promptMentionError = getSeedanceReferencePromptMentionError(seedancePromptForRun, {
             imageCount: localReferenceImageCount,
-            videoCount: localReferenceVideoIds.length,
-            audioCount: localReferenceAudioIds.length,
+            videoCount: localReferenceVideoCount,
+            audioCount: localReferenceAudioCount,
           });
           if (promptMentionError) {
             setError(promptMentionError);
             return;
           }
         }
-        const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance25 ? 'seedance25' : 'standard'); // Volcengine 2.5 raises every reference cap.
+        const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(usingVolcengine ? seedance2VolcengineModelForRun : undefined);
         const seedance25FamilyLabel = isJimeng25 || isVolcengineSeedance25 ? 'Seedance 2.5' : 'Seedance 2';
         const localReferenceImageLimit = isJimeng25 ? SEEDANCE25_REFERENCE_IMAGE_LIMIT : volcengineReferenceLimits.images;
         const localReferenceVideoLimit = isJimeng25 ? SEEDANCE25_REFERENCE_VIDEO_LIMIT : volcengineReferenceLimits.videos;
         const localReferenceAudioLimit = isJimeng25 ? SEEDANCE25_REFERENCE_AUDIO_LIMIT : volcengineReferenceLimits.audios;
         if (!isJimengMulti && (
           localReferenceImageCount > localReferenceImageLimit
-          || localReferenceVideoIds.length > localReferenceVideoLimit
-          || localReferenceAudioIds.length > localReferenceAudioLimit
+          || localReferenceVideoCount > localReferenceVideoLimit
+          || localReferenceAudioCount > localReferenceAudioLimit
         )) {
           setError(`${seedance25FamilyLabel} Reference supports up to ${localReferenceImageLimit} images, ${localReferenceVideoLimit} videos, and ${localReferenceAudioLimit} audio clips.`);
           return;
@@ -1566,7 +1598,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           return;
         }
         const localSeedance2GenerateAudioForRun = usingJimeng ? false : seedance2GenerateAudioForRun; // Jimeng hides and ignores audio generation.
-        const localSeedance2CameraFixedForRun = usingJimeng ? false : safeVolcengineSettings.seedance2CameraFixed; // Jimeng hides and ignores fixed camera; Volcengine 2.5 clears it.
+        const localSeedance2CameraFixedForRun = false;
         const localProviderOptionsForRun: Pick<GenerationInputs, 'jimengOptions' | 'volcengineOptions'> = usingJimeng ? { jimengOptions: isJimengMulti ? {
           multiframeDuration: jimengMultiframeDurationForRun,
           multiframeResolution: jimengMultiframeResolutionForRun,
@@ -1592,12 +1624,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
           seedance2VolcengineModel: seedance2VolcengineModelForRun,
           seedance2AspectRatio: safeVolcengineSettings.seedance2AspectRatio,
           seedance2Resolution: safeVolcengineSettings.seedance2Resolution,
+          ...(hasArkSettings ? { seedanceArkSettings: arkSettings } : {}),
           seedance2Duration: seedance2VolcengineDurationForRun,
           seedance2GenerateAudio: seedance2GenerateAudioForRun,
           seedance2CameraFixed: safeVolcengineSettings.seedance2CameraFixed,
-          ...(isVolcengineSeedance25 ? { seedance2OutputFormat: seedance2OutputFormatForRun } : {}), // 2.0 sub-models never persist the container choice.
+          ...(supportsOutputFormat ? { seedance2OutputFormat: seedance2OutputFormatForRun } : {}),
         } }; // One source of truth shared by queue-retry inputs and saved-video metadata.
-        const localSeedanceRetryInputs: GenerationInputs = {
+        const tailFrame = submittedLastFrameImageId
+          ? images.find(img => img.id === submittedLastFrameImageId) ?? null
+          : null;
+        const localSeedanceRetryInputs: GenerationInputs = resumeJobId && generationOverride ? generationOverride : {
           kind: 'video',
           prompt: seedancePromptForRun,
           provider: localBackendProvider,
@@ -1611,13 +1647,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ...(submittedPrimaryImageId && activePrimary?.metadata?.generation?.originalSourceImageId
             ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
             : submittedPrimaryImageId ? { originalSourceImageId: submittedPrimaryImageId } : {}),
-          ...(submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
+          ...(tailFrame && submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
           ...localProviderOptionsForRun,
         }; // Queue retry uses the same request metadata as saved videos.
 
-        const tailFrame = submittedLastFrameImageId
-          ? images.find(img => img.id === submittedLastFrameImageId) ?? null
-          : null;
         if (tailFrame && !isImageCanvasMedia(tailFrame)) {
           setError('Select a still image on the canvas to use as the ending frame.');
           return;
@@ -1626,7 +1659,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const referenceImageCanvasItems = localReferenceImageIds
           .map(id => images.find(img => img.id === id))
           .filter(isImageCanvasMedia);
-        if (referenceImageCanvasItems.length !== localReferenceImageIds.length) {
+        if (!resumeJobId && referenceImageCanvasItems.length !== localReferenceImageIds.length) {
           setError('Seedance 2 image references must be still images.');
           return;
         }
@@ -1634,7 +1667,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const referenceVideoCanvasItems = localReferenceVideoIds
           .map(id => images.find(img => img.id === id))
           .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'video'));
-        if (referenceVideoCanvasItems.length !== localReferenceVideoIds.length) {
+        if (!resumeJobId && referenceVideoCanvasItems.length !== localReferenceVideoIds.length) {
           setError('Seedance 2 video references must be videos on the canvas.');
           return;
         }
@@ -1646,9 +1679,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const localReferenceVideoTotalDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS : volcengineReferenceLimits.videoTotalDurationSeconds;
         const localReferenceAudioTotalDuration = isJimeng25 ? JIMENG_SEEDANCE25_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS : volcengineReferenceLimits.audioTotalDurationSeconds;
         const localReferenceDurationTolerance = usingJimeng ? 0.05 : 0; // Match the backend's allowance for media-probe rounding.
-        const referenceVideoDurations = await Promise.all(referenceVideoCanvasItems.map(resolveCanvasMediaDurationSeconds)); // Legacy snapshots load only selected video metadata.
+        const canProbeInBackend = (item: CanvasImage) => usingVolcengine && item.metadata?.generation?.provider === 'volcengine';
+        const referenceVideoDurations = resumeJobId ? [] : await Promise.all(referenceVideoCanvasItems.map(item => {
+          if (!canProbeInBackend(item)) return resolveCanvasMediaDurationSeconds(item);
+          if (item.element instanceof HTMLVideoElement && isVideoPlaybackUnavailable(item.element)) return getCanvasMediaDurationSeconds(item);
+          return resolveOptionalCanvasMediaDurationSeconds(item);
+        }));
         if (workspaceSignal?.aborted) return;
-        if (referenceVideoDurations.some(durationSeconds => durationSeconds === null || durationSeconds < localReferenceVideoMinDuration - localReferenceDurationTolerance || durationSeconds > localReferenceMaxDuration + localReferenceDurationTolerance)) {
+        if (referenceVideoDurations.some((durationSeconds, index) => durationSeconds === null
+          ? !canProbeInBackend(referenceVideoCanvasItems[index])
+          : durationSeconds < localReferenceVideoMinDuration - localReferenceDurationTolerance || durationSeconds > localReferenceMaxDuration + localReferenceDurationTolerance)) {
           setError(`${seedance25FamilyLabel} reference videos must each be between ${localReferenceVideoMinDuration} and ${localReferenceMaxDuration} seconds.`);
           return;
         }
@@ -1661,11 +1701,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const referenceAudioCanvasItems = localReferenceAudioIds
           .map(id => images.find(img => img.id === id))
           .filter((img): img is CanvasImage => Boolean(img && img.mediaType === 'audio'));
-        if (referenceAudioCanvasItems.length !== localReferenceAudioIds.length) {
+        if (!resumeJobId && referenceAudioCanvasItems.length !== localReferenceAudioIds.length) {
           setError('Seedance 2 audio references must be audio clips on the canvas.');
           return;
         }
-        const referenceAudioDurations = referenceAudioCanvasItems.map(getCanvasMediaDurationSeconds); // Seedance validates reference audio duration per clip and in total.
+        const referenceAudioDurations = resumeJobId ? [] : referenceAudioCanvasItems.map(getCanvasMediaDurationSeconds);
         if (referenceAudioDurations.some(durationSeconds => durationSeconds === null || durationSeconds < localReferenceMinDuration - localReferenceDurationTolerance || durationSeconds > localReferenceMaxDuration + localReferenceDurationTolerance)) {
           setError(`${seedance25FamilyLabel} reference audio clips must each be between ${localReferenceMinDuration} and ${localReferenceMaxDuration} seconds.`);
           return;
@@ -1683,7 +1723,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ...(tailFrameImage ? [tailFrameImage] : []),
           ...referenceImageCanvasItems, ...multiframeCanvasItems,
         ];
-        if (!confirmRasterCopies(usedStillImages, 'Generate video')) return;
+        if (!resumeJobId && !confirmRasterCopies(usedStillImages, 'Generate video')) return;
 
         const seedanceRequestKey = buildSeedance2RequestKey({
           provider: generationProviderForRun,
@@ -1697,7 +1737,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
           duration: usingJimeng ? localDuration : seedance2VolcengineDurationForRun,
           generateAudio: localSeedance2GenerateAudioForRun,
           cameraFixed: localSeedance2CameraFixedForRun,
-          outputFormat: isVolcengineSeedance25 ? seedance2OutputFormatForRun : undefined,
+          outputFormat: supportsOutputFormat ? seedance2OutputFormatForRun : undefined,
+          ...(hasArkSettings ? { arkSettings } : {}),
           primaryImageId: submittedPrimaryImageId,
           videoLastFrameImageId: submittedLastFrameImageId,
           referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds,
@@ -1706,7 +1747,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           images,
         });
 
-        if (!confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
+        if (!resumeJobId && !confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
           return;
         }
 
@@ -1721,6 +1762,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             modelId: falModelIdForRun,
             modelLabel: jobModelLabel,
             provider: localBackendProvider,
+            ...(resumeJobId ? { providerJobId: resumeJobId } : {}),
             retryInputs: localSeedanceRetryInputs,
             status: 'IN_QUEUE',
             logs: [],
@@ -1739,21 +1781,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
         };
 
         try {
-          const firstFrameImageFile = firstFrameImage
+          const firstFrameImageFile = !resumeJobId && firstFrameImage
             ? await awaitActive(async () => buildStillImageFile(firstFrameImage, `seedance2-first-frame-${Date.now()}`))
             : undefined;
-          const lastFrameImageFile = tailFrameImage && localVariant === 'smart' && !isJimengMulti
+          const lastFrameImageFile = !resumeJobId && tailFrameImage && localVariant === 'smart' && !isJimengMulti
             ? await awaitActive(async () => buildStillImageFile(tailFrameImage, `seedance2-last-frame-${Date.now()}`))
             : undefined;
 
-          const referenceImageFiles = isJimengMulti ? [] : await awaitActive(async () => Promise.all(
+          const referenceImageFiles = resumeJobId || isJimengMulti ? [] : await awaitActive(async () => Promise.all(
             referenceImageCanvasItems.map((img, index) => buildStillImageFile(img, `seedance2-reference-image-${index + 1}-${Date.now()}`)),
           )); // Multi-frame images use their dedicated form field and must not be uploaded twice.
-          const referenceVideoFiles = await awaitActive(async () => Promise.all(referenceVideoCanvasItems.map(async (img, index) => {
+          const referenceVideoFiles = resumeJobId ? [] : await awaitActive(async () => Promise.all(referenceVideoCanvasItems.map(async (img, index) => {
             const realFile = await awaitActive(async () => ensureRealSnapshotFile(img.file));
             return new File([realFile], img.file.name || `seedance2-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
           })));
-          const referenceAudioFiles = await awaitActive(async () => Promise.all(referenceAudioCanvasItems.map(async (img, index) => {
+          const referenceAudioFiles = resumeJobId ? [] : await awaitActive(async () => Promise.all(referenceAudioCanvasItems.map(async (img, index) => {
             const realFile = await awaitActive(async () => ensureRealSnapshotFile(img.file));
             if (realFile.type === 'audio/webm') {
               const wavBlob = await awaitActive(async () => convertAudioBlobToWav(realFile));
@@ -1822,14 +1864,16 @@ export const useGeneration = (args: UseGenerationArgs) => {
               },
             }))
             : await awaitActive(async () => generateSeedanceVideo(seedancePromptForRun, {
-              modelId: SEEDANCE2_VOLCENGINE_MODEL_IDS[seedance2VolcengineModelForRun],
+              modelId: volcengineModel.id,
+              ...(resumeJobId ? { resumeJobId } : {}),
               variant: safeVolcengineSettings.seedance2Variant,
               aspectRatio: safeVolcengineSettings.seedance2AspectRatio,
               duration: seedance2VolcengineDurationForRun,
-              resolution: safeVolcengineSettings.seedance2Resolution,
+              resolution: arkResolution,
+              ...(hasArkSettings ? { settings: arkSettings } : {}),
               generateAudio: localSeedance2GenerateAudioForRun,
               cameraFixed: safeVolcengineSettings.seedance2CameraFixed,
-              ...(isVolcengineSeedance25 ? { outputFormat: seedance2OutputFormatForRun } : {}), // Only Seedance 2.5 sends a container choice.
+              ...(supportsOutputFormat ? { outputFormat: seedance2OutputFormatForRun } : {}),
               ...(firstFrameImageFile ? { primaryImageFile: firstFrameImageFile } : {}),
               ...(lastFrameImageFile ? { lastFrameImageFile } : {}),
               ...(referenceImageFiles.length ? { referenceImageFiles } : {}),
@@ -1868,27 +1912,30 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const hasVideoFileType = videoBlob.type.trim().toLowerCase().startsWith('video/');
             const extension = hasVideoFileType
               ? getVideoFileExtension(videoBlob.type)
-              : isVolcengineSeedance25 ? seedance2OutputFormatForRun : 'mp4';
+              : supportsOutputFormat ? seedance2OutputFormatForRun : 'mp4';
             const fileType = hasVideoFileType
               ? videoBlob.type
               : extension === 'mov' ? 'video/quicktime' : 'video/mp4';
             const videoFileName = `generated_seedance2_video.${extension}`;
-            const videoElement = await awaitActive(async () => loadMediaFromBlob(videoBlob, 'video')) as HTMLVideoElement;
-            videoElement.pause();
-            videoElement.currentTime = 0;
-            videoElement.loop = true;
-            videoElement.muted = true;
-            videoElement.playsInline = true;
-            let isPlaying = true;
-            try {
-              const playPromise = videoElement.play();
-              if (playPromise && typeof playPromise.then === 'function') {
-                await awaitActive(async () => playPromise);
-              }
-            } catch {
+            const videoElement = await awaitActive(async () => usingVolcengine
+              ? (await loadVolcengineVideoFromBlob(videoBlob)).element
+              : loadMediaFromBlob(videoBlob, 'video'));
+            if (!(videoElement instanceof HTMLVideoElement)) throw new Error('Expected a video element.');
+            let isPlaying = !isVideoPlaybackUnavailable(videoElement);
+            if (isPlaying) {
               videoElement.pause();
-              if (workspaceSignal?.aborted) { revokeVideoObjectUrl(videoElement); return; }
-              isPlaying = false;
+              videoElement.currentTime = 0;
+              videoElement.loop = true;
+              videoElement.muted = true;
+              videoElement.playsInline = true;
+              try {
+                const playPromise = videoElement.play();
+                if (playPromise) await awaitActive(async () => playPromise);
+              } catch {
+                videoElement.pause();
+                if (workspaceSignal?.aborted) { revokeVideoObjectUrl(videoElement); return; }
+                isPlaying = false;
+              }
             }
 
             const { naturalWidth, naturalHeight } = getNaturalSize(videoElement);
@@ -1904,7 +1951,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const placement = anchorForPlacement
               ? (() => {
                 const anchorBounds = getImageBounds(anchorForPlacement);
-                return findNonOverlappingPlacement(displayWidth, displayHeight, anchorBounds.maxX + 20, anchorBounds.minY);
+                return findNonOverlappingPlacement(images, displayWidth, displayHeight, anchorBounds.maxX + 20, anchorBounds.minY);
               })()
               : { x: 100, y: 100 };
             const audioTrackInfo = (videoElement as unknown as { audioTracks?: { length?: number } }).audioTracks;
@@ -1936,22 +1983,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 modelLabel: jobModelLabel,
                 prompt: seedancePromptForRun,
                 generation: {
-                  kind: 'video',
-                  prompt: seedancePromptForRun,
-                  provider: localBackendProvider,
-                  modelId: falModelIdForRun,
-                  modelLabel: jobModelLabel,
-                  modelMode: falModelModeForRun,
+                  ...localSeedanceRetryInputs,
                   url: videoResult.videoUrl,
-                  ...(submittedPrimaryImageId ? { primaryImageId: submittedPrimaryImageId } : {}),
-                  ...((isJimengMulti ? multiframeImageIds : localReferenceImageIds).length ? { referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds } : {}),
-                  ...(localReferenceVideoIds.length ? { referenceVideoIds: localReferenceVideoIds } : {}),
-                  ...(localReferenceAudioIds.length ? { referenceAudioIds: localReferenceAudioIds } : {}),
-                  ...(submittedPrimaryImageId && activePrimary?.metadata?.generation?.originalSourceImageId
-                    ? { originalSourceImageId: activePrimary.metadata.generation.originalSourceImageId }
-                    : submittedPrimaryImageId ? { originalSourceImageId: submittedPrimaryImageId } : {}),
-                  ...(lastFrameImageFile && submittedLastFrameImageId ? { videoLastFrameImageId: submittedLastFrameImageId } : {}),
-                  ...localProviderOptionsForRun,
+                  ...('draft' in videoResult && videoResult.draft ? { volcengineDraft: videoResult.draft } : {}),
                 },
               },
             };
@@ -1962,6 +1996,22 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }));
             logGeneratedMediaAppended(debugContext, 'video', [newVideo.id]);
             onGenerationPlaced?.({ mediaIds: [newVideo.id], mediaType: 'video', modelLabel: jobModelLabel });
+            if (arkSettings.returnLastFrame && 'lastFrameUrl' in videoResult && videoResult.lastFrameUrl) {
+              try {
+                const frame = await downloadVolcengineLastFrame(videoResult.lastFrameUrl, workspaceSignal);
+                if (getCanvasDocument?.().version === originatingDocumentVersion) setState(prev => {
+                  const video = prev.images.find(image => image.id === newVideo.id);
+                  if (!video || getCanvasDocument?.().version !== originatingDocumentVersion) return prev;
+                  const { maxX, minY } = getImageBounds(video);
+                  const position = findNonOverlappingPlacement(prev.images, frame.width, frame.height, maxX + 20, minY);
+                  return { ...prev, images: [...prev.images, { ...frame, ...position }] };
+                });
+              } catch (error) {
+                if (!workspaceSignal?.aborted && getCanvasDocument?.().version === originatingDocumentVersion) {
+                  setToastMessage(error instanceof Error ? error.message : 'Could not save the final frame.');
+                }
+              }
+            }
             onGenerationComplete?.();
           } catch (loadErr) {
             if (workspaceSignal?.aborted) return;
@@ -1979,6 +2029,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...job,
                   status: 'FAILED',
                   error: message,
+                  ...(err instanceof TokenHubSeedanceJobUnavailable ? { providerJobId: undefined } : {}),
                   updatedAt: Date.now(),
                 }
                 : job
@@ -2965,7 +3016,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               const anchorBounds = getImageBounds(anchorForPlacement);
               const placementX = anchorBounds.maxX + 20;
               const placementY = anchorBounds.minY;
-              return findNonOverlappingPlacement(displayWidth, displayHeight, placementX, placementY);
+              return findNonOverlappingPlacement(images, displayWidth, displayHeight, placementX, placementY);
             })()
             : { x: 100, y: 100 };
           const audioTrackInfo = (videoElement as unknown as { audioTracks?: { length?: number } }).audioTracks;
@@ -3111,11 +3162,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
-    const generationModelLabel = usingFal ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
-    const shouldValidateFalOptions = usingFal
-      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isIdeogram45ModelForRun);
+    const generationModelLabel = usingFal || usingTokenHub ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
+    const shouldValidateFalOptions = (usingFal || usingTokenHub)
+      && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || usingTokenHub || isGptImage26ModelForRun || isIdeogram45ModelForRun);
     const falNumImageMaxForRun = getFalNumImageMaxForModel(falModelIdForRun); // Read output cap from active model.
-    const resolvedImageSettings = krea3SettingsForRun ?? nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? gptImage26SettingsForRun ?? grokImageSettingsForRun;
+    const resolvedImageSettings = krea3SettingsForRun ?? nanoBananaSettingsForRun ?? ideogram45SettingsForRun ?? gptImage2SettingsForRun ?? gptImage25SettingsForRun ?? tokenHubOperation ?? gptImage26SettingsForRun ?? grokImageSettingsForRun;
     const numImagesForValidation = generationOverride && resolvedImageSettings
       ? resolvedImageSettings.numImages ?? 1 : falNumImagesForRun;
     const isNumImagesInvalid =
@@ -3148,15 +3199,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
-    const supportsEditReferenceImages = isKrea3ModelForRun || isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isIdeogram45ModelForRun || isFlux3ImageModelForRun || isGrokImagineModel;
-    const referenceCanvasImages = usingFal && !isTextToImage && !isUpscaleModel && supportsEditReferenceImages
+    const supportsEditReferenceImages = usingTokenHub || isKrea3ModelForRun || isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isIdeogram45ModelForRun || isFlux3ImageModelForRun || isGrokImagineModel;
+    const referenceCanvasImages = (usingFal || usingTokenHub) && !isTextToImage && !isUpscaleModel && supportsEditReferenceImages
       ? referenceImageIdsForRun.filter(id => id !== primaryImageIdForRun)
         .map(id => images.find(image => image.id === id)).filter(isImageCanvasMedia)
         .slice(0, getModelReferenceCapabilities(falModelIdForRun, editToolForRun).availableReferenceSlots)
       : [];
     if (!isTextToImage && activePrimary && !confirmRasterCopies([activePrimary, ...referenceCanvasImages], isUpscaleModel ? 'Upscale image' : 'Edit image')) return;
 
-    const falJobId = usingFal ? retryJobId ?? crypto.randomUUID() : null;
+    const falJobId = usingFal || usingTokenHub ? retryJobId ?? crypto.randomUUID() : null;
     const jobModelLabel = getFalModelLabel(falModelIdForRun);
     const upscaleDetails = usingFal && isUpscaleModel
       ? [
@@ -3177,6 +3228,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ...(gptImage2SettingsForRun ? serializeGptImage2GenerationOptions(gptImage2SettingsForRun) : {}),
       ...(gptImage26SettingsForRun ? serializeGptImage26GenerationOptions(gptImage26SettingsForRun) : {}),
       ...(gptImage25SettingsForRun ? serializeGptImage25GenerationOptions(gptImage25SettingsForRun) : {}),
+      ...tokenHubOperation?.savedOptions,
       ...(krea3SettingsForRun ? serializeKrea3GenerationOptions(krea3SettingsForRun) : {}),
       ...(grokImageSettingsForRun ? serializeGrokImageGenerationOptions(grokImageSettingsForRun) : {}),
       ...(recraftSettingsForRun ? serializeRecraftGenerationOptions(recraftSettingsForRun) : {}),
@@ -3204,7 +3256,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
       } : {}),
       falOptions: imageFalOptionsForRun,
     }; // Queue retry mirrors generated-image metadata before output exists.
-    const retryableImageInputs = usingFal ? imageRetryInputs : undefined; // Fal image jobs can replay saved request inputs.
     const handleFalPhaseUpdate = (update: FalPhaseUpdate) => {
       if (!falJobId) {
         return;
@@ -3214,14 +3265,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
       )));
     }; // Reflect service phase changes in the queue row.
 
-    if (usingFal && falJobId) {
+    if (falJobId) {
       const newJob: FalQueueJob = {
         id: falJobId,
         prompt: jobPromptDescription,
         modelId: falModelIdForRun,
         modelLabel: jobModelLabel,
-        provider: 'fal',
-        ...(retryableImageInputs ? { retryInputs: retryableImageInputs } : {}),
+        provider: generationProviderForRun,
+        retryInputs: imageRetryInputs,
         status: 'IN_QUEUE',
         phase: 'submitting',
         phaseMessage: 'Preparing request...',
@@ -3233,7 +3284,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       queueJob(newJob);
       addDebugLog({
         direction: 'outbound',
-        source: 'fal',
+        source: generationProviderForRun,
         title: jobModelLabel,
         message: 'Submitting request',
         data: {
@@ -3258,33 +3309,52 @@ export const useGeneration = (args: UseGenerationArgs) => {
 
     try {
       let generationResult: FalImageGenerationResult;
-      let placementOrigin = { x: 100, y: 100 };
-      let sourceImageForAPI: {
-        element: HTMLImageElement;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        naturalWidth: number;
-        naturalHeight: number;
-        file: File;
-      } | null = null;
+      const handleImageQueueUpdate = (update: FalQueueUpdate) => {
+        setFalJobs(prev => prev.map(job => job.id === falJobId ? applyFalQueueUpdateToJob(job, update) : job));
+      };
 
-      if (isTextToImage) {
-        const imageBoundsList = images.map(getImageBounds);
-        const placementX = imageBoundsList.length > 0
-          ? Math.max(...imageBoundsList.map(b => b.maxX)) + 20
-          : 100;
-        const placementY = imageBoundsList.length > 0
-          ? Math.min(...imageBoundsList.map(b => b.minY))
-          : 100;
-        placementOrigin = { x: placementX, y: placementY };
+      const editSource = isTextToImage ? null : activePrimary;
+      const editParams = editSource ? {
+        prompt: trimmedPrompt,
+        image: editSource.element,
+        tool: editToolForRun,
+        paths: editPathsForRun,
+        imageDimensions: {
+          width: editSource.naturalWidth || editSource.width,
+          height: editSource.naturalHeight || editSource.height,
+        },
+      } : undefined;
 
-        if (usingFal) {
-          if (!falJobId) {
-            throw new Error('Unable to create Fal job identifier.');
-          }
+      let editReferenceImages: HTMLImageElement[] | undefined;
+      if (referenceCanvasImages.length > 0) {
+        editReferenceImages = await awaitActive(() => Promise.all(referenceCanvasImages.map(async img => {
+          if ((img.rotation ?? 0) === 0) return img.element;
+          const rasterized = await awaitActive(() => rasterizeImages([img]));
+          return rasterized.element;
+        })));
+        referenceIdsUsed = referenceCanvasImages.map(img => img.id);
+      }
 
+      if (tokenHubOperation) {
+        if (!falJobId) {
+          throw new Error('Unable to create TokenHub job identifier.');
+        }
+        const transport = { abortSignal: workspaceSignal, onPhaseUpdate: handleFalPhaseUpdate };
+        if (tokenHubOperation.kind === 'text_to_image') {
+          generationResult = await awaitActive(() => tokenHubOperation.execute(trimmedPrompt, transport));
+        } else {
+          if (!editParams) throw new Error('Please select an image to edit.');
+          generationResult = await awaitActive(() => tokenHubOperation.execute({
+            ...editParams,
+            referenceImages: editReferenceImages,
+          }, transport));
+        }
+      } else if (usingFal) {
+        if (!falJobId) {
+          throw new Error('Unable to create Fal job identifier.');
+        }
+
+        if (!editParams) {
           const textToImageModelId = krea3SettingsForRun?.endpoint ?? nanoBananaSettingsForRun?.endpoint ?? gptImage2SettingsForRun?.endpoint ?? gptImage25SettingsForRun?.endpoint ?? gptImage26SettingsForRun?.endpoint ?? grokImageSettingsForRun?.endpoint ?? recraftSettingsForRun?.endpoint ?? (isIdeogram45ModelForRun
             ? falModelIdForRun
             : isSeedreamModel
@@ -3297,17 +3367,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
                     ? RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID
                     : NANO_BANANA_PRO_TEXT_TO_IMAGE_MODEL_ID);
 
-          const falResult = await awaitActive(async () => generateFalImage(trimmedPrompt, {
+          generationResult = await awaitActive(() => generateFalImage(trimmedPrompt, {
             jobId: falJobId,
             onPhaseUpdate: handleFalPhaseUpdate,
-            onQueueUpdate: (update) => {
-              setFalJobs(prev => prev.map(job => {
-                if (job.id !== falJobId) {
-                  return job;
-                }
-                return applyFalQueueUpdateToJob(job, update);
-              }));
-            },
+            onQueueUpdate: handleImageQueueUpdate,
             modelId: textToImageModelId,
             aspectRatio: (isNanoBananaModel || isSeedreamModel)
               ? falAspectRatioSelectionForRun
@@ -3325,181 +3388,52 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
             ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
           }));
-
-          generationResult = falResult;
-
-          setFalJobs(prev => prev.map(job => {
-            if (job.id !== falJobId) {
-              return job;
-            }
-            if (job.status === 'FAILED') {
-              return job;
-            }
-            return {
-              ...job,
-              status: 'COMPLETED',
-              phase: 'completed',
-              phaseMessage: 'Image ready',
-              requestId: falResult.requestId || job.requestId,
-              description: falResult.text,
-              updatedAt: Date.now(),
-            };
-          }));
+        } else if (isUpscaleModel) {
+          generationResult = isSeedvrUpscaleModel
+            ? await awaitActive(() => upscaleFalSeedvrImage(
+              editParams.image,
+              falScaleFactorForRun,
+              falNoiseScaleForRun,
+              { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate: handleImageQueueUpdate },
+            ))
+            : await awaitActive(() => upscaleFalCrystalImage(
+              editParams.image,
+              falScaleFactorForRun,
+              falCreativityForRun,
+              { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate: handleImageQueueUpdate },
+            ));
         } else {
-          generationResult = await awaitActive(async () => generateGoogleImage(trimmedPrompt, {
-            aspectRatio: googleAspectRatio,
+          generationResult = await awaitActive(() => generateFalImageEdit({
+            ...editParams,
+            referenceImages: editReferenceImages,
+          }, {
+            jobId: falJobId,
+            onPhaseUpdate: handleFalPhaseUpdate,
+            modelId: falModelIdForRun,
+            ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
+            ...(!resolvedImageSettings && normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
+            ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
+            ...(nanoBananaSettingsForRun?.kind === 'image_edit' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
+            ...(gptImage2SettingsForRun?.kind === 'image_edit' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
+            ...(gptImage26SettingsForRun?.kind === 'image_edit' ? { gptImage26RunSettings: gptImage26SettingsForRun } : {}),
+            ...(gptImage25SettingsForRun?.kind === 'image_edit' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
+            ...(krea3SettingsForRun?.kind === 'image_edit' ? { krea3RunSettings: krea3SettingsForRun } : {}),
+            ...(grokImageSettingsForRun?.kind === 'image_edit' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
+            ...(ideogram45SettingsForRun?.kind === 'image_edit' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
+            ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
+            ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
+            onQueueUpdate: handleImageQueueUpdate,
           }));
         }
+      } else if (generationProviderForRun === 'google') {
+        generationResult = editParams
+          ? await awaitActive(() => generateGoogleImageEdit({
+            ...editParams,
+            mimeType: editSource?.file.type,
+          }))
+          : await awaitActive(() => generateGoogleImage(trimmedPrompt, { aspectRatio: googleAspectRatio }));
       } else {
-        if (!primaryImageIdForRun || !activePrimary) {
-          throw new Error('Please select an image to edit.');
-        }
-
-        sourceImageForAPI = {
-          element: activePrimary.element as HTMLImageElement,
-          x: activePrimary.x,
-          y: activePrimary.y,
-          width: activePrimary.width,
-          height: activePrimary.height,
-          naturalWidth: activePrimary.naturalWidth,
-          naturalHeight: activePrimary.naturalHeight,
-          file: activePrimary.file,
-        };
-
-        const editImageDimensions = {
-          width: sourceImageForAPI.naturalWidth || sourceImageForAPI.width,
-          height: sourceImageForAPI.naturalHeight || sourceImageForAPI.height,
-        };
-
-        if (usingFal) {
-          if (!falJobId) {
-            throw new Error('Unable to create Fal job identifier.');
-          }
-
-          if (isUpscaleModel) {
-            const onQueueUpdate = (update: FalQueueUpdate) => {
-              setFalJobs(prev => prev.map(job => {
-                if (job.id !== falJobId) {
-                  return job;
-                }
-                return applyFalQueueUpdateToJob(job, update);
-              }));
-            };
-
-            const falUpscaleResult = isSeedvrUpscaleModel
-              ? await awaitActive(async () => upscaleFalSeedvrImage(
-                sourceImageForAPI.element,
-                falScaleFactorForRun,
-                falNoiseScaleForRun,
-                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate },
-              ))
-              : await awaitActive(async () => upscaleFalCrystalImage(
-                sourceImageForAPI.element,
-                falScaleFactorForRun,
-                falCreativityForRun,
-                { jobId: falJobId, onPhaseUpdate: handleFalPhaseUpdate, onQueueUpdate },
-              ));
-
-            generationResult = falUpscaleResult;
-
-            setFalJobs(prev => prev.map(job => {
-              if (job.id !== falJobId) {
-                return job;
-              }
-              if (job.status === 'FAILED') {
-                return job;
-              }
-              return {
-                ...job,
-                status: 'COMPLETED',
-                phase: 'completed',
-                phaseMessage: 'Image ready',
-                requestId: falUpscaleResult.requestId || job.requestId,
-                description: falUpscaleResult.text,
-                updatedAt: Date.now(),
-              };
-            }));
-          } else {
-            let editReferenceImages: HTMLImageElement[] | undefined;
-            if (referenceCanvasImages.length > 0) {
-              const prepareReferenceImage = async (img: CanvasImage & { element: HTMLImageElement }): Promise<HTMLImageElement> => {
-                if ((img.rotation ?? 0) === 0) {
-                  return img.element;
-                }
-                const rasterized = await awaitActive(async () => rasterizeImages([img]));
-                return rasterized.element;
-              };
-
-              if (referenceCanvasImages.length > 0) {
-                editReferenceImages = await awaitActive(async () => Promise.all(referenceCanvasImages.map(prepareReferenceImage)));
-                referenceIdsUsed = referenceCanvasImages.map(img => img.id);
-              }
-            }
-
-            const falEditResult = await awaitActive(async () => generateFalImageEdit({
-              prompt: trimmedPrompt,
-              image: sourceImageForAPI.element,
-              tool: editToolForRun,
-              paths: editPathsForRun,
-              imageDimensions: editImageDimensions,
-              referenceImages: editReferenceImages,
-            }, {
-              jobId: falJobId,
-              onPhaseUpdate: handleFalPhaseUpdate,
-              modelId: falModelIdForRun,
-              ...(falAspectRatioSelectionForRun ? { aspectRatio: falAspectRatioSelectionForRun } : {}),
-              ...(!resolvedImageSettings && normalizedFalImageSizeSelectionForRun ? { imageSize: normalizedFalImageSizeSelectionForRun } : {}),
-              ...(falResolutionSelectionForRun ? { resolution: falResolutionSelectionForRun } : {}),
-              ...(nanoBananaSettingsForRun?.kind === 'image_edit' ? { nanoBananaRunSettings: nanoBananaSettingsForRun } : {}),
-              ...(gptImage2SettingsForRun?.kind === 'image_edit' ? { gptImage2RunSettings: gptImage2SettingsForRun } : {}),
-              ...(gptImage26SettingsForRun?.kind === 'image_edit' ? { gptImage26RunSettings: gptImage26SettingsForRun } : {}),
-              ...(gptImage25SettingsForRun?.kind === 'image_edit' ? { gptImage25RunSettings: gptImage25SettingsForRun } : {}),
-              ...(krea3SettingsForRun?.kind === 'image_edit' ? { krea3RunSettings: krea3SettingsForRun } : {}),
-              ...(grokImageSettingsForRun?.kind === 'image_edit' ? { grokImageRunSettings: grokImageSettingsForRun } : {}),
-              ...(ideogram45SettingsForRun?.kind === 'image_edit' ? { ideogram45RunSettings: ideogram45SettingsForRun } : {}),
-              ...(isFlux3ImageModelForRun ? flux3ImageSettingsForRun : {}),
-              ...(!resolvedImageSettings ? { numImages: normalizedFalNumImages } : {}),
-              onQueueUpdate: (update) => {
-                setFalJobs(prev => prev.map(job => {
-                  if (job.id !== falJobId) {
-                    return job;
-                  }
-                  return applyFalQueueUpdateToJob(job, update);
-                }));
-              },
-            }));
-
-            generationResult = falEditResult;
-
-            setFalJobs(prev => prev.map(job => {
-              if (job.id !== falJobId) {
-                return job;
-              }
-              if (job.status === 'FAILED') {
-                return job;
-              }
-              return {
-                ...job,
-                status: 'COMPLETED',
-                phase: 'completed',
-                phaseMessage: 'Image ready',
-                requestId: falEditResult.requestId || job.requestId,
-                description: falEditResult.text,
-                updatedAt: Date.now(),
-              };
-            }));
-          }
-        } else {
-          const googleResult = await awaitActive(async () => generateGoogleImageEdit({
-            prompt: trimmedPrompt,
-            image: sourceImageForAPI.element,
-            tool: editToolForRun,
-            paths: editPathsForRun,
-            imageDimensions: editImageDimensions,
-            mimeType: sourceImageForAPI.file.type,
-          }));
-          generationResult = googleResult;
-        }
+        throw new Error('Unable to resolve the image generation provider.');
       }
 
       if (!generationResult) {
@@ -3511,7 +3445,23 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const generatedImageSources = generationResult.imageDataUrls?.length
         ? generationResult.imageDataUrls
         : generatedImages.map(base64 => `${PNG_DATA_URL_PREFIX}${base64}`); // Legacy providers still return raw PNG base64.
-      const outputImageFormatPolicy = grokImageSettingsForRun || gptImage26SettingsForRun ? 'preserve-original' : 'png';
+      const preservesTokenHubJpeg = tokenHubOperation !== undefined && isTokenHubNanoBananaModel(falModelIdForRun);
+      const requestedTokenHubCount = preservesTokenHubJpeg ? tokenHubOperation.numImages : 0;
+      const missingTokenHubImages = Math.max(0, requestedTokenHubCount - generatedImageSources.length);
+
+      if (falJobId && missingTokenHubImages === 0) {
+        setFalJobs(prev => prev.map(job => job.id === falJobId && job.status !== 'FAILED' ? {
+          ...job,
+          status: 'COMPLETED',
+          phase: 'completed',
+          phaseMessage: 'Image ready',
+          requestId: generationResult.requestId || job.requestId,
+          description: generationResult.text,
+          updatedAt: Date.now(),
+        } : job));
+      }
+
+      const outputImageFormatPolicy = grokImageSettingsForRun || gptImage26SettingsForRun || preservesTokenHubJpeg ? 'preserve-original' : 'png';
       const addGeneratedImages = async () => {
         const newImages: CanvasImage[] = [];
         let lastBounds = images.length > 0 ? getImageBounds(images[images.length - 1]) : null;
@@ -3521,12 +3471,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
           const { naturalWidth, naturalHeight } = getNaturalSize(img);
           const displayWidth = naturalWidth || 512;
           const displayHeight = naturalHeight || 512;
-          let newX = placementOrigin.x;
-          let newY = placementOrigin.y;
-          if (lastBounds) {
-            newX = lastBounds.maxX + 20;
-            newY = lastBounds.minY;
-          }
+          const newX = lastBounds ? lastBounds.maxX + 20 : 100;
+          const newY = lastBounds ? lastBounds.minY : 100;
 
           const newCanvasImage: CanvasImage = {
             id: crypto.randomUUID(),
@@ -3612,12 +3558,27 @@ export const useGeneration = (args: UseGenerationArgs) => {
       };
 
       await awaitActive(async () => addGeneratedImages());
+      if (falJobId && missingTokenHubImages > 0) {
+        const message = `Generated ${generatedImageSources.length} of ${requestedTokenHubCount} images. Retry to generate the remaining images.`;
+        setFalJobs(prev => prev.map(job => job.id === falJobId ? {
+          ...job,
+          status: 'FAILED',
+          phase: 'failed',
+          phaseMessage: 'Some images could not be generated',
+          error: message,
+          requestId: generationResult.requestId || job.requestId,
+          retryInputs: { ...imageRetryInputs, falOptions: { ...imageFalOptionsForRun, numImages: missingTokenHubImages } },
+          updatedAt: Date.now(),
+        } : job));
+        setError(message);
+      }
       // Let autosave know a generation completed successfully.
       onGenerationComplete?.();
     } catch (err) {
       if (workspaceSignal?.aborted) return;
       const message = err instanceof Error ? err.message : 'An unknown error occurred.';
       const errorPhase = getFalErrorPhase(err);
+      const tokenHubRequestId = err instanceof TokenHubImageRequestError ? err.requestId : undefined;
       const errorRequestId = getFalErrorRequestId(err);
       const userFacingMessage = usingFal
         ? buildFalDisplayError(message, undefined, {
@@ -3625,7 +3586,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           hasRequestId: Boolean(errorRequestId),
         }) ?? message ?? FAL_PROVIDER_DOWN_MESSAGE
         : message;
-      if (usingFal) {
+      if (usingFal || usingTokenHub) {
         setFalJobs(prev => prev.map(job => {
           if (job.id === falJobId) {
             return {
@@ -3633,6 +3594,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               status: 'FAILED',
               phase: 'failed',
               phaseMessage: errorPhase === 'uploading' ? 'Upload failed' : 'Generation failed',
+              requestId: tokenHubRequestId ?? job.requestId,
               error: userFacingMessage,
               updatedAt: Date.now(),
             };
@@ -3650,6 +3612,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
   }, [
     workspaceSignal,
+    getCanvasDocument,
     appMode,
     tool,
     prompt,
@@ -3734,6 +3697,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance2GenerateAudio,
     seedance2CameraFixed,
     seedance2OutputFormat,
+    seedanceArkSettings,
+    tokenHubSeedanceEnabled,
     seedance25Variant,
     seedance25AspectRatio,
     seedance25Resolution,
@@ -3755,6 +3720,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
     ideogram45EditPrecision,
     gptImage25Background,
     gptImage25Variant,
+    tokenHubGptImage25Quality,
+    tokenHubGptImage25Background,
+    tokenHubGptImage25Variant,
+    tokenHubNanoBananaWebSearch,
+    tokenHubNanoBananaThinkingLevel,
     krea3Variant, krea3ReasoningLevel,
     grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
     grokImagePassthrough, grokImageEnableSafetyChecker,

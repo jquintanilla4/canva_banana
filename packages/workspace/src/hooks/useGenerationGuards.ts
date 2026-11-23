@@ -1,4 +1,6 @@
+import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import { isGptImage26Model } from '../services/gptImage26Config';
+import { isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
 import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
 import type { Flux3InputKind } from '../utils/flux3';
 import type { UseFalSettingsResult } from './useFalSettings';
@@ -259,9 +261,9 @@ export function useGenerationGuards({
   const isVolcengineSeedance2VideoModel = isSeedance2VideoModel && falModelId === SEEDANCE_2_VIDEO_MODEL_ID; // Edit/Extend only exist on the Volcengine backend.
   const isSeedance2EditMode = isVolcengineSeedance2VideoModel && seedance2Variant === 'edit';
   const isSeedance2ExtendMode = isVolcengineSeedance2VideoModel && seedance2Variant === 'extend';
-  const isVolcengineSeedance25Model = isVolcengineSeedance2VideoModel && seedance2VolcengineModel === 'seedance25';
+  const isVolcengineSeedance25Model = isVolcengineSeedance2VideoModel && getSeedance2VolcengineModelCapabilities(seedance2VolcengineModel).family === '2.5';
   const seedance2VolcengineLabel = isVolcengineSeedance25Model ? 'Seedance 2.5' : 'Seedance 2';
-  const seedance2VolcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance25Model ? 'seedance25' : 'standard'); // Placeholder copy follows the selected sub-model's caps.
+  const seedance2VolcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2VideoModel ? seedance2VolcengineModel : undefined);
   const isSeedance25ReferenceMode = isSeedance25VideoModel && seedance25Variant === 'reference';
   const isJimengReferenceMode = (
     falModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID && isSeedance2ReferenceMode
@@ -340,7 +342,8 @@ export function useGenerationGuards({
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
-      && (isSeedreamModel || isNanoBananaModel || isGrokModel || isGptImage2Model || isIdeogram45Model(falModelId));
+      && (isSeedreamModel || isNanoBananaModel || isGrokModel || isGptImage2Model || isIdeogram45Model(falModelId)
+        || isTokenHubNanoBananaModel(falModelId));
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||
@@ -424,8 +427,10 @@ export function useGenerationGuards({
           }
           if (isSeedance2ExtendMode) {
             return seedance2ReferenceVideoCount > 0
-              ? 'Describe how the clips connect, e.g. "@Video1 followed by @Video2", or extend @Video1 forward or backward...'
-              : `${seedance2VolcengineLabel} Extend: select up to ${seedance2VolcengineReferenceLimits.videos} video clips (@Video1, @Video2, ...), then describe how to chain or extend them...`;
+              ? isVolcengineSeedance25Model
+                ? 'Describe how to extend or chain the video clips. You can reference still images such as @Image1...'
+                : 'Describe how the clips connect, e.g. "@Video1 followed by @Video2", or extend @Video1 forward or backward...'
+              : `${seedance2VolcengineLabel} Extend: select up to ${seedance2VolcengineReferenceLimits.videos} video clips (@Video1, @Video2, ...)${isVolcengineSeedance25Model ? ' and optional reference images' : ''}, then describe how to chain or extend the clips...`;
           }
           if (isSeedance2ReferenceMode) {
             return seedance2ReferenceAssetCount > 0
