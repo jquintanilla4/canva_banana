@@ -79,7 +79,7 @@ const mockState = vi.hoisted(() => {
   const setSourceVideoId = vi.fn();
   const setSourceAudioId = vi.fn();
   const setLiveVideoPromptBars = vi.fn();
-  const runtimeConfig = { isDesktop: false };
+  const runtimeConfig = { isDesktop: false, tokenHubSeedanceEnabled: false };
   const getRuntimeConfig = vi.fn(() => runtimeConfig);
   const baseVideoPromptArea = {
     id: 'area-1',
@@ -219,6 +219,7 @@ const mockState = vi.hoisted(() => {
     falState.isVolcengineSeedance2VideoModel = mode === 'video';
   });
   falState.handleFalModelChange = vi.fn();
+  falState.handleSeedance2VolcengineModelChange = vi.fn();
   falState.handleFalVideoDurationChange = vi.fn();
   falState.handleKlingVariantChange = vi.fn();
   falState.handleKlingV3DurationChange = vi.fn();
@@ -642,6 +643,9 @@ afterEach(() => {
     value: originalNavigatorPlatform,
   });
   mockState.runtimeConfig.isDesktop = false;
+  mockState.runtimeConfig.tokenHubSeedanceEnabled = false;
+  mockState.falState.handleFalModelChange.mockClear();
+  mockState.falState.handleSeedance2VolcengineModelChange.mockClear();
   mockState.getRuntimeConfig.mockClear();
   mockState.handleGenerate.mockClear();
   mockState.onGenerationPlaced = null;
@@ -761,6 +765,37 @@ describe('App Flux 3 footer gating', () => {
 });
 
 describe('App video prompt area gating', () => {
+  it('switches Seedance providers in the footer without changing the saved model ID', () => {
+    mockState.runtimeConfig.tokenHubSeedanceEnabled = true;
+    mockState.falState.seedance2VolcengineModel = 'seedance25';
+    const { rerender } = render(<App />);
+
+    expect(mockState.lastPromptBarProps?.selectedModel).toBe('volcengine/seedance-2');
+    const chooseModel = (id: string) => {
+      const onModelChange = mockState.lastPromptBarProps?.onModelChange;
+      if (typeof onModelChange === 'function') onModelChange(id);
+    };
+    chooseModel('tokenhub/seedance-2');
+    expect(mockState.falState.handleSeedance2VolcengineModelChange).toHaveBeenLastCalledWith('tokenhub25');
+    expect(mockState.falState.handleFalModelChange).toHaveBeenLastCalledWith('volcengine/seedance-2');
+
+    mockState.falState.seedance2VolcengineModel = 'tokenhub25';
+    rerender(<App />);
+    expect(mockState.lastPromptBarProps?.selectedModel).toBe('tokenhub/seedance-2');
+    chooseModel('volcengine/seedance-2');
+    expect(mockState.falState.handleSeedance2VolcengineModelChange).toHaveBeenLastCalledWith('seedance25');
+    expect(mockState.falState.handleFalModelChange).toHaveBeenLastCalledWith('volcengine/seedance-2');
+  });
+
+  it('keeps a saved TokenHub choice identifiable while the gateway is unconfigured', () => {
+    mockState.falState.seedance2VolcengineModel = 'tokenhub25';
+    render(<App />);
+    expect(mockState.lastPromptBarProps?.selectedModel).toBe('tokenhub/seedance-2');
+    expect(mockState.lastPromptBarProps?.modelOptions).toContainEqual({
+      value: 'tokenhub/seedance-2', label: 'Seedance 2/2.5 (TokenHub)', disabled: true,
+    });
+  });
+
   it('does not reread desktop runtime config while App rerenders', () => {
     mockState.getRuntimeConfig.mockClear();
 
@@ -1520,7 +1555,7 @@ describe('App video prompt area gating', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
 
     expect(mockState.lastCanvasProps?.embeddedVideoPromptBarModelOptions).toEqual(expect.arrayContaining([
-      { value: 'volcengine/seedance-2', label: 'Seedance 2++ (VE)' },
+      { value: 'volcengine/seedance-2', label: 'Seedance 2/2.5 (VE)' },
       { value: 'bytedance/seedance-2.0', label: 'Seedance 2 (FAL)' },
       { value: 'kling/v4', label: 'Kling v4' },
       { value: 'xai/grok-imagine-video/image-to-video', label: 'Grok Imagine' },

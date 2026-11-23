@@ -627,8 +627,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     { value: 'image', label: 'Image' },
     { value: 'video', label: 'Video' },
   ];
+  const isVolcengineDraft = modelControls?.some(control =>
+    control.kind === 'volcengine-settings' && control.supportsDraft && control.settings.draft === true,
+  );
   const containerBaseClass = `relative bg-gray-900/70 backdrop-blur-sm rounded-2xl shadow-xl flex ${isMiniMode ? 'items-center' : 'items-end'} gap-[1.1rem] transition-all duration-300 ease-out ${isMiniMode ? 'py-[0.48rem] pl-[0.7rem] pr-[0.8rem]' : 'py-[0.81rem] pl-[0.83rem] pr-[1.15rem]'}`;
-  const promptContainerClass = `${containerBaseClass} ${promptOutlineColor ? 'border' : ''}`;
+  const promptContainerClass = `${containerBaseClass} ${promptOutlineColor ? 'border' : ''} ${isVolcengineDraft ? 'inset-ring-2 inset-ring-yellow-400/45' : ''}`;
   const negativePromptContainerClass = `${containerBaseClass} ${negativePromptOutlineColor ? 'border' : ''}`;
   const multiPromptContainerClass = `${containerBaseClass} ${multiPromptOutlineColor ? 'border' : ''}`;
   const promptContainerStyle = promptOutlineColor ? { borderColor: promptOutlineColor } : undefined;

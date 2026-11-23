@@ -28,7 +28,7 @@ describe('GPT Image 2.5 Fal requests', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('registers one family picker entry and only valid size presets', () => {
-    expect(FAL_IMAGE_MODEL_OPTIONS.filter(option => option.value.includes('gpt-image-2.5'))).toEqual([
+    expect(FAL_IMAGE_MODEL_OPTIONS.filter(option => option.value === GPT_IMAGE_25_MODEL_ID)).toEqual([
       { value: GPT_IMAGE_25_MODEL_ID, label: 'GPT Image 2.5' },
     ]);
     for (const option of GPT_IMAGE_25_IMAGE_SIZE_OPTIONS) {

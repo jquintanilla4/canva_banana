@@ -1,3 +1,5 @@
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
+export { isSeedance2VolcengineModel, SEEDANCE2_VOLCENGINE_MODEL_OPTIONS } from './volcengineModels';
 import { GPT_IMAGE_26_MODEL_ID, GPT_IMAGE_26_MAX_OUTPUT_IMAGES, GPT_IMAGE_26_NUM_IMAGE_OPTIONS, isGptImage26Model } from './gptImage26Config';
 export { GPT_IMAGE_26_MODEL_ID, isGptImage26Model } from './gptImage26Config';
 import { NANO_BANANA_PRO_EDIT_MODEL_ID, NANO_BANANA_21_EDIT_MODEL_ID, getNanoBananaSelectorModelId, NANO_BANANA_MAX_OUTPUT_IMAGES, NANO_BANANA_21_ASPECT_RATIO_OPTIONS, FAL_RESOLUTION_OPTIONS } from './nanoBananaConfig';
@@ -25,6 +27,8 @@ import type {
 import { IDEOGRAM_45_MODEL_ID, IDEOGRAM_45_EDIT_MODEL_ID, IDEOGRAM_45_MAX_OUTPUT_IMAGES, isIdeogram45Model } from './ideogram45Config';
 import { GPT_IMAGE_2_EDIT_MODEL_ID, GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID, GPT_IMAGE_2_IMAGE_SIZE_OPTIONS, GPT_IMAGE_2_MAX_OUTPUT_IMAGES, GPT_IMAGE_2_NUM_IMAGE_OPTIONS } from './gptImage2Config';
 import { GPT_IMAGE_25_MODEL_ID, GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, GPT_IMAGE_25_MAX_OUTPUT_IMAGES, GPT_IMAGE_25_NUM_IMAGE_OPTIONS, isGptImage25Model } from './gptImage25Config';
+import { TOKENHUB_GPT_IMAGE_25_MODEL_ID, TOKENHUB_GPT_IMAGE_25_IMAGE_SIZE_OPTIONS, TOKENHUB_GPT_IMAGE_25_MAX_OUTPUT_IMAGES, TOKENHUB_GPT_IMAGE_25_NUM_IMAGE_OPTIONS, isTokenHubGptImage25Model } from './tokenHubGptImage25Config';
+import { TOKENHUB_NANO_BANANA_21_MODEL_ID, TOKENHUB_NANO_BANANA_MAX_OUTPUT_IMAGES, TOKENHUB_NANO_BANANA_NUM_IMAGE_OPTIONS, isTokenHubNanoBananaModel } from './tokenHubNanoBananaConfig';
 import { KREA_3_MODEL_ID, KREA_3_MAX_INPUTS, getKrea3SelectorModelId } from './krea3Config';
 export { KREA_3_MODEL_ID, isKrea3Model } from './krea3Config';
 import { KLING_V4_VIDEO_MODEL_ID, isKlingV4VideoModel } from './klingV4Config';
@@ -147,10 +151,12 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: GPT_IMAGE_2_EDIT_MODEL_ID, label: 'GPT Image 2' }, // Selector uses edit id.
   { value: GPT_IMAGE_26_MODEL_ID, label: 'GPT Image 2.6 Sunburst' },
   { value: GPT_IMAGE_25_MODEL_ID, label: 'GPT Image 2.5' },
+  { value: TOKENHUB_GPT_IMAGE_25_MODEL_ID, label: 'GPT Image 2.5 (TokenHub)' },
   { value: IDEOGRAM_45_MODEL_ID, label: 'Ideogram 4.5' },
   { value: GROK_IMAGINE_IMAGE_MODEL_ID, label: 'Grok Imagine 2.0' },
   { value: KREA_3_MODEL_ID, label: 'Krea 3' },
   { value: NANO_BANANA_21_EDIT_MODEL_ID, label: 'NanoBanana 2.1' }, // Selector uses edit id.
+  { value: TOKENHUB_NANO_BANANA_21_MODEL_ID, label: 'NanoBanana 2.1 (TokenHub)' },
   { value: NANO_BANANA_PRO_EDIT_MODEL_ID, label: 'NanoBanana Pro' },
   { value: RECRAFT_V4_PRO_TEXT_TO_IMAGE_MODEL_ID, label: 'Recraft v4.1 Pro' }, // Direct text-to-image endpoint.
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
@@ -173,7 +179,7 @@ const FAL_VIDEO_MODEL_OPTIONS_BASE = [
   { value: MINIMAX_H3_VIDEO_MODEL_ID, label: 'MiniMax H3' },
   { value: SCAIL_VIDEO_MODEL_ID, label: 'Scail' },
   { value: SEEDANCE_15_VIDEO_MODEL_ID, label: 'Seedance 1.5 FFLF' },
-  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2++ (VE)' }, // VE-backed Seedance 2 selector label.
+  { value: SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2/2.5 (VE)' }, // VE-backed Seedance 2 selector label.
   { value: FAL_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (FAL)' }, // Fal-backed Seedance 2.
   { value: FAL_SEEDANCE_25_VIDEO_MODEL_ID, label: 'Seedance 2.5 (FAL)' }, // Fal-backed Seedance 2.5.
   { value: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, label: 'Seedance 2 (JM CLI)' }, // Jimeng CLI-backed Seedance 2.
@@ -353,7 +359,7 @@ export const SEEDANCE2_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant;
 export const SEEDANCE2_VOLCENGINE_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance2Variant; label: string; tooltip?: string }> = [
   ...SEEDANCE2_VARIANT_OPTIONS,
   { value: 'edit', label: 'Edit', tooltip: 'Modify an existing video with text instructions and optional image/audio references.' },
-  { value: 'extend', label: 'Extend', tooltip: 'Continue a video or chain up to 3 clips on Seedance 2.0 or 10 clips on Seedance 2.5.' },
+  { value: 'extend', label: 'Extend', tooltip: 'Continue a video or chain clips. Seedance 2.5 also accepts reference images.' },
 ] as const; // Edit/Extend use the reference-style request shape, so only Volcengine exposes them.
 
 export const SEEDANCE25_VARIANT_OPTIONS: ReadonlyArray<{ value: Seedance25Variant; label: string }> = [
@@ -482,46 +488,6 @@ export const JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS: ReadonlyArray<{ value: Jime
   { value: 'seedance2.0mini', label: 'Mini', supports1080p: false, supports4k: false, tooltip: 'Seedance 2.0 Mini channel; 720p only.' },
 ] as const;
 
-export const SEEDANCE2_VOLCENGINE_MODEL_OPTIONS: ReadonlyArray<{ value: Seedance2VolcengineModelSelectionValue; label: string; supports1080p: boolean; supports4k: boolean; tooltip: string }> = [
-  { value: 'standard', label: 'Seedance 2.0', supports1080p: true, supports4k: true, tooltip: 'Volcengine Seedance 2.0; supports 480p, 720p, 1080p, and 4K.' },
-  { value: 'fast', label: 'Seedance 2.0 Fast', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.0 Fast; 480p and 720p only.' },
-  { value: 'mini', label: 'Seedance 2.0 Mini', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.0 Mini; 480p and 720p only.' },
-  { value: 'seedance25', label: 'SD 2.5', supports1080p: false, supports4k: false, tooltip: 'Volcengine Seedance 2.5; 480p and 720p only, up to 30s or Auto duration, and up to 30 reference images.' },
-] as const;
-
-export type Seedance2VolcengineModelCapabilities = {
-  maxDurationSeconds: number; // Longest explicit clip length the sub-model accepts.
-  supportsAutoDuration: boolean; // Volcengine can let the provider pick the clip length.
-  referenceLimits: { images: number; videos: number; audios: number }; // Per-modality reference caps.
-  supportsOutputFormat: boolean; // Only Seedance 2.5 exposes the mp4/mov picker.
-  requiresAdaptiveRatioForVariants: boolean; // Seedance 2.5 Edit/Extend variants must run at Adaptive ratio.
-};
-
-const SEEDANCE2_VOLCENGINE_20_CAPABILITIES: Seedance2VolcengineModelCapabilities = {
-  maxDurationSeconds: 15,
-  supportsAutoDuration: true,
-  referenceLimits: { images: 9, videos: 3, audios: 3 },
-  supportsOutputFormat: false,
-  requiresAdaptiveRatioForVariants: false,
-}; // All Seedance 2.0 sub-models share the same capability envelope.
-
-export const SEEDANCE2_VOLCENGINE_MODEL_CAPABILITIES: Record<Seedance2VolcengineModelSelectionValue, Seedance2VolcengineModelCapabilities> = {
-  standard: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
-  fast: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
-  mini: SEEDANCE2_VOLCENGINE_20_CAPABILITIES,
-  seedance25: {
-    maxDurationSeconds: 30,
-    supportsAutoDuration: true,
-    referenceLimits: { images: 30, videos: 10, audios: 10 },
-    supportsOutputFormat: true,
-    requiresAdaptiveRatioForVariants: true,
-  },
-};
-
-export const getSeedance2VolcengineModelCapabilities = (
-  model: Seedance2VolcengineModelSelectionValue | undefined,
-): Seedance2VolcengineModelCapabilities => SEEDANCE2_VOLCENGINE_MODEL_CAPABILITIES[model ?? 'standard'] ?? SEEDANCE2_VOLCENGINE_20_CAPABILITIES; // Unknown legacy values fall back to the 2.0 envelope.
-
 export type VolcengineSafeSeedance2Settings = {
   seedance2Variant: Seedance2Variant;
   seedance2AspectRatio: Seedance2AspectRatioSelectionValue;
@@ -534,28 +500,25 @@ export const getVolcengineSafeSeedance2Settings = (
   model: Seedance2VolcengineModelSelectionValue,
   current: VolcengineSafeSeedance2Settings,
   hasFirstFrame = false,
-): VolcengineSafeSeedance2Settings => ({
-  seedance2Variant: current.seedance2Variant,
-  seedance2AspectRatio:
-    model === 'seedance25' && (
-      current.seedance2Variant === 'edit'
-      || current.seedance2Variant === 'extend'
-      || (current.seedance2Variant === 'smart' && hasFirstFrame)
-    )
-      ? 'adaptive'
-      : current.seedance2AspectRatio, // Seedance 2.5 keeps the source ratio for first-frame, Edit, and Extend tasks.
-  seedance2Resolution:
-    model !== 'standard' && (current.seedance2Resolution === '1080p' || current.seedance2Resolution === '4k')
-      ? '720p'
-      : current.seedance2Resolution, // Fast/Mini/2.5 cap at 720p; standard keeps 4K.
-  seedance2Duration:
-    model === 'seedance25'
-      ? current.seedance2Variant === 'edit' ? 'auto' : current.seedance2Duration // Edit requires Auto; other 2.5 variants keep explicit 4-30s values.
-      : current.seedance2Duration !== 'auto' && Number(current.seedance2Duration) > 15
-        ? '15'
-        : current.seedance2Duration, // 2.0 sub-models accept Auto or an explicit 4-15s duration.
-  seedance2CameraFixed: model === 'seedance25' ? false : current.seedance2CameraFixed, // 2.5 drops the fixed-camera toggle.
-}); // Single clamp used by both the global settings hook and embedded prompt bars.
+): VolcengineSafeSeedance2Settings => {
+  const capabilities = getSeedance2VolcengineModelCapabilities(model);
+  const adaptive = capabilities.family === '2.5' && (
+    current.seedance2Variant === 'edit'
+    || current.seedance2Variant === 'extend'
+    || (current.seedance2Variant === 'smart' && hasFirstFrame)
+  );
+  const forceAutoDuration = capabilities.editUsesSourceDuration && current.seedance2Variant === 'edit';
+  const duration = current.seedance2Duration === 'auto' && !capabilities.supportsAutoDuration ? '5' : current.seedance2Duration;
+  return {
+    ...current,
+    seedance2AspectRatio: adaptive ? 'adaptive' : current.seedance2AspectRatio,
+    seedance2Resolution: capabilities.resolutions.includes(current.seedance2Resolution) ? current.seedance2Resolution : '720p',
+    seedance2Duration: forceAutoDuration ? 'auto' : Number(duration) > capabilities.maxDurationSeconds
+      ? '15'
+      : duration,
+    seedance2CameraFixed: false,
+  };
+};
 
 export const SEEDANCE2_OUTPUT_FORMAT_OPTIONS: ReadonlyArray<{ value: Seedance2OutputFormatSelectionValue; label: string }> = [
   { value: 'mp4', label: 'MP4' },
@@ -1002,9 +965,6 @@ export const isMiniMaxH3DurationSelectionValue = (value: unknown): value is Mini
 export const isJimengSeedance2ModelVersion = (value: unknown): value is JimengSeedance2ModelVersionSelectionValue =>
   value === 'seedance2.0fast' || value === 'seedance2.0' || value === 'seedance2.0_vip' || value === 'seedance2.0fast_vip' || value === 'seedance2.0mini';
 
-export const isSeedance2VolcengineModel = (value: unknown): value is Seedance2VolcengineModelSelectionValue =>
-  value === 'standard' || value === 'fast' || value === 'mini' || value === 'seedance25';
-
 export const isSeedance2VolcengineDurationSelectionValue = (value: unknown): value is Seedance2VolcengineDurationSelectionValue =>
   isSeedance25DurationSelectionValue(value); // The Volcengine picker spans Auto plus 4-30s; 2.0 sub-models narrow it at submit.
 
@@ -1072,6 +1032,7 @@ export const isFalImageSizeSelectionValue = (value: unknown): value is FalImageS
     FAL_IMAGE_SIZE_OPTIONS.some(option => option.value === value)
     || GPT_IMAGE_2_IMAGE_SIZE_OPTIONS.some(option => option.value === value)
     || GPT_IMAGE_25_IMAGE_SIZE_OPTIONS.some(option => option.value === value)
+    || TOKENHUB_GPT_IMAGE_25_IMAGE_SIZE_OPTIONS.some(option => option.value === value)
   );
 
 export const isFalAspectRatioSelectionValue = (value: unknown): value is FalAspectRatioSelectionValue =>
@@ -1147,7 +1108,7 @@ export const isWan27VideoVariant = (value: unknown): value is Wan27VideoVariant 
 export const isApiProvider = (value: unknown): value is ApiProviderId =>
   value === 'google' || value === 'fal';
 export const isGenerationProvider = (value: unknown): value is GenerationProviderId =>
-  value === 'google' || value === 'fal' || value === 'volcengine' || value === 'jimeng';
+  value === 'google' || value === 'fal' || value === 'volcengine' || value === 'jimeng' || value === 'tokenhub';
 export const isFalModelMode = (value: unknown): value is FalModelMode =>
   value === 'image' || value === 'video';
 export const isGenerationKind = (value: unknown): value is GenerationKind =>
@@ -1303,6 +1264,8 @@ export const getFalNumImageMaxForModel = (modelId: string | undefined): number =
     : getNanoBananaSelectorModelId(modelId) ? NANO_BANANA_MAX_OUTPUT_IMAGES
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_MAX_OUTPUT_IMAGES
     : isGptImage26Model(modelId) ? GPT_IMAGE_26_MAX_OUTPUT_IMAGES
+    : isTokenHubGptImage25Model(modelId) ? TOKENHUB_GPT_IMAGE_25_MAX_OUTPUT_IMAGES
+    : isTokenHubNanoBananaModel(modelId) ? TOKENHUB_NANO_BANANA_MAX_OUTPUT_IMAGES
     : isGptImage25Model(modelId) ? GPT_IMAGE_25_MAX_OUTPUT_IMAGES
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_MAX_OUTPUT_IMAGES
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 6 : 4;
@@ -1311,6 +1274,8 @@ export const getFalNumImageOptionsForModel = (modelId: string | undefined): Read
     : getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_NUM_IMAGE_OPTIONS
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
     : isGptImage26Model(modelId) ? GPT_IMAGE_26_NUM_IMAGE_OPTIONS
+    : isTokenHubGptImage25Model(modelId) ? TOKENHUB_GPT_IMAGE_25_NUM_IMAGE_OPTIONS
+    : isTokenHubNanoBananaModel(modelId) ? TOKENHUB_NANO_BANANA_NUM_IMAGE_OPTIONS
     : isGptImage25Model(modelId) ? GPT_IMAGE_25_NUM_IMAGE_OPTIONS
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_NUM_IMAGE_OPTIONS
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE : FAL_NUM_IMAGE_OPTIONS;
@@ -1347,9 +1312,11 @@ export const DEFAULT_MAX_REFERENCE_IMAGES = 13;
 export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KLING_O3_VIDEO_EDIT_MODEL_ID | typeof SEEDANCE_15_VIDEO_MODEL_ID, number>> = {
   [NANO_BANANA_PRO_EDIT_MODEL_ID]: 14,
   [NANO_BANANA_21_EDIT_MODEL_ID]: 14, // Preserve the family reference cap.
+  [TOKENHUB_NANO_BANANA_21_MODEL_ID]: 14,
   [GPT_IMAGE_2_EDIT_MODEL_ID]: 9, // GPT Image 2 supports 10 total input images.
   [GPT_IMAGE_26_MODEL_ID]: 15,
   [GPT_IMAGE_25_MODEL_ID]: 15, // Primary plus references must fit 16 total inputs.
+  [TOKENHUB_GPT_IMAGE_25_MODEL_ID]: 15,
   [IDEOGRAM_45_MODEL_ID]: 4, // Primary source plus four references.
   [KREA_3_MODEL_ID]: KREA_3_MAX_INPUTS - 1, // Primary plus references must fit eight total inputs.
   [SEEDREAM_V5_LITE_MODEL_ID]: 9, // Seedream 5 Lite supports 10 total input images.

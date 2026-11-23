@@ -1,3 +1,5 @@
+import { useVolcengineDraftFinalization } from './hooks/useVolcengineDraftFinalization';
+import { getActiveVolcengineSettings, getVolcengineAssetCounts, getVolcengineAssetMentions } from './services/volcengineSettings';
 import { isSvgImage } from './services/svgMedia';
 import { useWorkspaceApi } from './hooks/useWorkspaceApi';
 import type { WorkspaceHandle, WorkspaceProps } from './workspaceTypes';
@@ -23,12 +25,14 @@ import {
   FLUX_3_VIDEO_MODEL_ID,
   WAN_VISION_ENHANCER_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
+  SEEDANCE_2_VIDEO_MODEL_ID,
   getFalModelLabel,
 } from './services/modelConfig';
 import {
   buildPromptBarModelControls,
   getPromptBarModelOptions,
 } from './services/promptBarConfig';
+import { getSeedanceVideoPickerModelId, withSelectedSeedanceVideoPickerOption } from './services/seedanceVideoPicker';
 import { getModelUiCapabilities } from './services/modelCapabilities';
 import { buildFooterPromptBarControlsInput } from './services/promptBarSettingsView';
 import { useBlindTestMode } from './hooks/useBlindTestMode';
@@ -171,6 +175,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setLiveVideoPromptBars, // Stage in-progress prompt bar edits
     commit: handleCommit,  // Commit staged (live) edits as a new history entry
     replaceState,          // Replace current snapshot without adding undo depth
+    updateImagesMetadata,
+    getCanvasDocument,
     undo,                  // Undo last committed action
     redo,                  // Redo last undone action
     canUndo,               // Whether undo is currently possible
@@ -273,6 +279,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setState,
     setError,
     fal,
+    tokenHubSeedanceEnabled: runtimeConfig.tokenHubSeedanceEnabled,
     isLoading,
   });
 
@@ -864,6 +871,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     prompt,
     promptPrefix: cameraPromptPrefix,
     apiProvider,
+    tokenHubSeedanceEnabled: runtimeConfig.tokenHubSeedanceEnabled,
     fal,
     selection,
     images,
@@ -873,10 +881,15 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setIsLoading,
     setFalJobs,
     setState,
+    getCanvasDocument,
     setToastMessage,
     setTool,
     onGenerationComplete: handleGenerationComplete,
     onGenerationPlaced: handleGenerationPlaced,
+  });
+
+  const { renderDraft: handleRenderVolcengineDraft, clearUnconfirmedRender, retryLastFrame, downloadingLastFrames } = useVolcengineDraftFinalization({
+    getCanvasDocument, setState, updateImagesMetadata, setFalJobs, setError, onGenerationPlaced: handleGenerationPlaced,
   });
 
   const isEmbeddedPromptBarActive = activeEmbeddedPromptBarId !== null;
@@ -964,7 +977,10 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     }
     retryingFalJobIdsRef.current.add(jobId); // Blocks duplicate retries while this attempt runs.
     try {
-      await handleGenerate(job.retryInputs, { retryJobId: job.id });
+      await handleGenerate(job.retryInputs, {
+        retryJobId: job.id,
+        ...(job.provider === 'volcengine' && job.providerJobId ? { resumeSeedanceJobId: job.providerJobId } : {}),
+      });
       return true;
     } finally {
       retryingFalJobIdsRef.current.delete(jobId);
@@ -1098,6 +1114,15 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
 
   const hasSourceVideoSelected = Boolean(sourceVideoId);
   const hasSourceAudioSelected = Boolean(sourceAudioId);
+  const arkAssets = fal.isVideoMode && fal.falVideoModelId === SEEDANCE_2_VIDEO_MODEL_ID
+    ? getActiveVolcengineSettings(fal.seedance2VolcengineModel, fal.seedance2Variant, fal.seedanceArkSettings).assets
+    : undefined;
+  const arkAssetMentions = getVolcengineAssetMentions(arkAssets, {
+    image: effectiveSeedanceReferenceImageIds.length,
+    video: effectiveSeedanceReferenceVideoIds.length,
+    audio: effectiveSeedanceReferenceAudioIds.length,
+  });
+  const arkAssetCounts = getVolcengineAssetCounts(arkAssets);
 
   // Build prompt mention suggestions for Kling/Wan based on current reference/element selections.
   const { klingPromptMentions, klingReferenceCount } = useKlingPromptMentions({
@@ -1132,8 +1157,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     flux3RunPlan,
     hasSourceVideo: hasSourceVideoSelected,
     hasSourceAudio: hasSourceAudioSelected,
-    seedance2ReferenceAssetCount,
-    seedance2ReferenceVideoCount: effectiveSeedanceReferenceVideoIds.length,
+    seedance2ReferenceAssetCount: seedance2ReferenceAssetCount + arkAssetMentions.length,
+    seedance2ReferenceVideoCount: effectiveSeedanceReferenceVideoIds.length + arkAssetCounts.video,
     taggedReferenceImageCount: referenceImageIds.length,
     taggedReferenceVideoCount: referenceVideoIds.length,
     activePrimaryImage,
@@ -1146,6 +1171,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   // Derive UI controls for the prompt bar based on provider, model, and mode selections.
   const promptBarModelControls = buildPromptBarModelControls(buildFooterPromptBarControlsInput({
     apiProvider,
+    tokenHubSeedanceEnabled: runtimeConfig.tokenHubSeedanceEnabled,
     fal,
     flux3: {
       keyframeError: flux3KeyframeError ?? undefined,
@@ -1156,13 +1182,17 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     isLoading,
     shouldValidateFalOptions,
     isNumImagesInvalid,
-  }));
-  const promptBarModelOptions = mapModelOptions(getPromptBarModelOptions(fal.falModelMode));
+  }), arkAssetMentions);
+  const selectedPromptBarModel = getSeedanceVideoPickerModelId(fal.falModelId, fal.seedance2VolcengineModel);
+  const promptBarModelOptions = mapModelOptions(withSelectedSeedanceVideoPickerOption(
+    getPromptBarModelOptions(fal.falModelMode, runtimeConfig.tokenHubSeedanceEnabled), selectedPromptBarModel,
+  ));
   const providerLabels = useMemo<Record<ApiProviderId, string>>(() => ({
     google: PROVIDER_LABELS.google,
     fal: modelCapabilities.provider === 'jimeng'
       ? 'JM CLI'
-      : modelCapabilities.provider === 'volcengine' ? 'VOLCENGINE' : PROVIDER_LABELS.fal,
+      : modelCapabilities.provider === 'volcengine' ? 'VOLCENGINE'
+        : modelCapabilities.provider === 'tokenhub' ? 'TOKENHUB' : PROVIDER_LABELS.fal,
   }), [modelCapabilities.provider]);
   const shouldShowNegativePrompt = modelCapabilities.showNegativePrompt;
   const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);
@@ -1361,6 +1391,10 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
           getMetadataTransferBlockReason={getMetadataTransferBlockReason}
           onImageDuplicate={handleDuplicateImage}
           onRerunGeneration={handleRerunGeneration}
+          onRenderVolcengineDraft={handleRenderVolcengineDraft}
+          onClearUnconfirmedVolcengineRender={clearUnconfirmedRender}
+          onRetryVolcengineLastFrame={retryLastFrame}
+          downloadingLastFrames={downloadingLastFrames}
           showMetadataOverlay={showMetadataOverlay}
           transformMode={transformMode}
           onStartTransform={handleStartTransform}
@@ -1514,6 +1548,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         submitDisabledReason={submitDisabledReason}
         jimengBlocksSubmit={jimengSetup.shouldBlockSelectedSubmit}
         modelOptions={promptBarModelOptions}
+        selectedModel={selectedPromptBarModel}
         onModelModeChange={handleModelModeChange}
         modelControls={promptBarModelControls}
         promptPlaceholder={modelCapabilities.promptPlaceholder ?? promptPlaceholderText}
@@ -1524,8 +1559,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         negativePromptOutlineColor={negativePromptOutlineColor}
         cameraThemeActive={isCameraPromptAccentActive}
         klingSuggestionsEnabled={modelCapabilities.klingSuggestionsEnabled}
-        klingReferenceCount={Math.max(klingReferenceCount, flux3PromptMentions.length)}
-        klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : klingPromptMentions}
+        klingReferenceCount={Math.max(klingReferenceCount + arkAssetMentions.length, flux3PromptMentions.length)}
+        klingSuggestionOptions={flux3PromptMentions.length ? flux3PromptMentions : [...klingPromptMentions, ...arkAssetMentions.map(({ mention }) => mention)]}
         showCreateVideoPromptBarButton={shouldShowVideoPromptBarAccessory}
         onCreateVideoPromptBar={handleCreateVideoPromptBar}
         focusRequestToken={promptFocusRequestToken}

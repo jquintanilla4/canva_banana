@@ -5,6 +5,7 @@ import { Tooltip } from '../Tooltip';
 import { PlusIcon } from '../Icons';
 import type { ApiProviderId } from '../../types';
 import type { UseFalSettingsResult } from '../../hooks/useFalSettings';
+import { resolveSeedanceVideoPickerSelection } from '../../services/seedanceVideoPicker';
 
 type PromptBarProps = React.ComponentProps<typeof PromptBar>;
 
@@ -25,6 +26,7 @@ type AppFooterProps = {
   submitDisabledReason: string | null;
   jimengBlocksSubmit: boolean;
   modelOptions: PromptBarProps['modelOptions'];
+  selectedModel: PromptBarProps['selectedModel'];
   onModelModeChange: PromptBarProps['onModelModeChange'];
   modelControls: PromptBarProps['modelControls'];
   promptPlaceholder: string;
@@ -60,6 +62,7 @@ export function AppFooter({
   submitDisabledReason,
   jimengBlocksSubmit,
   modelOptions,
+  selectedModel,
   onModelModeChange,
   modelControls,
   promptPlaceholder,
@@ -79,6 +82,11 @@ export function AppFooter({
   if (hidden) {
     return null;
   }
+  const handleModelChange = (modelId: string) => {
+    const seedance = resolveSeedanceVideoPickerSelection(modelId, fal.seedance2VolcengineModel);
+    if (seedance && seedance.model !== fal.seedance2VolcengineModel) fal.handleSeedance2VolcengineModelChange(seedance.model);
+    fal.handleFalModelChange(seedance?.modelId ?? modelId);
+  };
   return (
     <>
       {providers.length > 0 && (
@@ -99,8 +107,8 @@ export function AppFooter({
         submitDisabled={submitDisabled || isEmbeddedPromptBarActive || jimengBlocksSubmit}
         submitDisabledReason={isEmbeddedPromptBarActive ? null : submitDisabledReason}
         modelOptions={modelOptions}
-        selectedModel={fal.falModelId}
-        onModelChange={fal.handleFalModelChange}
+        selectedModel={selectedModel}
+        onModelChange={handleModelChange}
         modelSelectDisabled={apiProvider !== 'fal' || isLoading}
         modelMode={fal.falModelMode}
         onModelModeChange={onModelModeChange}

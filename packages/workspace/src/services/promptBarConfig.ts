@@ -1,3 +1,6 @@
+import type { VolcengineAssetMention, VolcengineSettings } from './volcengineSettings';
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
+import { TOKENHUB_SEEDANCE_PICKER_OPTION } from './seedanceVideoPicker';
 import { buildGptImage26Controls } from './promptBar/gptImage26Controls';
 import { isGptImage26Model, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from './gptImage26Config';
 import { getNanoBananaAspectRatioOptionsForProvider } from './nanoBananaAspectRatioPolicy';
@@ -10,7 +13,6 @@ import type {
   FalAspectRatioSelectionValue,
   FalGptImage2QualitySelectionValue,
   FalImageSizeSelectionValue,
-  FalModelOption,
   FalModelMode,
   FalResolutionSelectionValue,
   FalVideoModelId,
@@ -75,10 +77,15 @@ import { buildNanoBananaControls } from './promptBar/nanoBananaControls';
 import { buildGptImage2Controls } from './promptBar/gptImage2Controls';
 import { buildGptImage25Controls } from './promptBar/gptImage25Controls';
 import { isGptImage25Model } from './gptImage25Config';
+import { buildTokenHubGptImage25Controls } from './promptBar/tokenHubGptImage25Controls';
+import { isTokenHubGptImage25Model, type TokenHubGptImage25Variant, type TokenHubGptImage25Background, type TokenHubGptImage25Quality } from './tokenHubGptImage25Config';
+import { buildTokenHubNanoBananaControls } from './promptBar/tokenHubNanoBananaControls';
+import { isTokenHubNanoBananaModel } from './tokenHubNanoBananaConfig';
 import { buildKlingV4Controls } from './promptBar/klingV4Controls';
 import { isKlingV4VideoModel } from './klingV4Config';
 import type {
   PromptBarControl as PromptBarModelControl,
+  PromptBarControlOption,
   PromptBarSelectControl,
 } from '../components/promptBarControls';
 export type { PromptBarKeyframesControl } from '../components/promptBarControls';
@@ -153,7 +160,6 @@ import {
   SEEDANCE2_VOLCENGINE_25_DURATION_OPTIONS,
   JIMENG_MULTIFRAME_DURATION_OPTIONS,
   SEEDANCE2_AUDIO_OPTIONS,
-  SEEDANCE2_CAMERA_FIXED_OPTIONS,
   SEEDANCE25_VARIANT_OPTIONS,
   SEEDANCE25_ASPECT_RATIO_OPTIONS,
   SEEDANCE25_RESOLUTION_OPTIONS,
@@ -283,9 +289,12 @@ type Seedance2PromptBarControlsInput = {
   seedance2OutputFormat?: Seedance2OutputFormatSelectionValue; // Seedance 2.5 container picker value.
   seedance2VolcengineModel?: Seedance2VolcengineModelSelectionValue;
   seedance2HasFirstFrame?: boolean;
-  showCameraFixed?: boolean;
+  seedanceArkSettings?: VolcengineSettings;
+  arkAssetMentions?: readonly VolcengineAssetMention[];
+  onSeedanceArkSettingsChange?: (settings: VolcengineSettings) => void;
   showJimengModelVersion?: boolean;
   showVolcengineModelPicker?: boolean;
+  tokenHubSeedanceEnabled?: boolean;
   showAudio?: boolean;
   allowFullResolution?: boolean;
   isLoading: boolean;
@@ -316,14 +325,16 @@ export const buildSeedance2PromptBarControls = ({
   seedance2Resolution,
   seedance2Duration,
   seedance2GenerateAudio,
-  seedance2CameraFixed,
   seedance2OutputFormat = 'mp4',
-  showCameraFixed = true,
   showJimengModelVersion = false,
   showVolcengineModelPicker = false,
+  tokenHubSeedanceEnabled = false,
   showAudio = true,
   allowFullResolution = false,
   seedance2HasFirstFrame = false,
+  seedanceArkSettings,
+  arkAssetMentions,
+  onSeedanceArkSettingsChange,
   isLoading,
   onSeedance2VariantChange,
   onSeedance2JimengModelVersionChange,
@@ -332,30 +343,29 @@ export const buildSeedance2PromptBarControls = ({
   onSeedance2ResolutionChange,
   onSeedance2DurationChange,
   onSeedance2GenerateAudioChange,
-  onSeedance2CameraFixedChange,
   onSeedance2OutputFormatChange,
 }: Seedance2PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> => {
-  const isSeedance25VolcengineSelection = Boolean(showVolcengineModelPicker && seedance2VolcengineModel === 'seedance25');
+  const selectedVolcengineModel = getSeedance2VolcengineModelCapabilities(seedance2VolcengineModel);
+  const isSeedance25VolcengineSelection = showVolcengineModelPicker && selectedVolcengineModel.family === '2.5';
   const isSeedance25AdaptiveLocked = isSeedance25VolcengineSelection && (
     seedance2Variant === 'edit'
     || seedance2Variant === 'extend'
     || (seedance2Variant === 'smart' && seedance2HasFirstFrame)
   );
-  const isSeedance25EditDurationLocked = isSeedance25VolcengineSelection && seedance2Variant === 'edit'; // 2.5 Edit must run at Auto duration.
+  const editDurationLocked = showVolcengineModelPicker && selectedVolcengineModel.editUsesSourceDuration && seedance2Variant === 'edit';
+  const showAutoDuration = showVolcengineModelPicker && (selectedVolcengineModel.supportsAutoDuration || editDurationLocked);
   const selectedJimengModelVersion = JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS.find(option => option.value === seedance2JimengModelVersion);
   const supportsJimeng1080p = Boolean(showJimengModelVersion && selectedJimengModelVersion?.supports1080p);
   const supportsJimeng4k = Boolean(showJimengModelVersion && selectedJimengModelVersion?.supports4k);
-  const selectedVolcengineModel = SEEDANCE2_VOLCENGINE_MODEL_OPTIONS.find(option => option.value === seedance2VolcengineModel);
-  const supportsVolcengine1080p = Boolean(showVolcengineModelPicker && selectedVolcengineModel?.supports1080p);
-  const supportsVolcengine4k = Boolean(showVolcengineModelPicker && selectedVolcengineModel?.supports4k);
-  const seedance2ResolutionValue = showJimengModelVersion
+  const isDraft = showVolcengineModelPicker && selectedVolcengineModel.supportsDraft && seedanceArkSettings?.draft === true;
+  const seedance2ResolutionValue = isDraft ? '480p' : showJimengModelVersion
     ? seedance2Resolution === '480p'
       || (seedance2Resolution === '1080p' && !supportsJimeng1080p)
       || (seedance2Resolution === '4k' && !supportsJimeng4k)
       ? '720p'
       : seedance2Resolution
     : showVolcengineModelPicker
-      ? (seedance2Resolution === '1080p' && !supportsVolcengine1080p) || (seedance2Resolution === '4k' && !supportsVolcengine4k)
+      ? !selectedVolcengineModel.resolutions.includes(seedance2Resolution)
         ? '720p'
         : seedance2Resolution
       : seedance2Resolution === '4k'
@@ -367,7 +377,7 @@ export const buildSeedance2PromptBarControls = ({
     disabled: showJimengModelVersion
       ? option.value === '480p' || (option.value === '1080p' && !supportsJimeng1080p) || (option.value === '4k' && !supportsJimeng4k)
       : showVolcengineModelPicker
-        ? (option.value === '1080p' && !supportsVolcengine1080p) || (option.value === '4k' && !supportsVolcengine4k)
+        ? !selectedVolcengineModel.resolutions.includes(option.value)
         : option.value === '4k' || (option.value === '1080p' ? !allowFullResolution : option.disabled),
   })); // Keep provider-specific resolution matrices explicit.
   const aspectRatioOptions = SEEDANCE2_ASPECT_RATIO_OPTIONS
@@ -407,19 +417,20 @@ export const buildSeedance2PromptBarControls = ({
   }
 
   if (showVolcengineModelPicker) {
+    const modelOptions = SEEDANCE2_VOLCENGINE_MODEL_OPTIONS.filter(option => option.provider === selectedVolcengineModel.provider);
     controls.push({
       id: buildSeedance2ControlId('volcengine-model', idPrefix),
       prefixLabel: 'Model',
-      ariaLabel: 'Select Seedance 2 Volcengine model',
-      options: SEEDANCE2_VOLCENGINE_MODEL_OPTIONS.map(option => ({
+      ariaLabel: selectedVolcengineModel.provider === 'tokenhub' ? 'Select Seedance 2 TokenHub model' : 'Select Seedance 2 Volcengine model',
+      options: modelOptions.map(option => ({
         value: option.value,
         label: option.label,
         tooltip: option.tooltip,
       })),
       value: seedance2VolcengineModel,
       onChange: (value: string) => onSeedance2VolcengineModelChange?.(value as Seedance2VolcengineModelSelectionValue),
-      disabled: isLoading,
-      tooltip: selectedVolcengineModel?.tooltip,
+      disabled: isLoading || (selectedVolcengineModel.provider === 'tokenhub' && !tokenHubSeedanceEnabled),
+      tooltip: modelOptions.find(option => option.value === seedance2VolcengineModel)?.tooltip,
     });
   }
 
@@ -442,12 +453,12 @@ export const buildSeedance2PromptBarControls = ({
       : showVolcengineModelPicker
         ? SEEDANCE2_VOLCENGINE_20_DURATION_OPTIONS
         : SEEDANCE2_DURATION_OPTIONS
-    ).map(option => ({ value: option.value, label: option.label })),
-    value: isSeedance25EditDurationLocked ? 'auto' : seedance2Duration,
+    ).filter(option => option.value !== 'auto' || showAutoDuration).map(option => ({ value: option.value, label: option.label })),
+    value: editDurationLocked ? 'auto' : showVolcengineModelPicker && !showAutoDuration && seedance2Duration === 'auto' ? '5' : seedance2Duration,
     onChange: (value: string) => onSeedance2DurationChange(value as Seedance2VolcengineDurationSelectionValue),
     isLoading,
-    disabled: isSeedance25EditDurationLocked,
-    tooltip: isSeedance25EditDurationLocked ? 'Seedance 2.5 Edit requires the Auto duration.' : undefined,
+    disabled: editDurationLocked,
+    tooltip: editDurationLocked ? 'Edit follows the source video duration.' : undefined,
   }),
   buildSeedancePickerControl({
     id: buildSeedance2ControlId('resolution', idPrefix),
@@ -457,21 +468,10 @@ export const buildSeedance2PromptBarControls = ({
     value: seedance2ResolutionValue,
     onChange: (value: string) => onSeedance2ResolutionChange(value as Seedance2ResolutionSelectionValue),
     isLoading,
+    disabled: isDraft,
   }));
 
-  if (showCameraFixed && !isSeedance25VolcengineSelection) {
-    controls.push(buildSeedancePickerControl({
-      id: buildSeedance2ControlId('camera-fixed', idPrefix),
-      prefixLabel: 'Camera',
-      ariaLabel: 'Toggle Seedance 2 camera fixed',
-      options: SEEDANCE2_CAMERA_FIXED_OPTIONS.map(option => ({ value: option.value, label: option.label })),
-      value: getSeedance2BooleanSelectionValue(seedance2CameraFixed),
-      onChange: (value: string) => onSeedance2CameraFixedChange(value === 'true'),
-      isLoading,
-    }));
-  }
-
-  if (isSeedance25VolcengineSelection) {
+  if (showVolcengineModelPicker && selectedVolcengineModel.supportsOutputFormat) {
     controls.push(buildSeedancePickerControl({
       id: buildSeedance2ControlId('output-format', idPrefix),
       prefixLabel: 'Format',
@@ -493,6 +493,18 @@ export const buildSeedance2PromptBarControls = ({
       onChange: (value: string) => onSeedance2GenerateAudioChange(value === 'true'),
       isLoading,
     }));
+  }
+
+  if (showVolcengineModelPicker && selectedVolcengineModel.provider === 'volcengine' && onSeedanceArkSettingsChange) {
+    controls.push({
+      kind: 'volcengine-settings',
+      id: buildSeedance2ControlId('ark-settings', idPrefix),
+      settings: seedanceArkSettings ?? {},
+      supportsDraft: selectedVolcengineModel.supportsDraft,
+      assetMentions: arkAssetMentions,
+      onSettingsChange: onSeedanceArkSettingsChange,
+      disabled: isLoading,
+    });
   }
 
   return controls;
@@ -753,6 +765,7 @@ export const buildKlingV3PromptBarControls = ({
 };
 
 export type PromptBarControlsInput = {
+  tokenHubSeedanceEnabled?: boolean;
   apiProvider: 'google' | 'fal';
   controlIdPrefix?: string; // Keeps embedded control ids unique.
   falModelId: string;
@@ -862,6 +875,8 @@ export type PromptBarControlsInput = {
   seedance2CameraFixed: boolean;
   seedance2OutputFormat?: Seedance2OutputFormatSelectionValue;
   seedance2HasFirstFrame?: boolean;
+  seedanceArkSettings?: VolcengineSettings;
+  onSeedanceArkSettingsChange?: (settings: VolcengineSettings) => void;
   seedance25Variant?: Seedance25Variant;
   seedance25AspectRatio?: Seedance25AspectRatioSelectionValue;
   seedance25Resolution?: Seedance25ResolutionSelectionValue;
@@ -889,6 +904,10 @@ export type PromptBarControlsInput = {
   ideogram45IsEditing?: boolean;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  tokenHubGptImage25Quality?: TokenHubGptImage25Quality;
+  tokenHubGptImage25Background?: TokenHubGptImage25Background;
+  tokenHubGptImage25Variant?: TokenHubGptImage25Variant;
+  tokenHubNanoBananaThinkingLevel?: NanoBananaThinkingLevel;
   krea3Variant?: Krea3Variant;
   krea3ReasoningLevel?: Krea3ReasoningLevel;
   krea3IsEditing?: boolean;
@@ -1006,6 +1025,10 @@ export type PromptBarControlsInput = {
   onIdeogram45EditPrecisionChange?: (value: string) => void;
   onGptImage25BackgroundChange?: (value: string) => void;
   onGptImage25VariantChange?: (value: string) => void;
+  onTokenHubGptImage25QualityChange?: (value: string) => void;
+  onTokenHubGptImage25BackgroundChange?: (value: string) => void;
+  onTokenHubGptImage25VariantChange?: (value: string) => void;
+  onTokenHubNanoBananaThinkingLevelChange?: (value: string) => void;
   onKrea3VariantChange?: (value: string) => void;
   onKrea3ReasoningLevelChange?: (value: string) => void;
   onGrokImageAspectRatioChange?: (value: string) => void;
@@ -1026,7 +1049,10 @@ export type PromptBarControlsInput = {
 };
 
 // Map model/provider state into select configs consumed by PromptBar.
-export const buildPromptBarModelControls = (input: PromptBarControlsInput): ReadonlyArray<PromptBarModelControl> | undefined => {
+export const buildPromptBarModelControls = (
+  input: PromptBarControlsInput,
+  arkAssetMentions?: readonly VolcengineAssetMention[],
+): ReadonlyArray<PromptBarModelControl> | undefined => {
   const {
     apiProvider,
     controlIdPrefix,
@@ -1132,6 +1158,9 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     seedance2CameraFixed,
     seedance2OutputFormat = 'mp4',
     seedance2HasFirstFrame = false,
+    tokenHubSeedanceEnabled = false,
+    seedanceArkSettings,
+    onSeedanceArkSettingsChange,
     seedance25Variant = 'reference',
     seedance25AspectRatio = 'adaptive',
     seedance25Resolution = '720p',
@@ -1158,6 +1187,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     ideogram45IsEditing = false,
     gptImage25Background,
     gptImage25Variant,
+    tokenHubGptImage25Quality,
+    tokenHubGptImage25Background,
+    tokenHubGptImage25Variant,
+    tokenHubNanoBananaThinkingLevel,
     krea3Variant, krea3ReasoningLevel, krea3IsEditing = false,
     onKrea3VariantChange = () => undefined, onKrea3ReasoningLevelChange = () => undefined,
     grokImageAspectRatio, grokImageResolution, grokImageQuality, grokImageOutputFormat,
@@ -1266,6 +1299,10 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     onIdeogram45EditPrecisionChange = () => undefined,
     onGptImage25BackgroundChange = () => undefined,
     onGptImage25VariantChange = () => undefined,
+    onTokenHubGptImage25QualityChange = () => undefined,
+    onTokenHubGptImage25BackgroundChange = () => undefined,
+    onTokenHubGptImage25VariantChange = () => undefined,
+    onTokenHubNanoBananaThinkingLevelChange = () => undefined,
     onFalScaleFactorChange,
     onFalCreativityChange,
     onFalNoiseScaleChange,
@@ -1859,9 +1896,12 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       seedance2CameraFixed,
       seedance2OutputFormat,
       seedance2HasFirstFrame,
-      showCameraFixed: !isFalSeedance2VideoModel && !isJimengSeedance2VideoModel,
+      seedanceArkSettings,
+      arkAssetMentions,
+      onSeedanceArkSettingsChange,
       showJimengModelVersion: isJimengSeedance2VideoModel,
       showVolcengineModelPicker: !isFalSeedance2VideoModel && !isJimengSeedance2VideoModel,
+      tokenHubSeedanceEnabled,
       showAudio: !isJimengSeedance2VideoModel,
       allowFullResolution: isFalSeedance2VideoModel,
       isLoading,
@@ -2049,6 +2089,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
     }));
   }
   const isGptImage25 = !isVideoMode && isGptImage25Model(falModelId);
+  const isTokenHubGptImage25 = !isVideoMode && isTokenHubGptImage25Model(falModelId);
   const isIdeogram45 = !isVideoMode && isIdeogram45Model(falModelId);
   if (apiProvider === 'fal' && !isVideoMode && isKrea3Model(falModelId)) {
     controls.push(...buildKrea3Controls({
@@ -2071,6 +2112,23 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
       imageSizeSelection: falImageSizeSelection, onSizeChange: onFalImageSizeChange,
       onQualityChange: onGptImage25QualityChange, onVariantChange: onGptImage25VariantChange,
       onBackgroundChange: onGptImage25BackgroundChange,
+    }));
+  }
+  if (apiProvider === 'fal' && isTokenHubGptImage25) {
+    controls.push(...buildTokenHubGptImage25Controls({
+      isLoading, quality: tokenHubGptImage25Quality, variant: tokenHubGptImage25Variant, background: tokenHubGptImage25Background,
+      imageSizeSelection: falImageSizeSelection, onSizeChange: onFalImageSizeChange,
+      onQualityChange: onTokenHubGptImage25QualityChange, onVariantChange: onTokenHubGptImage25VariantChange,
+      onBackgroundChange: onTokenHubGptImage25BackgroundChange,
+    }));
+  }
+  const showTokenHubNanoBananaControls = apiProvider === 'fal' && !isVideoMode && isTokenHubNanoBananaModel(falModelId);
+  if (showTokenHubNanoBananaControls) {
+    controls.push(...buildTokenHubNanoBananaControls({
+      isLoading, aspectRatioSelection: falAspectRatioSelection, resolution: falResolutionSelection,
+      thinkingLevel: tokenHubNanoBananaThinkingLevel,
+      onAspectRatioChange: onFalAspectRatioChange, onResolutionChange: onFalResolutionChange,
+      onThinkingLevelChange: onTokenHubNanoBananaThinkingLevelChange,
     }));
   }
 
@@ -2109,7 +2167,7 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || isGptImage2Model || isGptImage25 || isGptImage26 || isIdeogram45);
+    && (isSeedreamModel || isNanoBananaModel || showTokenHubNanoBananaControls || isGptImage2Model || isGptImage25 || isTokenHubGptImage25 || isGptImage26 || isIdeogram45);
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
@@ -2128,8 +2186,13 @@ export const buildPromptBarModelControls = (input: PromptBarControlsInput): Read
   return controls.length > 0 ? controls : undefined;
 };
 
-export const getPromptBarModelOptions = (mode: FalModelMode): ReadonlyArray<FalModelOption> =>
-  mode === 'video' ? FAL_VIDEO_MODEL_OPTIONS : FAL_IMAGE_MODEL_OPTIONS;
+export const getPromptBarModelOptions = (mode: FalModelMode, tokenHubSeedanceEnabled = false): ReadonlyArray<PromptBarControlOption> => {
+  if (mode !== 'video') return FAL_IMAGE_MODEL_OPTIONS;
+  if (!tokenHubSeedanceEnabled) return FAL_VIDEO_MODEL_OPTIONS;
+  return FAL_VIDEO_MODEL_OPTIONS.flatMap<PromptBarControlOption>(option => option.value === SEEDANCE_2_VIDEO_MODEL_ID
+    ? [option, TOKENHUB_SEEDANCE_PICKER_OPTION]
+    : [option]);
+};
 
 export const shouldShowKlingNegativePrompt = (falModelId: FalVideoModelId | string): boolean =>
   falModelId === KLING_VIDEO_MODEL_ID || falModelId === KLING_V3_VIDEO_MODEL_ID;

@@ -14,6 +14,7 @@ import {
   applyDesktopSettings,
   parseDotenvEntry,
   readDesktopSettingsFile,
+  resolveDesktopSettingsPath,
   writeDesktopSettingsFileAtomic,
 } from './settings-env.mjs';
 import { APPLICATION_MENU_ITEM_IDS, FILE_MENU_COMMANDS, buildApplicationMenuTemplate } from './application-menu.mjs';
@@ -83,6 +84,10 @@ const repoRoot = resolve(desktopDir, '../..');
 const webDistDir = resolve(repoRoot, 'apps/web/dist');
 const preloadPath = join(desktopDir, 'preload.cjs');
 const devRendererUrl = getDevRendererUrl(process.env, app.isPackaged);
+const devTokenHubSettings = devRendererUrl && process.env.CANVA_BANANA_DEV_TOKENHUB_ENV === '1'
+  ? ['TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL', 'TOKENHUB_VIDEO_ENABLED', 'VOLCENGINE_ACCESS_KEY', 'VOLCENGINE_SECRET_KEY', 'TOS_BUCKET_NAME', 'TOS_REGION']
+  : [];
+const devTokenHubShellSettings = new Set(devTokenHubSettings.filter(key => process.env[key] !== undefined));
 const fileMenuCommandChannel = 'canva-banana:file-menu-command';
 const chatHistoryClearedChannel = 'canva-banana:chat-history-cleared';
 const canvasMediaDownloadFinishedChannel = 'canva-banana:canvas-media-download-finished';
@@ -127,7 +132,11 @@ const setServiceStatus = (serviceName, patch) => {
 
 const getServiceStatusSnapshot = () => JSON.parse(JSON.stringify(serviceStatus)); // Avoid leaking mutable main-process objects.
 
-const getDesktopSettingsPath = () => join(app.getPath('userData'), '.env.local'); // QA-managed settings live in App Support.
+const getDesktopSettingsPath = () => resolveDesktopSettingsPath({
+  isPackaged: app.isPackaged,
+  userDataPath: app.getPath('userData'),
+  repoRoot,
+});
 
 const getChatHistoryPath = () => join(app.getPath('userData'), 'chat-history.json'); // App-level prompt chat history lives in App Support.
 
@@ -906,13 +915,13 @@ const refreshRuntimeConfig = (serviceUrls) => {
   return runtimeConfig;
 };
 
-const loadEnvFile = (envPath) => {
+const loadEnvFile = (envPath, keys) => {
   if (!existsSync(envPath)) {
     return;
   }
   for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
     const parsed = parseDotenvEntry(line);
-    if (parsed && process.env[parsed.key] === undefined) {
+    if (parsed && (!keys || keys.has(parsed.key)) && process.env[parsed.key] === undefined) {
       process.env[parsed.key] = parsed.value; // Exported shell values should always win over dotenv files.
     }
   }
@@ -1208,6 +1217,9 @@ const buildRuntimeConfig = ({ secureBackendUrl, pythonBackendUrl, pythonBackendA
     pythonBackendAuthToken: pythonBackendAuthOrigin ? desktopAuthToken : undefined,
     pythonBackendAuthOrigin,
     volcengineApiBaseUrl: normalizeBaseUrl(process.env.VOLCENGINE_API_BASE_URL || pythonBackendUrl),
+    tokenHubSeedanceEnabled: process.env.TOKENHUB_VIDEO_ENABLED === undefined
+      ? Boolean(process.env.TOKENHUB_API_KEY?.trim())
+      : process.env.TOKENHUB_VIDEO_ENABLED === 'true',
     jimengApiBaseUrl: normalizeBaseUrl(process.env.JIMENG_API_BASE_URL || pythonBackendUrl),
   };
 };
@@ -1219,6 +1231,7 @@ const buildRuntimeConfigLaunchArgument = () => ({
   falApiUrl: runtimeConfig?.falApiUrl,
   falModelId: runtimeConfig?.falModelId,
   volcengineApiBaseUrl: runtimeConfig?.volcengineApiBaseUrl,
+  tokenHubSeedanceEnabled: runtimeConfig?.tokenHubSeedanceEnabled,
   jimengApiBaseUrl: runtimeConfig?.jimengApiBaseUrl,
 }); // Keep process arguments free of API keys and auth tokens.
 
@@ -1266,6 +1279,12 @@ const stopManagedServices = () => {
 };
 
 const restartManagedServices = async () => {
+  const fileSettings = new Set(devTokenHubSettings.filter(key => !devTokenHubShellSettings.has(key)));
+  if (fileSettings.size > 0) {
+    for (const key of fileSettings) delete process.env[key];
+    loadEnvFile(resolve(repoRoot, '.env.local'), fileSettings);
+    loadEnvFile(resolve(repoRoot, '.env'), fileSettings);
+  }
   const serviceUrls = await managedServiceLifecycle.restart();
   if (serviceUrls) {
     refreshRuntimeConfig(serviceUrls); // A shutdown-blocked restart must not replace the last runtime config.
@@ -1792,8 +1811,13 @@ ipcMain.handle('canva-banana:app-icon-set-selected', async (_event, iconId) => {
   return buildCurrentAppIconState();
 });
 
-ipcMain.handle('canva-banana:restart-services', async () => {
+ipcMain.handle('canva-banana:restart-services', async (event) => {
+  const wasTokenHubEnabled = runtimeConfig?.tokenHubSeedanceEnabled;
   await restartManagedServices();
+  if (wasTokenHubEnabled !== runtimeConfig?.tokenHubSeedanceEnabled) {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender);
+    setTimeout(() => targetWindow?.webContents.reload(), 150).unref();
+  }
   return buildSettingsStatus();
 });
 
@@ -1802,7 +1826,7 @@ ipcMain.handle('canva-banana:clear-settings', async (event, keys) => {
   const { content: nextContent } = applyDesktopSettings(content, { clears: Array.isArray(keys) ? keys : [] });
   await writeDesktopSettingsFileAtomic(getDesktopSettingsPath(), nextContent);
   for (const key of Array.isArray(keys) ? keys : []) {
-    if (DESKTOP_SETTING_KEYS.includes(key)) {
+    if (DESKTOP_SETTING_KEYS.includes(key) && !devTokenHubShellSettings.has(key)) {
       delete process.env[key]; // Cleared values should disappear from restarted services.
     }
   }
@@ -1819,7 +1843,7 @@ ipcMain.handle('canva-banana:save-settings', async (event, payload) => {
   const { content: nextContent, values } = applyDesktopSettings(content, { updates });
   await writeDesktopSettingsFileAtomic(getDesktopSettingsPath(), nextContent);
   for (const key of DESKTOP_SETTING_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(updates, key) && typeof updates[key] === 'string' && updates[key].trim()) {
+    if (!devTokenHubShellSettings.has(key) && Object.prototype.hasOwnProperty.call(updates, key) && typeof updates[key] === 'string' && updates[key].trim()) {
       process.env[key] = values[key]; // Saved values should affect the restart immediately.
     }
   }

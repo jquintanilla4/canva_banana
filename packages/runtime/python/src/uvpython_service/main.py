@@ -7,22 +7,26 @@ import socket
 import tempfile
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from fastapi import FastAPI, File, Form, HTTPException, Request as FastAPIRequest, UploadFile, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from volcenginesdkarkruntime._exceptions import ArkAPIStatusError
 
-from uvpython_service.config import get_settings
+from uvpython_service.config import get_settings, get_tokenhub_settings
 from uvpython_service.jimeng_worker import JIMENG_MODEL_ID, check_jimeng_health, check_jimeng_login, clear_jimeng_cache, create_jimeng_job, get_jimeng_setup_status, install_or_update_jimeng_cli, jimeng_job_store, serialize_jimeng_job, start_jimeng_login
 from uvpython_service.media import get_ffprobe_status, probe_media_duration_seconds
-from uvpython_service.models import JobState
-from uvpython_service.models import DEFAULT_MODEL_ID, MediaInput, SeedanceJobPayload
+from uvpython_service.models import JobState, is_tokenhub
+from uvpython_service.tokenhub_seedance import validate_output_url, validate_configuration
+from uvpython_service.models import DEFAULT_MODEL_ID, DraftFinalizationPayload, MediaInput, SeedanceJobPayload
+from uvpython_service.ark_references import resolve_reference_sources
 from uvpython_service.store import job_store
-from uvpython_service.worker import create_job, serialize_job
+from uvpython_service.worker import DraftFinalizationNotSubmitted, DraftFinalizationUnavailable, create_draft_finalization, create_job, resume_draft_finalization, resume_tokenhub_job, serialize_job
 
 app = FastAPI(title="Canva Banana UV Python Service")  # Local dev API surface.
 JIMENG_VIDEO_MEDIA_TYPES = {
@@ -334,7 +338,7 @@ def _stream_remote_asset(remote_url: str, *, allow_redirects: bool = True) -> St
     return StreamingResponse(iter_content(), media_type=media_type, headers=response_headers)
 
 
-def _open_pinned_remote_asset(remote_url: str, pinned_ip: str) -> http.client.HTTPResponse:
+def _open_pinned_remote_asset(remote_url: str, pinned_ip: str, *, provider: str = "Jimeng") -> http.client.HTTPResponse:
     parsed_url = urlparse(remote_url)
     assert parsed_url.hostname is not None  # _require_safe_jimeng_remote_url validates host before this call.
     connection_class = _PinnedHTTPSConnection if parsed_url.scheme == "https" else _PinnedHTTPConnection
@@ -355,27 +359,34 @@ def _open_pinned_remote_asset(remote_url: str, pinned_ip: str) -> http.client.HT
         response = connection.getresponse()
     except OSError as exc:
         connection.close()
-        raise HTTPException(status_code=502, detail=f"Jimeng asset download failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"Jimeng asset download failed: {exc}" if provider == "Jimeng" else f"{provider} asset download failed") from exc
     if 300 <= response.status < 400:
         response.close()
         connection.close()
-        raise HTTPException(status_code=403, detail="Jimeng remote output URL redirects are not allowed")
+        raise HTTPException(status_code=403, detail=f"{provider} remote output URL redirects are not allowed")
     if response.status >= 400:
         status_code = response.status
         response.close()
         connection.close()
-        raise HTTPException(status_code=502, detail=f"Jimeng asset download failed with HTTP {status_code}")
+        raise HTTPException(status_code=502, detail=f"{provider} asset download failed with HTTP {status_code}")
     return response  # StreamingResponse closes the HTTPResponse after iterating.
 
 
-def _stream_pinned_jimeng_remote_asset(remote_url: str, pinned_ip: str) -> StreamingResponse:
-    upstream_response = _open_pinned_remote_asset(remote_url, pinned_ip)
+def _stream_pinned_remote_asset(remote_url: str, pinned_ip: str, *, provider: str) -> StreamingResponse:
+    upstream_response = _open_pinned_remote_asset(remote_url, pinned_ip, provider=provider)
     media_type = upstream_response.headers.get_content_type() or "application/octet-stream"  # Reuse the provider mime when available.
     response_headers: dict[str, str] = {}
     for header_name in ("Content-Disposition", "Content-Length", "ETag", "Last-Modified"):
         header_value = upstream_response.headers.get(header_name)
         if header_value:
             response_headers[header_name] = header_value  # Mirror useful file metadata for direct opens and downloads.
+    if provider == "TokenHub":
+        if upstream_response.headers.get("Content-Type") and media_type not in {"video/mp4", "application/octet-stream"}:
+            upstream_response.close()
+            raise HTTPException(status_code=502, detail="TokenHub output is not an MP4 video")
+        media_type = "video/mp4"
+        response_headers["X-Content-Type-Options"] = "nosniff"
+        response_headers["Content-Disposition"] = "inline; filename=seedance.mp4"
 
     def iter_content() -> Iterator[bytes]:
         try:
@@ -393,7 +404,7 @@ def _stream_pinned_jimeng_remote_asset(remote_url: str, pinned_ip: str) -> Strea
 def _stream_jimeng_asset(output_url: str) -> StreamingResponse | FileResponse:
     if output_url.startswith(("http://", "https://")):
         pinned_ip = _require_safe_jimeng_remote_url(output_url)
-        return _stream_pinned_jimeng_remote_asset(output_url, pinned_ip)  # Avoid a second DNS lookup after host validation.
+        return _stream_pinned_remote_asset(output_url, pinned_ip, provider="Jimeng")
     output_path = Path(output_url).expanduser()
     if not output_path.exists() or not output_path.is_file():
         raise HTTPException(status_code=404, detail="Jimeng output file is not available")
@@ -472,6 +483,64 @@ def clear_jimeng_cache_endpoint(request: FastAPIRequest) -> dict[str, object]:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+class DraftFinalizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    draftTaskId: str
+    resolution: Literal["1080p", "4k"]
+    outputFormat: Literal["mp4", "mov"] | None = None
+    returnLastFrame: bool | None = None
+    watermark: bool | None = None
+    priority: int | None = Field(default=None, ge=0, le=9)
+
+
+class DraftResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    requestId: str
+    draftTaskId: str | None = None
+    resolution: Literal["1080p", "4k"] | None = None
+
+
+@app.post("/api/volcengine/draft-finalizations")
+def finalize_seedance_draft(request: FastAPIRequest, body: DraftFinalizationRequest) -> dict[str, object]:
+    _require_trusted_volcengine_submit_request(request)
+    try:
+        job = create_draft_finalization(DraftFinalizationPayload(
+            draft_task_id=body.draftTaskId,
+            resolution=body.resolution,
+            output_format=body.outputFormat,
+            return_last_frame=body.returnLastFrame,
+            watermark=body.watermark,
+            priority=body.priority,
+        ))
+        return _build_job_response(request, job)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DraftFinalizationNotSubmitted as exc:
+        raise HTTPException(status_code=503, detail={"code": "draft-not-submitted", "message": str(exc)}) from exc
+    except ArkAPIStatusError as exc:
+        status_code = exc.status_code if exc.status_code in {400, 401, 403, 404, 422, 429} else 500
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/volcengine/resume")
+def resume_seedance_draft_finalization(request: FastAPIRequest, body: DraftResumeRequest) -> dict[str, object]:
+    _require_trusted_volcengine_submit_request(request)
+    try:
+        return _build_job_response(request, resume_draft_finalization(
+            body.requestId, draft_task_id=body.draftTaskId, resolution=body.resolution,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DraftFinalizationUnavailable as exc:
+        raise HTTPException(status_code=410, detail={
+            "code": "draft-task-unavailable", "message": str(exc), "confirmedRequestId": exc.confirmed_request_id,
+        }) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.post("/api/volcengine/jobs")
 async def submit_seedance_job(
     request: FastAPIRequest,
@@ -484,6 +553,12 @@ async def submit_seedance_job(
     output_format: str | None = Form(None),
     generate_audio: bool = Form(False),
     camera_fixed: bool = Form(False),
+    web_search: bool = Form(False),
+    return_last_frame: bool = Form(False),
+    watermark: bool = Form(False),
+    priority: int | None = Form(None),
+    draft: bool = Form(False),
+    reference_sources: str | None = Form(None),
     primary_image: UploadFile | None = File(None),
     last_frame_image: UploadFile | None = File(None),
     reference_images: list[UploadFile] | None = File(None),
@@ -494,6 +569,14 @@ async def submit_seedance_job(
     payload: SeedanceJobPayload | None = None
     staged_media: list[MediaInput] = []
     try:
+        if is_tokenhub(model_id):
+            validate_configuration(get_tokenhub_settings(get_settings()), has_media=bool(primary_image or last_frame_image or reference_images or reference_videos or reference_audios))
+            if variant not in {"smart", "reference", "edit", "extend"}:
+                raise ValueError("Unsupported TokenHub generation mode")
+            if ratio not in {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "adaptive"}:
+                raise ValueError("Unsupported TokenHub ratio")
+            if resolution is not None and resolution not in {"480p", "720p", "1080p"}:
+                raise ValueError("Unsupported TokenHub resolution")
         if output_format is not None and output_format not in {"mp4", "mov"}:
             raise ValueError(f"Unsupported output_format: {output_format}")  # Seedance 2.5 only accepts mp4 or mov.
         primary_image_media = await _read_upload(primary_image)
@@ -513,6 +596,11 @@ async def submit_seedance_job(
         reference_audio_media = await _read_uploads(reference_audios, should_probe_duration=True, media_label="reference audio")
         staged_media.extend(reference_audio_media)
 
+        references = resolve_reference_sources(reference_sources, {
+            "image": reference_image_media,
+            "video": reference_video_media,
+            "audio": reference_audio_media,
+        })
         payload = SeedanceJobPayload(
             prompt=prompt,
             model_id=model_id,
@@ -523,11 +611,16 @@ async def submit_seedance_job(
             output_format=output_format,  # type: ignore[arg-type]  # Validated against the mp4/mov whitelist above.
             generate_audio=generate_audio,
             camera_fixed=camera_fixed,
+            web_search=web_search,
+            return_last_frame=return_last_frame,
+            watermark=watermark,
+            priority=priority,
+            draft=draft,
             primary_image=primary_image_media,
             last_frame_image=last_frame_image_media,
-            reference_images=reference_image_media,
-            reference_videos=reference_video_media,
-            reference_audios=reference_audio_media,
+            reference_images=references["image"],
+            reference_videos=references["video"],
+            reference_audios=references["audio"],
         )
         job = create_job(payload)
         payload = None  # The worker now owns the staged media lifecycle.
@@ -650,6 +743,18 @@ def get_seedance_job(job_id: str, request: FastAPIRequest) -> dict[str, object]:
     return _build_job_response(request, job)
 
 
+@app.post("/api/volcengine/jobs/{job_id}/resume")
+def resume_seedance_job(job_id: str, request: FastAPIRequest) -> dict[str, object]:
+    _require_trusted_volcengine_submit_request(request)
+    try:
+        job = resume_tokenhub_job(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    if not job:
+        raise HTTPException(status_code=404, detail="TokenHub job is no longer available to resume")
+    return _build_job_response(request, job)
+
+
 @app.get("/api/jimeng/jobs/{job_id}")
 def get_jimeng_job(job_id: str, request: FastAPIRequest) -> dict[str, object]:
     job = jimeng_job_store.get(job_id)
@@ -749,6 +854,16 @@ def download_seedance_job_output(job_id: str) -> StreamingResponse:
         raise HTTPException(status_code=404, detail="Job not found")
     if not job.output_url:
         raise HTTPException(status_code=404, detail="Job output is not available")
+    if is_tokenhub(job.model_id):
+        try:
+            validate_output_url(job.output_url)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from None
+        hostname = urlparse(job.output_url).hostname
+        pinned_ip = _resolve_public_remote_ip(hostname) if hostname else None
+        if not pinned_ip:
+            raise HTTPException(status_code=403, detail="TokenHub output must resolve to a public host")
+        return _stream_pinned_remote_asset(job.output_url, pinned_ip, provider="TokenHub")
     return _stream_remote_asset(job.output_url)  # Proxy the generated video through the local backend for browser compatibility.
 
 

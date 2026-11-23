@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanvasImage } from '../../types';
 import type { AppState } from '../useCanvasHistory';
+import { isVideoPlaybackUnavailable, markVideoPlaybackUnavailable } from '../../services/mediaService';
 
 const mediaMocks = vi.hoisted(() => ({
   loadAudioFromBlob: vi.fn(),
@@ -138,6 +139,24 @@ describe('useDuplicateCanvasMedia', () => {
     expect(duplicate.audioElement).toBe(duplicatedAudio);
     expect(duplicate.currentPlaybackTime).toBe(0);
     expect(duplicate.isPlaying).toBe(false);
+  });
+
+  it('duplicates a video with an unavailable preview without decoding it', async () => {
+    const snapshotObjectUrl = 'canva-banana-snapshot://source/ark-video';
+    const source = buildMedia('video', buildFile('video', snapshotObjectUrl));
+    if (!(source.element instanceof HTMLVideoElement)) throw new Error('Expected video fixture');
+    markVideoPlaybackUnavailable(source.element);
+    const { result } = renderDuplicateHook(source);
+
+    act(() => result.current.duplicateImage(source.id));
+
+    await waitFor(() => expect(result.current.state.images).toHaveLength(2));
+    const duplicate = result.current.state.images[1];
+    expect(duplicate.file).toBe(source.file);
+    expect(duplicate.element).not.toBe(source.element);
+    expect(duplicate.element instanceof HTMLVideoElement && isVideoPlaybackUnavailable(duplicate.element)).toBe(true);
+    expect(mediaMocks.loadMediaFromUrl).not.toHaveBeenCalled();
+    expect(mediaMocks.ensureRealSnapshotFile).not.toHaveBeenCalled();
   });
 
   it('keeps duplicating current-session media from its real File', async () => {
