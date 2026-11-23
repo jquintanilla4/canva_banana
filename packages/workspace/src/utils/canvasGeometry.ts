@@ -35,3 +35,28 @@ export const isOverlapping = (img1: CanvasImage, img2: CanvasImage): boolean => 
   const b = getImageBounds(img2);
   return !(a.minX > b.maxX || a.maxX < b.minX || a.minY > b.maxY || a.maxY < b.minY);
 };
+
+export const findNonOverlappingPlacement = (
+  images: readonly CanvasImage[],
+  width: number,
+  height: number,
+  startX: number,
+  startY: number,
+): { x: number; y: number } => {
+  const spacing = 20;
+  const bounds = images.map(getImageBounds);
+  const touchesRow = (box: ReturnType<typeof getImageBounds>, y: number) => y <= box.maxY && y + height >= box.minY;
+  const overlapsAt = (x: number, y: number) =>
+    bounds.some(box => touchesRow(box, y) && x <= box.maxX && x + width >= box.minX);
+
+  let x = startX;
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    if (!overlapsAt(x, startY)) return { x, y: startY };
+    x += width + spacing;
+  }
+
+  const y = startY + height + spacing;
+  if (!overlapsAt(startX, y)) return { x: startX, y };
+  const rightOfRow = bounds.reduce((nextX, box) => touchesRow(box, y) ? Math.max(nextX, box.maxX + spacing) : nextX, startX);
+  return { x: rightOfRow, y };
+};

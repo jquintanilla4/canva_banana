@@ -269,6 +269,7 @@ const installBrowserSnapshotWorkingStorage = (options: { beforeWrite?: () => Pro
 const renderEmptySnapshotIO = (autosaveEnabled: boolean) => {
   const setError = vi.fn();
   const setJimengSessionId = vi.fn();
+  const setSeedanceArkSettings = vi.fn();
   const selectionSetters = {
     setSelectedImageIds: vi.fn(),
     setSelectedNoteIds: vi.fn(),
@@ -300,7 +301,7 @@ const renderEmptySnapshotIO = (autosaveEnabled: boolean) => {
       setToastMessage: vi.fn(),
       setIsFileMenuOpen: vi.fn(),
     },
-    fal: { setJimengSessionId } as unknown as UseFalSettingsResult,
+    fal: { setJimengSessionId, setSeedanceArkSettings } as unknown as UseFalSettingsResult,
     selection: {
       selectedImageIds: [],
       referenceImageIds: [],
@@ -322,7 +323,7 @@ const renderEmptySnapshotIO = (autosaveEnabled: boolean) => {
     availableProviders: ['google', 'fal'],
     autosaveEnabled: enabled,
   }), { initialProps: { enabled: autosaveEnabled } });
-  return { ...rendered, setError, setJimengSessionId, resetHistory }; // Expose import feedback and document-scoped session restoration.
+  return { ...rendered, setError, setJimengSessionId, setSeedanceArkSettings, resetHistory }; // Expose import feedback and document-scoped session restoration.
 };
 
 afterEach(() => {
@@ -444,13 +445,14 @@ describe('useSnapshotIO (Kling v3)', () => {
         closeSnapshotRead: vi.fn(async () => ({ closed: true })),
       },
     };
-    const { result, setJimengSessionId } = renderEmptySnapshotIO(true);
+    const { result, setJimengSessionId, setSeedanceArkSettings } = renderEmptySnapshotIO(true);
 
     await act(async () => {
       await result.current.importSnapshotWithPicker(vi.fn());
     });
     expect(beginAutosaveSnapshot).not.toHaveBeenCalled();
     expect(setJimengSessionId).toHaveBeenCalledWith(0);
+    expect(setSeedanceArkSettings).toHaveBeenCalledWith({});
 
     act(() => {
       result.current.autosaveSnapshot();
@@ -772,6 +774,7 @@ describe('useSnapshotIO (Kling v3)', () => {
       setKlingV3Shot2Duration: vi.fn(),
       handleSeedance2JimengModelVersionChange: vi.fn(),
       handleSeedance2VolcengineModelChange: vi.fn(),
+      setSeedanceArkSettings: vi.fn(),
       setJimengMultiframeDuration: vi.fn(),
       setJimengMultiframeResolution: vi.fn(),
       setJimengSessionId: vi.fn(),
@@ -933,7 +936,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setToastMessage: vi.fn(),
         setIsFileMenuOpen: vi.fn(),
       },
-      fal: { setJimengSessionId: vi.fn() } as unknown as UseFalSettingsResult,
+      fal: { setJimengSessionId: vi.fn(), setSeedanceArkSettings: vi.fn() } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
         referenceImageIds: [],
@@ -1014,7 +1017,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setToastMessage: vi.fn(),
         setIsFileMenuOpen: vi.fn(),
       },
-      fal: { setJimengSessionId: vi.fn() } as unknown as UseFalSettingsResult,
+      fal: { setJimengSessionId: vi.fn(), setSeedanceArkSettings: vi.fn() } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
         referenceImageIds: [],
@@ -1122,7 +1125,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setToastMessage,
         setIsFileMenuOpen: vi.fn(),
       },
-      fal: { setJimengSessionId: vi.fn() } as unknown as UseFalSettingsResult,
+      fal: { setJimengSessionId: vi.fn(), setSeedanceArkSettings: vi.fn() } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
         referenceImageIds: [],
@@ -1273,7 +1276,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setToastMessage: vi.fn(),
         setIsFileMenuOpen: vi.fn(),
       },
-      fal: { setJimengSessionId: vi.fn() } as unknown as UseFalSettingsResult,
+      fal: { setJimengSessionId: vi.fn(), setSeedanceArkSettings: vi.fn() } as unknown as UseFalSettingsResult,
       selection: {
         selectedImageIds: [],
         referenceImageIds: [],
@@ -2022,6 +2025,7 @@ describe('useSnapshotIO (Kling v3)', () => {
         setFalVideoModelId: vi.fn(),
         setWan27VideoVariant: vi.fn(),
         handleSeedance2VolcengineModelChange: vi.fn(),
+        setSeedanceArkSettings: vi.fn(),
         setFlux3Variant: vi.fn(),
         setFlux3AspectRatio: vi.fn(),
         setFlux3Resolution: vi.fn(),

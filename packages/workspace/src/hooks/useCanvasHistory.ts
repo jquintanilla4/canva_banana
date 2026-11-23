@@ -74,6 +74,11 @@ export const useCanvasHistory = (
   const [liveVideoPromptBars, setLiveVideoPromptBars] = useState<CanvasVideoPromptBar[] | null>(null);
   const imageDraftRef = useRef<CanvasImageDraft | null>(null);
   const currentImagesRef = useRef<CanvasImage[]>(initialState.images);
+  const documentVersion = useRef(0);
+  const getCanvasDocument = useCallback(() => ({
+    version: documentVersion.current,
+    images: currentImagesRef.current,
+  }), []);
   const pendingImageMergeLogRef = useRef<{ baselineIds: Set<string> } | null>(null);
 
   const currentState = historyState.history[historyState.index];
@@ -143,6 +148,19 @@ export const useCanvasHistory = (
         history: newHistory,
       };
     });
+  }, []);
+
+  const updateImagesMetadata = useCallback((update: (metadata: CanvasImage['metadata']) => CanvasImage['metadata']) => {
+    setHistoryState(current => ({
+      ...current,
+      history: current.history.map(state => {
+        const images = state.images.map(image => {
+          const metadata = update(image.metadata);
+          return metadata === image.metadata ? image : { ...image, metadata };
+        });
+        return images.some((image, index) => image !== state.images[index]) ? { ...state, images } : state;
+      }),
+    }));
   }, []);
 
   const setLiveImages = useCallback<Dispatch<SetStateAction<CanvasImage[] | null>>>((value) => {
@@ -260,6 +278,7 @@ export const useCanvasHistory = (
   }, [commit]);
 
   const resetHistory = useCallback((nextState: AppState) => {
+    documentVersion.current += 1;
     clearLiveImages();
     setLivePaths(null);
     setLiveNotes(null);
@@ -353,6 +372,8 @@ export const useCanvasHistory = (
     setLiveVideoPromptBars,
     commit,
     replaceState,
+    updateImagesMetadata,
+    getCanvasDocument,
     undo,
     redo,
     canUndo,

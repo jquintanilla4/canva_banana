@@ -59,6 +59,10 @@ import { KLING_V4_DEFAULTS, KLING_V4_EDIT_VIDEO_MODEL_ID, isKlingV4VideoModel, i
 import { resolveKlingV4RunSettings, serializeKlingV4GenerationOptions } from '../services/klingV4RunSettings';
 import { resolveGptImage2RunSettings, serializeGptImage2GenerationOptions } from '../services/gptImage2RunSettings';
 import { resolveGptImage25RunSettings, serializeGptImage25GenerationOptions } from '../services/gptImage25RunSettings';
+import { TOKENHUB_GPT_IMAGE_25_DEFAULTS, isTokenHubGptImage25Model } from '../services/tokenHubGptImage25Config';
+import { resolveTokenHubGptImage25RunSettingsFromOptions, serializeTokenHubGptImage25GenerationOptions } from '../services/tokenHubGptImage25RunSettings';
+import { TOKENHUB_NANO_BANANA_DEFAULTS, isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
+import { resolveTokenHubNanoBananaRunSettingsFromOptions, serializeTokenHubNanoBananaGenerationOptions } from '../services/tokenHubNanoBananaRunSettings';
 import { resolveRecraftRunSettings, serializeRecraftGenerationOptions } from '../services/recraftRunSettings';
 import { resolveGrokImageRunSettings, serializeGrokImageGenerationOptions } from '../services/grokImageRunSettings';
 
@@ -174,7 +178,7 @@ const VIDEO_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
         seedance2Duration: '5',
         seedance2GenerateAudio: false,
         seedance2CameraFixed: false,
-        ...(isVolcengine ? { seedance2VolcengineModel: 'standard', seedance2OutputFormat: 'mp4' } : {}),
+        ...(isVolcengine ? { seedance2VolcengineModel: 'standard', seedance2OutputFormat: 'mp4', seedanceArkSettings: {} } : {}),
         ...(modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID ? { sessionId: 0 } : {}),
       }; // Provider-owned defaults must not overwrite hidden settings for another provider.
     },
@@ -186,6 +190,8 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [SEEDVR_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, noiseScale: 0.1 } }, // SeedVR defaults.
   { matches: [FLUX_3_TEXT_TO_IMAGE_MODEL_ID], defaults: restoredOptions => resolveFlux3ImageSettings(restoredOptions) },
   { matches: (modelId) => isGptImage26Model(modelId), defaults: GPT_IMAGE_26_DEFAULTS },
+  { matches: isTokenHubNanoBananaModel, defaults: TOKENHUB_NANO_BANANA_DEFAULTS },
+  { matches: (modelId) => isTokenHubGptImage25Model(modelId), defaults: TOKENHUB_GPT_IMAGE_25_DEFAULTS },
   { matches: (modelId) => isGptImage25Model(modelId), defaults: GPT_IMAGE_25_DEFAULTS },
   { matches: (modelId) => isKrea3Model(modelId), defaults: KREA_3_DEFAULTS },
   { matches: (modelId) => isIdeogram45Model(modelId), defaults: IDEOGRAM_45_DEFAULTS },
@@ -290,6 +296,12 @@ export const resolveGenerationTransferOptions = (
       ...serializeKlingV4GenerationOptions(settings),
     }; // Replays cannot inherit live controls or restore Source duration into Generate.
   }
+  if (isTokenHubNanoBananaModel(normalizedModelId)) {
+    const settings = resolveTokenHubNanoBananaRunSettingsFromOptions(
+      generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image', resolvedOptions, 'restore',
+    );
+    return { ...resolvedOptions, ...serializeTokenHubNanoBananaGenerationOptions(settings) };
+  }
   if (isNanoBananaEditModelId(normalizedModelId)) {
     const settings = resolveNanoBananaRunSettings({
       kind: generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image', modelId: normalizedModelId,
@@ -321,6 +333,12 @@ export const resolveGenerationTransferOptions = (
       delete options.gptImage26FrameDurationMs;
     }
     return options;
+  }
+  if (isTokenHubGptImage25Model(normalizedModelId)) {
+    const settings = resolveTokenHubGptImage25RunSettingsFromOptions(
+      generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image', resolvedOptions, 'restore',
+    );
+    return { ...resolvedOptions, ...serializeTokenHubGptImage25GenerationOptions(settings) };
   }
   if (isGptImage25Model(normalizedModelId)) {
     const settings = resolveGptImage25RunSettings({

@@ -1,4 +1,7 @@
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { isGptImage26Model } from './gptImage26Config';
+import { isTokenHubGptImage25Model } from './tokenHubGptImage25Config';
+import { isTokenHubNanoBananaModel } from './tokenHubNanoBananaConfig';
 import {
   isFalVideoModelId as isVideoModelId,
   isKrea3Model,
@@ -224,6 +227,22 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
     }),
   },
   {
+    matches: (modelId) => isTokenHubNanoBananaModel(modelId),
+    base: { provider: 'tokenhub', supportsCameraSettings: true },
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: annotationReferenceToast(modelId, 'NanoBanana 2.1 (TokenHub)'),
+    }),
+  },
+  {
+    matches: (modelId) => isTokenHubGptImage25Model(modelId),
+    base: { provider: 'tokenhub' },
+    resolve: (_ctx, modelId) => ({
+      maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
+      referenceLimitToast: () => ({ message: 'GPT Image 2.5 (TokenHub) supports up to 15 reference images. Annotations use a separate markup image.', durationMs: 4000 }),
+    }),
+  },
+  {
     matches: (modelId) => isGptImage25Model(modelId),
     resolve: (_ctx, modelId) => ({
       maxReferenceImages: getModelReferenceCapabilities(modelId).referenceCapacity,
@@ -420,14 +439,16 @@ const MODEL_UI_CAPABILITY_RULES: readonly ModelUiCapabilityRule[] = [
     resolve: (ctx, modelId) => {
       const isVolcengineSelector = modelId === SEEDANCE_2_VIDEO_MODEL_ID;
       // Only the Volcengine selector can opt into the larger Seedance 2.5 reference envelope.
-      const limits = getSeedance2VolcengineReferenceLimits(isVolcengineSelector ? (ctx.seedance2VolcengineModel ?? 'standard') : 'standard');
-      const modelLabel = isVolcengineSelector && ctx.seedance2VolcengineModel === 'seedance25' ? 'Seedance 2.5' : 'Seedance 2';
+      const limits = getSeedance2VolcengineReferenceLimits(isVolcengineSelector ? (ctx.seedance2VolcengineModel ?? 'standard') : undefined);
+      const volcengineModel = getSeedance2VolcengineModelCapabilities(ctx.seedance2VolcengineModel);
+      const modelLabel = isVolcengineSelector && volcengineModel.family === '2.5' ? volcengineModel.label : 'Seedance 2';
       return {
+        ...(isVolcengineSelector ? { provider: volcengineModel.provider } : {}),
         supportsTailFrame: ctx.seedance2Variant === 'smart',
         promptPlaceholder: ctx.seedance2Variant === 'edit'
           ? `Seedance 2 Edit: select a video to edit (@Video1), optionally tag @Image/@Audio replacement clips, then describe the changes... ${GENERATE_SUFFIX}`
           : ctx.seedance2Variant === 'extend'
-            ? `${modelLabel} Extend: select up to ${limits.videos} video clips and describe how to chain them, e.g. "@Video1 followed by @Video2", or extend @Video1 forward or backward... ${GENERATE_SUFFIX}`
+            ? `${modelLabel} Extend: select up to ${limits.videos} video clips${isVolcengineSelector && volcengineModel.family === '2.5' ? ' and optional reference images' : ''}, then describe how to chain or extend the clips... ${GENERATE_SUFFIX}`
             : ctx.seedance2Variant === 'reference'
               ? referencePlaceholder(modelLabel, limits.images, limits.videos, limits.audios)
               : `Seedance 2 Smart: write a prompt for text-to-video, or select an image to use as the first frame. Shift-click another still image to mark an end frame... ${GENERATE_SUFFIX}`,

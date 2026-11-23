@@ -167,6 +167,13 @@ class WorkerEditExtendValidationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _validate_payload(payload)
 
+    def test_seedance25_extend_with_reference_image_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            payload = build_variant_payload(
+                "extend", Path(tmp_dir), model_id="doubao-seedance-2-5-260628", ratio="adaptive", videos=1, images=1,
+            )
+            _validate_payload(payload)
+
     def test_extend_rejects_first_and_last_frame_images(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -409,63 +416,32 @@ class Seedance25ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _validate_payload(build_smart_payload("doubao-seedance-2-0-260128", output_format="mov"))
 
-    def test_seedance25_rejects_1080p(self) -> None:
-        with self.assertRaises(ValueError):
-            _validate_payload(build_seedance25_smart_payload(resolution="1080p"))
+    def test_seedance25_accepts_1080p_and_4k(self) -> None:
+        for resolution in ("1080p", "4k"):
+            _validate_payload(build_seedance25_smart_payload(resolution=resolution))
 
 
-class FakeCreateTasks:
+class RecordingArkClient:
     def __init__(self) -> None:
-        self.kwargs: dict[str, object] | None = None
+        self.body: dict[str, object] = {}
 
-    def create(
-        self,
-        *,
-        model: object,
-        content: object,
-        ratio: object,
-        duration: object,
-        watermark: object,
-        generate_audio: object,
-        camera_fixed: object | None = None,
-        resolution: object | None = None,
-        extra_body: dict[str, object] | None = None,
-    ) -> object:
-        self.kwargs = {
-            "model": model,
-            "content": content,
-            "ratio": ratio,
-            "duration": duration,
-            "watermark": watermark,
-            "generate_audio": generate_audio,
-        }  # An explicit signature rejects unsupported SDK keyword arguments.
-        if camera_fixed is not None:
-            self.kwargs["camera_fixed"] = camera_fixed
-        if resolution is not None:
-            self.kwargs["resolution"] = resolution
-        if extra_body is not None:
-            self.kwargs["extra_body"] = extra_body
+    def post(self, path: str, *, body: dict[str, object], cast_to: object) -> object:
+        self.body = body
         return SimpleNamespace(id="task-1")
 
 
-def build_fake_ark_client() -> SimpleNamespace:
-    tasks = FakeCreateTasks()
-    return SimpleNamespace(content_generation=SimpleNamespace(tasks=tasks))
-
-
 class CreateRemoteTaskTests(unittest.TestCase):
-    def test_seedance20_smart_request_keeps_camera_fixed_and_omits_25_params(self) -> None:
-        client = build_fake_ark_client()
-        payload = build_smart_payload("doubao-seedance-2-0-260128")
+    def test_seedance20_smart_request_omits_camera_fixed_and_25_params(self) -> None:
+        client = RecordingArkClient()
+        payload = build_smart_payload("doubao-seedance-2-0-260128", camera_fixed=True)
 
         _create_remote_task(client, payload, content=[{"type": "text", "text": "make a video"}])  # type: ignore[arg-type]
 
-        kwargs = client.content_generation.tasks.kwargs or {}
-        self.assertIn("camera_fixed", kwargs)
-        self.assertNotIn("output_format", kwargs)
-        self.assertNotIn("omni_reference_task_type", kwargs)
-        self.assertNotIn("extra_body", kwargs)
-        self.assertEqual(kwargs["watermark"], False)
+        body = client.body
+        self.assertNotIn("camera_fixed", body)
+        self.assertNotIn("output_format", body)
+        self.assertNotIn("omni_reference_task_type", body)
+        self.assertEqual(body["watermark"], False)
 
     def test_seedance20_edit_and_extend_requests_omit_25_task_type(self) -> None:
         model_ids = (
@@ -476,28 +452,28 @@ class CreateRemoteTaskTests(unittest.TestCase):
         for model_id in model_ids:
             for variant in ("edit", "extend"):
                 with self.subTest(model_id=model_id, variant=variant), tempfile.TemporaryDirectory() as tmp_dir:
-                    client = build_fake_ark_client()
+                    client = RecordingArkClient()
                     payload = build_variant_payload(variant, Path(tmp_dir), model_id=model_id, videos=1)
 
                     _create_remote_task(client, payload, content=[{"type": "text", "text": "make a video"}])  # type: ignore[arg-type]
 
-                    kwargs = client.content_generation.tasks.kwargs or {}
-                    self.assertNotIn("extra_body", kwargs)
-                    self.assertIn("camera_fixed", kwargs)
+                    body = client.body
+                    self.assertNotIn("omni_reference_task_type", body)
+                    self.assertNotIn("camera_fixed", body)
 
     def test_seedance25_request_omits_camera_fixed(self) -> None:
-        client = build_fake_ark_client()
+        client = RecordingArkClient()
         payload = build_seedance25_smart_payload(output_format="mov")
 
         _create_remote_task(client, payload, content=[{"type": "text", "text": "make a video"}])  # type: ignore[arg-type]
 
-        kwargs = client.content_generation.tasks.kwargs or {}
-        self.assertNotIn("camera_fixed", kwargs)
-        self.assertNotIn("output_format", kwargs)  # Provider extensions must not become unsupported SDK keyword arguments.
-        self.assertEqual(kwargs["extra_body"], {"output_format": "mov"})  # Smart tasks leave the omni task type on auto.
+        body = client.body
+        self.assertNotIn("camera_fixed", body)
+        self.assertEqual(body["output_format"], "mov")
+        self.assertNotIn("omni_reference_task_type", body)
 
     def test_seedance25_edit_request_sets_omni_task_type(self) -> None:
-        client = build_fake_ark_client()
+        client = RecordingArkClient()
         with tempfile.TemporaryDirectory() as tmp_dir:
             payload = build_variant_payload(
                 "edit",
@@ -510,13 +486,13 @@ class CreateRemoteTaskTests(unittest.TestCase):
 
             _create_remote_task(client, payload, content=[{"type": "text", "text": "make a video"}])  # type: ignore[arg-type]
 
-        kwargs = client.content_generation.tasks.kwargs or {}
-        self.assertEqual(kwargs["extra_body"], {"omni_reference_task_type": "edit"})
-        self.assertNotIn("camera_fixed", kwargs)
-        self.assertNotIn("output_format", kwargs)  # Omitted when the caller leaves the provider default.
+        body = client.body
+        self.assertEqual(body["omni_reference_task_type"], "edit")
+        self.assertNotIn("camera_fixed", body)
+        self.assertNotIn("output_format", body)  # Omitted when the caller leaves the provider default.
 
     def test_seedance25_extend_request_sets_omni_task_type(self) -> None:
-        client = build_fake_ark_client()
+        client = RecordingArkClient()
         with tempfile.TemporaryDirectory() as tmp_dir:
             payload = build_variant_payload(
                 "extend",
@@ -529,8 +505,8 @@ class CreateRemoteTaskTests(unittest.TestCase):
 
             _create_remote_task(client, payload, content=[{"type": "text", "text": "make a video"}])  # type: ignore[arg-type]
 
-        kwargs = client.content_generation.tasks.kwargs or {}
-        self.assertEqual(kwargs["extra_body"], {"omni_reference_task_type": "extend"})
+        body = client.body
+        self.assertEqual(body["omni_reference_task_type"], "extend")
 
 
 if __name__ == "__main__":

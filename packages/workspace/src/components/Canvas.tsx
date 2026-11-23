@@ -1,6 +1,10 @@
+import { VolcengineDraftActions } from './VolcengineDraftActions';
+import { hasVolcengineLastFrame } from '../services/volcengineMedia';
+import { getActiveVolcengineSettings, getVolcengineAssetCounts, getVolcengineAssetMentions, type VolcengineAssetMention, type VolcengineFinalResolution } from '../services/volcengineSettings';
+import { getSeedanceVideoPickerModelId, resolveSeedanceVideoPickerSelection, withSelectedSeedanceVideoPickerOption } from '../services/seedanceVideoPicker';
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react';
 import { Tool, Path, Point, CanvasImage, CanvasNote, AppMode, CanvasVideoPromptArea, CanvasVideoPromptBar, VideoPromptAreaMembership, VideoModelCapabilityProfile } from '../types';
-import { getNaturalSize, loadImageFromBlob, prepareVideoForPlayback } from '../services/mediaService';
+import { getNaturalSize, loadImageFromBlob, playVideoFromUserGesture } from '../services/mediaService';
 import {
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -35,7 +39,7 @@ import { getImageBounds } from './canvas/geometry';
 import { getCanvasWheelZoomMultiplier } from './canvas/wheelZoom';
 import { isAudioImage, isVideoImage } from './canvas/mediaGuards';
 import { createCanvasRenderCache, drawCanvas, drawDotGridLayer } from './canvas/render/drawCanvas';
-import { getJimengSafeSeedance2Resolution, isEmbeddedSeedanceEditMode, isEmbeddedSeedanceReferenceMode } from '../utils/embeddedVideoRouting';
+import { applyEmbeddedSeedanceModel, getEmbeddedSeedanceModel, getJimengSafeSeedance2Resolution, isEmbeddedSeedanceEditMode, isEmbeddedSeedanceReferenceMode } from '../utils/embeddedVideoRouting';
 import { getJimengMultiframeDisabledReason } from '../utils/jimengMultiframe';
 import { createImageLodCache, disposeImageLodCache, prewarmImageLodCache, pruneImageLodCache, type ImageLodCache } from './canvas/render/imageLodCache';
 import { drainCanvasPerfStats, isCanvasPerfHudEnabled, recordCanvasDraw } from './canvas/render/perfHud';
@@ -133,6 +137,10 @@ interface CanvasProps {
   getMetadataTransferBlockReason?: (imageId: string) => string | null; // Null means the saved generation can load into the prompt bar.
   onImageDuplicate: (imageId: string) => void;
   onRerunGeneration: (imageId: string) => void;
+  onRenderVolcengineDraft?: (imageId: string, resolution: VolcengineFinalResolution, recoveryId?: string) => void;
+  onClearUnconfirmedVolcengineRender?: (imageId: string, resolution: VolcengineFinalResolution) => void;
+  onRetryVolcengineLastFrame?: (imageId: string) => void;
+  downloadingLastFrames?: ReadonlySet<string>;
   showMetadataOverlay: boolean;
   transformMode: { imageId: string; } | null;
   onStartTransform: (imageId: string) => void;
@@ -142,7 +150,7 @@ interface CanvasProps {
   onVideoPromptBarBlur: (barId: string) => void;
   onVideoPromptBarUpdate: (barId: string, updater: (bar: CanvasVideoPromptBar) => CanvasVideoPromptBar) => void;
   onVideoPromptBarSubmit: (barId: string) => void;
-  buildVideoPromptBarControls: (bar: CanvasVideoPromptBar) => ReadonlyArray<PromptBarControlConfig>;
+  buildVideoPromptBarControls: (bar: CanvasVideoPromptBar, arkAssetMentions: readonly VolcengineAssetMention[]) => ReadonlyArray<PromptBarControlConfig>;
   getVideoPromptBarSubmitError?: (bar: CanvasVideoPromptBar) => string | null;
   embeddedVideoPromptBarModelOptions: ReadonlyArray<{ value: string; label: string }>;
   onScaleChange?: (scale: number) => void;
@@ -160,6 +168,8 @@ const VIEW_GESTURE_SETTLE_MS = 160;
 const WHEEL_RECT_TTL_MS = 300;
 
 const normalizeEmbeddedPromptBarForModel = (bar: CanvasVideoPromptBar, modelId: string): CanvasVideoPromptBar => {
+  const seedance = resolveSeedanceVideoPickerSelection(modelId, getEmbeddedSeedanceModel(bar));
+  if (seedance) return applyEmbeddedSeedanceModel({ ...bar, modelId: seedance.modelId }, seedance.model);
   if (modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID) {
     return {
       ...bar,
@@ -323,6 +333,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   getMetadataTransferBlockReason,
   onImageDuplicate,
   onRerunGeneration,
+  onRenderVolcengineDraft,
+  onClearUnconfirmedVolcengineRender,
+  onRetryVolcengineLastFrame,
+  downloadingLastFrames,
   showMetadataOverlay,
   transformMode,
   onStartTransform,
@@ -443,16 +457,12 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       if (nextIsPlaying) {
         const attemptId = getNextPlaybackAttemptId(mediaId);
-        prepareVideoForPlayback(videoElement); // Wake lazy videos before asking Chromium to play them.
-        const playPromise = videoElement.play();
-        if (playPromise && typeof playPromise.catch === 'function') {
-          playPromise.catch(err => {
-            console.error('Failed to play video', err);
-            if (playbackAttemptIdsRef.current[mediaId] === attemptId) {
-              onMediaPlaybackRejected?.(mediaId); // Repair optimistic state if the browser blocks playback.
-            }
-          });
-        }
+        void playVideoFromUserGesture(videoElement, { keepUnavailablePreview: target.metadata?.generation?.provider === 'volcengine' }).catch(err => {
+          console.error('Failed to play video', err);
+          if (playbackAttemptIdsRef.current[mediaId] === attemptId) {
+            onMediaPlaybackRejected?.(mediaId);
+          }
+        });
       } else {
         getNextPlaybackAttemptId(mediaId);
         videoElement.pause();
@@ -1196,6 +1206,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     return images.find(img => img.id === targetId) || null;
   }, [images, primarySelectedImageId, selectedImageIds.length]);
   const selectedImageIsVideo = selectedImage?.mediaType === 'video';
+  const selectedDraft = selectedImageIsVideo ? selectedImage.metadata?.generation?.volcengineDraft : undefined;
+  const lastFrameTaskId = selectedImageIsVideo ? selectedImage.metadata?.volcengineLastFrameTaskId : undefined;
+  const isDownloadingLastFrame = !!lastFrameTaskId && downloadingLastFrames?.has(lastFrameTaskId) === true;
+  const canRetryLastFrame = onRetryVolcengineLastFrame && lastFrameTaskId && !hasVolcengineLastFrame(images, lastFrameTaskId);
   const selectedImageIsAudio = selectedImage?.mediaType === 'audio';
   const selectedVideoIsPlaying = selectedImageIsVideo && selectedImage?.isPlaying;
   const selectedAudioIsPlaying = selectedImageIsAudio && selectedImage?.isPlaying;
@@ -1670,6 +1684,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             height: bar.height,
           };
         const selectedEmbeddedModelId = bar.modelId ?? SEEDANCE_2_VIDEO_MODEL_ID; // Legacy bars default to Volcengine Seedance 2.
+        const selectedSeedanceModel = getEmbeddedSeedanceModel(bar);
+        const selectedPickerId = getSeedanceVideoPickerModelId(selectedEmbeddedModelId, selectedSeedanceModel);
         const removedEmbeddedModelLabel = isRemovedOneToAllAnimateModelId(selectedEmbeddedModelId)
           ? '1-to-All Animate (Unavailable)'
           : isRemovedHailuoModelId(selectedEmbeddedModelId)
@@ -1683,10 +1699,17 @@ export const Canvas: React.FC<CanvasProps> = ({
           : null; // Keep the retired choice visible while supported choices remain selectable.
         const embeddedModelOptionsForBar = removedEmbeddedModelOption
           ? [removedEmbeddedModelOption, ...embeddedVideoPromptBarModelOptions]
-          : embeddedVideoPromptBarModelOptions;
-        const selectedEmbeddedModelLabel = removedEmbeddedModelOption?.label
-          ?? embeddedVideoPromptBarModelOptions.find(option => option.value === selectedEmbeddedModelId)?.label
-          ?? 'Seedance 2';
+          : withSelectedSeedanceVideoPickerOption(embeddedVideoPromptBarModelOptions, selectedPickerId);
+        const selectedEmbeddedModelLabel = embeddedModelOptionsForBar.find(option => option.value === selectedPickerId)?.label ?? 'Seedance 2';
+        const arkAssets = selectedEmbeddedModelId === SEEDANCE_2_VIDEO_MODEL_ID
+          ? getActiveVolcengineSettings(selectedSeedanceModel, bar.seedance2Variant, bar.seedanceArkSettings ?? bar.falOptions?.seedanceArkSettings).assets
+          : undefined;
+        const arkAssetCounts = getVolcengineAssetCounts(arkAssets);
+        const arkAssetMentions = getVolcengineAssetMentions(arkAssets, {
+          image: barMembership?.acceptedImageIds.length ?? 0,
+          video: barMembership?.acceptedVideoIds.length ?? 0,
+          audio: barMembership?.acceptedAudioIds.length ?? 0,
+        });
         const usableEmbeddedMediaCount = barMembership
           ? Number(Boolean(barMembership.primaryImageId))
             + barMembership.acceptedImageIds.length
@@ -1794,8 +1817,8 @@ export const Canvas: React.FC<CanvasProps> = ({
                   inputDisabled={false}
                   submitDisabled={isRemovedEmbeddedModel || !barMembership || videoPromptBarSubmitError !== null || jimengMultiframeDisabledReason !== null || (
                     isEmbeddedSeedanceEditMode(bar, selectedEmbeddedModelId)
-                      ? barMembership.acceptedVideoIds.length === 0
-                      : isEmbeddedSeedanceReferenceMode(bar, selectedEmbeddedModelId) && usableEmbeddedMediaCount === 0
+                      ? barMembership.acceptedVideoIds.length + arkAssetCounts.video === 0
+                      : isEmbeddedSeedanceReferenceMode(bar, selectedEmbeddedModelId) && usableEmbeddedMediaCount + arkAssetMentions.length === 0
                   ) || (
                     selectedEmbeddedModelId === MINIMAX_H3_VIDEO_MODEL_ID
                       && (bar.falOptions?.miniMaxH3Variant ?? 'reference') === 'reference'
@@ -1807,14 +1830,14 @@ export const Canvas: React.FC<CanvasProps> = ({
                   )}
                   submitDisabledReason={videoPromptBarSubmitError ?? jimengMultiframeDisabledReason}
                   modelOptions={embeddedModelOptionsForBar}
-                  selectedModel={selectedEmbeddedModelId}
+                  selectedModel={selectedPickerId}
                   onModelChange={(modelId) => onVideoPromptBarUpdate(bar.id, currentBar => normalizeEmbeddedPromptBarForModel(currentBar, modelId))}
                   modelSelectDisabled={isLoading}
                   modelMode="video"
                   onModelModeChange={() => {}}
                   modelModeDisabled
                   showModeSwitch={false}
-                  modelControls={buildVideoPromptBarControls(bar)}
+                  modelControls={buildVideoPromptBarControls(bar, arkAssetMentions)}
                   promptPlaceholder={isKlingV3EmbeddedModel ? 'Describe the first Kling 3.0 Pro shot using staged media... (Cmd/Ctrl + Enter to generate)' : `Describe the ${selectedEmbeddedModelLabel} video using staged media... (Cmd/Ctrl + Enter to generate)`}
                   showMultiPrompt={isKlingV3EmbeddedModel && Boolean(bar.klingV3MultiPromptEnabled)}
                   multiPrompt={bar.klingV3MultiPrompt ?? ''}
@@ -1827,8 +1850,8 @@ export const Canvas: React.FC<CanvasProps> = ({
                   negativePromptPlaceholder="Describe what the video should avoid... (optional)"
                   negativePromptOutlineColor={showEmbeddedNegativePrompt ? '#f87171' : undefined}
                   klingSuggestionsEnabled
-                  klingReferenceCount={barMembership ? Object.keys(barMembership.orderLabels).length : 0}
-                  klingSuggestionOptions={barMembership ? getMentionOptionsFromMembership(barMembership) : []}
+                  klingReferenceCount={barMembership ? Object.keys(barMembership.orderLabels).length + arkAssetMentions.length : 0}
+                  klingSuggestionOptions={barMembership ? [...getMentionOptionsFromMembership(barMembership), ...arkAssetMentions.map(({ mention }) => mention)] : []}
                   onPromptFocus={() => onVideoPromptBarFocus(bar.id)}
                   onPromptBlur={() => onVideoPromptBarBlur(bar.id)}
                 />
@@ -1917,6 +1940,31 @@ export const Canvas: React.FC<CanvasProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+      {!isPresentationMode && !cropMode && !transformMode && selectedImage && ((selectedDraft && onRenderVolcengineDraft) || canRetryLastFrame) && (
+        <div className="absolute left-1/2 top-20 z-[101] flex -translate-x-1/2 items-center gap-2">
+          {selectedDraft && onRenderVolcengineDraft && (
+            <VolcengineDraftActions
+              key={selectedImage.id}
+              draft={selectedDraft}
+              images={images}
+              onRender={(resolution, recoveryId) => onRenderVolcengineDraft(selectedImage.id, resolution, recoveryId)}
+              onClearPending={onClearUnconfirmedVolcengineRender
+                ? resolution => onClearUnconfirmedVolcengineRender(selectedImage.id, resolution)
+                : undefined}
+            />
+          )}
+          {canRetryLastFrame && (
+            <ActionButton
+              onClick={() => onRetryVolcengineLastFrame(selectedImage.id)}
+              disabled={isDownloadingLastFrame}
+              title={isDownloadingLastFrame ? 'Downloading last frame' : 'Retry last frame'}
+              ariaLabel="Retry last frame"
+            >
+              <span className="whitespace-nowrap text-xs">{isDownloadingLastFrame ? 'Downloading frame…' : 'Retry last frame'}</span>
+            </ActionButton>
+          )}
         </div>
       )}
       {!isPresentationMode && selectedImage && !cropMode && !transformMode && (

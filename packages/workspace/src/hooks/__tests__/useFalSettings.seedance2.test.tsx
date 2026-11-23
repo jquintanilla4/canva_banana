@@ -115,7 +115,7 @@ describe('useFalSettings (Seedance 2)', () => {
     act(() => result.current.handleSeedance2VolcengineModelChange('seedance25'));
 
     expect(result.current.seedance2VolcengineModel).toBe('seedance25');
-    expect(result.current.seedance2Resolution).toBe('720p'); // 2.5 caps at 720p like Fast/Mini.
+    expect(result.current.seedance2Resolution).toBe('4k');
     expect(result.current.seedance2Duration).toBe('15'); // 15s stays valid on 2.5.
     expect(result.current.seedance2CameraFixed).toBe(false); // 2.5 drops the fixed-camera flag.
     expect(result.current.seedance2OutputFormat).toBe('mp4'); // Container picker defaults to MP4.

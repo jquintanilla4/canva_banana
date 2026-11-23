@@ -514,7 +514,7 @@ class MainApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         resolve_host.assert_called_once_with("example.com")
-        open_pinned.assert_called_once_with("https://example.com/output.mp4", "93.184.216.34")
+        open_pinned.assert_called_once_with("https://example.com/output.mp4", "93.184.216.34", provider="Jimeng")
         open_url.assert_not_called()
 
     def test_jimeng_remote_output_proxy_rejects_redirects(self) -> None:

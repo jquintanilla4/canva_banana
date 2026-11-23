@@ -1,3 +1,4 @@
+import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import type { CanvasImage, Seedance2VolcengineModel } from '../types';
 
 export const SEEDANCE_REFERENCE_IMAGE_LIMIT = 9; // Seedance 2 docs allow up to 9 image refs.
@@ -21,33 +22,28 @@ export type Seedance2VolcengineReferenceLimits = {
   audioTotalDurationSeconds: number;
 };
 
-const SEEDANCE2_VOLCENGINE_20_REFERENCE_LIMITS: Seedance2VolcengineReferenceLimits = {
-  images: SEEDANCE_REFERENCE_IMAGE_LIMIT,
-  videos: SEEDANCE_REFERENCE_VIDEO_LIMIT,
-  audios: SEEDANCE_REFERENCE_AUDIO_LIMIT,
-  total: SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT,
-  clipMinDurationSeconds: SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS,
-  clipMaxDurationSeconds: SEEDANCE_REFERENCE_MEDIA_MAX_DURATION_SECONDS,
-  videoTotalDurationSeconds: SEEDANCE_REFERENCE_VIDEO_TOTAL_DURATION_LIMIT_SECONDS,
-  audioTotalDurationSeconds: SEEDANCE_REFERENCE_AUDIO_TOTAL_DURATION_LIMIT_SECONDS,
-}; // Seedance 2.0 sub-models share the original 9/3/3 and 2-15s envelope.
+const providerReferenceLimits = (model: Seedance2VolcengineModel) => {
+  const { referenceLimits, maxDurationSeconds } = getSeedance2VolcengineModelCapabilities(model);
+  return {
+    ...referenceLimits,
+    total: referenceLimits.images + referenceLimits.videos + referenceLimits.audios,
+    clipMinDurationSeconds: SEEDANCE_REFERENCE_MEDIA_MIN_DURATION_SECONDS,
+    clipMaxDurationSeconds: maxDurationSeconds,
+    videoTotalDurationSeconds: maxDurationSeconds,
+    audioTotalDurationSeconds: maxDurationSeconds,
+  };
+};
 
-const SEEDANCE2_VOLCENGINE_25_REFERENCE_LIMITS: Seedance2VolcengineReferenceLimits = {
-  images: 30,
-  videos: 10,
-  audios: 10,
-  total: 50,
-  clipMinDurationSeconds: 2,
-  clipMaxDurationSeconds: 30,
-  videoTotalDurationSeconds: 30,
-  audioTotalDurationSeconds: 30,
-}; // Seedance 2.5 raises caps to 30/10/10 and stretches clips to 2-30s.
+const otherProviderReferenceLimits = { ...providerReferenceLimits('standard'), total: SEEDANCE_REFERENCE_TOTAL_FILE_LIMIT };
 
-export const getSeedance2VolcengineReferenceLimits = (
-  model: Seedance2VolcengineModel | undefined,
-): Seedance2VolcengineReferenceLimits => (
-  model === 'seedance25' ? SEEDANCE2_VOLCENGINE_25_REFERENCE_LIMITS : SEEDANCE2_VOLCENGINE_20_REFERENCE_LIMITS
-); // Pick the reference envelope for the selected Volcengine sub-model.
+export const getSeedance2VolcengineReferenceLimits = (model?: Seedance2VolcengineModel): Seedance2VolcengineReferenceLimits =>
+  model ? providerReferenceLimits(model) : otherProviderReferenceLimits;
+
+export const getSeedance2VolcengineExtendReferenceLimits = (model: Seedance2VolcengineModel | undefined) => {
+  const limits = getSeedance2VolcengineReferenceLimits(model);
+  const images = getSeedance2VolcengineModelCapabilities(model).family === '2.5' ? limits.images : 0;
+  return { images, videos: limits.videos, audios: 0, total: images + limits.videos };
+};
 
 type BuildEffectiveSeedanceReferenceIdsArgs = {
   enabled: boolean;

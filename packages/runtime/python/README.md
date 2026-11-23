@@ -1,6 +1,6 @@
 # UV Python Service
 
-Local FastAPI backend that runs Seedance generations for Canva Banana. It supports Volcengine Ark directly and Jimeng through the `dreamina` CLI.
+Local FastAPI backend that runs Seedance generations for Canva Banana. It supports Volcengine Ark directly, TokenHub, and Jimeng through the `dreamina` CLI.
 
 ## Setup and run
 
@@ -29,6 +29,16 @@ Both setup paths install the bundled `ffprobe` fallback for reference audio/vide
 These are required for the direct Volcengine Seedance 2 provider path. Jimeng CLI jobs do not need these credentials.
 
 The service only loads environment files when `CANVA_BANANA_ENV_DIR` explicitly names their directory. It reads `.env.local` then `.env`, while exported shell values take precedence. The repository app wrapper sets this directory to the repository root for development; installed consumers must supply it or pass environment values directly.
+
+## TokenHub Seedance
+
+Set `TOKENHUB_API_KEY` on the Python service. `TOKENHUB_BASE_URL` defaults to `https://tokenhub.ctclouds.com/v1`. Select **Seedance 2/2.5 (TokenHub)** in the video model picker, then select **Seedance 2.0** or **Seedance 2.5** in the **Model** control.
+
+For uploaded frames and references, set `VOLCENGINE_ACCESS_KEY`, `VOLCENGINE_SECRET_KEY`, `TOS_BUCKET_NAME`, and `TOS_REGION` for your TOS bucket. The service gives TokenHub expiring URLs to read those files. Text-only generation requires the TokenHub key alone.
+
+TokenHub stages uploads under `tokenhub_seedance_refs/`. Configure a bucket lifecycle rule for this prefix to delete temporary objects after your chosen retention period.
+
+Desktop and standalone browser builds enable the picker when they have a TokenHub key in their configuration. For a separate browser build and Python environment, set `TOKENHUB_VIDEO_ENABLED=true` in the browser build and keep the key in Python. Embedded hosts can set `tokenHubSeedanceEnabled` in the workspace runtime config.
 
 ## Optional env
 
