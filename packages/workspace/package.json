@@ -32,13 +32,13 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.5",
     "tailwindcss": "^4.3.0",
-    "postcss": "^8.5.31",
+    "postcss": "^8.5.33",
     "@types/react": "^19.2.17",
-    "@fal-ai/client": "^1.10.1",
+    "@fal-ai/client": "^1.11.0",
     "@google/genai": "^2.31.0",
-    "@zip.js/zip.js": "^2.24.0",
+    "@zip.js/zip.js": "^2.25.0",
     "react-icons": "^5.7.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
