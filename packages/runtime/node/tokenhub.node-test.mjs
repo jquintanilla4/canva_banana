@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -174,7 +175,20 @@ test('TokenHub bounds generation bodies and admits one large edit at a time', as
       model: FLARE_MODEL, prompt: 'Edit a large source',
       images: [`data:image/png;base64,${'YWFh'.repeat(300_000)}`],
     };
-    assert.equal((await postJson(baseUrl, generationPath, largeText)).status, 413);
+    const oversizedRequest = httpRequest(`${baseUrl}${generationPath}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(JSON.stringify(largeText)),
+        Origin: TRUSTED_ORIGIN,
+      },
+      signal: AbortSignal.timeout(5_000),
+    });
+    const oversizedResponse = once(oversizedRequest, 'response');
+    oversizedRequest.end();
+    const [rejected] = await oversizedResponse;
+    rejected.resume();
+    assert.equal(rejected.statusCode, 413);
     const streamed = await fetch(`${baseUrl}${generationPath}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Origin: TRUSTED_ORIGIN },
       body: new Blob([JSON.stringify(largeText)]).stream(), duplex: 'half',
