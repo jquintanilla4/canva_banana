@@ -79,8 +79,10 @@ Different features use different AI providers. You only need credentials for the
 | Google Gemini image features | `GEMINI_API_KEY` |
 | Fal.ai image and video models | `FAL_API_KEY` |
 | Optional prompt chat | `OPENROUTER_API_KEY` |
+| TokenHub GPT Image 2.5 and NanoBanana 2.1 generation and edits | `TOKENHUB_API_KEY` |
 | HeyGen prompt timing assistance | `MOONSHOT_API_KEY` |
 | Direct Volcengine Seedance 2 | `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` |
+| TokenHub Seedance 2.0 and 2.5 | `TOKENHUB_API_KEY`. Uploaded frames and references also use `VOLCENGINE_ACCESS_KEY`, `VOLCENGINE_SECRET_KEY`, and your TOS bucket. |
 | Seedance 2, Seedance 2.5, and Multi-frame through Jimeng | Complete the Jimeng CLI setup shown inside the app; CLI 1.4.15+ is required |
 
 In the desktop app, open Settings and enter the credentials there. For browser development, create a file named `.env.local` in the project folder and add each credential on its own line:
@@ -89,9 +91,10 @@ In the desktop app, open Settings and enter the credentials there. For browser d
 GEMINI_API_KEY=your_key_here
 FAL_API_KEY=your_key_here
 OPENROUTER_API_KEY=your_key_here
+TOKENHUB_API_KEY=your_key_here
 ```
 
-Only add the keys you need. Do not share this file or commit it to Git. Fal.ai, Moonshot, and OpenRouter credentials are handled by the local secure backend instead of being placed in browser-side JavaScript.
+Only add the keys you need. Do not share this file or commit it to Git. Fal.ai, Moonshot, OpenRouter, and TokenHub credentials are handled by the local secure backend instead of being placed in browser-side JavaScript.
 
 ## Using the Canvas
 
@@ -206,7 +209,7 @@ npm run preview
 
 ### Local Services
 
-- The secure Node backend runs on `127.0.0.1:8787` by default. It handles Fal.ai, Moonshot, and OpenRouter requests.
+- The secure Node backend runs on `127.0.0.1:8787` by default. It handles Fal.ai, Moonshot, OpenRouter, and TokenHub requests.
 - The Python backend runs on `127.0.0.1:8000` by default. It supports Volcengine and Jimeng workflows.
 - Both backends read `.env.local` first and fall back to `.env`. Exported shell variables take priority.
 - More Seedance backend details are available in [packages/runtime/python/README.md](packages/runtime/python/README.md).
@@ -216,6 +219,7 @@ Optional configuration:
 - `SECURE_BACKEND_API_BASE_URL` points the web frontend to another secure backend.
 - `SECURE_BACKEND_ALLOWED_ORIGINS` lists trusted browser origins separated by commas.
 - `NODE_BACKEND_HOST` and `NODE_BACKEND_PORT` change the secure backend address.
+- `TOKENHUB_BASE_URL` optionally overrides the TokenHub API base URL.
 - `FAL_API_URL` points the Fal SDK to another proxy.
 - `FAL_MODEL_ID` changes the default Fal image model.
 - `VOLCENGINE_FFPROBE_PATH` selects a custom `ffprobe` binary.

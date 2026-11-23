@@ -24,6 +24,7 @@ const buildDevHealthConfigState = () => {
     falAssetFetch: true,
     moonshotIntent: false,
     openrouterChat: true,
+    tokenhubImages: true,
   };
   const reuseContract = {
     version: 1,
@@ -33,12 +34,15 @@ const buildDevHealthConfigState = () => {
       falAssetFetch: true,
       moonshotIntent: true,
       openrouterChat: true,
+      tokenhubImages: true,
     },
     readiness,
     config: {
       FAL_API_KEY: { present: true },
       MOONSHOT_API_KEY: { present: false },
       OPENROUTER_API_KEY: { present: true },
+      TOKENHUB_API_KEY: { present: true },
+      TOKENHUB_BASE_URL: 'https://tokenhub.ctclouds.com/v1',
       SECURE_BACKEND_ALLOWED_ORIGINS: DEV_HEALTH_ALLOWED_ORIGINS,
       CANVA_BANANA_DESKTOP_AUTH_TOKEN: { present: false },
     },
@@ -743,7 +747,7 @@ test('dev health probe advertises secure backend identity and capabilities', asy
     });
     assert.equal(response.status, 200);
     const payload = await response.json();
-    assert.equal(payload.protocolVersion, 2);
+    assert.equal(payload.protocolVersion, 3);
     assert.equal(payload.status, 'ok');
     assert.equal(payload.service, 'canva-banana-secure-backend');
     assert.equal(typeof payload.workspaceRoot, 'string');
@@ -752,12 +756,14 @@ test('dev health probe advertises secure backend identity and capabilities', asy
       falAssetFetch: true,
       moonshotIntent: true,
       openrouterChat: true,
+      tokenhubImages: true,
     });
     assert.deepEqual(payload.readiness, {
       falProxy: true,
       falAssetFetch: true,
       moonshotIntent: false,
       openrouterChat: true,
+      tokenhubImages: true,
     });
     assert.deepEqual(payload.auth, { desktopTokenRequired: false });
     assert.deepEqual(payload.configState, {
@@ -773,6 +779,7 @@ test('dev health probe advertises secure backend identity and capabilities', asy
         falAssetFetch: true,
         moonshotIntent: false,
         openrouterChat: true,
+        tokenhubImages: true,
       },
       allowedOrigins: DEV_HEALTH_ALLOWED_ORIGINS,
       auth: { desktopTokenRequired: false },
@@ -784,17 +791,21 @@ test('dev health probe advertises secure backend identity and capabilities', asy
           falAssetFetch: true,
           moonshotIntent: true,
           openrouterChat: true,
+          tokenhubImages: true,
         },
         readiness: {
           falProxy: true,
           falAssetFetch: true,
           moonshotIntent: false,
           openrouterChat: true,
+          tokenhubImages: true,
         },
         config: {
           FAL_API_KEY: { present: true },
           MOONSHOT_API_KEY: { present: false },
           OPENROUTER_API_KEY: { present: true },
+          TOKENHUB_API_KEY: { present: true },
+          TOKENHUB_BASE_URL: 'https://tokenhub.ctclouds.com/v1',
           SECURE_BACKEND_ALLOWED_ORIGINS: DEV_HEALTH_ALLOWED_ORIGINS,
           CANVA_BANANA_DESKTOP_AUTH_TOKEN: { present: false },
         },

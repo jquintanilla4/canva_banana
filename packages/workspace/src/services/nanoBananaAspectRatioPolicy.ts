@@ -1,8 +1,11 @@
 import type { ApiProviderId } from '../types';
 import { FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS, getNanoBananaAspectRatioOptions } from './nanoBananaConfig';
+import { TOKENHUB_NANO_BANANA_ASPECT_RATIO_OPTIONS, isTokenHubNanoBananaModel } from './tokenHubNanoBananaConfig';
 
 export const getNanoBananaAspectRatioOptionsForProvider = (modelId: string | undefined, provider: ApiProviderId) =>
-  provider === 'fal' ? getNanoBananaAspectRatioOptions(modelId) : FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS;
+  provider === 'google' ? FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS
+    : isTokenHubNanoBananaModel(modelId) ? TOKENHUB_NANO_BANANA_ASPECT_RATIO_OPTIONS
+    : getNanoBananaAspectRatioOptions(modelId);
 
 export const getGoogleImageAspectRatio = (value: unknown) =>
   FAL_NANO_BANANA_ASPECT_RATIO_OPTIONS.find(option =>

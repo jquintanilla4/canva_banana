@@ -7,5 +7,6 @@ export const runtimeConfig: Partial<RuntimeConfig> = {
   falApiUrl: process.env.FAL_API_URL,
   falModelId: process.env.FAL_MODEL_ID,
   volcengineApiBaseUrl: process.env.VOLCENGINE_API_BASE_URL,
+  tokenHubSeedanceEnabled: process.env.TOKENHUB_VIDEO_ENABLED === 'true',
   jimengApiBaseUrl: process.env.JIMENG_API_BASE_URL,
 }; // Environment loading belongs to the standalone host, never the reusable package.

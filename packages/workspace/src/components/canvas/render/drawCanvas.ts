@@ -1,3 +1,4 @@
+import { isVideoPlaybackUnavailable } from '../../../services/mediaService';
 import { formatDuration } from '../../../services/audioService';
 import { Tool, type CanvasImage, type CanvasImageMetadata, type CanvasNote, type Path, type Point } from '../../../types';
 import { CROP_HANDLE_SIZE, NOTE_PIN_BORDER, NOTE_PIN_FILL, NOTE_PIN_LABEL_FONT_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
@@ -452,12 +453,23 @@ const drawVideoPlaceholder = (
   width: number,
   height: number,
   scale: number,
+  unavailable: boolean,
 ): void => {
   ctx.fillStyle = '#303744';
   ctx.fillRect(x, y, width, height); // Keep unloaded videos visible without opening their streams.
   ctx.strokeStyle = '#596274';
   ctx.lineWidth = 1 / scale;
   ctx.strokeRect(x, y, width, height); // Define the video bounds on dark canvases.
+
+  if (unavailable) {
+    ctx.fillStyle = '#d1d5db';
+    ctx.font = `${Math.min(16 / scale, width / 22)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Preview unavailable', x + width / 2, y + height / 2 - 10 / scale, width * 0.9);
+    ctx.fillText('Download original video', x + width / 2, y + height / 2 + 10 / scale, width * 0.9);
+    return;
+  }
 
   const iconSize = Math.min(width, height, 64 / scale) * 0.32;
   const iconCenterX = x + width / 2;
@@ -600,7 +612,7 @@ export function drawCanvas({
     const isVideoWaitingForFrame = isVideoImage(image)
       && image.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
     if (isVideoWaitingForFrame) {
-      drawVideoPlaceholder(ctx, baseX, baseY, image.width, image.height, scale);
+      drawVideoPlaceholder(ctx, baseX, baseY, image.width, image.height, scale, isVideoImage(image) && isVideoPlaybackUnavailable(image.element));
     } else {
       // Zoomed out, the LOD cache substitutes a pre-downscaled bitmap so drawImage isn't
       // resampling the full-resolution source per item per frame.

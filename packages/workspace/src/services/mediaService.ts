@@ -1,4 +1,5 @@
 import { normalizeImageFile, SVG_MIME_TYPE } from './svgMedia';
+import { readMp4VideoDimensions } from './mp4VideoDimensions';
 import { CanvasMediaType, CanvasImage } from '../types';
 import { getImageBounds, getImageRotation } from '../utils/canvasGeometry';
 
@@ -21,6 +22,56 @@ export const getMediaTypeFromFileType = (fileType: string): CanvasMediaType =>
 const VIDEO_OBJECT_URL_KEY = '__videoObjectUrl' as const;
 type VideoWithObjectUrl = HTMLVideoElement & { [key in typeof VIDEO_OBJECT_URL_KEY]?: string };
 const pendingVideoMetadataLoads = new WeakMap<HTMLVideoElement, Promise<void>>(); // Share one metadata request per video.
+
+const unavailableVideos = new WeakSet<HTMLVideoElement>();
+
+export const isVideoPlaybackUnavailable = (video: HTMLVideoElement): boolean => unavailableVideos.has(video);
+
+export const markVideoPlaybackUnavailable = (video: HTMLVideoElement): void => {
+  unavailableVideos.add(video);
+};
+
+const hasVideoCodecError = (video: HTMLVideoElement): boolean => video.error?.code === 3 || video.error?.code === 4;
+
+export const loadVolcengineVideoFromBlob = async (
+  blob: Blob,
+): Promise<{ element: HTMLVideoElement; canPlay: boolean }> => {
+  const objectUrl = URL.createObjectURL(blob);
+  const video = createLazyVideoFromUrl(objectUrl, 1, 1);
+  video.preload = 'auto';
+  try {
+    const canPlay = await new Promise<boolean>((resolve, reject) => {
+      const cleanup = () => {
+        video.onloadeddata = null;
+        video.onerror = null;
+      };
+      video.onloadeddata = () => {
+        cleanup();
+        resolve(true);
+      };
+      video.onerror = error => {
+        cleanup();
+        if (hasVideoCodecError(video)) {
+          resolve(false);
+        } else {
+          reject(error);
+        }
+      };
+      video.load();
+    });
+    if (!canPlay) {
+      markVideoPlaybackUnavailable(video);
+      const dimensions = await readMp4VideoDimensions(blob);
+      video.width = video.videoWidth || dimensions?.width || 1;
+      video.height = video.videoHeight || dimensions?.height || 1;
+      video.preload = 'none';
+    }
+    return { element: video, canPlay };
+  } catch (error) {
+    revokeVideoObjectUrl(video);
+    throw error;
+  }
+};
 
 export const getVideoObjectUrl = (element: HTMLVideoElement): string | undefined =>
   (element as VideoWithObjectUrl)[VIDEO_OBJECT_URL_KEY];
@@ -58,6 +109,27 @@ export const prepareVideoForPlayback = (video: HTMLVideoElement): void => {
   }
   video.preload = 'auto'; // A Play action should wake the dormant snapshot stream immediately.
   video.load(); // Detached canvas videos need an explicit first load in some Chromium builds.
+};
+
+export const playVideoFromUserGesture = async (
+  video: HTMLVideoElement,
+  { keepUnavailablePreview = false }: { keepUnavailablePreview?: boolean } = {},
+): Promise<void> => {
+  if (video.error && getVideoObjectUrl(video)) {
+    video.preload = 'auto';
+    video.load();
+  } else {
+    prepareVideoForPlayback(video);
+  }
+  try {
+    await video.play();
+    unavailableVideos.delete(video);
+  } catch (error) {
+    if (keepUnavailablePreview && (hasVideoCodecError(video) || (error instanceof DOMException && error.name === 'NotSupportedError'))) {
+      markVideoPlaybackUnavailable(video);
+    }
+    throw error;
+  }
 };
 
 export const ensureVideoMetadataLoaded = (video: HTMLVideoElement): Promise<void> => {

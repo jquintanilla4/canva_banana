@@ -211,10 +211,12 @@ describe('video prompt area helpers', () => {
     expect(extend.maxAudios).toBe(0);
   });
 
-  it('raises the Extend video cap for the Volcengine Seedance 2.5 sub-model', () => {
+  it('supports video and image references for Volcengine Seedance 2.5 Extend', () => {
     const extend25 = getVideoPromptAreaCapabilityProfile(SEEDANCE_2_VIDEO_MODEL_ID, 'extend', { seedance2VolcengineModel: 'seedance25' });
 
-    expect(extend25.supportedMediaTypes).toEqual(['video']);
+    expect(extend25.supportedMediaTypes).toEqual(['image', 'video']);
+    expect(extend25.defaultImageRole).toBe('reference');
+    expect(extend25.maxImages).toBe(30);
     expect(extend25.maxVideos).toBe(10); // 2.5 chains up to 10 clips.
   });
 

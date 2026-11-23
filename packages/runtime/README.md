@@ -10,6 +10,8 @@ const server = createSecureBackendServer({
     FAL_API_KEY: process.env.FAL_API_KEY,
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     MOONSHOT_API_KEY: process.env.MOONSHOT_API_KEY,
+    TOKENHUB_API_KEY: process.env.TOKENHUB_API_KEY,
+    TOKENHUB_BASE_URL: process.env.TOKENHUB_BASE_URL,
     SECURE_BACKEND_ALLOWED_ORIGINS: 'https://your-app.example',
   },
 });
@@ -23,9 +25,17 @@ Use the host's existing authentication/secret storage and explicit allowed origi
 | --- | --- |
 | Fal image/video models, uploads and asset fetching | This Node server, `FAL_API_KEY`, and the browser `secureBackendApiBaseUrl`/optional proxy override. Supported model changes travel with the shared renderer/provider code. |
 | Prompt chat | Node server plus `OPENROUTER_API_KEY`. |
+| TokenHub GPT Image 2.5 and NanoBanana 2.1 generation and edits | Node server and `TOKENHUB_API_KEY`. Set `TOKENHUB_BASE_URL` to override `https://tokenhub.ctclouds.com/v1`. |
 | HeyGen timing intent assistance | Node server plus `MOONSHOT_API_KEY`. |
 | Gemini | Browser library's explicit `geminiApiKey`/`apiKey` configuration (user-supplied key); the Node proxy does not currently proxy Gemini. |
 | Volcengine/Jimeng | Included Python HTTP service, corresponding credentials/CLI setup, and explicit `volcengineApiBaseUrl`/`jimengApiBaseUrl`. |
+
+TokenHub uses `POST /api/tokenhub/images/generations` for text-to-image and `POST /api/tokenhub/images/edits` for edits. Both routes return an Images API result with a `data` array of base64 images.
+
+Text-to-image requests have a 1 MiB body limit. Each backend instance accepts one edit at a time and returns HTTP 429 for additional edit requests while that edit runs. When setting a custom TokenHub base URL, include any gateway path prefix. A bare origin uses `/v1`.
+
+- GPT Image 2.5 supports `og-image-2-5-flare-standard` and `og-image-2-5-sunburst-standard` and accepts OpenAI image-generation fields. Edits add an `images` array of data URLs and an optional PNG `markup` data URL.
+- NanoBanana 2.1 uses `gg-nano-banana-2-1-standard` with `prompt` and optional `aspect_ratio`, `resolution` (`1K` by default, `2K`, or `4K`), `thinking_level` (`minimal`, `medium`, or `high`), and output count `n` (1–4). Edits add an ordered `images` array of data URLs. The backend calls TokenHub Chat Completions with `n: 1` and extracts JPEG data from the Markdown image in each choice. It sends edit inputs as `image_url` parts alongside the prompt and processes requested outputs in sequence.
 
 The package includes `python/src`, `python/pyproject.toml`, `python/uv.lock`, and its README. `pythonBackendSourcePath` points to that installed project, independent of a source checkout. Run `uv sync --project <that-path>` and launch `uv run --project <that-path> uvicorn uvpython_service.main:app --app-dir <that-path>/src --host 127.0.0.1 --port 8000` when using source-based local services. Python requires 3.12 or newer. Supply environment values directly, or set `CANVA_BANANA_ENV_DIR` to a host-owned directory; shell values take precedence. Configure `JIMENG_WORK_DIR` explicitly for per-project working data.
 

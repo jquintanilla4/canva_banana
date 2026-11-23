@@ -1,3 +1,4 @@
+import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import type { PromptBarControlsInput } from './promptBarConfig';
 import {
   CRYSTAL_UPSCALER_MODEL_ID,
@@ -21,7 +22,6 @@ import {
   VEO_31_IMAGE_TO_VIDEO_MODEL_ID,
   WAN_27_VIDEO_MODEL_ID,
   WAN_ANIMATE_MODEL_ID,
-  getVolcengineSafeSeedance2Settings,
   isGptImage2EditModelId,
   isJimengSeedance2VideoModel,
   isKlingO3VideoModelId,
@@ -43,7 +43,7 @@ import {
   updateEmbeddedFlux3Variant,
 } from '../utils/embeddedFlux3';
 import { getEmbeddedVideoPromptBarModelId } from '../utils/videoPromptAreas';
-import { getJimengSafeSeedance2Resolution } from '../utils/embeddedVideoRouting';
+import { applyEmbeddedSeedanceModel, getEmbeddedSeedanceModel, getJimengSafeSeedance2Resolution } from '../utils/embeddedVideoRouting';
 import { KLING_V4_DEFAULTS, isKlingV4VideoModel, isKlingV4Variant, isKlingV4Resolution, isKlingV4AspectRatio, isKlingV4Duration } from './klingV4Config';
 
 // -----------------------------------------------------------------------------------
@@ -133,7 +133,7 @@ const PROMPT_BAR_VALUE_KEYS = [
   'seedance2Variant', 'seedance2JimengModelVersion', 'seedance2VolcengineModel',
   'seedance2AspectRatio', 'seedance2Resolution', 'seedance2Duration',
   'jimengMultiframeDuration', 'jimengMultiframeResolution',
-  'seedance2GenerateAudio', 'seedance2CameraFixed', 'seedance2OutputFormat',
+  'seedance2GenerateAudio', 'seedance2CameraFixed', 'seedance2OutputFormat', 'seedanceArkSettings',
   'seedance25Variant', 'seedance25AspectRatio', 'seedance25Resolution', 'seedance25Duration', 'seedance25GenerateAudio',
   'flux3ImageAspectRatio', 'flux3ImageResolution',
   'recraftImageSize', 'recraftBackgroundColor', 'recraftColors',
@@ -146,6 +146,8 @@ const PROMPT_BAR_VALUE_KEYS = [
   'gptImage26FrameDurationMs',
   'gptImage26OutputFormat',
   'gptImage25Variant', 'gptImage25Background', 'gptImage25Quality', 'gptImage2Quality',
+  'tokenHubGptImage25Variant', 'tokenHubGptImage25Background', 'tokenHubGptImage25Quality',
+  'tokenHubNanoBananaThinkingLevel',
   'krea3Variant', 'krea3ReasoningLevel',
   'nanoBananaWebSearch', 'nanoBananaThinkingLevel',
   'ideogram45Quality', 'ideogram45EditPrecision',
@@ -244,7 +246,7 @@ const buildEmbeddedPromptBarValues = (
     seedance15Audio: options.seedance15Audio ?? fal.seedance15Audio,
     seedance2Variant: bar.seedance2Variant,
     seedance2JimengModelVersion: bar.seedance2JimengModelVersion ?? options.seedance2JimengModelVersion ?? fal.seedance2JimengModelVersion,
-    seedance2VolcengineModel: bar.seedance2VolcengineModel ?? options.seedance2VolcengineModel ?? fal.seedance2VolcengineModel,
+    seedance2VolcengineModel: getEmbeddedSeedanceModel(bar),
     seedance2AspectRatio: bar.seedance2AspectRatio ?? '16:9',
     seedance2Resolution: bar.seedance2Resolution ?? '720p',
     seedance2Duration: bar.seedance2Duration ?? '5',
@@ -253,6 +255,7 @@ const buildEmbeddedPromptBarValues = (
     seedance2GenerateAudio: bar.seedance2GenerateAudio,
     seedance2CameraFixed: bar.seedance2CameraFixed,
     seedance2OutputFormat: bar.seedance2OutputFormat ?? fal.seedance2OutputFormat,
+    seedanceArkSettings: bar.seedanceArkSettings ?? options.seedanceArkSettings,
     seedance25Variant: options.seedance25Variant ?? 'reference',
     seedance25AspectRatio: options.seedance25AspectRatio ?? 'adaptive',
     seedance25Resolution: options.seedance25Resolution ?? '720p',
@@ -277,6 +280,10 @@ const buildEmbeddedPromptBarValues = (
     ideogram45EditPrecision: fal.ideogram45EditPrecision,
     gptImage25Background: fal.gptImage25Background,
     gptImage25Variant: fal.gptImage25Variant,
+    tokenHubGptImage25Quality: fal.tokenHubGptImage25Quality,
+    tokenHubGptImage25Background: fal.tokenHubGptImage25Background,
+    tokenHubGptImage25Variant: fal.tokenHubGptImage25Variant,
+    tokenHubNanoBananaThinkingLevel: fal.tokenHubNanoBananaThinkingLevel,
     krea3Variant: fal.krea3Variant,
     krea3ReasoningLevel: fal.krea3ReasoningLevel,
     grokImageAspectRatio: fal.grokImageAspectRatio,
@@ -380,6 +387,7 @@ const createFooterPromptBarHandlers = (
   onSeedance2GenerateAudioChange: fal.handleSeedance2GenerateAudioChange,
   onSeedance2CameraFixedChange: fal.handleSeedance2CameraFixedChange,
   onSeedance2OutputFormatChange: fal.handleSeedance2OutputFormatChange,
+  onSeedanceArkSettingsChange: fal.setSeedanceArkSettings,
   onSeedance25VariantChange: fal.handleSeedance25VariantChange,
   onSeedance25AspectRatioChange: fal.handleSeedance25AspectRatioChange,
   onSeedance25ResolutionChange: fal.handleSeedance25ResolutionChange,
@@ -406,6 +414,10 @@ const createFooterPromptBarHandlers = (
   onIdeogram45EditPrecisionChange: fal.handleIdeogram45EditPrecisionChange,
   onGptImage25BackgroundChange: fal.handleGptImage25BackgroundChange,
   onGptImage25VariantChange: fal.handleGptImage25VariantChange,
+  onTokenHubGptImage25QualityChange: fal.handleTokenHubGptImage25QualityChange,
+  onTokenHubGptImage25BackgroundChange: fal.handleTokenHubGptImage25BackgroundChange,
+  onTokenHubGptImage25VariantChange: fal.handleTokenHubGptImage25VariantChange,
+  onTokenHubNanoBananaThinkingLevelChange: fal.handleTokenHubNanoBananaThinkingLevelChange,
   onKrea3VariantChange: fal.handleKrea3VariantChange,
   onKrea3ReasoningLevelChange: fal.handleKrea3ReasoningLevelChange,
   onGrokImageAspectRatioChange: fal.handleGrokImageAspectRatioChange,
@@ -571,28 +583,9 @@ const createEmbeddedPromptBarHandlers = (
         };
       }); // Keep the channel and its compatible resolution in one history update.
     },
-    onSeedance2VolcengineModelChange: value => {
-      updateBar(bar.id, currentBar => {
-        const nextModel = isSeedance2VolcengineModel(value) ? value : 'standard';
-        const safe = getVolcengineSafeSeedance2Settings(nextModel, currentBar); // Shared clamp keeps embedded bars in step with the global hook.
-        return {
-          ...currentBar,
-          seedance2VolcengineModel: nextModel,
-          seedance2AspectRatio: safe.seedance2AspectRatio,
-          seedance2Resolution: safe.seedance2Resolution,
-          seedance2Duration: safe.seedance2Duration,
-          seedance2CameraFixed: safe.seedance2CameraFixed,
-          falOptions: {
-            ...(currentBar.falOptions ?? {}),
-            seedance2VolcengineModel: nextModel,
-            seedance2AspectRatio: safe.seedance2AspectRatio,
-            seedance2Resolution: safe.seedance2Resolution,
-            seedance2Duration: safe.seedance2Duration,
-            seedance2CameraFixed: safe.seedance2CameraFixed,
-          },
-        };
-      }); // Keep the Volcengine model and its compatible settings in one history update.
-    },
+    onSeedance2VolcengineModelChange: value => updateBar(bar.id, currentBar => (
+      applyEmbeddedSeedanceModel(currentBar, isSeedance2VolcengineModel(value) ? value : 'standard')
+    )),
     onSeedance2AspectRatioChange: value => updateLegacyAndFal({ seedance2AspectRatio: value as CanvasVideoPromptBar['seedance2AspectRatio'] }, 'seedance2AspectRatio', value),
     onSeedance2ResolutionChange: value => updateLegacyAndFal({ seedance2Resolution: value as CanvasVideoPromptBar['seedance2Resolution'] }, 'seedance2Resolution', value),
     onSeedance2DurationChange: value => updateLegacyAndFal({ seedance2Duration: value as CanvasVideoPromptBar['seedance2Duration'] }, 'seedance2Duration', value),
@@ -600,6 +593,7 @@ const createEmbeddedPromptBarHandlers = (
     onJimengMultiframeResolutionChange: value => updateFalOption('multiframeResolution', value),
     onSeedance2GenerateAudioChange: value => updateLegacyAndFal({ seedance2GenerateAudio: value }, 'seedance2GenerateAudio', value),
     onSeedance2CameraFixedChange: value => updateBar(bar.id, currentBar => ({ ...currentBar, seedance2CameraFixed: value })),
+    onSeedanceArkSettingsChange: settings => updateLegacyAndFal({ seedanceArkSettings: settings }, 'seedanceArkSettings', settings),
     onSeedance2OutputFormatChange: value => updateBar(bar.id, currentBar => ({
       ...currentBar,
       seedance2OutputFormat: isSeedance2OutputFormatSelectionValue(value) ? value : 'mp4',
@@ -630,6 +624,10 @@ const createEmbeddedPromptBarHandlers = (
     onIdeogram45EditPrecisionChange: NOOP,
     onGptImage25BackgroundChange: NOOP,
     onGptImage25VariantChange: NOOP,
+    onTokenHubGptImage25QualityChange: NOOP,
+    onTokenHubGptImage25BackgroundChange: NOOP,
+    onTokenHubGptImage25VariantChange: NOOP,
+    onTokenHubNanoBananaThinkingLevelChange: NOOP,
     onKrea3VariantChange: NOOP,
     onKrea3ReasoningLevelChange: NOOP,
     onGrokImageAspectRatioChange: NOOP,
@@ -663,7 +661,7 @@ const deriveFirstFrameFlags = (
     && hasFirstFrameImage,
   seedance2HasFirstFrame: modelId === SEEDANCE_2_VIDEO_MODEL_ID
     && values.seedance2Variant === 'smart'
-    && (site === 'embedded' || values.seedance2VolcengineModel === 'seedance25')
+    && (site === 'embedded' || getSeedance2VolcengineModelCapabilities(values.seedance2VolcengineModel).family === '2.5')
     && hasFirstFrameImage,
   seedance25UsesSourceAspectRatio: flags.isSeedance25VideoModel === true
     && values.seedance25Variant === 'smart'
@@ -672,6 +670,7 @@ const deriveFirstFrameFlags = (
 
 export type FooterPromptBarInputParams = {
   apiProvider: 'google' | 'fal';
+  tokenHubSeedanceEnabled?: boolean;
   fal: UseFalSettingsResult;
   flux3: FooterFlux3Handlers & { keyframeError?: string };
   hasFirstFrameImage: boolean;
@@ -682,6 +681,7 @@ export type FooterPromptBarInputParams = {
 
 export const buildFooterPromptBarControlsInput = ({
   apiProvider,
+  tokenHubSeedanceEnabled,
   fal,
   flux3,
   hasFirstFrameImage,
@@ -693,6 +693,7 @@ export const buildFooterPromptBarControlsInput = ({
   const values = pickFooterPromptBarValues(fal);
   return {
     apiProvider,
+    tokenHubSeedanceEnabled,
     falModelId: fal.falModelId,
     falModelMode: fal.falModelMode,
     ...flags,
@@ -711,6 +712,7 @@ export const buildFooterPromptBarControlsInput = ({
 
 export type EmbeddedPromptBarInputParams = {
   bar: CanvasVideoPromptBar;
+  tokenHubSeedanceEnabled?: boolean;
   barMembership: VideoPromptAreaMembership | undefined;
   fal: UseFalSettingsResult;
   updateBar: EmbeddedPromptBarUpdate;
@@ -719,6 +721,7 @@ export type EmbeddedPromptBarInputParams = {
 
 export const buildEmbeddedPromptBarControlsInput = ({
   bar,
+  tokenHubSeedanceEnabled,
   barMembership,
   fal,
   updateBar,
@@ -739,6 +742,7 @@ export const buildEmbeddedPromptBarControlsInput = ({
   };
   return {
     apiProvider: 'fal',
+    tokenHubSeedanceEnabled,
     controlIdPrefix: bar.id, // Scope control ids to this embedded bar.
     falModelId: modelId,
     falModelMode: 'video',

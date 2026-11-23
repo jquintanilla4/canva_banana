@@ -1,3 +1,4 @@
+import * as falMedia from '../../services/fal/media';
 import { GPT_IMAGE_26_MODEL_ID } from '../../services/gptImage26Config';
 import * as gptImage26Policy from '../../services/gptImage26RunSettings';
 import { beginWorkspaceSession } from '../../services/workspaceSession';
@@ -36,6 +37,22 @@ import { serializeIdeogram45EditInput, serializeIdeogram45TextInput } from '../.
 import * as gptImage2Policy from '../../services/gptImage2RunSettings';
 import * as gptImage25Policy from '../../services/gptImage25RunSettings';
 import { serializeGptImage2Input, serializeGptImage25Input } from '../../services/fal/gptImage';
+import { TOKENHUB_GPT_IMAGE_25_MODEL_ID } from '../../services/tokenHubGptImage25Config';
+import * as tokenHubGptImage25Policy from '../../services/tokenHubGptImage25RunSettings';
+import { generateTokenHubImage, generateTokenHubImageEdit } from '../../services/tokenHubImageService';
+import { TOKENHUB_NANO_BANANA_21_MODEL_ID, TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL } from '../../services/tokenHubNanoBananaConfig';
+import { generateTokenHubNanoBanana, generateTokenHubNanoBananaEdit } from '../../services/tokenHubNanoBananaService';
+
+vi.mock('../../services/tokenHubImageService', async importOriginal => ({
+  ...await importOriginal<typeof import('../../services/tokenHubImageService')>(),
+  generateTokenHubImage: vi.fn(),
+  generateTokenHubImageEdit: vi.fn(),
+}));
+
+vi.mock('../../services/tokenHubNanoBananaService', () => ({
+  generateTokenHubNanoBanana: vi.fn(),
+  generateTokenHubNanoBananaEdit: vi.fn(),
+}));
 
 vi.mock('../../services/geminiService', async () => {
   const actual = await vi.importActual<typeof import('../../services/geminiService')>('../../services/geminiService');
@@ -67,9 +84,11 @@ vi.mock('../../services/falService', async () => {
 
 vi.mock('../../services/mediaService', async () => {
   const actual = await vi.importActual<typeof import('../../services/mediaService')>('../../services/mediaService');
+  const loadMediaFromBlob = vi.fn(actual.loadMediaFromBlob);
   return {
     ...actual,
-    loadMediaFromBlob: vi.fn(actual.loadMediaFromBlob),
+    loadMediaFromBlob,
+    loadVolcengineVideoFromBlob: async (blob: Blob) => ({ element: await loadMediaFromBlob(blob, 'video'), canPlay: true }),
   };
 });
 
@@ -425,6 +444,73 @@ describe('useGeneration placement notifications', () => {
     expect(stateHarness.state.images[0]?.metadata?.generation?.falOptions).toMatchObject(dimensions);
   });
 
+  it.each(['text_to_image', 'image_edit'] as const)('places successful TokenHub Nano Banana %s JPEGs and retries only missing images', async kind => {
+    const nano = await vi.importActual<typeof import('../../services/tokenHubNanoBananaService')>('../../services/tokenHubNanoBananaService');
+    const isEdit = kind === 'image_edit';
+    const primary = buildCanvasImage('nano-edit-source');
+    const sourceUrl = 'data:image/png;base64,c291cmNl';
+    if (isEdit) {
+      vi.mocked(generateTokenHubNanoBananaEdit).mockImplementationOnce(nano.generateTokenHubNanoBananaEdit)
+        .mockImplementationOnce(nano.generateTokenHubNanoBananaEdit);
+      vi.spyOn(falMedia, 'imageToCanvas').mockReturnValue(Object.assign(document.createElement('canvas'), {
+        toDataURL: () => sourceUrl,
+      }));
+    } else {
+      vi.mocked(generateTokenHubNanoBanana).mockImplementationOnce(nano.generateTokenHubNanoBanana)
+        .mockImplementationOnce(nano.generateTokenHubNanoBanana);
+    }
+    const jpegResult = () => Response.json({ data: [{ b64_json: '/9j/2Q==' }] });
+    const fetchImages = vi.fn<typeof fetch>().mockResolvedValueOnce(jpegResult());
+    if (!isEdit) fetchImages.mockResolvedValueOnce(Response.json({ detail: 'TokenHub is busy' }, { status: 429 }));
+    fetchImages.mockResolvedValueOnce(jpegResult());
+    vi.stubGlobal('fetch', fetchImages);
+    const stateHarness = createStateHarness();
+    const setError = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    const setFalJobs = (value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      jobs = typeof value === 'function' ? value(jobs) : value;
+    };
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A poster', apiProvider: 'fal',
+      fal: createFalStub({
+        falImageModelId: TOKENHUB_NANO_BANANA_21_MODEL_ID, falAspectRatioSelection: '8:1', falResolutionSelection: '4K',
+        tokenHubNanoBananaThinkingLevel: 'high', falNumImages: 2,
+      }), selection: createSelectionStub(isEdit ? {
+        primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
+        primarySelectionMediaType: 'image', selectedImageIds: [primary.id],
+      } : {}),
+      images: isEdit ? [primary] : [], paths: [], videoNegativePrompt: '', setError, setIsLoading: vi.fn(),
+      setFalJobs, setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+
+    await act(async () => result.current.handleGenerate());
+
+    const firstRequestCount = isEdit ? 1 : 2;
+    expect(fetchImages).toHaveBeenCalledTimes(firstRequestCount);
+    expect(jobs[0]).toMatchObject({ status: 'FAILED', retryInputs: { kind, falOptions: { numImages: 1 } } });
+    expect(setError).toHaveBeenLastCalledWith(expect.stringContaining('Generated 1 of 2 images'));
+    expect(stateHarness.state.images).toHaveLength(1);
+    expect(stateHarness.state.images[0]?.metadata?.generation?.falOptions?.numImages).toBe(2);
+    const job = jobs[0];
+    if (!job?.retryInputs) throw new Error('Missing Nano Banana retry inputs');
+    await act(async () => result.current.handleGenerate(job.retryInputs, { retryJobId: job.id }));
+
+    expect(fetchImages).toHaveBeenCalledTimes(firstRequestCount + 1);
+    for (const [index, [url, request]] of fetchImages.mock.calls.entries()) {
+      if (typeof request?.body !== 'string') throw new Error('Missing Nano Banana generation JSON');
+      expect(url).toMatch(isEdit ? /\/api\/tokenhub\/images\/edits$/ : /\/api\/tokenhub\/images\/generations$/);
+      expect(JSON.parse(request.body)).toMatchObject({
+        n: isEdit && index === 0 ? 2 : 1, aspect_ratio: '8:1', resolution: '4K', thinking_level: 'high',
+        ...(isEdit ? { images: [sourceUrl] } : {}),
+      });
+    }
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ id: job.id, status: 'COMPLETED' });
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(stateHarness.state.images).toHaveLength(2);
+    expect(stateHarness.state.images[0]?.file).toMatchObject({ name: 'generated.jpeg', type: 'image/jpeg', size: 4 });
+  });
+
   it.each((['text_to_image', 'image_edit'] as const).flatMap(kind =>
     (['live', 'legacy'] as const).map(source => ({ kind, source })),
   ))('keeps Grok $kind $source requests, retries, and saved outputs consistent without leaking live controls', async ({ kind, source }) => {
@@ -677,6 +763,270 @@ describe('useGeneration placement notifications', () => {
       expect(settings.variant).toBe(source === 'saved' ? 'flare' : 'sunburst');
     }
     expect(jobs[0]?.status).toBe('COMPLETED');
+  });
+
+  it.each((['text_to_image', 'image_edit'] as const).flatMap(kind =>
+    (['live', 'saved'] as const).map(source => ({ kind, source })),
+  ))('routes TokenHub GPT Image 2.5 $kind $source runs through OpenAI settings and preserves retry metadata', async ({ kind, source }) => {
+    const primary = buildCanvasImage('tokenhub-source');
+    const reference = buildCanvasImage('tokenhub-reference');
+    const stateHarness = createStateHarness();
+    const fal = createFalStub({
+      falImageModelId: TOKENHUB_GPT_IMAGE_25_MODEL_ID,
+      tokenHubGptImage25Variant: 'sunburst', tokenHubGptImage25Quality: 'max', tokenHubGptImage25Background: 'transparent',
+      falImageSizeSelection: '2560x1440', falNumImages: 3,
+    });
+    const resolver = vi.spyOn(tokenHubGptImage25Policy, 'resolveTokenHubGptImage25RunSettingsFromOptions');
+    let jobs: FalQueueJob[] = [];
+    const setFalJobs = vi.fn((value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      jobs = typeof value === 'function' ? value(jobs) : value;
+    });
+    const output = { imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '', requestId: 'tokenhub-complete' };
+    vi.mocked(generateTokenHubImage).mockResolvedValue(output);
+    vi.mocked(generateTokenHubImageEdit).mockResolvedValue(output);
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A poster', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(kind === 'image_edit' && source === 'live' ? {
+        primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
+        primarySelectionMediaType: 'image', selectedImageIds: [primary.id, reference.id], referenceImageIds: [reference.id],
+      } : {}), images: [primary, reference], paths: [], videoNegativePrompt: '',
+      setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs, setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => {
+      await result.current.handleGenerate(source === 'live' ? undefined : {
+        kind, prompt: 'A saved poster', provider: 'tokenhub', modelMode: 'image', modelId: TOKENHUB_GPT_IMAGE_25_MODEL_ID,
+        primaryImageId: kind === 'image_edit' ? primary.id : undefined,
+        referenceImageIds: kind === 'image_edit' ? [reference.id] : undefined,
+        falOptions: {
+          tokenHubGptImage25Variant: 'flare', tokenHubGptImage25Quality: 'low', tokenHubGptImage25Background: 'opaque',
+          imageSizeSelection: '1024x1024', numImages: 2,
+        },
+      });
+    });
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(generateFalImage).not.toHaveBeenCalled();
+    expect(generateFalImageEdit).not.toHaveBeenCalled();
+    expect(generateGoogleImage).not.toHaveBeenCalled();
+    expect(generateGoogleImageEdit).not.toHaveBeenCalled();
+    const request = kind === 'text_to_image'
+      ? vi.mocked(generateTokenHubImage).mock.calls[0]?.[1]
+      : vi.mocked(generateTokenHubImageEdit).mock.calls[0]?.[1];
+    expect(request?.settings).toBe(resolver.mock.results[0]?.value);
+    expect(request?.settings).toMatchObject({
+      kind,
+      variant: source === 'live' ? 'sunburst' : 'flare',
+      quality: source === 'live' ? 'max' : 'low',
+      background: source === 'live' ? 'transparent' : 'opaque',
+      imageSizeSelection: source === 'live' ? '2560x1440' : '1024x1024',
+      numImages: source === 'live' ? 3 : 2,
+    });
+    if (kind === 'image_edit') {
+      expect(vi.mocked(generateTokenHubImageEdit).mock.calls[0]?.[0].referenceImages).toEqual([reference.element]);
+    }
+    const metadata = stateHarness.state.images[0]?.metadata?.generation;
+    expect(metadata?.provider).toBe('tokenhub');
+    expect(metadata?.falOptions).toEqual(jobs[0]?.retryInputs?.falOptions);
+    expect(metadata?.falOptions).toMatchObject(tokenHubGptImage25Policy.serializeTokenHubGptImage25GenerationOptions(request!.settings));
+    expect(jobs[0]).toMatchObject({ provider: 'tokenhub', status: 'COMPLETED', requestId: 'tokenhub-complete' });
+  });
+
+  it.each((['text_to_image', 'image_edit'] as const).flatMap(kind =>
+    (['live', 'saved'] as const).map(source => ({ kind, source })),
+  ))('dispatches TokenHub Nano $kind using $source settings and retains them when retried', async ({ kind, source }) => {
+    const modelId = TOKENHUB_NANO_BANANA_21_MODEL_ID;
+    const primary = buildCanvasImage('nano-source');
+    const reference = buildCanvasImage('nano-reference');
+    const stateHarness = createStateHarness();
+    const live = source === 'live';
+    const editing = kind === 'image_edit';
+    const fal = createFalStub({
+      falModelMode: live ? 'image' : 'video',
+      falImageModelId: live ? modelId : NANO_BANANA_21_EDIT_MODEL_ID,
+      falAspectRatioSelection: '8:1', falResolutionSelection: '4K', falNumImages: 4,
+      tokenHubNanoBananaWebSearch: true, tokenHubNanoBananaThinkingLevel: 'high',
+      nanoBananaWebSearch: true, nanoBananaThinkingLevel: 'medium',
+    });
+    const savedOptions = {
+      aspectRatioSelection: '1:4', resolutionSelection: '2K', numImages: 2,
+      tokenHubNanoBananaWebSearch: false, tokenHubNanoBananaThinkingLevel: 'minimal',
+    } as const;
+    let jobs: FalQueueJob[] = [];
+    const setFalJobs = (value: FalQueueJob[] | ((prev: FalQueueJob[]) => FalQueueJob[])) => {
+      jobs = typeof value === 'function' ? value(jobs) : value;
+    };
+    const generate = vi.mocked(generateTokenHubNanoBanana);
+    const edit = vi.mocked(generateTokenHubNanoBananaEdit);
+    const request = editing ? edit : generate;
+    const imagesBase64 = live ? ['Zm9v', 'YmFy', 'YmF6', 'cXV4'] : ['Zm9v', 'YmFy'];
+    request.mockRejectedValueOnce(new Error('TokenHub busy'))
+      .mockResolvedValue({ imageBase64: 'Zm9v', imagesBase64, text: '', requestId: 'nano-complete' });
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'A live poster', promptPrefix: '', apiProvider: 'fal', fal,
+      selection: createSelectionStub(editing && live ? {
+        primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
+        primarySelectionMediaType: 'image', selectedImageIds: [primary.id, reference.id], referenceImageIds: [reference.id],
+      } : {}), images: [primary, reference], paths: [], videoNegativePrompt: '',
+      setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs, setState: stateHarness.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => {
+      await result.current.handleGenerate(live ? undefined : {
+        kind, prompt: 'A saved poster', provider: 'tokenhub', modelId, falOptions: savedOptions,
+        primaryImageId: editing ? primary.id : undefined,
+        referenceImageIds: editing ? [reference.id] : undefined,
+      });
+    });
+    expect(jobs[0]).toMatchObject({ provider: 'tokenhub', status: 'FAILED', error: 'TokenHub busy' });
+    const failed = jobs[0];
+    if (!failed?.retryInputs) throw new Error('Missing Nano retry inputs');
+    const retryOptions = live ? {
+      aspectRatioSelection: '8:1', resolutionSelection: '4K', numImages: 4,
+      tokenHubNanoBananaWebSearch: true, tokenHubNanoBananaThinkingLevel: 'high',
+    } : savedOptions;
+    expect(failed.retryInputs).toMatchObject({ modelId, kind, falOptions: retryOptions });
+    expect(failed.retryInputs.falOptions).not.toHaveProperty('nanoBananaThinkingLevel');
+
+    await act(async () => { await result.current.handleGenerate(failed.retryInputs, { retryJobId: failed.id }); });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ id: failed.id, provider: 'tokenhub', status: 'COMPLETED', requestId: 'nano-complete' });
+    expect(request).toHaveBeenCalledTimes(2);
+    const settings = request.mock.calls[0]?.[1].settings;
+    expect(settings).toMatchObject({
+      kind, model: TOKENHUB_NANO_BANANA_21_PROVIDER_MODEL,
+      aspectRatioSelection: retryOptions.aspectRatioSelection, resolution: retryOptions.resolutionSelection,
+      numImages: retryOptions.numImages, webSearch: retryOptions.tokenHubNanoBananaWebSearch,
+      thinkingLevel: retryOptions.tokenHubNanoBananaThinkingLevel,
+    });
+    expect(request.mock.calls[1]?.[1].settings).toEqual(settings);
+    if (editing) expect(edit.mock.calls[1]?.[0].referenceImages).toEqual([reference.element]);
+    expect(generateFalImage).not.toHaveBeenCalled();
+    expect(generateFalImageEdit).not.toHaveBeenCalled();
+    expect(generateTokenHubImage).not.toHaveBeenCalled();
+    expect(generateTokenHubImageEdit).not.toHaveBeenCalled();
+    expect(stateHarness.state.images).toHaveLength(imagesBase64.length);
+    expect(stateHarness.state.images[0]?.metadata?.generation).toMatchObject({ modelId, falOptions: retryOptions });
+  });
+
+  it.each([
+    {
+      modelId: TOKENHUB_GPT_IMAGE_25_MODEL_ID,
+      rendering: 'transparent',
+      images: ['primary', 'reference-2', 'rasterized-1'],
+      markup: 'data:image/png;base64,annotation',
+    },
+    {
+      modelId: TOKENHUB_NANO_BANANA_21_MODEL_ID,
+      rendering: 'composite',
+      images: ['rasterized-1', 'reference-2', 'annotation', 'primary'],
+      markup: undefined,
+    },
+  ])('retries an annotated $modelId edit in place with the same ordered request', async ({ modelId, rendering, images, markup }) => {
+    const { generateTokenHubImageEdit: gptEdit } = await vi.importActual<typeof import('../../services/tokenHubImageService')>('../../services/tokenHubImageService');
+    const { generateTokenHubNanoBananaEdit: nanoEdit } = await vi.importActual<typeof import('../../services/tokenHubNanoBananaService')>('../../services/tokenHubNanoBananaService');
+    if (modelId === TOKENHUB_GPT_IMAGE_25_MODEL_ID) {
+      vi.mocked(generateTokenHubImageEdit).mockImplementationOnce(gptEdit).mockImplementationOnce(gptEdit);
+    } else {
+      vi.mocked(generateTokenHubNanoBananaEdit).mockImplementationOnce(nanoEdit).mockImplementationOnce(nanoEdit);
+    }
+
+    const primary = buildCanvasImage('primary');
+    const firstRef = { ...buildCanvasImage('reference-1'), rotation: 90 };
+    const secondRef = buildCanvasImage('reference-2');
+    const rasterized = { ...buildCanvasImage('rasterized-1'), mediaType: 'image', isPlaying: false, hasAudio: false } as const;
+    for (const image of [primary, firstRef, secondRef, rasterized]) image.element.id = image.id;
+    const rasterize = vi.spyOn(mediaService, 'rasterizeImages').mockResolvedValue(rasterized);
+    const png = (name: string) => 'data:image/png;base64,' + name;
+    const canvas = (name: string) => Object.assign(document.createElement('canvas'), { toDataURL: () => png(name) });
+    vi.spyOn(falMedia, 'imageToCanvas').mockImplementation(image => canvas(image.id));
+    const annotate = vi.spyOn(falMedia, 'buildAnnotationCanvas').mockReturnValue(canvas('annotation'));
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ detail: 'TokenHub is busy', error: { requestID: 'gateway-failed' } }, { status: 429 }))
+      .mockResolvedValueOnce(Response.json({ data: [{ b64_json: 'Zm9v', revised_prompt: 'Edited poster' }], request_id: 'gateway-complete' }));
+    vi.stubGlobal('fetch', fetch);
+
+    const paths: Path[] = [{ points: [{ x: 9, y: 10 }, { x: 22, y: 30 }], color: '#0000ff', size: 10, tool: Tool.ANNOTATE }];
+    const references = [secondRef.id, firstRef.id];
+    const state = createStateHarness();
+    const setError = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'Live prompt', promptPrefix: '', apiProvider: 'fal',
+      fal: createFalStub(), selection: createSelectionStub(), images: [primary, firstRef, secondRef], paths: [],
+      videoNegativePrompt: '', setError, setIsLoading: vi.fn(),
+      setFalJobs: update => { jobs = typeof update === 'function' ? update(jobs) : update; },
+      setState: state.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+
+    await act(async () => result.current.handleGenerate({
+      kind: 'image_edit', prompt: 'Edit the saved poster', provider: 'tokenhub', modelId, primaryImageId: primary.id,
+      referenceImageIds: references, editAppMode: 'ANNOTATE', editTool: Tool.ANNOTATE, editPaths: paths,
+    }));
+    const failed = jobs[0];
+    expect(failed).toMatchObject({ provider: 'tokenhub', status: 'FAILED', error: 'HTTP 429: TokenHub is busy', requestId: 'gateway-failed' });
+    expect(setError).toHaveBeenLastCalledWith('HTTP 429: TokenHub is busy');
+    expect(state.state.images).toHaveLength(0);
+    if (!failed?.retryInputs) throw new Error('Missing TokenHub retry inputs');
+
+    await act(async () => result.current.handleGenerate(failed.retryInputs, { retryJobId: failed.id }));
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      id: failed.id, status: 'COMPLETED', phase: 'completed', requestId: 'gateway-complete', description: 'Edited poster',
+    });
+    expect(rasterize.mock.calls).toEqual([[[firstRef]], [[firstRef]]]);
+    expect(annotate.mock.calls).toEqual(Array.from({ length: 2 }, () => [
+      primary.element, paths, { width: 64, height: 48 }, rendering,
+    ]));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [url, request] = fetch.mock.calls[0];
+    expect(url).toMatch(/\/api\/tokenhub\/images\/edits$/);
+    if (typeof request?.body !== 'string') throw new Error('Missing TokenHub edit JSON');
+    const payload: unknown = JSON.parse(request.body);
+    expect(payload).toMatchObject({ prompt: 'Edit the saved poster', images: images.map(png) });
+    if (markup) expect(payload).toHaveProperty('markup', markup);
+    else expect(payload).not.toHaveProperty('markup');
+    expect(fetch.mock.calls[1][1]?.body).toBe(request.body);
+    expect(state.state.images[0]?.metadata?.generation).toMatchObject({
+      referenceImageIds: references, editAppMode: 'ANNOTATE', editTool: Tool.ANNOTATE, editPaths: paths,
+      falOptions: failed.retryInputs.falOptions,
+    });
+  });
+
+  it.each([TOKENHUB_GPT_IMAGE_25_MODEL_ID, TOKENHUB_NANO_BANANA_21_MODEL_ID])('aborts an in-flight %s request when the workspace closes', async modelId => {
+    const { generateTokenHubImage: gptText } = await vi.importActual<typeof import('../../services/tokenHubImageService')>('../../services/tokenHubImageService');
+    const { generateTokenHubNanoBanana: nanoText } = await vi.importActual<typeof import('../../services/tokenHubNanoBananaService')>('../../services/tokenHubNanoBananaService');
+    if (modelId === TOKENHUB_GPT_IMAGE_25_MODEL_ID) vi.mocked(generateTokenHubImage).mockImplementationOnce(gptText);
+    else vi.mocked(generateTokenHubNanoBanana).mockImplementationOnce(nanoText);
+    const fetch = vi.fn<typeof globalThis.fetch>((_url, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    }));
+    vi.stubGlobal('fetch', fetch);
+
+    const close = beginWorkspaceSession();
+    try {
+      const setError = vi.fn();
+      const setState = vi.fn();
+      const onGenerationComplete = vi.fn();
+      let jobs: FalQueueJob[] = [];
+      const { result } = renderHook(() => useGeneration({
+        appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'Make a poster', promptPrefix: '', apiProvider: 'fal',
+        fal: createFalStub({ falImageModelId: modelId }), selection: createSelectionStub(), images: [], paths: [],
+        videoNegativePrompt: '', setError, setIsLoading: vi.fn(), setState, onGenerationComplete,
+        setFalJobs: update => { jobs = typeof update === 'function' ? update(jobs) : update; },
+        setToastMessage: vi.fn(), setTool: vi.fn(),
+      }));
+      const run = result.current.handleGenerate();
+      expect(fetch).toHaveBeenCalledOnce();
+      const signal = fetch.mock.calls[0][1]?.signal;
+      expect(signal?.aborted).toBe(false);
+      close();
+      expect(signal?.aborted).toBe(true);
+      await act(async () => run);
+      expect(jobs[0]).toMatchObject({ status: 'IN_QUEUE', phase: 'submitting' });
+      expect(setError.mock.calls).toEqual([[null]]);
+      expect(setState).not.toHaveBeenCalled();
+      expect(onGenerationComplete).not.toHaveBeenCalled();
+    } finally {
+      close();
+    }
   });
 
   it.each((['2.1', 'Pro'] as const).flatMap(model =>
@@ -1493,7 +1843,11 @@ describe('useGeneration placement notifications', () => {
     expect(queuedJobs[0].retryInputs?.editPaths).not.toBe(annotatePaths);
     expect(queuedJobs[0].retryInputs?.editPaths?.[0].points).not.toBe(annotatePaths[0].points);
   });
-  it('does not submit a prepared edit after its workspace closes and another opens', async () => {
+  it.each([
+    NANO_BANANA_PRO_EDIT_MODEL_ID,
+    TOKENHUB_GPT_IMAGE_25_MODEL_ID,
+    TOKENHUB_NANO_BANANA_21_MODEL_ID,
+  ])('does not submit a prepared %s edit after its workspace closes and another opens', async modelId => {
     const closeFirst = beginWorkspaceSession();
     let closeSecond: (() => void) | undefined;
     const primary = buildCanvasImage('first-project-primary');
@@ -1504,7 +1858,7 @@ describe('useGeneration placement notifications', () => {
     const state = createStateHarness();
     const { result, unmount } = renderHook(() => useGeneration({
       appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'Old project edit', promptPrefix: '', apiProvider: 'fal',
-      fal: createFalStub(), selection: createSelectionStub({
+      fal: createFalStub({ falImageModelId: modelId }), selection: createSelectionStub({
         primaryImageId: primary.id, primaryImage: primary, activePrimaryImage: primary,
         primarySelectionMediaType: 'image', selectedImageIds: [primary.id], referenceImageIds: [reference.id],
       }), images: [primary, reference], paths: [], videoNegativePrompt: '',
@@ -1519,6 +1873,8 @@ describe('useGeneration placement notifications', () => {
       closeSecond = beginWorkspaceSession();
       await act(async () => { finishPreparation({ ...reference, mediaType: 'image', isPlaying: false, hasAudio: false }); await run; });
       expect(generateFalImageEdit).not.toHaveBeenCalled();
+      expect(generateTokenHubImageEdit).not.toHaveBeenCalled();
+      expect(generateTokenHubNanoBananaEdit).not.toHaveBeenCalled();
       expect(state.setState).not.toHaveBeenCalled();
     } finally {
       unmount(); closeFirst(); closeSecond?.();

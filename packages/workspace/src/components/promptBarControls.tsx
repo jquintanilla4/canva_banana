@@ -1,5 +1,7 @@
 import React from 'react';
 import type { Flux3KeyframeTiming } from '../types';
+import type { VolcengineAssetMention, VolcengineSettings } from '../services/volcengineSettings';
+import { VolcengineSettingsPopover } from './VolcengineSettingsPopover';
 import { Flux3KeyframesPopover } from './Flux3KeyframesPopover';
 import { PromptBarPicker } from './PromptBarPicker';
 
@@ -58,9 +60,21 @@ export interface PromptBarKeyframesControl {
   errorMessage?: string;
 }
 
-export type PromptBarControl = PromptBarSelectControl | PromptBarColorControl | PromptBarActionControl | PromptBarKeyframesControl;
+export interface PromptBarVolcengineControl {
+  kind: 'volcengine-settings';
+  id: string;
+  ariaLabel?: string;
+  settings: VolcengineSettings;
+  supportsDraft: boolean;
+  assetMentions?: readonly VolcengineAssetMention[];
+  onSettingsChange: (settings: VolcengineSettings) => void;
+  disabled: boolean;
+}
+
+export type PromptBarControl = PromptBarSelectControl | PromptBarColorControl | PromptBarActionControl | PromptBarKeyframesControl | PromptBarVolcengineControl;
 
 export const getPromptBarControlSignature = (control: PromptBarControl): string => {
+  if (control.kind === 'volcengine-settings') return `${control.id}-${JSON.stringify(control.settings)}-${control.supportsDraft}-${control.disabled}`;
   if (control.kind === 'action') return `${control.id}-${control.disabled}-${control.label}`;
   if (control.kind === 'color') return `${control.id}-${control.value}-${control.disabled}`;
   if (control.kind === 'keyframes') {
@@ -75,6 +89,9 @@ const getControlTooltip = (control: PromptBarSelectControl): string | undefined 
 export const PromptBarModelControlList: React.FC<{ controls?: ReadonlyArray<PromptBarControl> }> = ({ controls }) => (
   <>
     {controls?.map(control => {
+      if (control.kind === 'volcengine-settings') {
+        return <VolcengineSettingsPopover key={control.id} {...control} />;
+      }
       if (control.kind === 'keyframes') {
         return <Flux3KeyframesPopover key={control.id} {...control} onChange={control.onTimingChange} />;
       }
@@ -150,7 +167,7 @@ export const PromptBarModelControlList: React.FC<{ controls?: ReadonlyArray<Prom
 
 export const PromptBarModelControlErrors: React.FC<{ controls?: ReadonlyArray<PromptBarControl> }> = ({ controls }) => (
   <>
-    {controls?.map(control => control.errorMessage ? (
+    {controls?.map(control => 'errorMessage' in control && control.errorMessage ? (
       <p key={`${control.id}-error`} className="text-xs text-red-400">{control.errorMessage}</p>
     ) : null)}
   </>

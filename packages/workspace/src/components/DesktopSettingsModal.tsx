@@ -24,6 +24,7 @@ const PRIMARY_SETTING_FIELDS: SettingField[] = [
   { key: 'FAL_API_KEY', label: 'FAL API Key', secret: true, placeholder: 'fal-key...' },
   { key: 'MOONSHOT_API_KEY', label: 'Moonshot API Key', secret: true, placeholder: 'sk-...' },
   { key: 'OPENROUTER_API_KEY', label: 'OpenRouter API Key', secret: true, placeholder: 'sk-or-...' },
+  { key: 'TOKENHUB_API_KEY', label: 'TokenHub API Key', secret: true, placeholder: 'sk-...' },
   { key: 'ARK_API_KEY', label: 'Ark API Key', secret: true, placeholder: 'ark-key...' },
   { key: 'VOLCENGINE_ACCESS_KEY', label: 'Volcengine Access Key', secret: true, placeholder: 'AK...' },
   { key: 'VOLCENGINE_SECRET_KEY', label: 'Volcengine Secret Key', secret: true, placeholder: 'SK...' },
@@ -32,6 +33,7 @@ const PRIMARY_SETTING_FIELDS: SettingField[] = [
 ];
 
 const ADVANCED_SETTING_FIELDS: SettingField[] = [
+  { key: 'TOKENHUB_BASE_URL', label: 'TokenHub Base URL', secret: false, placeholder: 'https://tokenhub.ctclouds.com/v1' },
   { key: 'JIMENG_CLI_PATH', label: 'Jimeng CLI Path', secret: false, placeholder: '/usr/local/bin/dreamina' },
 ];
 

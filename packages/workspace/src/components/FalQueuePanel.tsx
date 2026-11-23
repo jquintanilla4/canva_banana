@@ -3,6 +3,7 @@ import type { FalQueueJob } from '../types';
 import { isSuppressedFalLogMessage } from '../services/falConstants';
 import { getBlindTestModelLabel, getOpenSourceAliasLabel, type BlindTestMapping } from '../services/blindTestService';
 import { getFalModelLabel, isFalModelId } from '../services/modelConfig';
+import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import { ChevronDownIcon, RerunIcon } from './Icons';
 
 interface FalQueuePanelProps {
@@ -38,12 +39,15 @@ const phaseLabels: Record<NonNullable<FalQueueJob['phase']>, string> = {
   failed: 'Failed',
 }; // User-facing queue phase labels.
 
-const getProviderLabel = (provider: FalQueueJob['provider']): string => {
+const getProviderLabel = ({ provider, retryInputs }: FalQueueJob): string => {
   if (provider === 'volcengine') {
-    return 'VOLCENGINE';
+    return getSeedance2VolcengineModelCapabilities(retryInputs?.volcengineOptions?.seedance2VolcengineModel).provider.toUpperCase();
   }
   if (provider === 'jimeng') {
     return 'JIMENG';
+  }
+  if (provider === 'tokenhub') {
+    return 'TOKENHUB';
   }
   return 'FAL'; // Google jobs do not use this queue today, but keep the fallback readable.
 };
@@ -178,7 +182,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                       </p>
                     )}
                     <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">
-                      {getProviderLabel(job.provider)}
+                      {getProviderLabel(job)}
                     </p>
                   </div>
                   <span className={`text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${statusStyles[job.status]}`}>

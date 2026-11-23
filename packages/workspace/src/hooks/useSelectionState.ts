@@ -1,3 +1,4 @@
+import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_MAX_REFERENCE_IMAGES,
@@ -17,6 +18,7 @@ import { Tool, type ApiProviderId, type CanvasImage } from '../types';
 import { getModelReferenceCapabilities } from '../services/modelReferenceCapabilities';
 import type { UseFalSettingsResult } from './useFalSettings';
 import {
+  getSeedance2VolcengineExtendReferenceLimits,
   getSeedance2VolcengineReferenceLimits,
   limitEffectiveSeedanceReferenceIds,
 } from '../utils/seedanceReferences';
@@ -195,8 +197,15 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     && isMiniMaxH3VideoModel
     && miniMaxH3Variant === 'reference';
   const isMultimodalReferenceMode = isKlingV4GenerateMode || isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode || isSeedance25ReferenceMode || isMiniMaxH3ReferenceMode || isFlux3KeyframesMode;
-  const multimodalReferenceLabel = isKlingV4GenerateMode ? 'Kling v4' : isFlux3KeyframesMode ? 'Flux 3 Keyframes' : isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && seedance2VolcengineModel === 'seedance25') ? 'Seedance 2.5' : 'Seedance 2';
-  const volcengineReferenceLimits = getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2Mode ? seedance2VolcengineModel : 'standard'); // Non-Volcengine Seedance 2 providers share the 2.0 envelope.
+  const multimodalReferenceLabel = isKlingV4GenerateMode ? 'Kling v4' : isFlux3KeyframesMode ? 'Flux 3 Keyframes' : isMiniMaxH3ReferenceMode ? 'MiniMax H3' : isSeedance25ReferenceMode || (isVolcengineSeedance2Mode && getSeedance2VolcengineModelCapabilities(seedance2VolcengineModel).family === '2.5') ? 'Seedance 2.5' : 'Seedance 2';
+  const volcengineReferenceLimits = useMemo(
+    () => getSeedance2VolcengineReferenceLimits(isVolcengineSeedance2Mode ? seedance2VolcengineModel : undefined),
+    [isVolcengineSeedance2Mode, seedance2VolcengineModel],
+  );
+  const extendReferenceLimits = useMemo(() => getSeedance2VolcengineExtendReferenceLimits(seedance2VolcengineModel), [seedance2VolcengineModel]);
+  const extendReferenceError = extendReferenceLimits.images > 0
+    ? 'Seedance 2.5 Extend supports video clips and reference images.'
+    : 'Seedance 2 Extend supports video clips only.';
   const multimodalReferenceLimits = useMemo(() => isKlingV4GenerateMode
     ? { images: KLING_V4_REFERENCE_IMAGE_LIMIT, videos: KLING_V4_REFERENCE_VIDEO_LIMIT, audios: 0 }
     : isFlux3KeyframesMode
@@ -204,12 +213,12 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     : isSeedance25ReferenceMode
     ? { images: SEEDANCE25_REFERENCE_IMAGE_LIMIT, videos: SEEDANCE25_REFERENCE_VIDEO_LIMIT, audios: SEEDANCE25_REFERENCE_AUDIO_LIMIT }
     : isSeedance2ExtendMode
-      ? { images: 0, videos: volcengineReferenceLimits.videos, audios: 0 } // Extend chains video clips only.
-      : { images: volcengineReferenceLimits.images, videos: volcengineReferenceLimits.videos, audios: volcengineReferenceLimits.audios }, [flux3ModePolicy.maxImages, isKlingV4GenerateMode, isFlux3KeyframesMode, isSeedance25ReferenceMode, isSeedance2ExtendMode, volcengineReferenceLimits]);
+      ? extendReferenceLimits
+      : { images: volcengineReferenceLimits.images, videos: volcengineReferenceLimits.videos, audios: volcengineReferenceLimits.audios }, [extendReferenceLimits, flux3ModePolicy.maxImages, isKlingV4GenerateMode, isFlux3KeyframesMode, isSeedance25ReferenceMode, isSeedance2ExtendMode, volcengineReferenceLimits]);
   const multimodalReferenceTotalLimit = isKlingV4GenerateMode ? KLING_V4_REFERENCE_TOTAL_LIMIT : isFlux3KeyframesMode ? flux3ModePolicy.maxImages : isSeedance25ReferenceMode
     ? SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT
     : isSeedance2ExtendMode
-      ? volcengineReferenceLimits.videos // Extend caps out at its video clips.
+      ? extendReferenceLimits.total
       : volcengineReferenceLimits.total;
   const isVideoInputMode = isKlingO3VideoInputMode
     || isKlingV4EditMode
@@ -462,13 +471,15 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     setReferenceImageIds(keepAcceptedIds);
     setReferenceVideoIds(keepAcceptedIds);
     setReferenceAudioIds(keepAcceptedIds);
-    const rejectionMessage = isSeedance2ExtendMode && (violation === 'images' || violation === 'audios')
-      ? 'Seedance 2 Extend supports video clips only.' // Extend trims tagged images/audio with a mode-specific reason.
+    const rejectionMessage = isSeedance2ExtendMode && (violation === 'audios' || (violation === 'images' && !extendReferenceLimits.images))
+      ? extendReferenceError
       : violation === 'total'
         ? `${multimodalReferenceLabel} reference supports up to ${multimodalReferenceTotalLimit} total files.`
         : `${multimodalReferenceLabel} reference supports up to ${multimodalReferenceLimits[violation]} ${violation === 'audios' ? 'audio tracks' : violation}.`;
     onError(rejectionMessage);
   }, [
+    extendReferenceError,
+    extendReferenceLimits.images,
     images,
     isMultimodalReferenceMode,
     isSeedance2ExtendMode,
@@ -554,8 +565,9 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
       return;
     }
 
-    if (reference && isSeedance2ExtendMode && imageId && targetImage?.mediaType !== 'video') {
-      onError('Seedance 2 Extend supports video clips only.');
+    if (reference && isSeedance2ExtendMode && imageId && targetImage?.mediaType !== 'video'
+      && (!extendReferenceLimits.images || !isImageCanvasMedia(targetImage))) {
+      onError(extendReferenceError);
       return;
     }
 
@@ -907,6 +919,8 @@ export const useSelectionState = (options: SelectionOptions): SelectionStateResu
     sourceAudioId,
     isMultimodalReferenceMode,
     isSeedance2ExtendMode,
+    extendReferenceError,
+    extendReferenceLimits.images,
     multimodalReferenceLabel,
     multimodalReferenceLimits,
     isWan27ReferenceMode,

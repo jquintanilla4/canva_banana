@@ -39,6 +39,20 @@ describe('FalQueuePanel', () => {
     expect(screen.getByText('Uploading source image...')).not.toBeNull();
   });
 
+  it('labels TokenHub jobs with their provider', () => {
+    render(
+      <FalQueuePanel
+        jobs={[buildJob({ provider: 'tokenhub' })]}
+        onDismiss={vi.fn()}
+        onRetry={vi.fn()}
+        blindTestEnabled={false}
+        openSourceAliasEnabled={false}
+        blindTestMapping={new Map()}
+      />,
+    );
+    expect(screen.getByText('TOKENHUB')).not.toBeNull();
+  });
+
   it('retries retryable failed jobs and dismisses terminal jobs', () => {
     const onDismiss = vi.fn();
     const onRetry = vi.fn(() => true);

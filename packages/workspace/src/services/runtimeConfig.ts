@@ -11,6 +11,7 @@ export type RuntimeConfig = {
   falApiUrl?: string;
   falModelId?: string;
   volcengineApiBaseUrl?: string;
+  tokenHubSeedanceEnabled?: boolean;
   jimengApiBaseUrl?: string;
 };
 
@@ -41,6 +42,8 @@ export type DesktopSettingsKey =
   | 'FAL_API_KEY'
   | 'MOONSHOT_API_KEY'
   | 'OPENROUTER_API_KEY'
+  | 'TOKENHUB_API_KEY'
+  | 'TOKENHUB_BASE_URL'
   | 'ARK_API_KEY'
   | 'VOLCENGINE_ACCESS_KEY'
   | 'VOLCENGINE_SECRET_KEY'

@@ -1,12 +1,18 @@
 import { existsSync, renameSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
+
+export const resolveDesktopSettingsPath = ({ isPackaged, userDataPath, repoRoot }) => (
+  join(isPackaged ? userDataPath : repoRoot, '.env.local')
+);
 
 export const DESKTOP_SETTING_KEYS = [
   'GEMINI_API_KEY',
   'FAL_API_KEY',
   'MOONSHOT_API_KEY',
   'OPENROUTER_API_KEY',
+  'TOKENHUB_API_KEY',
+  'TOKENHUB_BASE_URL',
   'ARK_API_KEY',
   'VOLCENGINE_ACCESS_KEY',
   'VOLCENGINE_SECRET_KEY',
@@ -15,7 +21,7 @@ export const DESKTOP_SETTING_KEYS = [
   'JIMENG_CLI_PATH',
 ];
 
-export const REQUIRED_DESKTOP_SETTING_KEYS = DESKTOP_SETTING_KEYS.filter(key => key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY');
+export const REQUIRED_DESKTOP_SETTING_KEYS = DESKTOP_SETTING_KEYS.filter(key => !['JIMENG_CLI_PATH', 'OPENROUTER_API_KEY', 'TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL'].includes(key));
 export const SECRET_DESKTOP_SETTING_KEYS = DESKTOP_SETTING_KEYS.filter(key => key.endsWith('_KEY') || key === 'GEMINI_API_KEY' || key === 'FAL_API_KEY' || key === 'MOONSHOT_API_KEY' || key === 'ARK_API_KEY');
 
 const DESKTOP_SETTING_KEY_SET = new Set(DESKTOP_SETTING_KEYS);

@@ -166,6 +166,7 @@ try {
     spawnOptions: {
       env: {
         UV_CACHE_DIR: process.env.UV_CACHE_DIR || pythonBackendUvCacheDir,
+        CANVA_BANANA_DEV_TOKENHUB_ENV: '1',
       },
     },
   });
@@ -178,6 +179,7 @@ try {
     cwd: desktopDir,
     env: {
       ELECTRON_RENDERER_URL: WEB_URL,
+      CANVA_BANANA_DEV_TOKENHUB_ENV: '1',
       SECURE_BACKEND_API_BASE_URL: 'http://localhost:8787',
       VOLCENGINE_API_BASE_URL: 'http://localhost:8000',
       JIMENG_API_BASE_URL: 'http://localhost:8000',

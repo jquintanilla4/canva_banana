@@ -4,6 +4,7 @@ import { NANO_BANANA_21_EDIT_MODEL_ID } from '../../services/nanoBananaConfig';
 import { getGoogleImageAspectRatio } from '../../services/nanoBananaAspectRatioPolicy';
 import { buildPromptBarModelControls } from '../../services/promptBarConfig';
 import { buildFooterPromptBarControlsInput } from '../../services/promptBarSettingsView';
+import { TOKENHUB_NANO_BANANA_21_MODEL_ID } from '../../services/tokenHubNanoBananaConfig';
 import type { ApiProviderId } from '../../types';
 import { useFalSettings } from '../useFalSettings';
 
@@ -41,6 +42,19 @@ describe('Nano Banana provider aspect ratios', () => {
     });
     rerender({ apiProvider: 'google' });
     expect(result.current.falAspectRatioSelection).toBe('16:9');
+  });
+
+  it('normalizes an extended TokenHub ratio when switching to Google', () => {
+    const { result, rerender } = renderHook(({ apiProvider }: { apiProvider: ApiProviderId }) => useFalSettings({ apiProvider }), {
+      initialProps: { apiProvider: 'fal' },
+    });
+    act(() => {
+      result.current.handleFalModelChange(TOKENHUB_NANO_BANANA_21_MODEL_ID);
+      result.current.handleFalAspectRatioChange('8:1');
+    });
+    expect(result.current.falAspectRatioSelection).toBe('8:1');
+    rerender({ apiProvider: 'google' });
+    expect(result.current.falAspectRatioSelection).toBe('default');
   });
 
   it('resets unsupported ratios when Google replaces remembered Fal video mode', () => {

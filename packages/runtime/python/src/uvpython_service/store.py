@@ -93,11 +93,11 @@ class JobStore:
 
         return snapshot, unsubscribe
 
-    def update(self, job_id: str, **changes: object) -> JobState | None:
+    def update(self, job_id: str, *, when: Callable[[JobState], bool] | None = None, **changes: object) -> JobState | None:
         subscribers: set[JobSubscriber]
         with self._lock:
             job = self._jobs.get(job_id)
-            if not job:
+            if not job or (when is not None and not when(job)):
                 return None
             updated = replace(job, **changes)
             self._jobs[job_id] = updated
