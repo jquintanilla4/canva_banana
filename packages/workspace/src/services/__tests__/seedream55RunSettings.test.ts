@@ -20,7 +20,7 @@ describe('Seedream 5.5 run settings', () => {
     expect(isGenerationKind('layerize')).toBe(true);
   });
   it('shares defaults and normalizes transparent output through persistence', () => {
-    expect(resolveSeedream55RunSettings('text_to_image', {})).toEqual({ kind: 'text_to_image', endpoint: `${SEEDREAM_55_MODEL_ID}/text-to-image`, numImages: 1, imageSizeSelection: 'auto_2K', background: 'auto', outputFormat: 'png' });
+    expect(resolveSeedream55RunSettings('text_to_image', {})).toEqual({ kind: 'text_to_image', numImages: 1, imageSizeSelection: 'auto_2K', background: 'auto', outputFormat: 'png' });
     const settings = resolveSeedream55RunSettings('image_edit', { imageSizeSelection: 'auto_1.5K', numImages: 10, seedream55Background: 'transparent', seedream55OutputFormat: 'jpeg' });
     expect(settings).toMatchObject({ numImages: 6, outputFormat: 'png', background: 'transparent' });
     expect(serializeSeedream55GenerationOptions(settings)).toEqual({ imageSizeSelection: 'auto_1.5K', numImages: 6, seedream55Background: 'transparent', seedream55OutputFormat: 'png' });

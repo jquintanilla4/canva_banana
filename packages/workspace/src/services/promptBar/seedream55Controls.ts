@@ -3,12 +3,13 @@ import type { GenerationFalOptions } from '../../types';
 import {
   SEEDREAM_55_BACKGROUND_OPTIONS,
   SEEDREAM_55_FORMAT_OPTIONS,
-  SEEDREAM_55_IMAGE_SIZE_OPTIONS,
+  getSeedream55ImageSizeOptions,
 } from '../seedream55Config';
 import { resolveSeedream55RunSettings } from '../seedream55RunSettings';
 
 interface Seedream55ControlsInput extends Pick<GenerationFalOptions,
   'seedream55Background' | 'seedream55OutputFormat' | 'imageSizeSelection'> {
+  modelId?: string;
   isLoading: boolean;
   onSizeChange: (value: string) => void;
   onBackgroundChange: (value: string) => void;
@@ -16,14 +17,14 @@ interface Seedream55ControlsInput extends Pick<GenerationFalOptions,
 }
 
 export const buildSeedream55Controls = (input: Seedream55ControlsInput): PromptBarSelectControl[] => {
-  const settings = resolveSeedream55RunSettings('text_to_image', input, 'restore');
+  const settings = resolveSeedream55RunSettings('text_to_image', input, 'restore', input.modelId);
   const transparent = settings.background === 'transparent';
   return [
     {
       id: 'fal-seedream-55-size-select',
       prefixLabel: 'Size',
       ariaLabel: 'Select Seedream 5.5 image size',
-      options: SEEDREAM_55_IMAGE_SIZE_OPTIONS,
+      options: getSeedream55ImageSizeOptions(input.modelId),
       value: settings.imageSizeSelection,
       onChange: input.onSizeChange,
       disabled: input.isLoading,

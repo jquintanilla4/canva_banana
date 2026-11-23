@@ -1,4 +1,4 @@
-import { isSeedream55Model } from './seedream55Config';
+import { getSeedream55ModelProvider } from './seedream55Config';
 import { Tool } from '../types';
 import {
   getMaxReferenceImages,
@@ -22,7 +22,7 @@ export const getModelReferenceCapabilities = (
 ): ModelReferenceCapabilities => {
   const normalizedModelId = normalizeFalModelId(modelId);
   const referenceCapacity = getMaxReferenceImages(normalizedModelId);
-  const annotationUsesReferenceSlot = isSeedream55Model(normalizedModelId)
+  const annotationUsesReferenceSlot = getSeedream55ModelProvider(normalizedModelId)
     || isGptImage2EditModelId(normalizedModelId)
     || isGptImage25Model(normalizedModelId)
     || isKrea3Model(normalizedModelId)

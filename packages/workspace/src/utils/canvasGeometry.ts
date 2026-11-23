@@ -60,3 +60,15 @@ export const findNonOverlappingPlacement = (
   const rightOfRow = bounds.reduce((nextX, box) => touchesRow(box, y) ? Math.max(nextX, box.maxX + spacing) : nextX, startX);
   return { x: rightOfRow, y };
 };
+
+export const placeImagesAfterCanvasTail = (canvasImages: readonly CanvasImage[], images: readonly CanvasImage[]): CanvasImage[] => {
+  const occupied = [...canvasImages];
+  return images.map(image => {
+    const tail = occupied.at(-1);
+    const bounds = tail && getImageBounds(tail);
+    const position = findNonOverlappingPlacement(occupied, image.width, image.height, bounds ? bounds.maxX + 20 : 100, bounds?.minY ?? 100);
+    const placed = { ...image, ...position };
+    occupied.push(placed);
+    return placed;
+  });
+};

@@ -4,11 +4,12 @@ import type { LayerizeSeedream55Options } from './fal/types';
 import { layerizeSeedream55Image } from './falService';
 import { getNaturalSize, prepareGeneratedImage } from './mediaService';
 import { getFalModelLabel } from './modelConfig';
-import { isSeedream55Model, SEEDREAM_55_MODEL_ID } from './seedream55Config';
+import { getSeedream55ModelProvider, SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID } from './seedream55Config';
+import { layerizeVolcengineSeedream55Image } from './seedream55VolcengineService';
 
 interface Seedream55LayerizeOperation {
   readonly source: CanvasImage;
-  readonly generation: GenerationInputs & { modelId: typeof SEEDREAM_55_MODEL_ID; modelLabel: string };
+  readonly generation: GenerationInputs & { modelId: typeof SEEDREAM_55_MODEL_ID | typeof SEEDREAM_55_VOLCENGINE_MODEL_ID; modelLabel: string };
   execute(options: LayerizeSeedream55Options): Promise<{
     requestId?: string;
     images: CanvasImage[];
@@ -23,7 +24,8 @@ export const resolveSeedream55LayerizeOperation = ({
   modelId: string;
   images: readonly CanvasImage[];
 }): Seedream55LayerizeOperation => {
-  if (request.provider !== 'fal' || request.modelMode === 'video' || !isSeedream55Model(request.modelId ?? modelId)) {
+  const provider = getSeedream55ModelProvider(request.modelId ?? modelId);
+  if (!provider || request.provider !== provider || request.modelMode === 'video') {
     throw new Error('Select Seedream 5.5 to layerize an image.');
   }
   const source = images.find(image => image.id === request.primaryImageId);
@@ -36,12 +38,14 @@ export const resolveSeedream55LayerizeOperation = ({
 
   const image = source.element;
   const prompt = request.prompt.trim();
-  const modelLabel = getFalModelLabel(SEEDREAM_55_MODEL_ID);
+  const isVolcengine = provider === 'volcengine';
+  const selectorId = isVolcengine ? SEEDREAM_55_VOLCENGINE_MODEL_ID : SEEDREAM_55_MODEL_ID;
+  const modelLabel = getFalModelLabel(selectorId);
   const generation = {
     kind: 'layerize',
     prompt,
-    provider: 'fal',
-    modelId: SEEDREAM_55_MODEL_ID,
+    provider,
+    modelId: selectorId,
     modelLabel,
     modelMode: 'image',
     primaryImageId: source.id,
@@ -53,7 +57,8 @@ export const resolveSeedream55LayerizeOperation = ({
     source,
     generation,
     async execute(options) {
-      const result = await layerizeSeedream55Image({ image, sourceFile: source.file, prompt }, options);
+      const layerize = isVolcengine ? layerizeVolcengineSeedream55Image : layerizeSeedream55Image;
+      const result = await layerize({ image, sourceFile: source.file, prompt }, options);
       const layers: CanvasImage[] = [];
       for (const { dataUrl, bounds } of result.layers) {
         options.abortSignal?.throwIfAborted();

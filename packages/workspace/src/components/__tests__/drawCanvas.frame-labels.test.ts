@@ -4,6 +4,7 @@ import { Tool, type CanvasImage, type Path } from '../../types';
 import { useCanvasReferenceLabels } from '../../hooks/useCanvasReferenceLabels';
 import { getModelUiCapabilities } from '../../services/modelCapabilities';
 import { KLING_V4_VIDEO_MODEL_ID } from '../../services/klingV4Config';
+import { SEEDREAM_55_ENDPOINTS, SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../../services/seedream55Config';
 import { createCanvasRenderCache, drawCanvas } from '../canvas/render/drawCanvas';
 
 const buildContext = (): CanvasRenderingContext2D => ({
@@ -110,6 +111,36 @@ const buildVideoImage = (readyState: number): CanvasImage => {
     file: new File(['video'], 'video.mp4', { type: 'video/mp4' }),
   }; // Video fixture can represent both lazy and decoded states.
 };
+
+it.each([
+  { modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, pickerId: SEEDREAM_55_VOLCENGINE_MODEL_ID, provider: 'volcengine', modelLabel: 'Seedream 5.5 (VE)', blindLabel: 'Swift Wolf' },
+  { modelId: SEEDREAM_55_ENDPOINTS.layerize, pickerId: SEEDREAM_55_MODEL_ID, provider: 'fal', modelLabel: 'Seedream 5.5', blindLabel: 'Swift Wolf' },
+  { modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, pickerId: SEEDREAM_55_VOLCENGINE_MODEL_ID, provider: 'google', modelLabel: 'Google Gemini', blindLabel: 'Google Gemini' },
+] as const)('renders $blindLabel for $provider in a cached metadata overlay while Blind Test is enabled', ({ modelId, pickerId, provider, modelLabel, blindLabel }) => {
+  const ctx = buildContext();
+  const metadata = { source: 'generated', modelLabel, generation: { kind: 'text_to_image', prompt: '', provider, modelId } } as const;
+  const args: Parameters<typeof drawCanvas>[0] = {
+    canvas: buildCanvas(640, 480), ctx, pan: { x: 0, y: 0 }, scale: 1,
+    images: [{ ...buildImage('seedream', 10), width: 480, height: 400, metadata }],
+    notes: [], paths: [], selectedImageIds: [], referenceImageIds: [], referenceVideoIds: [], referenceAudioIds: [],
+    elementImageIds: [], videoLastFrameImageId: null, sourceVideoId: null, tailSelectionEnabled: false,
+    isKlingO3VideoInputMode: false, isKlingO3ReferenceMode: false, isSeedance15FflfMode: false,
+    isKlingV3ControlVideoInputMode: false, isVeo31ExtendMode: false, isWanAnimateVideoInputMode: false,
+    isWan27VideoMode: false, showMetadataOverlay: true, cropMode: null, transformMode: null,
+    renderCache: createCanvasRenderCache(),
+  };
+  const labels = vi.mocked(ctx.fillText);
+
+  drawCanvas(args);
+  expect(labels.mock.calls.map(([label]) => label)).toContain(modelLabel);
+  labels.mockClear();
+  drawCanvas({ ...args, blindTestMapping: new Map([[pickerId, 'Swift Wolf']]) });
+  expect(labels.mock.calls.map(([label]) => label)).toEqual([blindLabel]);
+  labels.mockClear();
+  drawCanvas(args);
+  expect(labels.mock.calls.map(([label]) => label)).toContain(modelLabel);
+  expect(metadata.modelLabel).toBe(modelLabel);
+});
 
 describe('drawCanvas frame role labels', () => {
   it('labels the selected still as first frame and the tail still as last frame', () => {

@@ -1,5 +1,5 @@
 import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
-import { isSeedream55Model } from '../services/seedream55Config';
+import { getSeedream55ModelProvider } from '../services/seedream55Config';
 import { isGptImage26Model } from '../services/gptImage26Config';
 import { isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
 import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
@@ -340,7 +340,7 @@ export function useGenerationGuards({
     const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage) && !(isVideoMode && (
       (isVideoInputMode && hasSourceVideo) || isGrokImagineVideoEditMode
     ));
-    const isSeedream55 = usingFal && !isVideoMode && isSeedream55Model(falModelId);
+    const isSeedream55 = usingFal && !isVideoMode && Boolean(getSeedream55ModelProvider(falModelId));
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode

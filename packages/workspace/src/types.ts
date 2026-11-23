@@ -327,6 +327,7 @@ export interface GenerationPlacedPayload {
   mediaIds: string[];
   mediaType: 'image' | 'video';
   modelLabel?: string;
+  modelId?: string;
 }
 
 export type VideoPromptAreaMediaRole =

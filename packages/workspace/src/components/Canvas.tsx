@@ -1,5 +1,6 @@
 import { VolcengineDraftActions } from './VolcengineDraftActions';
 import { hasVolcengineLastFrame } from '../services/volcengineMedia';
+import type { BlindTestMapping } from '../services/blindTestService';
 import { getActiveVolcengineSettings, getVolcengineAssetCounts, getVolcengineAssetMentions, type VolcengineAssetMention, type VolcengineFinalResolution } from '../services/volcengineSettings';
 import { getSeedanceVideoPickerModelId, resolveSeedanceVideoPickerSelection, withSelectedSeedanceVideoPickerOption } from '../services/seedanceVideoPicker';
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react';
@@ -142,6 +143,7 @@ interface CanvasProps {
   onRetryVolcengineLastFrame?: (imageId: string) => void;
   downloadingLastFrames?: ReadonlySet<string>;
   showMetadataOverlay: boolean;
+  blindTestMapping?: BlindTestMapping;
   transformMode: { imageId: string; } | null;
   onStartTransform: (imageId: string) => void;
   onExitTransform: () => void;
@@ -338,6 +340,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onRetryVolcengineLastFrame,
   downloadingLastFrames,
   showMetadataOverlay,
+  blindTestMapping,
   transformMode,
   onStartTransform,
   onExitTransform,
@@ -717,6 +720,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       isWanAnimateVideoInputMode,
       isWan27VideoMode,
       showMetadataOverlay,
+      blindTestMapping,
       cropMode: effectiveCropMode,
       transformMode: effectiveTransformMode,
       renderCache: renderCacheRef.current,
@@ -730,7 +734,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (perfHudEnabled) {
       recordCanvasDraw(performance.now() - drawStart);
     }
-  }, [gifPlaybackRef, reconcileGifs, disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, frameRoleLabelsEnabled, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
+  }, [blindTestMapping, gifPlaybackRef, reconcileGifs, disabledMediaIds, effectiveCropMode, effectiveTransformMode, elementImageIds, elementImageOrderLabels, frameRoleLabelsEnabled, images, isKlingO3ReferenceMode, isPresentationMode, isSeedance15FflfMode, isKlingO3VideoInputMode, isKlingV3ControlVideoInputMode, isVeo31ExtendMode, isWanAnimateVideoInputMode, isWan27VideoMode, notes, paths, perfHudEnabled, referenceAudioIds, referenceImageIds, referenceImageOrderLabels, referenceVideoIds, selectedImageIds, showMetadataOverlay, sourceVideoId, tailSelectionEnabled, videoLastFrameImageId]);
 
   useEffect(() => {
     drawRef.current = draw;

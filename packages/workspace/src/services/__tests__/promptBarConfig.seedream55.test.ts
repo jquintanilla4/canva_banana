@@ -4,7 +4,8 @@ import { useFalSettings } from '../../hooks/useFalSettings';
 import { useGenerationGuards, type GenerationGuardsArgs } from '../../hooks/useGenerationGuards';
 import { Tool } from '../../types';
 import { buildSeedream55Controls } from '../promptBar/seedream55Controls';
-import { SEEDREAM_55_MODEL_ID } from '../seedream55Config';
+import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../seedream55Config';
+import { FAL_IMAGE_MODEL_OPTIONS } from '../modelConfig';
 import { normalizeSnapshotImageMetadata } from '../snapshotService';
 
 const guardArgs: GenerationGuardsArgs = {
@@ -55,5 +56,25 @@ describe('Seedream 5.5 contextual Layerize settings', () => {
     act(() => expect(result.current.applyGenerationSettings(generation)).toBe(true));
     expect(result.current).toMatchObject({ falImageModelId: SEEDREAM_55_MODEL_ID, falImageSizeSelection: 'auto_2K', falNumImages: 1 });
     expect(result.current).not.toHaveProperty('seedream55Mode');
+  });
+
+  it('restores Volcengine image settings from a snapshot into its own picker entry', () => {
+    expect(FAL_IMAGE_MODEL_OPTIONS).toEqual(expect.arrayContaining([
+      { value: SEEDREAM_55_MODEL_ID, label: 'Seedream 5.5' },
+      { value: SEEDREAM_55_VOLCENGINE_MODEL_ID, label: 'Seedream 5.5 (VE)' },
+    ]));
+    const saved = normalizeSnapshotImageMetadata({ source: 'generated', generation: {
+      kind: 'image_edit', prompt: 'Edit the poster', provider: 'volcengine', modelMode: 'image',
+      modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, primaryImageId: 'source',
+      falOptions: { imageSizeSelection: 'auto_1.5K', seedream55Background: 'opaque', seedream55OutputFormat: 'jpeg', numImages: 6 },
+    } });
+    const generation = saved?.generation;
+    if (!generation) throw new Error('Volcengine image generation metadata was dropped.');
+    const { result } = renderHook(() => useFalSettings({ apiProvider: 'fal' }));
+    act(() => expect(result.current.applyGenerationSettings(generation)).toBe(true));
+    expect(result.current).toMatchObject({
+      falImageModelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, falModelMode: 'image', falImageSizeSelection: 'auto_1.5K',
+      seedream55Background: 'opaque', seedream55OutputFormat: 'jpeg', falNumImages: 1,
+    });
   });
 });

@@ -1,6 +1,7 @@
 import type { FalImageSizeOption, GenerationFalOptions, GenerationInputs } from '../types';
 
 export const SEEDREAM_55_MODEL_ID = 'bytedance/seedream/v5.5';
+export const SEEDREAM_55_VOLCENGINE_MODEL_ID = 'volcengine/seedream-5.5';
 export const SEEDREAM_55_ENDPOINTS = {
   text_to_image: `${SEEDREAM_55_MODEL_ID}/text-to-image`,
   image_edit: `${SEEDREAM_55_MODEL_ID}/edit`,
@@ -12,6 +13,15 @@ export const SEEDREAM_55_MAX_OUTPUT_IMAGES = 6;
 export const SEEDREAM_55_NUM_IMAGE_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
 export const isSeedream55Model = (modelId: string | undefined): boolean =>
   modelId === SEEDREAM_55_MODEL_ID || Object.values(SEEDREAM_55_ENDPOINTS).some(endpoint => endpoint === modelId);
+export const getSeedream55ModelProvider = (modelId: string | undefined) =>
+  modelId === SEEDREAM_55_VOLCENGINE_MODEL_ID ? 'volcengine' : isSeedream55Model(modelId) ? 'fal' : undefined;
+export const SEEDREAM_55_LAYERIZE_MAX_BYTES = 30_000_000;
+export const validateSeedream55LayerizeDimensions = ({ naturalWidth: width, naturalHeight: height }: HTMLImageElement) => {
+  const pixels = width * height;
+  if (pixels < 512 ** 2 || pixels > 6000 ** 2 || width > 16 * height || height > 16 * width) {
+    throw new Error('Resize the image to between 262,144 and 36,000,000 total pixels with an aspect ratio between 1:16 and 16:1 to use Layerize.');
+  }
+};
 export const SEEDREAM_55_DEFAULTS = {
   imageSizeSelection: 'auto_2K', numImages: 1,
   seedream55Background: 'auto', seedream55OutputFormat: 'png',
@@ -27,6 +37,12 @@ export const SEEDREAM_55_IMAGE_SIZE_OPTIONS = [
   { value: 'auto_1.5K', label: 'Auto 1.5K' },
   { value: 'auto_2K', label: 'Auto 2K (default)' },
 ] as const satisfies ReadonlyArray<{ value: FalImageSizeOption; label: string }>;
+const SEEDREAM_55_VOLCENGINE_SIZES = { auto_1K: '1K', 'auto_1.5K': '1.5K', auto_2K: '2K' } as const;
+export const getSeedream55ImageSizeOptions = (modelId?: string) => modelId === SEEDREAM_55_VOLCENGINE_MODEL_ID
+  ? SEEDREAM_55_IMAGE_SIZE_OPTIONS.filter(({ value }) => Object.hasOwn(SEEDREAM_55_VOLCENGINE_SIZES, value))
+  : SEEDREAM_55_IMAGE_SIZE_OPTIONS;
+export const getSeedream55VolcengineSize = (size: Seedream55ImageSize) =>
+  Object.entries(SEEDREAM_55_VOLCENGINE_SIZES).find(([value]) => value === size)?.[1] ?? '2K';
 export const SEEDREAM_55_BACKGROUND_OPTIONS = [
   { value: 'auto', label: 'Auto' }, { value: 'opaque', label: 'Opaque' }, { value: 'transparent', label: 'Transparent' },
 ] as const;

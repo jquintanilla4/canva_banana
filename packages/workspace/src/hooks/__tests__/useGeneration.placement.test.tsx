@@ -1,4 +1,4 @@
-import { SEEDREAM_55_MODEL_ID } from '../../services/seedream55Config';
+import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../../services/seedream55Config';
 import * as falMedia from '../../services/fal/media';
 import { GPT_IMAGE_26_MODEL_ID } from '../../services/gptImage26Config';
 import * as gptImage26Policy from '../../services/gptImage26RunSettings';
@@ -422,6 +422,82 @@ describe('useGeneration placement notifications', () => {
     expect(selected ? generateFalImageEdit : generateFalImage).toHaveBeenCalledOnce();
     expect(jobs[0].retryInputs?.kind).toBe(selected ? 'image_edit' : 'text_to_image');
     expect(jobs[0].status).toBe('COMPLETED');
+  });
+
+  it.each(['text_to_image', 'image_edit', 'layerize'] as const)('runs %s through the Volcengine image backend and saves its model', async operation => {
+    const element = document.createElement('img');
+    Object.defineProperties(element, { naturalWidth: { value: 768 }, naturalHeight: { value: 512 } });
+    const primary = { ...buildCanvasImage('ve-source'), element };
+    const reference = { ...buildCanvasImage('ve-reference'), element };
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['image'], { type: 'image/png' })));
+    const output = { b64_json: 'aW1hZ2U=', output_format: 'png' };
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => Response.json({
+      requestId: 've-image', data: operation === 'layerize'
+        ? [{ ...output, z_index: 2, bounding_box: { absolute: [6, 9, 26, 30] } }, { ...output, z_index: 0 }] : [output],
+    }));
+    vi.stubGlobal('fetch', fetch);
+    const state = createStateHarness();
+    state.setState(prev => ({ ...prev, images: [primary, reference] }));
+    const onGenerationPlaced = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    const selected = operation !== 'text_to_image';
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'Create a poster', promptPrefix: '', apiProvider: 'fal',
+      fal: createFalStub({ falImageModelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, falImageSizeSelection: 'auto_1.5K' }),
+      selection: createSelectionStub({ primaryImageId: selected ? primary.id : null, selectedImageIds: selected ? [primary.id] : [],
+        referenceImageIds: operation === 'image_edit' ? [reference.id] : [] }),
+      images: [primary, reference], paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(),
+      setFalJobs: update => { jobs = typeof update === 'function' ? update(jobs) : update; },
+      setState: state.setState, setToastMessage: vi.fn(), setTool: vi.fn(), onGenerationPlaced,
+    }));
+    await act(async () => result.current.handleGenerate(operation === 'layerize' ? {
+      kind: 'layerize', prompt: '', provider: 'volcengine', modelMode: 'image', modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, primaryImageId: primary.id,
+    } : undefined));
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('/api/volcengine/images/generations'), expect.objectContaining({
+      headers: expect.objectContaining({ 'X-Canva-Banana-Local-Action': 'volcengine-submit' }),
+    }));
+    const body = fetch.mock.calls[0]?.[1]?.body;
+    if (!(body instanceof FormData)) throw new Error('Expected a multipart image request.');
+    expect(body.get('operation')).toBe(operation);
+    expect(body.get('prompt')).toBe(operation === 'layerize' ? '' : 'Create a poster');
+    expect(body.get('size')).toBe(operation === 'layerize' ? null : '1.5K');
+    expect(body.getAll('images')).toHaveLength(operation === 'image_edit' ? 2 : operation === 'layerize' ? 1 : 0);
+    const saved = { kind: operation, provider: 'volcengine', modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, modelMode: 'image' };
+    expect(jobs[0]).toMatchObject({ status: 'COMPLETED', requestId: 've-image', retryInputs: saved });
+    const placed = state.state.images.slice(2);
+    expect(placed).toHaveLength(operation === 'layerize' ? 2 : 1);
+    expect(placed[0].metadata?.generation).toMatchObject(saved);
+    if (operation === 'layerize') expect(placed[1]).toMatchObject({ x: placed[0].x + 6, y: placed[0].y + 9, width: 20, height: 21 });
+    expect(onGenerationPlaced).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID }));
+    expect(generateFalImage).not.toHaveBeenCalled();
+    expect(generateFalImageEdit).not.toHaveBeenCalled();
+    expect(layerizeSeedream55Image).not.toHaveBeenCalled();
+  });
+
+  it('places two Volcengine images started from the same canvas without overlap', async () => {
+    let submitCount = 0;
+    let finishRequests = () => {};
+    const deferred = new Promise<void>(resolve => { finishRequests = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      submitCount += 1;
+      await deferred;
+      return Response.json({ data: [{ b64_json: 'aW1hZ2U=', output_format: 'png' }] });
+    }));
+    const state = createStateHarness();
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'Create a poster', promptPrefix: '', apiProvider: 'fal',
+      fal: createFalStub({ falImageModelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, falImageSizeSelection: 'auto_2K' }),
+      selection: createSelectionStub(), images: [], paths: [], videoNegativePrompt: '',
+      setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs: vi.fn(),
+      setState: state.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    const first = result.current.handleGenerate();
+    const second = result.current.handleGenerate();
+    await vi.waitFor(() => expect(submitCount).toBe(2));
+    finishRequests();
+    await act(async () => { await Promise.all([first, second]); });
+    const placements = state.state.images.map(({ x, y }) => [x, y]);
+    expect(placements).toEqual([[100, 100], [184, 100]]);
   });
 
   it.each(['missing', 'video', 'reference'] as const)('rejects explicit Layerize with %s input before creating a job', async input => {

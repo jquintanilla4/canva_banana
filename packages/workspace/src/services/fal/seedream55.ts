@@ -1,5 +1,5 @@
 import type { CanvasRect } from '../../types';
-import { SEEDREAM_55_ENDPOINTS } from '../seedream55Config';
+import { SEEDREAM_55_ENDPOINTS, SEEDREAM_55_LAYERIZE_MAX_BYTES, validateSeedream55LayerizeDimensions } from '../seedream55Config';
 import { resolveSeedream55RunSettings, type Seedream55RunSettings } from '../seedream55RunSettings';
 import { getWorkspaceSignal } from '../workspaceSession';
 import { ensureFalClientConfigured } from './client';
@@ -49,15 +49,18 @@ const parseLayerBounds = (value: unknown): CanvasRect => {
   }
   return { x: left, y: top, width: right - left, height: bottom - top };
 };
-export const parseSeedream55Layers = (data: unknown): Seedream55Layer[] => {
-  if (!isRecord(data) || !Array.isArray(data.layers) || data.layers.length === 0) throw new Error('Seedream 5.5 did not return layers.');
-  const layers = data.layers.map((value: unknown): Seedream55Layer => {
-    if (!isRecord(value) || !isRecord(value.image) || typeof value.image.url !== 'string' || !value.image.url.trim()
-      || typeof value.z_index !== 'number' || !Number.isInteger(value.z_index) || value.z_index < 0) {
+export const parseSeedream55LayerItems = (
+  items: unknown, getImageUrl: (layer: Record<string, unknown>) => unknown,
+): Seedream55Layer[] => {
+  if (!Array.isArray(items) || items.length === 0) throw new Error('Seedream 5.5 did not return layers.');
+  const layers = items.map((value: unknown): Seedream55Layer => {
+    if (!isRecord(value) || typeof value.z_index !== 'number' || !Number.isInteger(value.z_index) || value.z_index < 0) {
       throw new Error('Seedream 5.5 returned a malformed layer.');
     }
+    const url = getImageUrl(value);
+    if (typeof url !== 'string' || !url.trim()) throw new Error('Seedream 5.5 returned a malformed layer.');
     return {
-      url: value.image.url, zIndex: value.z_index,
+      url, zIndex: value.z_index,
       bounds: value.z_index === 0 ? null : parseLayerBounds(value.bounding_box),
       ...(typeof value.name === 'string' && value.name.trim() ? { name: value.name.trim() } : {}),
     };
@@ -66,20 +69,20 @@ export const parseSeedream55Layers = (data: unknown): Seedream55Layer[] => {
   return layers;
 };
 
+export const parseSeedream55Layers = (data: unknown): Seedream55Layer[] => parseSeedream55LayerItems(
+  isRecord(data) ? data.layers : undefined, layer => isRecord(layer.image) ? layer.image.url : undefined,
+);
+
 export const layerizeSeedream55Image = async (
   { image, sourceFile, prompt }: { image: HTMLImageElement; sourceFile?: File; prompt: string },
   suppliedOptions: LayerizeSeedream55Options = {},
 ): Promise<FalLayerizeResult> => {
   const options = { ...suppliedOptions, abortSignal: suppliedOptions.abortSignal ?? getWorkspaceSignal() };
   options.abortSignal?.throwIfAborted();
-  const { naturalWidth: width, naturalHeight: height } = image;
-  const pixels = width * height;
-  if (pixels < 512 ** 2 || pixels > 6000 ** 2 || width > 16 * height || height > 16 * width) {
-    throw new Error('Resize the image to between 262,144 and 36,000,000 total pixels with an aspect ratio between 1:16 and 16:1 to use Layerize.');
-  }
+  validateSeedream55LayerizeDimensions(image);
   ensureFalClientConfigured();
   const uploadOptions = {
-    ...options, label: 'source image', maxBytes: 30_000_000,
+    ...options, label: 'source image', maxBytes: SEEDREAM_55_LAYERIZE_MAX_BYTES,
     maxBytesError: 'Seedream 5.5 Layerize input must be 30 MB or smaller.',
   };
   const originalTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/heic', 'image/heif'];

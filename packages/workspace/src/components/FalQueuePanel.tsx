@@ -3,6 +3,7 @@ import type { FalQueueJob } from '../types';
 import { isSuppressedFalLogMessage } from '../services/falConstants';
 import { getBlindTestModelLabel, getOpenSourceAliasLabel, type BlindTestMapping } from '../services/blindTestService';
 import { getFalModelLabel, isFalModelId } from '../services/modelConfig';
+import { getSeedream55ModelProvider } from '../services/seedream55Config';
 import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
 import { ChevronDownIcon, RerunIcon } from './Icons';
 
@@ -146,10 +147,12 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
         </div>
         <ul className="max-h-[calc(100dvh-13rem)] space-y-2 overflow-y-auto pr-1">
           {sortedJobs.map(job => {
-            const lastLog = [...job.logs].reverse().find(log => !isSuppressedFalLogMessage(log));
             const isRetrying = retryingJobIds.has(job.id);
+            const blindSeedream = blindTestEnabled && Boolean(getSeedream55ModelProvider(job.modelId));
+            const lastLog = blindSeedream ? undefined : [...job.logs].reverse().find(log => !isSuppressedFalLogMessage(log));
+            const phaseMessage = blindSeedream && (job.phase === 'submitting' || job.phase === 'queued') ? undefined : job.phaseMessage;
             const displayModelLabel = (() => {
-              if (job.provider !== 'fal') {
+              if (job.provider !== 'fal' && !blindSeedream) {
                 return job.modelLabel;
               }
               if (!blindTestEnabled && !openSourceAliasEnabled) {
@@ -181,17 +184,19 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                         Generation ID: {job.requestId}
                       </p>
                     )}
-                    <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">
-                      {getProviderLabel(job)}
-                    </p>
+                    {!blindSeedream && (
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">
+                        {getProviderLabel(job)}
+                      </p>
+                    )}
                   </div>
                   <span className={`text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${statusStyles[job.status]}`}>
                     {job.phase ? phaseLabels[job.phase] : statusLabels[job.status]}
                   </span>
                 </div>
-                {job.phaseMessage && (
+                {phaseMessage && (
                   <p className="text-[11px] text-gray-300 mt-2 leading-snug">
-                    {job.phaseMessage}
+                    {phaseMessage}
                   </p>
                 )}
                 {lastLog && (
@@ -199,7 +204,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                     {lastLog}
                   </p>
                 )}
-                {job.error && (
+                {job.error && !blindSeedream && (
                   <p className="text-[11px] text-red-300 mt-2 leading-snug">
                     {job.error}
                   </p>

@@ -16,6 +16,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Request as FastAPIReques
 from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import FormData, UploadFile as StarletteUploadFile
 from volcenginesdkarkruntime._exceptions import ArkAPIStatusError
 
 from uvpython_service.config import get_settings, get_tokenhub_settings
@@ -26,6 +28,7 @@ from uvpython_service.tokenhub_seedance import validate_output_url, validate_con
 from uvpython_service.models import DEFAULT_MODEL_ID, DraftFinalizationPayload, MediaInput, SeedanceJobPayload
 from uvpython_service.ark_references import resolve_reference_sources
 from uvpython_service.store import job_store
+from uvpython_service.seedream_images import ImageGenerationUpstreamError, generate_images, read_image_form, read_image_uploads, validate_image_options
 from uvpython_service.worker import DraftFinalizationNotSubmitted, DraftFinalizationUnavailable, create_draft_finalization, create_job, resume_draft_finalization, resume_tokenhub_job, serialize_job
 
 app = FastAPI(title="Canva Banana UV Python Service")  # Local dev API surface.
@@ -539,6 +542,62 @@ def resume_seedance_draft_finalization(request: FastAPIRequest, body: DraftResum
         }) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+_seedream_submit_slot = asyncio.Semaphore(1)
+
+
+@app.post("/api/volcengine/images/generations")
+async def submit_seedream_images(request: FastAPIRequest) -> dict[str, object]:
+    _require_trusted_volcengine_submit_request(request)
+    async with _seedream_submit_slot:
+        form = FormData()
+        try:
+            try:
+                form = await read_image_form(request)
+            except TimeoutError as exc:
+                raise HTTPException(status_code=408, detail="Image upload timed out") from exc
+            values: dict[str, str] = {}
+            for name in ("operation", "prompt", "size", "output_format", "background"):
+                value = form.get(name)
+                if value is not None:
+                    if not isinstance(value, str):
+                        raise ValueError(f"{name} must be text")
+                    values[name] = value
+            if "operation" not in values:
+                raise HTTPException(status_code=422, detail="operation is required")
+            uploads: list[StarletteUploadFile] = []
+            for upload in form.getlist("images"):
+                if not isinstance(upload, StarletteUploadFile):
+                    raise ValueError("images must be uploaded files")
+                uploads.append(upload)
+            options = validate_image_options(
+                values["operation"], values.get("prompt", ""), values.get("size"),
+                values.get("output_format", "png"), values.get("background", "auto"), len(uploads),
+            )
+            staged_images = await read_image_uploads(uploads, layerize=options.operation == "layerize")
+            generation = asyncio.create_task(run_in_threadpool(generate_images, options, staged_images))
+            try:
+                return await asyncio.shield(generation)
+            except asyncio.CancelledError:
+                completion = asyncio.gather(generation, return_exceptions=True)
+                while not completion.done():
+                    try:
+                        await asyncio.shield(completion)
+                    except asyncio.CancelledError:
+                        continue
+                raise
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ImageGenerationUpstreamError as exc:
+            status_code = exc.status_code if exc.status_code in {400, 401, 403, 404, 422, 429} else 502
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        finally:
+            await form.close()
 
 
 @app.post("/api/volcengine/jobs")

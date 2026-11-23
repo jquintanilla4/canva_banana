@@ -1,4 +1,4 @@
-import { SEEDREAM_55_DEFAULTS, isSeedream55LayerizeGeneration, isSeedream55Model } from '../services/seedream55Config';
+import { SEEDREAM_55_DEFAULTS, SEEDREAM_55_VOLCENGINE_MODEL_ID, getSeedream55ModelProvider, isSeedream55LayerizeGeneration } from '../services/seedream55Config';
 import { resolveSeedream55RunSettings, serializeSeedream55GenerationOptions } from '../services/seedream55RunSettings';
 import { GPT_IMAGE_26_DEFAULTS, isGptImage26Model } from '../services/gptImage26Config';
 import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from '../services/gptImage26RunSettings';
@@ -191,7 +191,7 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [CRYSTAL_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, creativity: 0 } }, // Crystal defaults.
   { matches: [SEEDVR_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, noiseScale: 0.1 } }, // SeedVR defaults.
   { matches: [FLUX_3_TEXT_TO_IMAGE_MODEL_ID], defaults: restoredOptions => resolveFlux3ImageSettings(restoredOptions) },
-  { matches: isSeedream55Model, defaults: SEEDREAM_55_DEFAULTS },
+  { matches: modelId => Boolean(getSeedream55ModelProvider(modelId)), defaults: SEEDREAM_55_DEFAULTS },
   { matches: (modelId) => isGptImage26Model(modelId), defaults: GPT_IMAGE_26_DEFAULTS },
   { matches: isTokenHubNanoBananaModel, defaults: TOKENHUB_NANO_BANANA_DEFAULTS },
   { matches: (modelId) => isTokenHubGptImage25Model(modelId), defaults: TOKENHUB_GPT_IMAGE_25_DEFAULTS },
@@ -245,7 +245,7 @@ export const resolveGenerationTransferOptions = (
 ): GenerationTransferOptions => {
   const savedOptions: GenerationTransferOptions = (generation.provider === 'jimeng'
     ? generation.jimengOptions
-    : generation.provider === 'volcengine'
+    : generation.provider === 'volcengine' && normalizedModelId !== SEEDREAM_55_VOLCENGINE_MODEL_ID
       ? generation.volcengineOptions
       : generation.falOptions) ?? {}; // Legacy generations may only contain provider and model metadata.
   const inferredVariantOptions: GenerationTransferOptions = isKlingV4VideoModel(normalizedModelId)
@@ -322,10 +322,10 @@ export const resolveGenerationTransferOptions = (
     }, 'restore');
     return { ...resolvedOptions, ...serializeKrea3GenerationOptions(settings) };
   }
-  if (isSeedream55Model(normalizedModelId)) {
+  if (getSeedream55ModelProvider(normalizedModelId)) {
     if (isSeedream55LayerizeGeneration(generation)) return resolvedOptions;
     const kind = generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image';
-    return { ...resolvedOptions, ...serializeSeedream55GenerationOptions(resolveSeedream55RunSettings(kind, resolvedOptions, 'restore')) };
+    return { ...resolvedOptions, ...serializeSeedream55GenerationOptions(resolveSeedream55RunSettings(kind, resolvedOptions, 'restore', normalizedModelId)) };
   }
   if (isGptImage26Model(normalizedModelId)) {
     const settings = resolveGptImage26RunSettings({
@@ -396,7 +396,7 @@ export const resolveGenerationTransferModelId = (generation: GenerationInputs): 
     ? generation.modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || generation.modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
       ? generation.modelId
       : JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
-    : generation.provider === 'volcengine'
+    : generation.provider === 'volcengine' && generation.modelId !== SEEDREAM_55_VOLCENGINE_MODEL_ID
       ? SEEDANCE_2_VIDEO_MODEL_ID
       : generation.modelId; // Local providers use their selector model even in older metadata.
 

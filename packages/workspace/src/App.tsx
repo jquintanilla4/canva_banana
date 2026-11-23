@@ -34,7 +34,7 @@ import {
 } from './services/promptBarConfig';
 import { getSeedanceVideoPickerModelId, withSelectedSeedanceVideoPickerOption } from './services/seedanceVideoPicker';
 import { getModelUiCapabilities } from './services/modelCapabilities';
-import { SEEDREAM_55_MODEL_ID, isSeedream55Model } from './services/seedream55Config';
+import { getSeedream55ModelProvider } from './services/seedream55Config';
 import { buildFooterPromptBarControlsInput } from './services/promptBarSettingsView';
 import { useBlindTestMode } from './hooks/useBlindTestMode';
 import { isOverlapping } from './utils/canvasGeometry';
@@ -213,7 +213,10 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const [isLoading, setIsLoading] = useState(false);
 
   // State for error message display (null if no error)
-  const [error, setError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<{ message: string; modelId?: string } | null>(null);
+  const setError = useCallback((message: string | null, modelId?: string) => {
+    setStatusError(message === null ? null : { message, modelId });
+  }, []);
 
   const { showFileName, toggleFileName } = useFileNameVisibility(); // The user's View-menu choice survives desktop relaunches.
   const { trackpadMode, toggleTrackpadMode } = useTrackpadMode(); // Trackpad zoom remains an explicit persisted opt-in.
@@ -301,6 +304,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     mapModelOptions,
     blindTestMapping,
   } = useBlindTestMode();
+  const error = blindTestEnabled && getSeedream55ModelProvider(statusError?.modelId)
+    ? 'Image generation failed. You can retry from the queue.' : statusError?.message ?? null;
 
   // App-owned blocking overlays (file menu, backups, desktop settings, app icon, debug log).
   const {
@@ -901,20 +906,21 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     void handleGenerate();
   }, [handleGenerate, isJimengSeedanceModelSelected, jimengSetup]);
 
-  const layerizeSourceId = apiProvider === 'fal' && !fal.isVideoMode && isSeedream55Model(fal.falModelId)
+  const layerizeProvider = getSeedream55ModelProvider(fal.falModelId);
+  const layerizeSourceId = apiProvider === 'fal' && !fal.isVideoMode && layerizeProvider
     && hasSingleImageSelected && referenceImageIds.length + referenceVideoIds.length + referenceAudioIds.length === 0
     ? activePrimaryImage?.id : undefined;
   const handleLayerize = useCallback(() => {
-    if (!layerizeSourceId) return;
+    if (!layerizeSourceId || !layerizeProvider) return;
     void handleGenerate({
       kind: 'layerize',
       prompt,
-      provider: 'fal',
-      modelId: SEEDREAM_55_MODEL_ID,
+      provider: layerizeProvider,
+      modelId: fal.falModelId,
       modelMode: 'image',
       primaryImageId: layerizeSourceId,
     });
-  }, [handleGenerate, layerizeSourceId, prompt]);
+  }, [fal.falModelId, handleGenerate, layerizeProvider, layerizeSourceId, prompt]);
 
   useEffect(() => {
     autosaveSnapshotRef.current = autosaveSnapshot;
@@ -1205,11 +1211,12 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   ));
   const providerLabels = useMemo<Record<ApiProviderId, string>>(() => ({
     google: PROVIDER_LABELS.google,
-    fal: modelCapabilities.provider === 'jimeng'
+    fal: blindTestEnabled && !fal.isVideoMode ? 'IMAGE MODELS'
+      : modelCapabilities.provider === 'jimeng'
       ? 'JM CLI'
       : modelCapabilities.provider === 'volcengine' ? 'VOLCENGINE'
         : modelCapabilities.provider === 'tokenhub' ? 'TOKENHUB' : PROVIDER_LABELS.fal,
-  }), [modelCapabilities.provider]);
+  }), [blindTestEnabled, fal.isVideoMode, modelCapabilities.provider]);
   const shouldShowNegativePrompt = modelCapabilities.showNegativePrompt;
   const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);
   const promptOutlineColor = isCameraPromptAccentActive
@@ -1412,6 +1419,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
           onRetryVolcengineLastFrame={retryLastFrame}
           downloadingLastFrames={downloadingLastFrames}
           showMetadataOverlay={showMetadataOverlay}
+          blindTestMapping={blindTestEnabled ? blindTestMapping : undefined}
           transformMode={transformMode}
           onStartTransform={handleStartTransform}
           onExitTransform={handleExitTransform}
@@ -1471,6 +1479,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
       )}
       <GenerationCanvasNotifications
         notifications={generationCanvasNotifications}
+        blindTestMapping={blindTestEnabled ? blindTestMapping : undefined}
         onActivate={handleGenerationNotificationActivate}
         onDismiss={dismissGenerationNotification}
       />

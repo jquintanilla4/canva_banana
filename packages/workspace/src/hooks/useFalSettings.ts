@@ -1,5 +1,5 @@
 import type { VolcengineSettings } from '../services/volcengineSettings';
-import { SEEDREAM_55_DEFAULTS, SEEDREAM_55_IMAGE_SIZE_OPTIONS, isSeedream55Model, isSeedream55Background, isSeedream55OutputFormat, type Seedream55Background, type Seedream55OutputFormat } from '../services/seedream55Config';
+import { SEEDREAM_55_DEFAULTS, getSeedream55ImageSizeOptions, getSeedream55ModelProvider, isSeedream55Background, isSeedream55OutputFormat, type Seedream55Background, type Seedream55OutputFormat } from '../services/seedream55Config';
 import { GPT_IMAGE_26_DEFAULTS, GPT_IMAGE_26_IMAGE_SIZE_OPTIONS, isGptImage26Model, isGptImage26Quality, isGptImage26Background, isGptImage26ReasoningEffort, isGptImage26OutputFormat, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from '../services/gptImage26Config';
 import { getRuntimeConfig } from '../services/runtimeConfig';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
@@ -955,8 +955,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     if (falModelMode === 'video') {
       return;
     }
-    if (isSeedream55Model(falModelId)) {
-      if (!SEEDREAM_55_IMAGE_SIZE_OPTIONS.some(option => option.value === falImageSizeSelection)) {
+    if (getSeedream55ModelProvider(falModelId)) {
+      if (!getSeedream55ImageSizeOptions(falModelId).some(option => option.value === falImageSizeSelection)) {
         setFalImageSizeSelection(SEEDREAM_55_DEFAULTS.imageSizeSelection);
       }
       return;

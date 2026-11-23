@@ -1,4 +1,4 @@
-import { isSeedream55Model } from '../seedream55Config';
+import { isSeedream55Model, SEEDREAM_55_ENDPOINTS } from '../seedream55Config';
 import { resolveSeedream55SettingsForRequest, serializeSeedream55Input } from './seedream55';
 import { GPT_IMAGE_26_OUTPUT_MIME_TYPES, isGptImage26Model, type GptImage26OutputFormat } from '../gptImage26Config';
 import { resolveGptImage26SettingsForRequest, serializeGptImage26Input } from './gptImage';
@@ -56,7 +56,7 @@ export const generateImage = async (
   const nanoBananaSettings = getNanoBananaSelectorModelId(selectedModelId)
     ? resolveNanoBananaSettingsForRequest('text_to_image', { ...options, modelId: selectedModelId }) : undefined;
   const krea3Settings = isKrea3Model(selectedModelId) ? resolveKrea3SettingsForRequest('text_to_image', options) : undefined;
-  const modelId = seedream55Settings?.endpoint ?? krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint ?? gptImage26Settings?.endpoint
+  const modelId = (seedream55Settings && SEEDREAM_55_ENDPOINTS[seedream55Settings.kind]) ?? krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint ?? gptImage26Settings?.endpoint
     ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_MODEL_ID : selectedModelId);
   const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
     : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings)

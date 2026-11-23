@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { getJimengSetupStatus } from '../services/jimengService';
-import { SEEDREAM_55_MODEL_ID } from '../services/seedream55Config';
+import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../services/seedream55Config';
 import type { DesktopAppIconState, DesktopFileMenuCommand, DesktopSettingsKey, DesktopSettingsStatus } from '../services/runtimeConfig';
 import { Tool, type CanvasImage, type GenerationPlacedPayload } from '../types';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
@@ -767,15 +767,18 @@ describe('App Flux 3 footer gating', () => {
 });
 
 describe('App Seedream 5.5 footer actions', () => {
-  it('offers Layerize for one still image and keeps Generate independent', () => {
+  it.each([
+    { modelId: SEEDREAM_55_MODEL_ID, provider: 'fal' },
+    { modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, provider: 'volcengine' },
+  ])('offers Layerize for one still image on $modelId and keeps Generate independent', ({ modelId, provider }) => {
     const image = buildCanvasMedia('seedream-source', 'image');
     const video = buildCanvasMedia('other-media', 'video');
     mockState.images = [image, video];
     mockState.displayedImages = mockState.images;
     Object.assign(mockState.falState, {
       falModelMode: 'image',
-      falModelId: SEEDREAM_55_MODEL_ID,
-      falImageModelId: SEEDREAM_55_MODEL_ID,
+      falModelId: modelId,
+      falImageModelId: modelId,
       isVideoMode: false,
     });
     const { rerender } = render(<App />);
@@ -790,7 +793,7 @@ describe('App Seedream 5.5 footer actions', () => {
     expect(screen.getByRole('tooltip').textContent).toBe('Layerize Image');
     fireEvent.click(layerizeButton);
     expect(mockState.handleGenerate).toHaveBeenLastCalledWith({
-      kind: 'layerize', prompt: '', provider: 'fal', modelId: SEEDREAM_55_MODEL_ID, modelMode: 'image', primaryImageId: image.id,
+      kind: 'layerize', prompt: '', provider, modelId, modelMode: 'image', primaryImageId: image.id,
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));

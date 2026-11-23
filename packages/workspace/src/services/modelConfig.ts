@@ -1,4 +1,4 @@
-import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_IMAGE_SIZE_OPTIONS, SEEDREAM_55_MAX_OUTPUT_IMAGES, SEEDREAM_55_NUM_IMAGE_OPTIONS, isSeedream55Model } from './seedream55Config';
+import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID, SEEDREAM_55_IMAGE_SIZE_OPTIONS, SEEDREAM_55_MAX_OUTPUT_IMAGES, SEEDREAM_55_NUM_IMAGE_OPTIONS, isSeedream55Model } from './seedream55Config';
 export { SEEDREAM_55_MODEL_ID, isSeedream55Model } from './seedream55Config';
 import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 export { isSeedance2VolcengineModel, SEEDANCE2_VOLCENGINE_MODEL_OPTIONS } from './volcengineModels';
@@ -164,6 +164,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: SEEDREAM_V5_LITE_MODEL_ID, label: 'Seedream 5 Lite' },
   { value: SEEDREAM_V5_PRO_MODEL_ID, label: 'Seedream 5 Pro' },
   { value: SEEDREAM_55_MODEL_ID, label: 'Seedream 5.5' },
+  { value: SEEDREAM_55_VOLCENGINE_MODEL_ID, label: 'Seedream 5.5 (VE)' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
  ] as const;
 
@@ -1264,7 +1265,7 @@ export const FAL_NUM_IMAGE_OPTIONS = [1, 2, 3, 4] as const;
 export const FAL_NUM_IMAGE_OPTIONS_SEEDREAM_V5_LITE = [1, 2, 3, 4, 5, 6] as const;
 const IDEOGRAM_45_NUM_IMAGE_OPTIONS = Array.from({ length: IDEOGRAM_45_MAX_OUTPUT_IMAGES }, (_, index) => index + 1);
 export const getFalNumImageMaxForModel = (modelId: string | undefined): number =>
-  getFlux3ImageSelectorModelId(modelId) || getKrea3SelectorModelId(modelId) ? 1
+  modelId === SEEDREAM_55_VOLCENGINE_MODEL_ID || getFlux3ImageSelectorModelId(modelId) || getKrea3SelectorModelId(modelId) ? 1
     : getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_MAX_OUTPUT_IMAGES
     : getNanoBananaSelectorModelId(modelId) ? NANO_BANANA_MAX_OUTPUT_IMAGES
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_MAX_OUTPUT_IMAGES
@@ -1276,7 +1277,7 @@ export const getFalNumImageMaxForModel = (modelId: string | undefined): number =
       : modelId === GPT_IMAGE_2_EDIT_MODEL_ID || modelId === GPT_IMAGE_2_TEXT_TO_IMAGE_MODEL_ID ? GPT_IMAGE_2_MAX_OUTPUT_IMAGES
         : isSeedreamV5LiteModelId(modelId) || isSeedreamV5ProModelId(modelId) ? 6 : 4;
 export const getFalNumImageOptionsForModel = (modelId: string | undefined): ReadonlyArray<number> =>
-  getFlux3ImageSelectorModelId(modelId) || getKrea3SelectorModelId(modelId) ? [1]
+  modelId === SEEDREAM_55_VOLCENGINE_MODEL_ID || getFlux3ImageSelectorModelId(modelId) || getKrea3SelectorModelId(modelId) ? [1]
     : getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_NUM_IMAGE_OPTIONS
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
     : isSeedream55Model(modelId) ? SEEDREAM_55_NUM_IMAGE_OPTIONS
@@ -1322,6 +1323,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [TOKENHUB_NANO_BANANA_21_MODEL_ID]: 14,
   [GPT_IMAGE_2_EDIT_MODEL_ID]: 9, // GPT Image 2 supports 10 total input images.
   [SEEDREAM_55_MODEL_ID]: 9,
+  [SEEDREAM_55_VOLCENGINE_MODEL_ID]: 9,
   [GPT_IMAGE_26_MODEL_ID]: 15,
   [GPT_IMAGE_25_MODEL_ID]: 15, // Primary plus references must fit 16 total inputs.
   [TOKENHUB_GPT_IMAGE_25_MODEL_ID]: 15,

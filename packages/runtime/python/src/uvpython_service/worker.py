@@ -111,11 +111,14 @@ def _validate_reference_media_durations(
         )
 
 
+ARK_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+
+
 def get_client(settings: Settings) -> Ark:
     if not settings.ark_api_key:
         raise ValueError("ARK_API_KEY must be set")  # Ark calls should fail fast on missing auth.
     return Ark(
-        base_url="https://ark.cn-beijing.volces.com/api/v3",
+        base_url=ARK_BASE_URL,
         api_key=settings.ark_api_key,
     )
 
