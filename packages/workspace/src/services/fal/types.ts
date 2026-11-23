@@ -1,3 +1,6 @@
+import type { Seedream55RunSettings } from '../seedream55RunSettings';
+import type { Seedream55Background, Seedream55OutputFormat } from '../seedream55Config';
+import type { CanvasRect } from '../../types';
 import type { GptImage26RunSettings } from '../gptImage26RunSettings';
 import type { GptImage26Quality, GptImage26Background, GptImage26ReasoningEffort, GptImage26OutputFormat } from '../gptImage26Config';
 import type { Krea3RunSettings } from '../krea3RunSettings';
@@ -137,6 +140,9 @@ export interface GenerateImageEditOptions extends FalPhaseOptions, Pick<Generati
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  seedream55RunSettings?: Seedream55RunSettings<'image_edit'>;
+  seedream55Background?: Seedream55Background;
+  seedream55OutputFormat?: Seedream55OutputFormat;
   gptImage26RunSettings?: GptImage26RunSettings<'image_edit'>;
   gptImage25RunSettings?: GptImage25RunSettings<'image_edit'>;
   krea3Variant?: Krea3Variant;
@@ -174,6 +180,9 @@ export interface GenerateImageOptions extends FalPhaseOptions, Pick<GenerationFa
   gptImage25Quality?: GptImage25Quality;
   gptImage25Background?: GptImage25Background;
   gptImage25Variant?: GptImage25Variant;
+  seedream55RunSettings?: Seedream55RunSettings<'text_to_image'>;
+  seedream55Background?: Seedream55Background;
+  seedream55OutputFormat?: Seedream55OutputFormat;
   gptImage26RunSettings?: GptImage26RunSettings<'text_to_image'>;
   gptImage25RunSettings?: GptImage25RunSettings<'text_to_image'>;
   krea3Variant?: Krea3Variant;
@@ -295,3 +304,12 @@ export interface RemoveBackgroundOptions extends FalPhaseOptions {
   onPhaseUpdate?: (update: FalPhaseUpdate) => void; // Hook for phase updates.
   jobId?: string; // UI queue job id for debug correlation.
 } // Optional controls for background removal.
+
+export interface FalLayerizeResult {
+  requestId?: string;
+  layers: Array<{ dataUrl: string; bounds: CanvasRect | null; name?: string }>;
+}
+
+export interface LayerizeSeedream55Options extends FalPhaseOptions {
+  onQueueUpdate?: (update: FalQueueUpdate) => void;
+}

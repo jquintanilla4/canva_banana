@@ -1,3 +1,4 @@
+import { SEEDREAM_55_MODEL_ID } from '../../services/seedream55Config';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KREA_3_MODEL_ID, SEEDANCE_2_VIDEO_MODEL_ID, WAN_VISION_ENHANCER_MODEL_ID } from '../../services/modelConfig';
@@ -103,6 +104,20 @@ describe('useGenerationPromptBarTransfer', () => {
     expect(args.setVideoNegativePromptForModel).not.toHaveBeenCalled();
     expect(args.setToastMessage).toHaveBeenCalledWith(expect.stringContaining('saved negative prompt was not restored'));
     expect(result.current.promptFocusRequestToken).toBe(1);
+  });
+
+  it('restores the Layerize prompt and original image selection', () => {
+    const generation: GenerationInputs = {
+      kind: 'layerize', prompt: 'Separate the title', provider: 'fal',
+      modelId: SEEDREAM_55_MODEL_ID, modelMode: 'image', primaryImageId: 'source-image', falOptions: {},
+    };
+    const args = buildHookArgs([buildImage('output-layer', generation), buildImage('source-image')]);
+    const { result } = renderHook(() => useGenerationPromptBarTransfer(args));
+    act(() => result.current.handleMetadataToPromptBar('output-layer'));
+    expect(args.applyGenerationSettings).toHaveBeenCalledWith(generation);
+    expect(args.setPrompt).toHaveBeenCalledWith('Separate the title');
+    expect(args.selection.setSelectedImageIds).toHaveBeenCalledWith(['source-image']);
+    expect(args.resetEditContext).toHaveBeenCalledOnce();
   });
 
   it('clears live edit context before restoring a saved image edit', () => {

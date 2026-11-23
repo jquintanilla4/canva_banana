@@ -34,6 +34,7 @@ import {
 } from './services/promptBarConfig';
 import { getSeedanceVideoPickerModelId, withSelectedSeedanceVideoPickerOption } from './services/seedanceVideoPicker';
 import { getModelUiCapabilities } from './services/modelCapabilities';
+import { SEEDREAM_55_MODEL_ID, isSeedream55Model } from './services/seedream55Config';
 import { buildFooterPromptBarControlsInput } from './services/promptBarSettingsView';
 import { useBlindTestMode } from './hooks/useBlindTestMode';
 import { isOverlapping } from './utils/canvasGeometry';
@@ -900,6 +901,21 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     void handleGenerate();
   }, [handleGenerate, isJimengSeedanceModelSelected, jimengSetup]);
 
+  const layerizeSourceId = apiProvider === 'fal' && !fal.isVideoMode && isSeedream55Model(fal.falModelId)
+    && hasSingleImageSelected && referenceImageIds.length + referenceVideoIds.length + referenceAudioIds.length === 0
+    ? activePrimaryImage?.id : undefined;
+  const handleLayerize = useCallback(() => {
+    if (!layerizeSourceId) return;
+    void handleGenerate({
+      kind: 'layerize',
+      prompt,
+      provider: 'fal',
+      modelId: SEEDREAM_55_MODEL_ID,
+      modelMode: 'image',
+      primaryImageId: layerizeSourceId,
+    });
+  }, [handleGenerate, layerizeSourceId, prompt]);
+
   useEffect(() => {
     autosaveSnapshotRef.current = autosaveSnapshot;
   }, [autosaveSnapshot]);
@@ -1542,6 +1558,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         prompt={prompt}
         onPromptChange={setPrompt}
         onSubmit={handlePromptSubmit}
+        onLayerize={layerizeSourceId ? handleLayerize : undefined}
         isEmbeddedPromptBarActive={isEmbeddedPromptBarActive}
         disablePromptInput={disablePromptInput}
         submitDisabled={submitDisabled}

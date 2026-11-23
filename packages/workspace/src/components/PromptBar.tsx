@@ -146,6 +146,7 @@ interface PromptBarProps {
   prompt: string;
   onPromptChange: (prompt: string) => void;
   onSubmit: () => void;
+  submitAccessory?: React.ReactNode;
   isLoading: boolean;
   inputDisabled: boolean;
   submitDisabled: boolean;
@@ -190,6 +191,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   prompt,
   onPromptChange,
   onSubmit,
+  submitAccessory,
   isLoading,
   inputDisabled,
   submitDisabled,
@@ -804,29 +806,32 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               </div>
             )}
           </div>
-          <Tooltip label="Generate" shortcut={KEYBOARD_SHORTCUT_LABELS.generate}>
-            <button
-              type="button"
-              aria-label="Generate"
-              aria-describedby={submitDisabledReason ? submitDisabledReasonId : undefined}
-              onClick={onSubmit}
-              disabled={isLoading || submitDisabled}
-              className={`shrink-0 text-white font-semibold rounded-full transition-all duration-300 ease-out disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center ${isMiniMode ? 'h-[2.28rem] w-[2.28rem]' : 'h-[2.64rem] w-[2.64rem]'} ${submitButtonAccentClassName}`}
-            >
-              {isLoading ? (
-                <span className="flex h-full w-full items-center justify-center leading-none [&>svg]:block">
-                  <svg className="animate-spin h-[1.1rem] w-[1.1rem] text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                </span>
-              ) : (
-                <span className="flex h-full w-full items-center justify-center leading-none [&>svg]:block">
-                  <LayerUpIcon className="h-[1.1rem] w-[1.1rem] text-white" aria-hidden="true" />
-                </span>
-              )}
-            </button>
-          </Tooltip>
+          <div className="flex shrink-0 items-center gap-2">
+            {submitAccessory}
+            <Tooltip label="Generate" shortcut={KEYBOARD_SHORTCUT_LABELS.generate}>
+              <button
+                type="button"
+                aria-label="Generate"
+                aria-describedby={submitDisabledReason ? submitDisabledReasonId : undefined}
+                onClick={onSubmit}
+                disabled={isLoading || submitDisabled}
+                className={`shrink-0 text-white font-semibold rounded-full transition-all duration-300 ease-out disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center ${isMiniMode ? 'h-[2.28rem] w-[2.28rem]' : 'h-[2.64rem] w-[2.64rem]'} ${submitButtonAccentClassName}`}
+              >
+                {isLoading ? (
+                  <span className="flex h-full w-full items-center justify-center leading-none [&>svg]:block">
+                    <svg className="animate-spin h-[1.1rem] w-[1.1rem] text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </span>
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center leading-none [&>svg]:block">
+                    <LayerUpIcon className="h-[1.1rem] w-[1.1rem] text-white" aria-hidden="true" />
+                  </span>
+                )}
+              </button>
+            </Tooltip>
+          </div>
         </div>
       </div>
     </div>

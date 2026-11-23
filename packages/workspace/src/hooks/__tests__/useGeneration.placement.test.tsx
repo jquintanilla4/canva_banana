@@ -1,3 +1,4 @@
+import { SEEDREAM_55_MODEL_ID } from '../../services/seedream55Config';
 import * as falMedia from '../../services/fal/media';
 import { GPT_IMAGE_26_MODEL_ID } from '../../services/gptImage26Config';
 import * as gptImage26Policy from '../../services/gptImage26RunSettings';
@@ -23,7 +24,7 @@ import {
   WAN_VISION_ENHANCER_MODEL_ID,
 } from '../../services/modelConfig';
 import { generateImage as generateGoogleImage, generateImageEdit as generateGoogleImageEdit } from '../../services/geminiService';
-import { generateImage as generateFalImage, generateImageEdit as generateFalImageEdit, generateImageToVideo as generateFalImageToVideo, uploadVideoToFal } from '../../services/falService';
+import { generateImage as generateFalImage, generateImageEdit as generateFalImageEdit, generateImageToVideo as generateFalImageToVideo, layerizeSeedream55Image, uploadVideoToFal } from '../../services/falService';
 import { generateSeedanceVideo } from '../../services/volcengineService';
 import { loadMediaFromBlob } from '../../services/mediaService';
 import { extractHeygenClipIntent } from '../../services/moonshotIntentService';
@@ -78,6 +79,7 @@ vi.mock('../../services/falService', async () => {
     generateImage: vi.fn(),
     generateImageEdit: vi.fn(),
     generateImageToVideo: vi.fn(),
+    layerizeSeedream55Image: vi.fn(),
     uploadVideoToFal: vi.fn(),
   };
 });
@@ -309,6 +311,139 @@ describe('useGeneration placement notifications', () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it.each(['explicit', 'endpoint'] as const)('places Seedream 5.5 stacks in free space on a %s run and retry', async run => {
+    const primary = { ...buildCanvasImage('seedream-source'), element: document.createElement('img'), x: 32, y: 45 };
+    const occupied = { ...buildCanvasImage('earlier-edit'), x: 116, y: 45 };
+    const state = createStateHarness();
+    state.setState(prev => ({ ...prev, images: [primary, occupied] }));
+    state.setState.mockClear();
+    const setError = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    const baseDataUrl = 'data:image/png;base64,YmFzZQ==';
+    const layerDataUrl = 'data:image/png;base64,bGF5ZXI=';
+    vi.mocked(layerizeSeedream55Image).mockResolvedValue({
+      requestId: 'seedream-layers',
+      layers: [
+        { dataUrl: baseDataUrl, bounds: null },
+        { dataUrl: layerDataUrl, bounds: { x: 6, y: 9, width: 26, height: 15 } },
+      ],
+    });
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: '', promptPrefix: '', apiProvider: 'fal',
+      fal: createFalStub(),
+      selection: createSelectionStub({ primaryImageId: primary.id, selectedImageIds: [primary.id] }),
+      images: [primary, occupied], paths: [], videoNegativePrompt: '', setError, setIsLoading: vi.fn(),
+      setFalJobs: update => { jobs = typeof update === 'function' ? update(jobs) : update; },
+      setState: state.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+
+    await act(async () => result.current.handleGenerate({
+      kind: run === 'endpoint' ? 'image_edit' : 'layerize', prompt: '', provider: 'fal',
+      modelId: run === 'endpoint' ? `${SEEDREAM_55_MODEL_ID}/layerize` : SEEDREAM_55_MODEL_ID,
+      modelMode: 'image', primaryImageId: primary.id,
+    }));
+
+    expect(layerizeSeedream55Image).toHaveBeenCalledExactlyOnceWith({ image: primary.element, sourceFile: primary.file, prompt: '' }, expect.objectContaining({ jobId: expect.any(String) }));
+    expect(setError).toHaveBeenCalledExactlyOnceWith(null);
+    expect(state.setState).toHaveBeenCalledOnce();
+    expect(state.state.images.slice(2).map(({ x, y, width, height }) => ({ x, y, width, height }))).toEqual([
+      { x: 200, y: 45, width: 64, height: 48 },
+      { x: 206, y: 54, width: 26, height: 15 },
+    ]);
+    expect(jobs[0]).toMatchObject({ status: 'COMPLETED', requestId: 'seedream-layers', retryInputs: {
+      kind: 'layerize', prompt: '', primaryImageId: primary.id, falOptions: {},
+    } });
+    expect(state.state.images.slice(2).map(image => image.metadata?.generation)).toEqual([jobs[0]?.retryInputs, jobs[0]?.retryInputs]);
+    await act(async () => result.current.handleGenerate(jobs[0].retryInputs, { retryJobId: jobs[0].id }));
+    expect(layerizeSeedream55Image).toHaveBeenCalledTimes(2);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].status).toBe('COMPLETED');
+    expect(state.state.images.map(image => image.x)).toEqual([32, 116, 200, 206, 284, 290]);
+  });
+
+  it.each(['snapshot switch', 'download failure'])('keeps Layerize active after provider completion and handles a %s', async outcome => {
+    const primary = { ...buildCanvasImage('seedream-source'), element: document.createElement('img') };
+    const setState = vi.fn();
+    const onGenerationComplete = vi.fn();
+    const onGenerationPlaced = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    let version = 0;
+    let finish = () => {};
+    vi.mocked(layerizeSeedream55Image).mockImplementationOnce((_source, options) => {
+      options?.onQueueUpdate?.({ status: 'COMPLETED', requestId: 'fal-ready' });
+      options?.onPhaseUpdate?.({ phase: 'downloading', requestId: 'fal-ready' });
+      return new Promise((resolve, reject) => {
+        finish = outcome === 'snapshot switch'
+          ? () => resolve({ requestId: 'fal-ready', layers: [{ dataUrl: 'data:image/png;base64,YmFzZQ==', bounds: null }] })
+          : () => reject(new Error('layer download failed'));
+      });
+    });
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: '', promptPrefix: '', apiProvider: 'fal',
+      fal: createFalStub(), selection: createSelectionStub(),
+      images: [primary], paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(),
+      setFalJobs: update => { jobs = typeof update === 'function' ? update(jobs) : update; },
+      setState, getCanvasDocument: () => ({ version }), setToastMessage: vi.fn(), setTool: vi.fn(),
+      onGenerationComplete, onGenerationPlaced,
+    }));
+    const pending = result.current.handleGenerate({
+      kind: 'layerize', prompt: '', provider: 'fal', modelId: SEEDREAM_55_MODEL_ID, modelMode: 'image', primaryImageId: primary.id,
+    });
+    expect(jobs[0]).toMatchObject({ status: 'IN_PROGRESS', phase: 'downloading', requestId: 'fal-ready' });
+    if (outcome === 'snapshot switch') version += 1;
+    finish();
+    await act(async () => pending);
+    expect(setState).not.toHaveBeenCalled();
+    expect(onGenerationComplete).not.toHaveBeenCalled();
+    expect(onGenerationPlaced).not.toHaveBeenCalled();
+    if (outcome === 'snapshot switch') expect(jobs).toHaveLength(0);
+    else expect(jobs[0]).toMatchObject({ status: 'FAILED', requestId: 'fal-ready', retryInputs: { kind: 'layerize' } });
+  });
+
+  it.each([false, true])('keeps ordinary Seedream 5.5 Generate on its image path with selected image %s', async selected => {
+    const primary = buildCanvasImage('seedream-source');
+    const state = createStateHarness();
+    const setError = vi.fn();
+    let jobs: FalQueueJob[] = [];
+    vi.mocked(generateFalImage).mockResolvedValue({ imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '' });
+    vi.mocked(generateFalImageEdit).mockResolvedValue({ imageBase64: 'Zm9v', imagesBase64: ['Zm9v'], text: '' });
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: 'Create a poster', promptPrefix: '', apiProvider: 'fal',
+      fal: createFalStub({ falImageModelId: SEEDREAM_55_MODEL_ID }),
+      selection: createSelectionStub({ primaryImageId: selected ? primary.id : null, selectedImageIds: selected ? [primary.id] : [] }),
+      images: [primary], paths: [], videoNegativePrompt: '', setError, setIsLoading: vi.fn(),
+      setFalJobs: update => { jobs = typeof update === 'function' ? update(jobs) : update; },
+      setState: state.setState, setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => result.current.handleGenerate());
+    expect(layerizeSeedream55Image).not.toHaveBeenCalled();
+    expect(selected ? generateFalImageEdit : generateFalImage).toHaveBeenCalledOnce();
+    expect(jobs[0].retryInputs?.kind).toBe(selected ? 'image_edit' : 'text_to_image');
+    expect(jobs[0].status).toBe('COMPLETED');
+  });
+
+  it.each(['missing', 'video', 'reference'] as const)('rejects explicit Layerize with %s input before creating a job', async input => {
+    const primary = { ...buildCanvasImage('seedream-source'), element: document.createElement('img') };
+    const setError = vi.fn();
+    const setFalJobs = vi.fn();
+    const { result } = renderHook(() => useGeneration({
+      appMode: 'CANVAS', tool: Tool.SELECTION, prompt: '', promptPrefix: '', apiProvider: 'fal',
+      fal: createFalStub(), selection: createSelectionStub(),
+      images: [{ ...primary, mediaType: input === 'video' ? 'video' : 'image' }], paths: [], videoNegativePrompt: '',
+      setError, setIsLoading: vi.fn(), setFalJobs, setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn(),
+    }));
+    await act(async () => result.current.handleGenerate({
+      kind: 'layerize', prompt: '', provider: 'fal', modelId: SEEDREAM_55_MODEL_ID, modelMode: 'image',
+      primaryImageId: input === 'missing' ? undefined : primary.id,
+      ...(input === 'reference' ? { referenceImageIds: ['extra-reference'] } : {}),
+    }));
+    expect(setError).toHaveBeenLastCalledWith(input === 'reference'
+      ? 'Seedream 5.5 Layerize takes one image. Clear the other selections and references.'
+      : 'Select a still image to layerize.');
+    expect(setFalJobs).not.toHaveBeenCalled();
+    expect(layerizeSeedream55Image).not.toHaveBeenCalled();
   });
 
   it.each((['svg', 'gif'] as const).flatMap(format => (['fal', 'google'] as const).map(apiProvider => ({ format, apiProvider }))))('cancels $apiProvider $format editing before queue, busy state, rasterization or providers', async ({ format, apiProvider }) => {

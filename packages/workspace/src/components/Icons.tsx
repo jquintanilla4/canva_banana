@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaFileExport, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus, FaRobot, FaHistory, FaThumbtack, FaFolder, FaFolderPlus, FaEllipsisV, FaMapMarkerAlt, FaStar } from 'react-icons/fa';
+import { FaMousePointer, FaHandPaper, FaPencilAlt, FaUndo, FaRedo, FaDownload, FaTrash, FaExpandAlt, FaStickyNote, FaArrowUp, FaArrowDown, FaEraser, FaCropAlt, FaCheck, FaTimes, FaCopy, FaFileExport, FaPaintBrush, FaChevronDown, FaUpload, FaBars, FaInfoCircle, FaExpand, FaSyncAlt, FaRulerCombined, FaRegClone, FaPlay, FaPause, FaCamera, FaMicrophone, FaStop, FaUserSecret, FaCrosshairs, FaPlus, FaMinus, FaRobot, FaHistory, FaThumbtack, FaFolder, FaFolderPlus, FaEllipsisV, FaMapMarkerAlt, FaStar, FaLayerGroup } from 'react-icons/fa';
 import { RiCameraLensLine } from 'react-icons/ri';
 import { PiSelectionBold } from 'react-icons/pi';
 import { IoNuclear, IoSparkles } from 'react-icons/io5';
@@ -25,6 +25,7 @@ export const RedoIcon = FaRedo as React.FC<IconProps>;
 export const DownloadIcon = FaDownload as React.FC<IconProps>;
 export const DeleteIcon = FaTrash as React.FC<IconProps>;
 export const ZoomToFitIcon = FaExpandAlt as React.FC<IconProps>;
+export const LayersIcon = FaLayerGroup as React.FC<IconProps>;
 export const LayerUpIcon = FaArrowUp as React.FC<IconProps>;
 export const LayerDownIcon = FaArrowDown as React.FC<IconProps>;
 export const ConfirmIcon = FaCheck as React.FC<IconProps>;

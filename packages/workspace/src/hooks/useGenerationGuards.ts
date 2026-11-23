@@ -1,4 +1,5 @@
 import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
+import { isSeedream55Model } from '../services/seedream55Config';
 import { isGptImage26Model } from '../services/gptImage26Config';
 import { isTokenHubNanoBananaModel } from '../services/tokenHubNanoBananaConfig';
 import { Tool, type Seedance2Variant, type Seedance2VolcengineModel } from '../types';
@@ -339,11 +340,12 @@ export function useGenerationGuards({
     const isTextToImage = (!hasPrimaryImage || isRecraftTextToImage) && !(isVideoMode && (
       (isVideoInputMode && hasSourceVideo) || isGrokImagineVideoEditMode
     ));
+    const isSeedream55 = usingFal && !isVideoMode && isSeedream55Model(falModelId);
     const promptEmpty = prompt.trim().length === 0;
     const shouldValidateFalOptions = usingFal
       && !isVideoMode
       && (isSeedreamModel || isNanoBananaModel || isGrokModel || isGptImage2Model || isIdeogram45Model(falModelId)
-        || isTokenHubNanoBananaModel(falModelId));
+        || isTokenHubNanoBananaModel(falModelId) || isSeedream55);
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Read output cap from active model.
     const isNumImagesInvalid =
       !Number.isFinite(falNumImages) ||

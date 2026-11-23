@@ -1,6 +1,8 @@
 import type { VolcengineAssetMention, VolcengineSettings } from './volcengineSettings';
 import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { TOKENHUB_SEEDANCE_PICKER_OPTION } from './seedanceVideoPicker';
+import { buildSeedream55Controls } from './promptBar/seedream55Controls';
+import { isSeedream55Model, type Seedream55Background, type Seedream55OutputFormat } from './seedream55Config';
 import { buildGptImage26Controls } from './promptBar/gptImage26Controls';
 import { isGptImage26Model, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from './gptImage26Config';
 import { getNanoBananaAspectRatioOptionsForProvider } from './nanoBananaAspectRatioPolicy';
@@ -891,6 +893,8 @@ export type PromptBarControlsInput = {
   nanoBananaWebSearch?: boolean;
   nanoBananaThinkingLevel?: NanoBananaThinkingLevel;
   gptImage2Quality?: FalGptImage2QualitySelectionValue;
+  seedream55Background?: Seedream55Background;
+  seedream55OutputFormat?: Seedream55OutputFormat;
   gptImage26Quality?: GptImage26Quality;
   gptImage26Background?: GptImage26Background;
   gptImage26ReasoningEffort?: GptImage26ReasoningEffort;
@@ -1014,6 +1018,8 @@ export type PromptBarControlsInput = {
   onNanoBananaWebSearchChange?: (value: string) => void;
   onNanoBananaThinkingLevelChange?: (value: string) => void;
   onGptImage2QualityChange?: (value: string) => void;
+  onSeedream55BackgroundChange?: (value: string) => void;
+  onSeedream55OutputFormatChange?: (value: string) => void;
   onGptImage26QualityChange?: (value: string) => void;
   onGptImage26BackgroundChange?: (value: string) => void;
   onGptImage26ReasoningEffortChange?: (value: string) => void;
@@ -1174,6 +1180,8 @@ export const buildPromptBarModelControls = (
     recraftColors,
     nanoBananaWebSearch, nanoBananaThinkingLevel, onNanoBananaWebSearchChange, onNanoBananaThinkingLevelChange,
     gptImage2Quality,
+    seedream55Background,
+    seedream55OutputFormat,
     gptImage26Quality,
     gptImage26Background,
     gptImage26ReasoningEffort,
@@ -1288,6 +1296,8 @@ export const buildPromptBarModelControls = (
     onRecraftAddColor,
     onRecraftRemoveColor,
     onGptImage2QualityChange = () => undefined,
+    onSeedream55BackgroundChange = () => undefined,
+    onSeedream55OutputFormatChange = () => undefined,
     onGptImage26QualityChange = () => undefined,
     onGptImage26BackgroundChange = () => undefined,
     onGptImage26ReasoningEffortChange = () => undefined,
@@ -2075,6 +2085,19 @@ export const buildPromptBarModelControls = (
     });
   }
 
+  const isSeedream55 = !isVideoMode && isSeedream55Model(falModelId);
+  if (usingFal && isSeedream55) {
+    controls.push(...buildSeedream55Controls({
+      isLoading,
+      seedream55Background,
+      seedream55OutputFormat,
+      imageSizeSelection: falImageSizeSelection === 'placeholder' ? undefined : falImageSizeSelection,
+      onSizeChange: onFalImageSizeChange,
+      onBackgroundChange: onSeedream55BackgroundChange,
+      onOutputFormatChange: onSeedream55OutputFormatChange,
+    }));
+  }
+
   const isGptImage26 = !isVideoMode && isGptImage26Model(falModelId);
   const gptImage26SvgOutput = isGptImage26 && !gptImage26IsEditing && gptImage26OutputFormat === 'svg';
   if (apiProvider === 'fal' && isGptImage26) {
@@ -2167,13 +2190,13 @@ export const buildPromptBarModelControls = (
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || showTokenHubNanoBananaControls || isGptImage2Model || isGptImage25 || isTokenHubGptImage25 || isGptImage26 || isIdeogram45);
+    && (isSeedreamModel || isNanoBananaModel || showTokenHubNanoBananaControls || isGptImage2Model || isGptImage25 || isTokenHubGptImage25 || isGptImage26 || isIdeogram45 || isSeedream55);
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
     controls.push({
       id: 'fal-num-images-select',
-      prefixLabel: isSeedreamV5Lite || isSeedreamV5Pro ? 'Images' : (isGrokImagineModel ? 'Num' : undefined), // Seedream 5 uses prefixed controls.
+      prefixLabel: isSeedreamV5Lite || isSeedreamV5Pro || isSeedream55 ? 'Images' : (isGrokImagineModel ? 'Num' : undefined), // Seedream 5 uses prefixed controls.
       ariaLabel: 'Select number of images to generate',
       options: falNumImageOptions.map(option => ({ value: `${option}`, label: `${option}` })),
       value: gptImage26SvgOutput ? '1' : falNumImages.toString(),

@@ -1,3 +1,5 @@
+import { isSeedream55Model } from '../seedream55Config';
+import { resolveSeedream55SettingsForRequest, serializeSeedream55Input } from './seedream55';
 import { GPT_IMAGE_26_OUTPUT_MIME_TYPES, isGptImage26Model, type GptImage26OutputFormat } from '../gptImage26Config';
 import { resolveGptImage26SettingsForRequest, serializeGptImage26Input } from './gptImage';
 import { getWorkspaceSignal } from '../workspaceSession';
@@ -6,7 +8,6 @@ import { resolveKrea3SettingsForRequest, serializeKrea3Input } from './krea3';
 import { getNanoBananaSelectorModelId } from '../nanoBananaConfig';
 import { resolveNanoBananaSettingsForRequest, serializeNanoBananaInput } from './nanoBanana';
 import { resolveFlux3ImageSettings } from '../flux3ImageConfig';
-import { fal } from '@fal-ai/client'; // Fal SDK client.
 import { IDEOGRAM_45_MODEL_ID, isIdeogram45Model } from '../ideogram45Config';
 import { resolveIdeogram45TextInput, type Ideogram45TextRequest } from './ideogram45';
 import { resolveGptImage2SettingsForRequest, resolveGptImage25SettingsForRequest, serializeGptImage2Input, serializeGptImage25Input } from './gptImage';
@@ -14,11 +15,9 @@ import { resolveRecraftSettingsForRequest, serializeRecraftInput } from './recra
 import { resolveGrokImageSettingsForRequest, serializeGrokImageInput } from './grokImage';
 import type { GrokImageOutputFormat, GrokImageQuality, GrokImageResolution } from '../grokImageConfig';
 import type { FalAspectRatioOption, FalImageSizeOption, FalResolutionOption, Flux3ImageResolution, GptImage25Quality, GptImage25Background } from '../../types'; // Shared option types.
-import type { FalImageGenerationResult, FalQueueUpdate, GenerateImageOptions } from './types'; // Fal request types.
+import type { FalImageGenerationResult, GenerateImageOptions } from './types'; // Fal request types.
 import { ensureFalClientConfigured } from './client'; // Client configuration helper.
-import { FalPhaseError } from './errors'; // Phase-aware error wrapper.
-import { normalizeQueueLogs, resolveQueueRequestId } from './queue'; // Queue normalizers.
-import { logFalEvent } from './logging'; // Fal debug logging.
+import { subscribeFalImage } from './queue';
 import { emitFalPhase } from './phase'; // Phase update helper.
 import { extractInlineData, normalizeFalImageMetadata, runFalDownloadStep } from './responses'; // Response parsing helpers.
 import { createRandomSeed } from './random'; // Seed helper.
@@ -48,6 +47,8 @@ export const generateImage = async (
 
   const gptImage2Settings = isGptImage2TextToImageModelId(selectedModelId) || isGptImage2EditModelId(selectedModelId)
     ? resolveGptImage2SettingsForRequest('text_to_image', options) : undefined;
+  const seedream55Settings = isSeedream55Model(selectedModelId)
+    ? resolveSeedream55SettingsForRequest('text_to_image', options) : undefined;
   const gptImage26Settings = isGptImage26Model(selectedModelId)
     ? resolveGptImage26SettingsForRequest('text_to_image', options) : undefined;
   const gptImage25Settings = isGptImage25Model(selectedModelId)
@@ -55,7 +56,7 @@ export const generateImage = async (
   const nanoBananaSettings = getNanoBananaSelectorModelId(selectedModelId)
     ? resolveNanoBananaSettingsForRequest('text_to_image', { ...options, modelId: selectedModelId }) : undefined;
   const krea3Settings = isKrea3Model(selectedModelId) ? resolveKrea3SettingsForRequest('text_to_image', options) : undefined;
-  const modelId = krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint ?? gptImage26Settings?.endpoint
+  const modelId = seedream55Settings?.endpoint ?? krea3Settings?.endpoint ?? nanoBananaSettings?.endpoint ?? gptImage2Settings?.endpoint ?? gptImage25Settings?.endpoint ?? gptImage26Settings?.endpoint
     ?? (isIdeogram45Model(selectedModelId) ? IDEOGRAM_45_MODEL_ID : selectedModelId);
   const gptImageInput = gptImage2Settings ? serializeGptImage2Input(gptImage2Settings)
     : gptImage25Settings ? serializeGptImage25Input(gptImage25Settings)
@@ -127,9 +128,10 @@ export const generateImage = async (
   if (nanoBananaSettings) Object.assign(body, serializeNanoBananaInput(nanoBananaSettings));
   if (gptImageInput) Object.assign(body, gptImageInput);
   if (krea3Settings) Object.assign(body, serializeKrea3Input(krea3Settings));
+  if (seedream55Settings) Object.assign(body, serializeSeedream55Input(seedream55Settings));
   if (grokSettings) Object.assign(body, serializeGrokImageInput(grokSettings));
 
-  if (!krea3Settings && !grokSettings && !nanoBananaSettings && !ideogram45Input && !gptImageInput && !isFlux3TextToImage && !isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
+  if (!seedream55Settings && !krea3Settings && !grokSettings && !nanoBananaSettings && !ideogram45Input && !gptImageInput && !isFlux3TextToImage && !isRecraftV4ProTextToImage && typeof numImagesOption === 'number' && Number.isFinite(numImagesOption)) {
     const maxNumImages = getFalNumImageMaxForModel(modelId); // Read max outputs from model capability.
     const normalized = Math.min(maxNumImages, Math.max(1, Math.floor(numImagesOption))); // Clamp request into supported range.
     if (normalized >= 1) {
@@ -151,63 +153,11 @@ export const generateImage = async (
     body.aspect_ratio = aspectRatioOption;
   }
 
-  let latestRequestId: string | undefined;
-
   const requestBody = ideogram45Input ? {
     prompt,
     ...ideogram45Input,
   } satisfies Ideogram45TextRequest : body;
-  emitFalPhase(options, modelId, { phase: 'submitting', message: 'Submitting to Fal...' });
-  options.abortSignal?.throwIfAborted();
-  logFalEvent('outbound', modelId, 'Outbound request (fal.subscribe)', { input: requestBody });
-
-  let result: Awaited<ReturnType<typeof fal.subscribe>>;
-  try {
-    options.abortSignal?.throwIfAborted();
-    result = await fal.subscribe(modelId, {
-      ...options.abortSignal ? { abortSignal: options.abortSignal } : {},
-      input: requestBody,
-      logs: true,
-      onQueueUpdate: update => {
-        if (options.abortSignal?.aborted) return;
-        const queueUpdate = update as unknown as FalQueueUpdate;
-        const normalizedLogs = normalizeQueueLogs(queueUpdate.logs);
-        const resolvedRequestId = resolveQueueRequestId(queueUpdate, latestRequestId);
-        if (resolvedRequestId) {
-          latestRequestId = resolvedRequestId;
-        }
-        emitFalPhase(options, modelId, {
-          phase: queueUpdate.status === 'IN_PROGRESS' ? 'processing' : 'queued',
-          message: queueUpdate.status === 'IN_PROGRESS' ? 'Processing on provider...' : 'Waiting in Fal queue...',
-          requestId: resolvedRequestId,
-        });
-        logFalEvent('inbound', modelId, 'Queue update', {
-          status: queueUpdate.status,
-          position: queueUpdate.position,
-          eta: queueUpdate.eta,
-          requestId: resolvedRequestId,
-          logs: normalizedLogs.map(log => log?.message ?? ''),
-        });
-        options.onQueueUpdate?.({
-          ...queueUpdate,
-          requestId: resolvedRequestId || '',
-          logs: normalizedLogs,
-        });
-      },
-    });
-  } catch (error) {
-    options.abortSignal?.throwIfAborted();
-    logFalEvent('error', modelId, 'Request failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw new FalPhaseError(latestRequestId ? 'processing' : 'submitting', error, latestRequestId);
-  }
-
-  options.abortSignal?.throwIfAborted();
-  logFalEvent('inbound', modelId, 'Result received', {
-    requestId: result?.requestId || latestRequestId,
-    data: (result?.data as Record<string, unknown>) ?? undefined,
-  });
+  const result = await subscribeFalImage(modelId, requestBody, options);
 
   const data = result?.data as { images?: Array<{ url: string; content_type?: string; file_name?: string; file_size?: number; width?: number; height?: number }>; description?: string; generated_text?: string | null } | undefined;
   const images = data?.images;
@@ -218,9 +168,9 @@ export const generateImage = async (
   emitFalPhase(options, modelId, {
     phase: 'downloading',
     message: 'Downloading generated image...',
-    requestId: result?.requestId || latestRequestId,
+    requestId: result?.requestId,
   });
-  const downloadRequestId = result?.requestId || latestRequestId; // Keep request id on download failures.
+  const downloadRequestId = result?.requestId; // Keep request id on download failures.
   const inlineDataList = await runFalDownloadStep(downloadRequestId, async () => (
     Promise.all(images.map(image => extractInlineData(image.url, options.abortSignal, gptImage26Settings
       ? { fallbackContentType: image.content_type, allowedContentTypes: GPT_IMAGE_26_OUTPUT_MIME_TYPES } : undefined)))
@@ -244,7 +194,7 @@ export const generateImage = async (
     ? data.description
     : typeof data?.generated_text === 'string' ? data.generated_text : '';
 
-  const requestId = result?.requestId || latestRequestId;
+  const requestId = result?.requestId;
   const imagesMetadata = images.map(normalizeFalImageMetadata); // Preserve provider dimensions.
 
   return { imageBase64: primaryBase64, imagesBase64: base64List, imageDataUrls: inlineDataList, imagesMetadata, text: description, requestId };

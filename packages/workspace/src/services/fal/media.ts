@@ -20,7 +20,7 @@ export interface FalUploadOptions extends FalPhaseOptions {
   maxBytesError?: string; // User-facing message when the cap is exceeded.
 }
 
-const uploadBlobToFal = async (blob: Blob, options: FalUploadOptions = {}): Promise<string> => { // Upload one blob with phase logs.
+export const uploadBlobToFal = async (blob: Blob, options: FalUploadOptions = {}): Promise<string> => {
   options.abortSignal?.throwIfAborted();
   ensureFalClientConfigured();
   if (options.maxBytes !== undefined && blob.size > options.maxBytes) {

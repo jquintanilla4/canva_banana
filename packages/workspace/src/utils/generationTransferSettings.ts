@@ -1,3 +1,5 @@
+import { SEEDREAM_55_DEFAULTS, isSeedream55LayerizeGeneration, isSeedream55Model } from '../services/seedream55Config';
+import { resolveSeedream55RunSettings, serializeSeedream55GenerationOptions } from '../services/seedream55RunSettings';
 import { GPT_IMAGE_26_DEFAULTS, isGptImage26Model } from '../services/gptImage26Config';
 import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from '../services/gptImage26RunSettings';
 import { KREA_3_DEFAULTS, isKrea3Model } from '../services/krea3Config';
@@ -189,6 +191,7 @@ const IMAGE_TRANSFER_DEFAULT_RULES: readonly TransferDefaultsRule[] = [
   { matches: [CRYSTAL_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, creativity: 0 } }, // Crystal defaults.
   { matches: [SEEDVR_UPSCALER_MODEL_ID], defaults: { scaleFactor: 2, noiseScale: 0.1 } }, // SeedVR defaults.
   { matches: [FLUX_3_TEXT_TO_IMAGE_MODEL_ID], defaults: restoredOptions => resolveFlux3ImageSettings(restoredOptions) },
+  { matches: isSeedream55Model, defaults: SEEDREAM_55_DEFAULTS },
   { matches: (modelId) => isGptImage26Model(modelId), defaults: GPT_IMAGE_26_DEFAULTS },
   { matches: isTokenHubNanoBananaModel, defaults: TOKENHUB_NANO_BANANA_DEFAULTS },
   { matches: (modelId) => isTokenHubGptImage25Model(modelId), defaults: TOKENHUB_GPT_IMAGE_25_DEFAULTS },
@@ -318,6 +321,11 @@ export const resolveGenerationTransferOptions = (
       imageSizeSelection: resolvedOptions.imageSizeSelection,
     }, 'restore');
     return { ...resolvedOptions, ...serializeKrea3GenerationOptions(settings) };
+  }
+  if (isSeedream55Model(normalizedModelId)) {
+    if (isSeedream55LayerizeGeneration(generation)) return resolvedOptions;
+    const kind = generation.kind === 'image_edit' ? 'image_edit' : 'text_to_image';
+    return { ...resolvedOptions, ...serializeSeedream55GenerationOptions(resolveSeedream55RunSettings(kind, resolvedOptions, 'restore')) };
   }
   if (isGptImage26Model(normalizedModelId)) {
     const settings = resolveGptImage26RunSettings({

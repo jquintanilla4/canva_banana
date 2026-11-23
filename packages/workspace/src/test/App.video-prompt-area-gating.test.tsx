@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { getJimengSetupStatus } from '../services/jimengService';
+import { SEEDREAM_55_MODEL_ID } from '../services/seedream55Config';
 import type { DesktopAppIconState, DesktopFileMenuCommand, DesktopSettingsKey, DesktopSettingsStatus } from '../services/runtimeConfig';
 import { Tool, type CanvasImage, type GenerationPlacedPayload } from '../types';
 import { FLOATING_EDGE_CONTROL_SIDE_OFFSET } from '../utils/promptBarFooterLayout';
@@ -349,11 +350,12 @@ vi.mock('../components/Toolbar', () => ({
 }));
 
 vi.mock('../components/PromptBar', () => ({
-  PromptBar: (props: { prompt: string; onSubmit: () => void; onModelModeChange: (mode: 'image' | 'video') => void; promptPlaceholder?: string; submitDisabled?: boolean; leadingAccessory?: ReactNode; focusRequestToken?: number }) => {
+  PromptBar: (props: { prompt: string; onSubmit: () => void; onModelModeChange: (mode: 'image' | 'video') => void; promptPlaceholder?: string; submitDisabled?: boolean; leadingAccessory?: ReactNode; submitAccessory?: ReactNode; focusRequestToken?: number }) => {
     mockState.lastPromptBarProps = props;
     return (
       <div>
         <span data-testid="footer-prompt">{props.prompt}</span>
+        {props.submitAccessory}
         <button type="button" onClick={props.onSubmit} disabled={props.submitDisabled}>
           Generate
         </button>
@@ -761,6 +763,47 @@ describe('App Flux 3 footer gating', () => {
     render(<App />);
 
     expect(mockState.lastPromptBarProps?.submitDisabled).toBe(true);
+  });
+});
+
+describe('App Seedream 5.5 footer actions', () => {
+  it('offers Layerize for one still image and keeps Generate independent', () => {
+    const image = buildCanvasMedia('seedream-source', 'image');
+    const video = buildCanvasMedia('other-media', 'video');
+    mockState.images = [image, video];
+    mockState.displayedImages = mockState.images;
+    Object.assign(mockState.falState, {
+      falModelMode: 'image',
+      falModelId: SEEDREAM_55_MODEL_ID,
+      falImageModelId: SEEDREAM_55_MODEL_ID,
+      isVideoMode: false,
+    });
+    const { rerender } = render(<App />);
+    expect(screen.queryByRole('button', { name: 'Layerize Image' })).toBeNull();
+
+    mockState.selectedImageIds = [image.id];
+    mockState.activePrimaryImage = image;
+    rerender(<App />);
+    const layerizeButton = screen.getByRole('button', { name: 'Layerize Image' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    fireEvent.mouseEnter(layerizeButton);
+    expect(screen.getByRole('tooltip').textContent).toBe('Layerize Image');
+    fireEvent.click(layerizeButton);
+    expect(mockState.handleGenerate).toHaveBeenLastCalledWith({
+      kind: 'layerize', prompt: '', provider: 'fal', modelId: SEEDREAM_55_MODEL_ID, modelMode: 'image', primaryImageId: image.id,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    expect(mockState.handleGenerate).toHaveBeenLastCalledWith();
+
+    mockState.selectedImageIds = [image.id, video.id];
+    rerender(<App />);
+    expect(screen.queryByRole('button', { name: 'Layerize Image' })).toBeNull();
+
+    mockState.selectedImageIds = [video.id];
+    mockState.activePrimaryImage = null;
+    rerender(<App />);
+    expect(screen.queryByRole('button', { name: 'Layerize Image' })).toBeNull();
   });
 });
 
