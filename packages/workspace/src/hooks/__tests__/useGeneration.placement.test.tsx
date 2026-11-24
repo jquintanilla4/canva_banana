@@ -1,3 +1,4 @@
+import { getJimengCanvasVideoModel } from '../../services/jimengCanvasVideoModels';
 import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../../services/seedream55Config';
 import * as falMedia from '../../services/fal/media';
 import { GPT_IMAGE_26_MODEL_ID } from '../../services/gptImage26Config';
@@ -11,7 +12,7 @@ import { NANO_BANANA_21_EDIT_MODEL_ID } from '../../services/nanoBananaConfig';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  FAL_SEEDANCE_2_VIDEO_MODEL_ID, FAL_SEEDANCE_25_VIDEO_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID, KLING_V4_VIDEO_MODEL_ID, FLUX_3_VIDEO_MODEL_ID, JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID, FAL_SEEDANCE_25_VIDEO_MODEL_ID, MINIMAX_H3_VIDEO_MODEL_ID, KLING_V4_VIDEO_MODEL_ID, FLUX_3_VIDEO_MODEL_ID, JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   FLUX_3_TEXT_TO_IMAGE_MODEL_ID,
   HEYGEN_V3_LIPSYNC_MODEL_ID,
   IDEOGRAM_45_MODEL_ID,
@@ -594,16 +595,18 @@ describe('useGeneration placement notifications', () => {
     { modelId: FLUX_3_VIDEO_MODEL_ID, options: { flux3Variant: 'keyframes', flux3Duration: '5' }, role: 'reference' },
     { modelId: SEEDANCE_2_VIDEO_MODEL_ID, options: { seedance2Variant: 'smart' }, role: 'tail' },
     { modelId: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, options: { seedance2Variant: 'reference' }, role: 'reference' },
-    { modelId: JIMENG_MULTIFRAME_VIDEO_MODEL_ID, options: {}, role: 'reference' },
   ] as const).flatMap(input => (['svg', 'gif'] as const).map(format => ({ ...input, format }))))('cancels actual $format $role for $modelId before any upload or queue', async ({ modelId, options, role, format }) => {
     const primary = buildCanvasImage('primary');
     const svg = { ...buildCanvasImage('vector'), file: new File(['source'], `vector.${format}`, { type: format === 'gif' ? 'image/gif' : 'image/svg+xml' }) };
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const args = { appMode: 'CANVAS' as const, tool: Tool.SELECTION, prompt: 'Animate', promptPrefix: '', apiProvider: 'fal' as const,
-      fal: createFalStub({ falModelMode: 'video', falVideoModelId: modelId }), selection: createSelectionStub({ selectedImageIds: modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID ? [primary.id, svg.id] : [primary.id] }), images: [primary, svg],
+      resolveJimengCanvasVideoModel: (version: string | undefined) => getJimengCanvasVideoModel(version, [
+        { model: 'seedance_2.0_fast', aliases: ['seedance2.0fast'], type: 'video', displayName: 'Fast', modes: [{ name: 'm2v', flags: [] }] },
+      ]),
+      fal: createFalStub({ falModelMode: 'video', falVideoModelId: modelId }), selection: createSelectionStub({ selectedImageIds: [primary.id] }), images: [primary, svg],
       paths: [], videoNegativePrompt: '', setError: vi.fn(), setIsLoading: vi.fn(), setFalJobs: vi.fn(), setState: vi.fn(), setToastMessage: vi.fn(), setTool: vi.fn() };
     const { result } = renderHook(() => useGeneration(args));
-    await act(async () => result.current.handleGenerate(modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID ? undefined : { kind: 'video', provider: 'fal', modelId, modelMode: 'video', prompt: 'Animate', primaryImageId: primary.id,
+    await act(async () => result.current.handleGenerate({ kind: 'video', provider: 'fal', modelId, modelMode: 'video', prompt: 'Animate', primaryImageId: primary.id,
       ...(role === 'tail' ? { videoLastFrameImageId: svg.id } : { referenceImageIds: modelId === FLUX_3_VIDEO_MODEL_ID ? [primary.id, svg.id] : [svg.id] }),
       falOptions: options }));
     expect(args.setError.mock.calls).toEqual([]);

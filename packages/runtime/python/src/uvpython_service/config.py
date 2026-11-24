@@ -56,12 +56,7 @@ class Settings:
     job_ttl_seconds: int
     max_terminal_jobs: int
     max_logs_per_job: int
-    jimeng_cli_path: str
-    jimeng_work_dir: Path
-    jimeng_submit_poll_seconds: int
-    jimeng_submit_timeout_seconds: int
-    jimeng_result_timeout_seconds: int
-    jimeng_query_interval_seconds: int
+    jimeng_canvas_root_dir: Path
     tokenhub_api_key: str = ""
     tokenhub_base_url: str = _TOKENHUB_DEFAULT_BASE_URL
     tokenhub_poll_interval_seconds: int = 5
@@ -70,7 +65,9 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    backend_dir = _find_backend_dir()  # Keep Jimeng generated assets inside the backend folder by default.
+    backend_dir = _find_backend_dir()
+    legacy_work_dir = Path(os.environ.get("JIMENG_WORK_DIR", str(backend_dir / ".jimeng-work"))).expanduser()
+    canvas_root_dir = os.environ.get("JIMENG_CANVAS_ROOT_DIR", "").strip()
     return Settings(
         tokenhub_api_key=os.environ.get("TOKENHUB_API_KEY", "").strip(),
         tokenhub_base_url=os.environ.get("TOKENHUB_BASE_URL", "").strip() or _TOKENHUB_DEFAULT_BASE_URL,
@@ -85,12 +82,7 @@ def get_settings() -> Settings:
         job_ttl_seconds=max(300, int(os.environ.get("VOLCENGINE_JOB_TTL_SECONDS", "14400"))),  # Drop old finished jobs after 4 hours by default.
         max_terminal_jobs=max(10, int(os.environ.get("VOLCENGINE_MAX_TERMINAL_JOBS", "400"))),  # Keep extra completed jobs around without growing forever.
         max_logs_per_job=max(10, int(os.environ.get("VOLCENGINE_MAX_LOGS_PER_JOB", "100"))),  # Preserve more queue history while still capping memory growth.
-        jimeng_cli_path=os.environ.get("JIMENG_CLI_PATH", "").strip(),  # Optional explicit dreamina executable.
-        jimeng_work_dir=Path(os.environ.get("JIMENG_WORK_DIR", str(backend_dir / ".jimeng-work"))).expanduser(),  # Staged Jimeng files live outside tracked source.
-        jimeng_submit_poll_seconds=max(1, int(os.environ.get("JIMENG_SUBMIT_POLL_SECONDS", "30"))),  # CLI waits this long on initial submit.
-        jimeng_submit_timeout_seconds=max(30, int(os.environ.get("JIMENG_SUBMIT_TIMEOUT_SECONDS", "300"))),  # Base command timeout excludes the size-based upload allowance.
-        jimeng_result_timeout_seconds=max(30, int(os.environ.get("JIMENG_RESULT_TIMEOUT_SECONDS", "900"))),  # Backend waits up to 15 minutes by default.
-        jimeng_query_interval_seconds=max(1, int(os.environ.get("JIMENG_QUERY_INTERVAL_SECONDS", "10"))),  # Delay between query_result checks.
+        jimeng_canvas_root_dir=Path(canvas_root_dir).expanduser() if canvas_root_dir else legacy_work_dir.parent / ".jimeng-canvas",
     )
 
 

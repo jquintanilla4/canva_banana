@@ -25,7 +25,6 @@ type AppFooterProps = {
   disablePromptInput: boolean;
   submitDisabled: boolean;
   submitDisabledReason: string | null;
-  jimengBlocksSubmit: boolean;
   modelOptions: PromptBarProps['modelOptions'];
   selectedModel: PromptBarProps['selectedModel'];
   onModelModeChange: PromptBarProps['onModelModeChange'];
@@ -62,7 +61,6 @@ export function AppFooter({
   disablePromptInput,
   submitDisabled,
   submitDisabledReason,
-  jimengBlocksSubmit,
   modelOptions,
   selectedModel,
   onModelModeChange,
@@ -119,7 +117,7 @@ export function AppFooter({
         ) : undefined}
         isLoading={isLoading}
         inputDisabled={disablePromptInput || isEmbeddedPromptBarActive}
-        submitDisabled={submitDisabled || isEmbeddedPromptBarActive || jimengBlocksSubmit}
+        submitDisabled={submitDisabled || isEmbeddedPromptBarActive}
         submitDisabledReason={isEmbeddedPromptBarActive ? null : submitDisabledReason}
         modelOptions={modelOptions}
         selectedModel={selectedModel}

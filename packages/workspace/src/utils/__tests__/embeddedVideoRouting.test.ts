@@ -30,7 +30,7 @@ describe('embeddedVideoRouting', () => {
     const input = buildEmbeddedVideoGenerationProviderInput(buildBar({
       modelId: FLUX_3_VIDEO_MODEL_ID,
       falOptions: { flux3AspectRatio: '9:16' },
-    }), FLUX_3_VIDEO_MODEL_ID, 0);
+    }), FLUX_3_VIDEO_MODEL_ID);
 
     expect(input.falOptions).toMatchObject({
       flux3Variant: 'smart',
@@ -53,7 +53,7 @@ describe('embeddedVideoRouting', () => {
         seedance25Duration: 'auto',
         seedance25GenerateAudio: true,
       },
-    }), JIMENG_SEEDANCE_25_VIDEO_MODEL_ID, 23);
+    }), JIMENG_SEEDANCE_25_VIDEO_MODEL_ID);
 
     expect(input.jimengOptions).toEqual({
       seedance25Variant: 'reference',
@@ -61,7 +61,6 @@ describe('embeddedVideoRouting', () => {
       seedance25Resolution: '720p',
       seedance25Duration: '5',
       seedance25GenerateAudio: false,
-      sessionId: 23,
     });
   });
 
@@ -75,7 +74,7 @@ describe('embeddedVideoRouting', () => {
       seedance2Duration: '10',
       seedance2CameraFixed: true,
       seedance2OutputFormat: 'mov',
-    }), SEEDANCE_2_VIDEO_MODEL_ID, 0);
+    }), SEEDANCE_2_VIDEO_MODEL_ID);
 
     expect(input.provider).toBe('volcengine');
     expect(input.volcengineOptions).toEqual({
@@ -96,7 +95,7 @@ describe('embeddedVideoRouting', () => {
       seedance2Variant: 'smart',
       seedance2VolcengineModel: 'seedance25',
       seedance2AspectRatio: '16:9',
-    }), SEEDANCE_2_VIDEO_MODEL_ID, 0, true);
+    }), SEEDANCE_2_VIDEO_MODEL_ID, true);
 
     expect(input.volcengineOptions?.seedance2AspectRatio).toBe('adaptive');
   });
@@ -105,14 +104,14 @@ describe('embeddedVideoRouting', () => {
     const jimeng = buildEmbeddedVideoGenerationProviderInput(buildBar({
       modelId: JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
       seedance2Variant: 'edit',
-    }), JIMENG_SEEDANCE_2_VIDEO_MODEL_ID, 7);
+    }), JIMENG_SEEDANCE_2_VIDEO_MODEL_ID);
 
     expect(jimeng.jimengOptions?.seedance2Variant).toBe('reference'); // Jimeng rejects Edit/Extend outright.
 
     const fal = buildEmbeddedVideoGenerationProviderInput(buildBar({
       modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
       seedance2Variant: 'extend',
-    }), FAL_SEEDANCE_2_VIDEO_MODEL_ID, 0);
+    }), FAL_SEEDANCE_2_VIDEO_MODEL_ID);
 
     expect(fal.falOptions?.seedance2Variant).toBe('reference'); // Fal has no Edit/Extend mode.
   });
@@ -127,7 +126,7 @@ describe('embeddedVideoRouting', () => {
     const input = buildEmbeddedVideoGenerationProviderInput(buildBar({
       modelId: SEEDANCE_2_VIDEO_MODEL_ID,
       seedance2Variant: 'edit',
-    }), SEEDANCE_2_VIDEO_MODEL_ID, 0);
+    }), SEEDANCE_2_VIDEO_MODEL_ID);
 
     expect(input.volcengineOptions?.seedance2Variant).toBe('edit');
   });

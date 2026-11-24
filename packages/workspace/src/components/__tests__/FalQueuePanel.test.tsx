@@ -107,6 +107,23 @@ describe('FalQueuePanel', () => {
     expect(onDismiss).toHaveBeenCalledWith('job-1');
   });
 
+  it('can recover a completed Canvas job without reloading', () => {
+    const onRetry = vi.fn(() => true);
+    render(<FalQueuePanel
+      jobs={[buildJob({
+        provider: 'jimeng', providerJobId: 'canvas-1', status: 'COMPLETED', phase: 'completed',
+        retryInputs: { kind: 'text_to_image', prompt: 'Saved edit', provider: 'jimeng' },
+      })]}
+      onDismiss={vi.fn()}
+      onRetry={onRetry}
+      blindTestEnabled={false}
+      openSourceAliasEnabled={false}
+      blindTestMapping={new Map()}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Resume here' }));
+    expect(onRetry).toHaveBeenCalledWith('job-1');
+  });
+
   it('locks a failed job retry while the retry attempt is pending', () => {
     const onRetry = vi.fn(() => new Promise<boolean>(() => {}));
 

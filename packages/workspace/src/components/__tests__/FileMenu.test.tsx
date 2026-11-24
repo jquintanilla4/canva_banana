@@ -23,8 +23,7 @@ describe('FileMenu', () => {
         trackpadMode={false}
         onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
-        onClearJimengCache={vi.fn()}
-        isClearingJimengCache={false}
+        onOpenJimengCanvasSetup={vi.fn()}
       />
     );
 
@@ -58,8 +57,7 @@ describe('FileMenu', () => {
         trackpadMode={false}
         onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
-        onClearJimengCache={vi.fn()}
-        isClearingJimengCache={false}
+        onOpenJimengCanvasSetup={vi.fn()}
       />
     );
 
@@ -87,8 +85,7 @@ describe('FileMenu', () => {
         trackpadMode={false}
         onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
-        onClearJimengCache={vi.fn()}
-        isClearingJimengCache={false}
+        onOpenJimengCanvasSetup={vi.fn()}
       />
     );
 
@@ -119,8 +116,7 @@ describe('FileMenu', () => {
         trackpadMode
         onToggleTrackpadMode={handleToggleTrackpadMode}
         onOpenDebugLog={vi.fn()}
-        onClearJimengCache={vi.fn()}
-        isClearingJimengCache={false}
+        onOpenJimengCanvasSetup={vi.fn()}
       />
     );
 
@@ -133,8 +129,8 @@ describe('FileMenu', () => {
     expect(handleToggleTrackpadMode).toHaveBeenCalledTimes(1);
   });
 
-  it('fires the Jimeng cache clear callback from the menu', () => {
-    const handleClearJimengCache = vi.fn();
+  it('opens Jimeng Canvas setup from the menu', () => {
+    const handleOpenJimengCanvasSetup = vi.fn();
 
     render(
       <FileMenu
@@ -151,38 +147,13 @@ describe('FileMenu', () => {
         trackpadMode={false}
         onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
-        onClearJimengCache={handleClearJimengCache}
-        isClearingJimengCache={false}
+        onOpenJimengCanvasSetup={handleOpenJimengCanvasSetup}
       />
     );
 
-    fireEvent.click(screen.getByRole('menuitem', { name: /clear jimeng cache/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /jimeng canvas setup/i }));
 
-    expect(handleClearJimengCache).toHaveBeenCalledTimes(1);
-  });
-
-  it('disables the Jimeng cache clear button while clearing', () => {
-    render(
-      <FileMenu
-        isOpen
-        onToggle={vi.fn()}
-        onClose={vi.fn()}
-        onImportSnapshot={vi.fn()}
-        onExportSnapshot={vi.fn()}
-        onOpenBackups={vi.fn()}
-        autosaveEnabled
-        onToggleAutosave={vi.fn()}
-        showZoomLevelBadge
-        onToggleZoomLevelBadge={vi.fn()}
-        trackpadMode={false}
-        onToggleTrackpadMode={vi.fn()}
-        onOpenDebugLog={vi.fn()}
-        onClearJimengCache={vi.fn()}
-        isClearingJimengCache
-      />
-    );
-
-    expect(screen.getByRole('menuitem', { name: /clearing jimeng cache/i }).hasAttribute('disabled')).toBe(true);
+    expect(handleOpenJimengCanvasSetup).toHaveBeenCalledTimes(1);
   });
 
   it('opens manage keys when a desktop handler is provided', () => {
@@ -204,8 +175,7 @@ describe('FileMenu', () => {
         onToggleTrackpadMode={vi.fn()}
         onOpenDebugLog={vi.fn()}
         onOpenDesktopSettings={handleOpenDesktopSettings}
-        onClearJimengCache={vi.fn()}
-        isClearingJimengCache={false}
+        onOpenJimengCanvasSetup={vi.fn()}
       />
     );
 

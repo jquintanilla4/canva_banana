@@ -5,6 +5,7 @@ import { getBlindTestModelLabel, getOpenSourceAliasLabel, type BlindTestMapping 
 import { getFalModelLabel, isFalModelId } from '../services/modelConfig';
 import { getSeedream55ModelProvider } from '../services/seedream55Config';
 import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
+import { getJimengCanvasResumeId } from '../services/jimengCanvasRecovery';
 import { ChevronDownIcon, RerunIcon } from './Icons';
 
 interface FalQueuePanelProps {
@@ -226,7 +227,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                 )}
                 {(job.status === 'COMPLETED' || job.status === 'FAILED') && (
                   <div className="mt-2 flex items-center gap-3">
-                    {job.status === 'FAILED' && job.retryInputs && (
+                    {job.retryInputs && (job.status === 'FAILED' || getJimengCanvasResumeId(job)) && (
                       <button
                         type="button"
                         onClick={() => {
@@ -234,7 +235,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                           void (async () => {
                             try {
                               const retryStarted = await onRetry(job.id);
-                              if (!retryStarted || isFailedJob(job.id)) {
+                              if (!retryStarted || isFailedJob(job.id) || job.status === 'COMPLETED') {
                                 unlockRetry(job.id);
                               }
                             } catch (error) {
@@ -247,7 +248,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                         className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-300 transition-colors hover:text-blue-200 disabled:cursor-not-allowed disabled:text-gray-500"
                       >
                         <RerunIcon className="h-3 w-3" aria-hidden="true" />
-                        Retry
+                        {getJimengCanvasResumeId(job) ? 'Resume here' : 'Retry'}
                       </button>
                     )}
                     <button

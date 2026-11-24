@@ -285,6 +285,7 @@ export type GenerationVolcengineOptions = Partial<{
 }>;
 
 export type GenerationJimengOptions = GenerationVolcengineOptions & Partial<{
+  canvasModel: string;
   seedance2JimengModelVersion: JimengSeedance2ModelVersion;
   seedance25Variant: Seedance25Variant;
   seedance25AspectRatio: Seedance25AspectRatio;
@@ -449,6 +450,8 @@ export type FalJobPhase = 'uploading' | 'submitting' | 'queued' | 'processing' |
 export interface FalQueueJob {
   id: string;
   providerJobId?: string; // Backend/provider identity can differ from the local queue row ID.
+  jimengCanvasAttemptId?: string;
+  jimengCanvasDocumentName?: string;
   prompt: string;
   modelId: string;
   modelLabel: string;

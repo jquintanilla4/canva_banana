@@ -1,4 +1,4 @@
-import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID, SEEDREAM_55_IMAGE_SIZE_OPTIONS, SEEDREAM_55_MAX_OUTPUT_IMAGES, SEEDREAM_55_NUM_IMAGE_OPTIONS, isSeedream55Model } from './seedream55Config';
+import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID, SEEDREAM_55_JIMENG_CANVAS_MODEL_ID, SEEDREAM_55_JIMENG_CANVAS_OUTPUT_COUNTS, SEEDREAM_55_IMAGE_SIZE_OPTIONS, SEEDREAM_55_MAX_OUTPUT_IMAGES, SEEDREAM_55_NUM_IMAGE_OPTIONS, isSeedream55Model } from './seedream55Config';
 export { SEEDREAM_55_MODEL_ID, isSeedream55Model } from './seedream55Config';
 import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 export { isSeedance2VolcengineModel, SEEDANCE2_VOLCENGINE_MODEL_OPTIONS } from './volcengineModels';
@@ -99,8 +99,8 @@ export const FAL_SEEDANCE_25_VIDEO_MODEL_ID = 'bytedance/seedance-2.5' as const;
 export const FAL_SEEDANCE_25_TEXT_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/text-to-video' as const; // Fal 2.5 text endpoint.
 export const FAL_SEEDANCE_25_IMAGE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/image-to-video' as const; // Fal 2.5 image endpoint.
 export const FAL_SEEDANCE_25_REFERENCE_TO_VIDEO_MODEL_ID = 'bytedance/seedance-2.5/reference-to-video' as const; // Fal 2.5 reference endpoint.
-export const JIMENG_SEEDANCE_2_VIDEO_MODEL_ID = 'jimeng-cli/seedance-2' as const; // Local Dreamina CLI Seedance 2 selector.
-export const JIMENG_SEEDANCE_25_VIDEO_MODEL_ID = 'jimeng-cli/seedance-2.5' as const; // Local Dreamina CLI Seedance 2.5 selector.
+export const JIMENG_SEEDANCE_2_VIDEO_MODEL_ID = 'jimeng-cli/seedance-2' as const;
+export const JIMENG_SEEDANCE_25_VIDEO_MODEL_ID = 'jimeng-cli/seedance-2.5' as const;
 export const JIMENG_MULTIFRAME_VIDEO_MODEL_ID = 'jimeng-cli/multiframe' as const; // Fixed-model intelligent multi-frame selector.
 export const VEO_31_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/veo3.1/image-to-video' as const;
 export const VEO_31_FFLF_VIDEO_MODEL_ID = 'fal-ai/veo3.1/first-last-frame-to-video' as const;
@@ -165,6 +165,7 @@ const FAL_IMAGE_MODEL_OPTIONS_BASE = [
   { value: SEEDREAM_V5_PRO_MODEL_ID, label: 'Seedream 5 Pro' },
   { value: SEEDREAM_55_MODEL_ID, label: 'Seedream 5.5' },
   { value: SEEDREAM_55_VOLCENGINE_MODEL_ID, label: 'Seedream 5.5 (VE)' },
+  { value: SEEDREAM_55_JIMENG_CANVAS_MODEL_ID, label: 'Seedream 5.5 (JM CLI)' },
   { value: SEEDVR_UPSCALER_MODEL_ID, label: 'SeedVR2 Upscaler', highlightColor: UPSCALE_MODEL_HIGHLIGHT_COLOR },
  ] as const;
 
@@ -1270,6 +1271,7 @@ export const getFalNumImageMaxForModel = (modelId: string | undefined): number =
     : getNanoBananaSelectorModelId(modelId) ? NANO_BANANA_MAX_OUTPUT_IMAGES
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_MAX_OUTPUT_IMAGES
     : isSeedream55Model(modelId) ? SEEDREAM_55_MAX_OUTPUT_IMAGES
+    : modelId === SEEDREAM_55_JIMENG_CANVAS_MODEL_ID ? SEEDREAM_55_JIMENG_CANVAS_OUTPUT_COUNTS.length
     : isGptImage26Model(modelId) ? GPT_IMAGE_26_MAX_OUTPUT_IMAGES
     : isTokenHubGptImage25Model(modelId) ? TOKENHUB_GPT_IMAGE_25_MAX_OUTPUT_IMAGES
     : isTokenHubNanoBananaModel(modelId) ? TOKENHUB_NANO_BANANA_MAX_OUTPUT_IMAGES
@@ -1281,6 +1283,7 @@ export const getFalNumImageOptionsForModel = (modelId: string | undefined): Read
     : getGrokImageSelectorModelId(modelId) ? GROK_IMAGE_NUM_IMAGE_OPTIONS
     : isIdeogram45Model(modelId) ? IDEOGRAM_45_NUM_IMAGE_OPTIONS
     : isSeedream55Model(modelId) ? SEEDREAM_55_NUM_IMAGE_OPTIONS
+    : modelId === SEEDREAM_55_JIMENG_CANVAS_MODEL_ID ? SEEDREAM_55_JIMENG_CANVAS_OUTPUT_COUNTS
     : isGptImage26Model(modelId) ? GPT_IMAGE_26_NUM_IMAGE_OPTIONS
     : isTokenHubGptImage25Model(modelId) ? TOKENHUB_GPT_IMAGE_25_NUM_IMAGE_OPTIONS
     : isTokenHubNanoBananaModel(modelId) ? TOKENHUB_NANO_BANANA_NUM_IMAGE_OPTIONS
@@ -1324,6 +1327,7 @@ export const MODEL_REFERENCE_IMAGE_LIMITS: Partial<Record<FalModelId | typeof KL
   [GPT_IMAGE_2_EDIT_MODEL_ID]: 9, // GPT Image 2 supports 10 total input images.
   [SEEDREAM_55_MODEL_ID]: 9,
   [SEEDREAM_55_VOLCENGINE_MODEL_ID]: 9,
+  [SEEDREAM_55_JIMENG_CANVAS_MODEL_ID]: 9,
   [GPT_IMAGE_26_MODEL_ID]: 15,
   [GPT_IMAGE_25_MODEL_ID]: 15, // Primary plus references must fit 16 total inputs.
   [TOKENHUB_GPT_IMAGE_25_MODEL_ID]: 15,

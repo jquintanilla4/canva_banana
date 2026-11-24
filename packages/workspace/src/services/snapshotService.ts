@@ -3,6 +3,7 @@ import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { isGifImage } from './gifMedia';
 import { isSvgFile, isSvgImage, normalizeImageFile } from './svgMedia';
 import { isSeedream55Background, isSeedream55OutputFormat } from './seedream55Config';
+import { isJimengCanvasVideoModelId } from './jimengCanvasVideoModels';
 import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from './gptImage26RunSettings';
 import { isGptImage26Quality, isGptImage26Background, isGptImage26ReasoningEffort, isGptImage26OutputFormat } from './gptImage26Config';
 import { isTokenHubGptImage25Quality, isTokenHubGptImage25Background, isTokenHubGptImage25Variant } from './tokenHubGptImage25Config';
@@ -2292,6 +2293,9 @@ export const normalizeSnapshotImageMetadata = (
     if (jimengOptionsRaw && typeof jimengOptionsRaw === 'object') {
       const typed = jimengOptionsRaw as GenerationInputs['jimengOptions'];
       const normalizedOptions: GenerationInputs['jimengOptions'] = {};
+      if (isJimengCanvasVideoModelId(typed?.canvasModel)) {
+        normalizedOptions.canvasModel = typed.canvasModel;
+      }
       if (isSeedance2Variant((typed as { seedance2Variant?: unknown }).seedance2Variant)) {
         normalizedOptions.seedance2Variant = typed.seedance2Variant;
       }

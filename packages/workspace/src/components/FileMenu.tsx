@@ -16,8 +16,7 @@ type FileMenuProps = {
   onToggleTrackpadMode: () => void; // Flips the persisted trackpad preference.
   onOpenDebugLog: () => void;
   onOpenDesktopSettings?: () => void;
-  onClearJimengCache: () => void;
-  isClearingJimengCache: boolean;
+  onOpenJimengCanvasSetup: () => void;
 };
 
 export const FileMenu: React.FC<FileMenuProps> = ({
@@ -35,8 +34,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
   onToggleTrackpadMode,
   onOpenDebugLog,
   onOpenDesktopSettings,
-  onClearJimengCache,
-  isClearingJimengCache,
+  onOpenJimengCanvasSetup,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -160,11 +158,10 @@ export const FileMenu: React.FC<FileMenuProps> = ({
           <button
             type="button"
             role="menuitem"
-            onClick={onClearJimengCache}
-            disabled={isClearingJimengCache}
-            className="px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 disabled:cursor-wait disabled:text-gray-500 disabled:hover:bg-transparent transition-colors"
+            onClick={onOpenJimengCanvasSetup}
+            className="px-4 py-2 text-left text-sm whitespace-nowrap hover:bg-gray-700 transition-colors"
           >
-            {isClearingJimengCache ? 'Clearing Jimeng Cache...' : 'Clear Jimeng Cache'}
+            Jimeng Canvas Setup
           </button>
         </div>
       )}

@@ -83,7 +83,7 @@ Different features use different AI providers. You only need credentials for the
 | HeyGen prompt timing assistance | `MOONSHOT_API_KEY` |
 | Direct Volcengine Seedance 2 | `ARK_API_KEY`, `VOLCENGINE_ACCESS_KEY`, and `VOLCENGINE_SECRET_KEY` |
 | TokenHub Seedance 2.0 and 2.5 | `TOKENHUB_API_KEY`. Uploaded frames and references also use `VOLCENGINE_ACCESS_KEY`, `VOLCENGINE_SECRET_KEY`, and your TOS bucket. |
-| Seedance 2, Seedance 2.5, and Multi-frame through Jimeng | Complete the Jimeng CLI setup shown inside the app; CLI 1.4.15+ is required |
+| Jimeng video and Seedream image models | Complete the Jimeng Canvas setup shown inside the app. Available models depend on your account catalog. |
 
 In the desktop app, open Settings and enter the credentials there. For browser development, create a file named `.env.local` in the project folder and add each credential on its own line:
 
@@ -186,7 +186,9 @@ Make sure the Python dependencies have been installed:
 npm -w @canva-banana/python-backend run sync
 ```
 
-Then confirm that the local backends are running. Jimeng also requires the one-time setup shown in the app. Its Login action now uses OAuth Device Flow: open the displayed authorization page, enter the short code, and choose **Check Login**. If video generation returns `AigcComplianceConfirmationRequired`, complete one generation with that model on the Dreamina website and retry.
+Then confirm that the local backends are running. Open **Jimeng Canvas Setup** in the app, install or update `dreamina-canvas`, and sign in. Open the displayed authorization page, enter the short code, and choose **Check Login**. Refresh the model catalog after login. Video and Seedream image models use this Canvas account. Standard and Fast video choices appear when the account catalog provides them.
+
+Desktop Settings accepts an optional **Jimeng Canvas CLI Path** for a manually installed `dreamina-canvas` executable. Leave it blank to use the managed installation. See the [Python service setup](packages/runtime/python/README.md#jimeng-canvas) for host paths and manual setup.
 
 ## Developer and Maintainer Reference
 

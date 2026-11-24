@@ -25,7 +25,7 @@ export const resolveSeedream55LayerizeOperation = ({
   images: readonly CanvasImage[];
 }): Seedream55LayerizeOperation => {
   const provider = getSeedream55ModelProvider(request.modelId ?? modelId);
-  if (!provider || request.provider !== provider || request.modelMode === 'video') {
+  if ((provider !== 'fal' && provider !== 'volcengine') || request.provider !== provider || request.modelMode === 'video') {
     throw new Error('Select Seedream 5.5 to layerize an image.');
   }
   const source = images.find(image => image.id === request.primaryImageId);

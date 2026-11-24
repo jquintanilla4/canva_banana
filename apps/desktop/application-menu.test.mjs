@@ -12,7 +12,7 @@ const buildHandlers = () => ({
   openDebugLog: vi.fn(),
   openManageKeys: vi.fn(),
   openChangeIcon: vi.fn(),
-  clearJimengCache: vi.fn(),
+  openJimengCanvasSetup: vi.fn(),
   clearChatHistory: vi.fn(),
 });
 
@@ -25,7 +25,6 @@ describe('application menu template', () => {
         showZoomLevelBadge: true,
         showFileName: true,
         trackpadMode: false,
-        isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
     });
@@ -48,7 +47,6 @@ describe('application menu template', () => {
         showZoomLevelBadge: true,
         showFileName: true,
         trackpadMode: false,
-        isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
     });
@@ -62,6 +60,7 @@ describe('application menu template', () => {
       'Backups...',
       'Autosave',
       'Debug Log',
+      'Jimeng Canvas Setup...',
     ]);
   });
 
@@ -73,7 +72,6 @@ describe('application menu template', () => {
         showZoomLevelBadge: true,
         showFileName: true,
         trackpadMode: false,
-        isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
     });
@@ -95,7 +93,6 @@ describe('application menu template', () => {
         showZoomLevelBadge: true,
         showFileName: true,
         trackpadMode: false,
-        isClearingJimengCache: false,
       },
       handlers,
     });
@@ -116,7 +113,6 @@ describe('application menu template', () => {
         showZoomLevelBadge: true,
         showFileName: true,
         trackpadMode: false,
-        isClearingJimengCache: false,
       },
       handlers: buildHandlers(),
     });
@@ -126,11 +122,10 @@ describe('application menu template', () => {
 
     expect(labels).toEqual([
       'Clear Chat History...',
-      'Clear Jimeng Cache',
     ]);
   });
 
-  it('reflects checkbox and clearing state in native menu items', () => {
+  it('reflects checkbox state in native menu items', () => {
     const template = buildApplicationMenuTemplate({
       appName: 'The Institute',
       fileMenuState: {
@@ -138,26 +133,33 @@ describe('application menu template', () => {
         showZoomLevelBadge: true,
         showFileName: false,
         trackpadMode: true,
-        isClearingJimengCache: true,
       },
       handlers: buildHandlers(),
     });
 
     const fileMenu = template.find(item => item.label === 'File');
     const viewMenu = template.find(item => item.label === 'View');
-    const historyMenu = template.find(item => item.label === 'History');
     const autosaveItem = fileMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.AUTOSAVE);
     const zoomItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE);
     const fileNameItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.FILE_NAME);
     const trackpadModeItem = viewMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.TRACKPAD_MODE);
-    const cacheItem = historyMenu.submenu.find(item => item.id === APPLICATION_MENU_ITEM_IDS.CLEAR_JIMENG_CACHE);
 
     expect(autosaveItem.checked).toBe(false);
     expect(zoomItem.checked).toBe(true);
     expect(fileNameItem.checked).toBe(false);
     expect(trackpadModeItem.checked).toBe(true);
-    expect(cacheItem.enabled).toBe(false);
-    expect(cacheItem.label).toBe('Clearing Jimeng Cache...');
+  });
+
+  it('opens Jimeng Canvas setup from the File menu', () => {
+    const handlers = buildHandlers();
+    const template = buildApplicationMenuTemplate({
+      appName: 'The Institute',
+      fileMenuState: { autosaveEnabled: true, showZoomLevelBadge: true, showFileName: true, trackpadMode: false },
+      handlers,
+    });
+    const fileMenu = template.find(item => item.label === 'File');
+    fileMenu.submenu.find(item => item.label === 'Jimeng Canvas Setup...').click();
+    expect(handlers.openJimengCanvasSetup).toHaveBeenCalledOnce();
   });
 
   it('wires Trackpad Mode to its View menu handler', () => {
@@ -169,7 +171,6 @@ describe('application menu template', () => {
         showZoomLevelBadge: true,
         showFileName: true,
         trackpadMode: false,
-        isClearingJimengCache: false,
       },
       handlers,
     });

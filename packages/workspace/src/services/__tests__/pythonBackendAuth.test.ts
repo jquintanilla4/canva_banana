@@ -15,10 +15,10 @@ describe('pythonBackendAuth', () => {
       }),
     };
 
-    expect(getPythonBackendAuthHeadersForUrl('http://localhost:8000/api/jimeng/jobs')).toEqual({
+    expect(getPythonBackendAuthHeadersForUrl('http://localhost:8000/api/jimeng/canvas/jobs')).toEqual({
       [PYTHON_BACKEND_DESKTOP_AUTH_TOKEN_HEADER]: 'desktop-secret',
     });
-    expect(getPythonBackendAuthHeadersForUrl('https://remote-backend.example.test/api/jimeng/jobs')).toEqual({});
+    expect(getPythonBackendAuthHeadersForUrl('https://remote-backend.example.test/api/jimeng/canvas/jobs')).toEqual({});
   });
 
   it('fails closed when the auth origin is missing or malformed', () => {
@@ -30,7 +30,7 @@ describe('pythonBackendAuth', () => {
       }),
     };
 
-    expect(getPythonBackendAuthHeadersForUrl('http://localhost:8000/api/jimeng/jobs')).toEqual({});
+    expect(getPythonBackendAuthHeadersForUrl('http://localhost:8000/api/jimeng/canvas/jobs')).toEqual({});
     expect(getPythonBackendAuthHeadersForUrl('not a url')).toEqual({});
   });
 });

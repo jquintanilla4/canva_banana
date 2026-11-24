@@ -2,6 +2,10 @@ import type { FalImageSizeOption, GenerationFalOptions, GenerationInputs } from 
 
 export const SEEDREAM_55_MODEL_ID = 'bytedance/seedream/v5.5';
 export const SEEDREAM_55_VOLCENGINE_MODEL_ID = 'volcengine/seedream-5.5';
+export const SEEDREAM_55_JIMENG_CANVAS_MODEL_ID = 'jimeng-cli/seedream-5.5';
+export const SEEDREAM_55_JIMENG_CANVAS_PROVIDER_MODEL = 'seedream_5.5';
+export const SEEDREAM_55_JIMENG_CANVAS_OUTPUT_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+export const SEEDREAM_55_JIMENG_CANVAS_ASPECT_RATIOS = ['1:1', '3:4', '16:9', '4:3', '9:16', '2:3', '3:2', '21:9'] as const;
 export const SEEDREAM_55_ENDPOINTS = {
   text_to_image: `${SEEDREAM_55_MODEL_ID}/text-to-image`,
   image_edit: `${SEEDREAM_55_MODEL_ID}/edit`,
@@ -14,7 +18,8 @@ export const SEEDREAM_55_NUM_IMAGE_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
 export const isSeedream55Model = (modelId: string | undefined): boolean =>
   modelId === SEEDREAM_55_MODEL_ID || Object.values(SEEDREAM_55_ENDPOINTS).some(endpoint => endpoint === modelId);
 export const getSeedream55ModelProvider = (modelId: string | undefined) =>
-  modelId === SEEDREAM_55_VOLCENGINE_MODEL_ID ? 'volcengine' : isSeedream55Model(modelId) ? 'fal' : undefined;
+  modelId === SEEDREAM_55_VOLCENGINE_MODEL_ID ? 'volcengine'
+    : modelId === SEEDREAM_55_JIMENG_CANVAS_MODEL_ID ? 'jimeng' : isSeedream55Model(modelId) ? 'fal' : undefined;
 export const SEEDREAM_55_LAYERIZE_MAX_BYTES = 30_000_000;
 export const validateSeedream55LayerizeDimensions = ({ naturalWidth: width, naturalHeight: height }: HTMLImageElement) => {
   const pixels = width * height;
@@ -40,6 +45,8 @@ export const SEEDREAM_55_IMAGE_SIZE_OPTIONS = [
 const SEEDREAM_55_VOLCENGINE_SIZES = { auto_1K: '1K', 'auto_1.5K': '1.5K', auto_2K: '2K' } as const;
 export const getSeedream55ImageSizeOptions = (modelId?: string) => modelId === SEEDREAM_55_VOLCENGINE_MODEL_ID
   ? SEEDREAM_55_IMAGE_SIZE_OPTIONS.filter(({ value }) => Object.hasOwn(SEEDREAM_55_VOLCENGINE_SIZES, value))
+  : modelId === SEEDREAM_55_JIMENG_CANVAS_MODEL_ID
+    ? SEEDREAM_55_IMAGE_SIZE_OPTIONS.filter(({ value }) => value === 'auto_1.5K' || value === 'auto_2K')
   : SEEDREAM_55_IMAGE_SIZE_OPTIONS;
 export const getSeedream55VolcengineSize = (size: Seedream55ImageSize) =>
   Object.entries(SEEDREAM_55_VOLCENGINE_SIZES).find(([value]) => value === size)?.[1] ?? '2K';

@@ -1,6 +1,6 @@
 # UV Python Service
 
-Local FastAPI backend that runs Seedance generations for Canva Banana. It supports Volcengine Ark directly, TokenHub, and Jimeng through the `dreamina` CLI.
+Local FastAPI backend that runs Seedance generations for Canva Banana. It supports Volcengine Ark directly, TokenHub, and Jimeng video and Seedream images through `dreamina-canvas`.
 
 ## Setup and run
 
@@ -26,7 +26,7 @@ Both setup paths install the bundled `ffprobe` fallback for reference audio/vide
 - `VOLCENGINE_ACCESS_KEY`
 - `VOLCENGINE_SECRET_KEY`
 
-These are required for the direct Volcengine Seedance 2 provider path. Jimeng CLI jobs do not need these credentials.
+These are required for the direct Volcengine Seedance 2 provider path. Jimeng Canvas jobs do not need these credentials.
 
 The service only loads environment files when `CANVA_BANANA_ENV_DIR` explicitly names their directory. It reads `.env.local` then `.env`, while exported shell values take precedence. The repository app wrapper sets this directory to the repository root for development; installed consumers must supply it or pass environment values directly.
 
@@ -49,41 +49,29 @@ Desktop and standalone browser builds enable the picker when they have a TokenHu
 - `VOLCENGINE_MAX_TERMINAL_JOBS`
 - `VOLCENGINE_MAX_LOGS_PER_JOB`
 - `VOLCENGINE_FFPROBE_PATH`
-- `JIMENG_CLI_PATH` (optional path to the `dreamina` executable)
-- `JIMENG_WORK_DIR` (default: `.jimeng-work` in the launched service working directory; configure explicitly in a host)
-- `JIMENG_SUBMIT_POLL_SECONDS` (default: `30`)
-- `JIMENG_SUBMIT_TIMEOUT_SECONDS` (default: `300`; a size-based upload allowance is added automatically)
-- `JIMENG_RESULT_TIMEOUT_SECONDS` (default: `900`)
-- `JIMENG_QUERY_INTERVAL_SECONDS` (default: `10`)
+- `JIMENG_CANVAS_CLI_PATH` to use a manually installed `dreamina-canvas` executable
+- `JIMENG_CANVAS_ROOT_DIR` for the Canvas installation and default working data, otherwise `.jimeng-canvas` under the backend project directory
+- `JIMENG_CANVAS_WORK_DIR` for persisted jobs and staged media, otherwise the Canvas root
+- `DREAMINA_CANVAS_STATE_DIR` for account state, otherwise `state/` under the Canvas root
+- `JIMENG_CANVAS_PROFILE` for the Canvas profile name, otherwise `canva-banana`
 
-## Jimeng CLI
+## Jimeng Canvas
 
-The app can handle Jimeng setup from the UI. Start the backend and frontend, select a Jimeng model, then use the setup panel to install/update the CLI, start login, and recheck account status. The integration requires Dreamina CLI 1.4.15 or newer.
+Start the backend and frontend, then open **Jimeng Canvas Setup** in the app. Install or update the CLI, sign in, and refresh the model catalog. The setup panel uses `dreamina-canvas auth login --no-browser`. Open the displayed authorization page, enter the short code, and choose **Check Login**. The backend keeps the sensitive device code in memory until the login session expires and never returns it to the browser.
 
-Manual fallback: install or update the CLI with the official command:
+Video generation and Seedream image generation use the Canvas account and its model catalog. Standard and Fast choices appear when the catalog provides those channels. Saved Multi-frame selections remain readable as metadata, but cannot start a new generation.
 
-```bash
-curl -fsSL https://jimeng.jianying.com/cli | bash
-```
-
-Then log in and verify the account:
+For a manual installation, use the official installer:
 
 ```bash
-dreamina login
-dreamina user_credit
+curl -fsSL https://jimeng.jianying.com/canvas-cli/install.sh | bash
 ```
 
-The in-app login uses the non-blocking OAuth Device Flow equivalents `dreamina login --headless` and `dreamina login checklogin`. Open the displayed verification URL, enter the short user code, then click **Check Login**. The backend keeps the sensitive device code in memory for at most 15 minutes and does not return it to the browser.
+If the executable is outside the service's `PATH`, set `JIMENG_CANVAS_CLI_PATH` to its full path. Update a manually configured executable yourself, or clear the override to let setup manage the installation. Canvas installation and login are separate from other Dreamina tools.
 
-Supported Jimeng video paths:
+Packaged desktop launches store the Canvas installation, persisted jobs, and account state under `.jimeng-canvas` in the app's user data directory. An existing Canvas data location is preserved during upgrades. Explicit Canvas path settings take precedence. Installed runtime hosts must choose writable directories and keep them across process restarts so account login and submitted jobs remain recoverable.
 
-- `Seedance 2 (JM CLI)`: regular, fast, VIP, fast VIP, and mini channels; 720p by default, with 1080p and 4K only on `seedance2.0_vip`.
-- `Seedance 2.5 (JM CLI)`: 480p or 720p, 4–30 seconds, larger multimodal limits, and audio-only reference input.
-- Smart mode with a first and last still image routes to `frames2video`.
-- `Jimeng Multi-frame`: select 2–20 still images. With two images, enter one prompt. With three or more, enter one transition prompt per segment separated by `||`; output can be 720p or 1080p.
-- The setup panel's Dreamina session field sends `--session` with every generation command; `0` uses the default session.
-
-Video generation may require a first generation with the selected model on the Dreamina website. If the CLI returns `AigcComplianceConfirmationRequired`, complete that web generation and retry. The CLI stores config and logs under `~/.dreamina_cli/`, including `~/.dreamina_cli/logs/` for troubleshooting. When reporting a failure, include the exact command, CLI version, error, submit ID when available, and the relevant log excerpt without exposing sensitive login material.
+When reporting a failure, include the Canvas CLI version, error, local job ID when available, and relevant logs without sensitive account material.
 
 ## ffprobe Checks
 

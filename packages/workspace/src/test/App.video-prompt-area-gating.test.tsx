@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
-import { getJimengSetupStatus } from '../services/jimengService';
+import { getJimengCanvasCatalog } from '../services/jimengCanvasService';
 import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../services/seedream55Config';
 import type { DesktopAppIconState, DesktopFileMenuCommand, DesktopSettingsKey, DesktopSettingsStatus } from '../services/runtimeConfig';
 import { Tool, type CanvasImage, type GenerationPlacedPayload } from '../types';
@@ -20,17 +20,17 @@ const desktopSettingsKeys: DesktopSettingsKey[] = [
   'VOLCENGINE_SECRET_KEY',
   'TOS_BUCKET_NAME',
   'TOS_REGION',
-  'JIMENG_CLI_PATH',
+  'JIMENG_CANVAS_CLI_PATH',
 ];
 
 const buildDesktopSettingsStatus = (presentKeys: DesktopSettingsKey[] = desktopSettingsKeys): DesktopSettingsStatus => ({
   configPath: '/Users/qa/Library/Application Support/The Institute/.env.local',
   fields: Object.fromEntries(desktopSettingsKeys.map(key => [key, {
     present: presentKeys.includes(key),
-    required: key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY',
+    required: key !== 'JIMENG_CANVAS_CLI_PATH' && key !== 'OPENROUTER_API_KEY',
     secret: key.endsWith('_KEY') || key.includes('API_KEY'),
   }])) as DesktopSettingsStatus['fields'],
-  missingKeys: desktopSettingsKeys.filter(key => key !== 'JIMENG_CLI_PATH' && key !== 'OPENROUTER_API_KEY' && !presentKeys.includes(key)),
+  missingKeys: desktopSettingsKeys.filter(key => key !== 'JIMENG_CANVAS_CLI_PATH' && key !== 'OPENROUTER_API_KEY' && !presentKeys.includes(key)),
   isPackaged: true,
   serviceStatus: {
     secureBackend: { state: 'ready', url: 'http://localhost:8787' },
@@ -388,7 +388,7 @@ vi.mock('../components/BackupsModal', () => ({
 vi.mock('../components/FalQueuePanel', () => ({ FalQueuePanel: () => null }));
 vi.mock('../components/DebugLogPanel', () => ({ DebugLogPanel: () => null }));
 vi.mock('../components/FileMenu', () => ({
-  FileMenu: ({ isOpen, onToggle, onImportSnapshot }: { isOpen: boolean; onToggle: () => void; onImportSnapshot: () => void }) => (
+  FileMenu: ({ isOpen, onToggle, onImportSnapshot, onOpenJimengCanvasSetup }: { isOpen: boolean; onToggle: () => void; onImportSnapshot: () => void; onOpenJimengCanvasSetup: () => void }) => (
     <div>
       <button type="button" aria-label="Snapshot menu" onClick={onToggle}>
         Menu
@@ -399,6 +399,7 @@ vi.mock('../components/FileMenu', () => ({
           <button type="button" onClick={onImportSnapshot}>
             Import Snapshot
           </button>
+          <button type="button" onClick={onOpenJimengCanvasSetup}>Jimeng Canvas Setup</button>
         </div>
       )}
     </div>
@@ -624,17 +625,12 @@ vi.mock('../services/debugLog', () => ({
   clearDebugLogs: vi.fn(),
 }));
 
-vi.mock('../services/jimengService', () => ({
-  clearJimengCache: vi.fn(async () => ({ status: 'ok', deletedFiles: 0, bytesFreed: 0, workDir: '/tmp/jimeng', errors: [], invalidatedJobIds: [] })),
-  getJimengSetupStatus: vi.fn(async () => ({
-    ready: false,
-    backendReachable: true,
-    cliAvailable: false,
-    authenticated: false,
-    message: 'Jimeng setup is required.',
-  })),
-  installJimengCli: vi.fn(),
-  startJimengLogin: vi.fn(async () => ({ message: 'Login started.' })),
+vi.mock('../services/jimengCanvasService', () => ({
+  getJimengCanvasCatalog: vi.fn(async () => []),
+  getJimengCanvasSetupStatus: vi.fn(async () => ({ cliAvailable: false, authenticated: false })),
+  installJimengCanvasCli: vi.fn(),
+  startJimengCanvasLogin: vi.fn(),
+  checkJimengCanvasLogin: vi.fn(),
 }));
 
 afterEach(() => {
@@ -681,13 +677,7 @@ afterEach(() => {
   mockState.displayedVideoPromptAreas = [{ ...mockState.baseVideoPromptArea }];
   mockState.displayedVideoPromptBars = [{ ...mockState.baseVideoPromptBar }];
   window.localStorage.clear();
-  vi.mocked(getJimengSetupStatus).mockResolvedValue({
-    ready: false,
-    backendReachable: true,
-    cliAvailable: false,
-    authenticated: false,
-    message: 'Jimeng setup is required.',
-  });
+  vi.mocked(getJimengCanvasCatalog).mockResolvedValue([]);
   Object.assign(mockState.falState, {
     falModelMode: 'video',
     falModelId: 'volcengine/seedance-2',
@@ -914,7 +904,7 @@ describe('App video prompt area gating', () => {
     expect(await screen.findByRole('dialog', { name: /manage keys/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Open prompt chat' })).toBeNull();
     await waitFor(() => expect(getSettingsStatus).toHaveBeenCalledTimes(2));
-    expect(screen.getByLabelText('Jimeng CLI Path', { selector: 'input' })).toBeTruthy();
+    expect(screen.getByLabelText('Jimeng Canvas CLI Path', { selector: 'input' })).toBeTruthy();
   });
 
   it('opens the Change Icon modal from the native menu command', async () => {
@@ -1014,7 +1004,7 @@ describe('App video prompt area gating', () => {
 
     expect(await screen.findByRole('dialog', { name: /manage keys/i })).toBeTruthy();
     expect(screen.getByLabelText('FAL API Key', { selector: 'input' })).toBeTruthy();
-    expect(screen.queryByLabelText('Jimeng CLI Path', { selector: 'input' })).toBeNull();
+    expect(screen.queryByLabelText('Jimeng Canvas CLI Path', { selector: 'input' })).toBeNull();
   });
 
   it('does not auto-open desktop onboarding when the Fal key is saved', async () => {
@@ -1290,95 +1280,36 @@ describe('App video prompt area gating', () => {
     expect(mockState.lastCanvasProps?.tailSelectionEnabled).toBe(false);
   });
 
-  it('keeps Jimeng setup recoverable after dismissing the panel', async () => {
-    Object.assign(mockState.falState, {
-      falModelId: 'jimeng-cli/seedance-2',
-      falVideoModelId: 'jimeng-cli/seedance-2',
-      isFalSeedance2VideoModel: false,
-      isJimengSeedance2VideoModel: true,
-      isVolcengineSeedance2VideoModel: false,
-    });
-
+  it('opens Jimeng Canvas setup from the file menu before a model is selected', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Switch To Fal' }));
-
-    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-
-    expect(screen.queryByRole('region', { name: 'Jimeng setup' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Reopen Jimeng setup' })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Reopen Jimeng setup' }));
-
-    expect(screen.getByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Snapshot menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Jimeng Canvas Setup' }));
+    expect(await screen.findByText('Sign-in required')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('region', { name: 'Jimeng Canvas setup' })).toBeNull();
   });
 
-  it('blocks global Jimeng submit and shortcut until setup is ready', async () => {
+  it('blocks the footer and shortcut while the Standard Fast catalog lookup is pending', () => {
+    vi.mocked(getJimengCanvasCatalog).mockReturnValue(new Promise(() => undefined));
     Object.assign(mockState.falState, {
       falModelId: 'jimeng-cli/seedance-2',
       falVideoModelId: 'jimeng-cli/seedance-2',
       isFalSeedance2VideoModel: false,
       isJimengSeedance2VideoModel: true,
       isVolcengineSeedance2VideoModel: false,
+      seedance2JimengModelVersion: 'seedance2.0fast',
     });
 
     render(<App />);
-
     fireEvent.click(screen.getByRole('button', { name: 'Switch To Fal' }));
 
-    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(true);
-
     mockState.keyboardShortcuts?.onGenerate();
-
     expect(mockState.handleGenerate).not.toHaveBeenCalled();
   });
 
-  it('blocks embedded Jimeng prompt bars until setup is ready', async () => {
-    mockState.videoPromptBars = [{
-      ...mockState.baseVideoPromptBar,
-      modelId: 'jimeng-cli/seedance-2',
-      seedance2JimengModelVersion: 'seedance2.0_vip',
-      seedance2Resolution: '1080p',
-    }];
-    mockState.displayedVideoPromptBars = [...mockState.videoPromptBars];
-
-    render(<App />);
-
-    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
-
-    expect(mockState.handleGenerate).not.toHaveBeenCalled();
-  });
-
-  it('keeps footer generation available when only an embedded Jimeng bar needs setup', async () => {
-    mockState.videoPromptBars = [{
-      ...mockState.baseVideoPromptBar,
-      modelId: 'jimeng-cli/seedance-2',
-    }];
-    mockState.displayedVideoPromptBars = [...mockState.videoPromptBars];
-
-    render(<App />);
-
-    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Generate' }) as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-
-    expect(mockState.handleGenerate).toHaveBeenCalledWith();
-  });
-
-  it('submits ready embedded Jimeng prompt bars through Jimeng options', async () => {
-    vi.mocked(getJimengSetupStatus).mockResolvedValue({
-      ready: true,
-      backendReachable: true,
-      cliAvailable: true,
-      authenticated: true,
-      message: 'Jimeng setup is ready.',
-    });
+  it('submits embedded Jimeng prompt bars through Jimeng options', async () => {
     mockState.videoPromptBars = [{
       ...mockState.baseVideoPromptBar,
       modelId: 'jimeng-cli/seedance-2',
@@ -1389,10 +1320,6 @@ describe('App video prompt area gating', () => {
     mockState.displayedVideoPromptBars = [...mockState.videoPromptBars];
 
     render(<App />);
-
-    await waitFor(() => {
-      expect(screen.queryByRole('region', { name: 'Jimeng setup' })).toBeNull();
-    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Submit Embedded Prompt' }));
 
@@ -1414,7 +1341,7 @@ describe('App video prompt area gating', () => {
     }));
   });
 
-  it('opens Jimeng setup instead of rerunning saved Jimeng generations before setup is ready', async () => {
+  it('reruns saved Jimeng generations with their stored provider and tier', async () => {
     mockState.images = [{
       ...buildCanvasMedia('jimeng-output', 'video'),
       metadata: {
@@ -1437,8 +1364,7 @@ describe('App video prompt area gating', () => {
       (mockState.lastCanvasProps?.onRerunGeneration as ((imageId: string) => void) | undefined)?.('jimeng-output');
     });
 
-    expect(await screen.findByRole('region', { name: 'Jimeng setup' })).toBeTruthy();
-    expect(mockState.handleGenerate).not.toHaveBeenCalled();
+    expect(mockState.handleGenerate).toHaveBeenCalledWith(mockState.images[0]?.metadata?.generation);
   });
 
   it('replaces the prompt and restores saved generation settings and canvas inputs', () => {
@@ -1804,7 +1730,7 @@ describe('App video prompt area gating', () => {
     ]);
   });
 
-  it('shows source aspect ratio for Jimeng Seedance 2.5 Smart with a first frame', () => {
+  it('offers Canvas aspect ratios for Jimeng Seedance 2.5 Smart with a first frame', () => {
     const firstFrame = buildCanvasMedia('first-frame', 'image');
     mockState.images = [firstFrame];
     mockState.displayedImages = [firstFrame];
@@ -1830,11 +1756,11 @@ describe('App video prompt area gating', () => {
       | Array<{ id: string; kind: string; options?: Array<{ value: string }>; value?: string }>
       | undefined;
     const aspectRatio = controls?.find(control => control.id === 'seedance25-aspect-ratio-select');
-    expect(aspectRatio?.options?.map(option => option.value)).toEqual(['source']);
-    expect(aspectRatio?.value).toBe('source');
+    expect(aspectRatio?.options?.map(option => option.value)).toContain('9:16');
+    expect(aspectRatio?.value).toBe('9:16');
   });
 
-  it('shows source aspect ratio for an embedded Jimeng Seedance 2.5 Smart bar with a first frame', () => {
+  it('offers Canvas aspect ratios for an embedded Jimeng Seedance 2.5 Smart bar with a first frame', () => {
     const firstFrame = buildCanvasMedia('embedded-first-frame', 'image');
     const jimengBar = {
       ...mockState.baseVideoPromptBar,
@@ -1858,8 +1784,8 @@ describe('App video prompt area gating', () => {
       | undefined;
     const controls = buildControls?.(jimengBar) ?? [];
     const aspectRatio = controls.find(control => control.id.endsWith('seedance25-aspect-ratio-select'));
-    expect(aspectRatio?.options?.map(option => option.value)).toEqual(['source']);
-    expect(aspectRatio?.value).toBe('source');
+    expect(aspectRatio?.options?.map(option => option.value)).toContain('9:16');
+    expect(aspectRatio?.value).toBe('9:16');
   });
 
   it('submits Kling v3 embedded prompt bars through smart first and last frame overrides', () => {

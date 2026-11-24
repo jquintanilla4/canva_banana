@@ -5,7 +5,11 @@ import { exportCanvasImage } from '../services/imageOperations';
 import { isSvgImage } from '../services/svgMedia';
 import { isGifImage } from '../services/gifMedia';
 import { confirmRasterCopies } from '../services/stillImagePolicy';
-import { getSeedream55ModelProvider, isSeedream55LayerizeGeneration, SEEDREAM_55_ENDPOINTS, SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../services/seedream55Config';
+import { getSeedream55ModelProvider, isSeedream55LayerizeGeneration, SEEDREAM_55_ENDPOINTS, SEEDREAM_55_VOLCENGINE_MODEL_ID, SEEDREAM_55_JIMENG_CANVAS_MODEL_ID, SEEDREAM_55_JIMENG_CANVAS_PROVIDER_MODEL, SEEDREAM_55_JIMENG_CANVAS_ASPECT_RATIOS } from '../services/seedream55Config';
+import { applyJimengCanvasProgress, JimengCanvasCancelled, readJimengCanvasImage, runJimengCanvasGeneration, type RequestJimengCanvasApproval } from '../services/jimengCanvasGeneration';
+import { keepsJimengCanvasQueueRow, rememberJimengCanvasJob } from '../services/jimengCanvasRecovery';
+import { getJimengCanvasVideoModel, getSavedJimengCanvasVideoModel, JIMENG_CANVAS_VIDEO_CATALOG_PENDING, type ResolveJimengCanvasVideoModel } from '../services/jimengCanvasVideoModels';
+import { buildAnnotationCanvas, canvasToBlob } from '../services/fal/media';
 import { resolveSeedream55LayerizeOperation } from '../services/seedream55LayerizeOperation';
 import { generateVolcengineSeedream55Image } from '../services/seedream55VolcengineService';
 import { resolveSeedream55RunSettings, serializeSeedream55GenerationOptions, type Seedream55RunSettings } from '../services/seedream55RunSettings';
@@ -45,9 +49,7 @@ import {
   KLING_O3_VIDEO_EDIT_MODEL_ID,
   JIMENG_SEEDANCE_2_VIDEO_MODEL_ID,
   JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
-  isValidJimengMultiframeImageCount,
-  JIMENG_MULTIFRAME_MAX_IMAGES,
-  JIMENG_MULTIFRAME_MIN_IMAGES,
+  JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
   FAL_SEEDANCE_2_VIDEO_MODEL_ID,
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
@@ -97,8 +99,6 @@ import {
   isSeedance2DurationSelectionValue,
   isSeedance2OutputFormatSelectionValue,
   isSeedance2VolcengineDurationSelectionValue,
-  isJimengMultiframeDurationSelectionValue,
-  isJimengMultiframeResolutionSelectionValue,
   isJimengSeedance2ModelVersion,
   isSeedance2ResolutionSelectionValue,
   isSeedance2Variant,
@@ -207,7 +207,6 @@ import { ensureRealSnapshotFile } from '../services/snapshotService';
 import { applyFalQueueUpdateToJob } from '../services/falQueueUtils';
 import { convertAudioBlobToWav } from '../services/audioService';
 import { generateSeedanceVideo, TokenHubSeedanceJobUnavailable, type VolcengineQueueUpdate } from '../services/volcengineService';
-import { generateJimengSeedanceVideo, type JimengQueueUpdate } from '../services/jimengService';
 import { extractHeygenClipIntent } from '../services/moonshotIntentService';
 import { buildSeedance2RequestKey } from '../utils/seedanceRequestKey';
 import {
@@ -246,7 +245,6 @@ import {
   getSeedanceReferencePromptMentionError,
   normalizeSeedanceReferencePromptMentions,
 } from '../utils/seedancePromptMentions';
-import { hasValidJimengMultiframePrompt, parseJimengMultiframeTransitionPrompts } from '../utils/jimengMultiframe';
 import {
   buildFlux3RunPlan,
   FLUX3_EXTEND_MAX_SECONDS,
@@ -271,16 +269,22 @@ type UseGenerationArgs = {
   setIsLoading: (value: boolean) => void;
   setFalJobs: Dispatch<SetStateAction<FalQueueJob[]>>;
   setState: (updater: (prevState: AppState) => AppState) => void;
-  getCanvasDocument?: () => { version: number };
+  getCanvasDocument?: () => { version: number; images?: readonly CanvasImage[] };
   setToastMessage: (message: string | null) => void;
   setTool: (tool: Tool) => void;
   onGenerationComplete?: () => void;
   onGenerationPlaced?: (payload: GenerationPlacedPayload) => void;
+  resolveJimengCanvasVideoModel?: ResolveJimengCanvasVideoModel;
+  requestJimengCanvasApproval?: RequestJimengCanvasApproval;
+  jimengCanvasDocumentName?: string;
 };
 
 type HandleGenerateOptions = {
   retryJobId?: string; // Existing queue row to replace during retry.
   resumeSeedanceJobId?: string;
+  resumeJimengCanvasJobId?: string;
+  jimengCanvasAttemptId?: string;
+  originalJimengCanvasDocumentName?: string | null;
 };
 
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
@@ -400,7 +404,7 @@ const logGeneratedMediaAppended = (
 
 const applyVolcengineQueueUpdateToJob = (
   job: FalQueueJob,
-  update: VolcengineQueueUpdate | JimengQueueUpdate,
+  update: VolcengineQueueUpdate,
 ): FalQueueJob => ({
   ...job,
   providerJobId: 'providerJobId' in update ? update.providerJobId : job.providerJobId,
@@ -432,7 +436,7 @@ const buildSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant):
   `${baseLabel} ${variant === 'reference' ? 'Reference' : variant === 'edit' ? 'Edit' : variant === 'extend' ? 'Extend' : 'Smart'}`; // Surface the active variant in the queue.
 
 const buildJimengSeedance2ModelLabel = (baseLabel: string, variant: Seedance2Variant, modelVersion: string): string => {
-  const channelLabel = modelVersion === 'seedance2.0_vip' ? 'VIP' : modelVersion === 'seedance2.0fast_vip' ? 'VIP Fast' : modelVersion === 'seedance2.0mini' ? 'Mini' : modelVersion === 'seedance2.0' ? 'Standard' : 'Standard Fast';
+  const channelLabel = JIMENG_SEEDANCE2_MODEL_VERSION_OPTIONS.find(option => option.value === modelVersion)?.label ?? modelVersion;
   return `${buildSeedance2ModelLabel(baseLabel, variant)} ${channelLabel}`;
 }; // Surface the active Jimeng CLI channel in the queue.
 
@@ -449,8 +453,8 @@ const buildStillImageFile = async (
 };
 
 const SEEDANCE_REPEAT_CONFIRM_INTERVAL = 5; // Ask before every sixth identical Seedance run.
-const JIMENG_DEFAULT_SEEDANCE2_MODEL_VERSION = 'seedance2.0fast'; // Match backend/default CLI channel for restored legacy runs.
-const JIMENG_AUDIO_ONLY_REFERENCE_HINT = 'Seedance 2 (JM CLI) needs an image or video reference too. Add one, then generate again.'; // Toast hint for Jimeng audio-only refs.
+const JIMENG_DEFAULT_SEEDANCE2_MODEL_VERSION = 'seedance2.0fast';
+const JIMENG_AUDIO_ONLY_REFERENCE_HINT = 'Seedance 2 (Jimeng Canvas) needs an image or video reference too. Add one, then generate again.';
 
 export const useGeneration = (args: UseGenerationArgs) => {
   const {
@@ -474,6 +478,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     setTool,
     onGenerationComplete,
     onGenerationPlaced,
+    resolveJimengCanvasVideoModel,
+    requestJimengCanvasApproval,
+    jimengCanvasDocumentName,
   } = args;
 
   const workspaceSignal = getWorkspaceSignal();
@@ -586,9 +593,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance25Resolution,
     seedance25Duration,
     seedance25GenerateAudio,
-    jimengMultiframeDuration,
-    jimengMultiframeResolution,
-    jimengSessionId,
     isSeedance15VideoModel,
     flux3ImageAspectRatio,
     flux3ImageResolution,
@@ -636,6 +640,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
     if (workspaceSignal?.aborted) return;
     const originatingDocumentVersion = getCanvasDocument?.().version;
     const isOriginatingDocumentOpen = () => getCanvasDocument?.().version === originatingDocumentVersion;
+    const savedCanvasName = options.originalJimengCanvasDocumentName;
+    const canvasJobDocumentName = savedCanvasName === undefined ? jimengCanvasDocumentName : savedCanvasName ?? undefined;
+    const approveJimengCanvas: RequestJimengCanvasApproval = async job => {
+      if (!requestJimengCanvasApproval || !isOriginatingDocumentOpen()) return 'cancel';
+      const decision = await requestJimengCanvasApproval(job);
+      return isOriginatingDocumentOpen() ? decision : 'cancel';
+    };
     const awaitActive = async <T,>(operation: () => Promise<T>): Promise<T> => {
       workspaceSignal?.throwIfAborted();
       const result = await operation();
@@ -659,21 +670,26 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const editPathsForRun = Array.isArray(generationOverride?.editPaths)
       ? clonePathsForRetry(generationOverride.editPaths)
       : paths; // Saved retry data should keep the original edit strokes.
+    const appendQueueJob = (jobs: FalQueueJob[], newJob: FalQueueJob): FalQueueJob[] => [
+      ...jobs.filter(keepsJimengCanvasQueueRow),
+      ...jobs.filter(job => !keepsJimengCanvasQueueRow(job)).slice(-9),
+      newJob,
+    ];
     const queueJob = (newJob: FalQueueJob) => {
       setFalJobs(prev => {
-        if (!retryJobId) {
-          return [...prev.slice(-9), newJob];
+        if (retryJobId && prev.some(job => job.id === retryJobId)) {
+          return prev.map(job => job.id === retryJobId ? newJob : job);
         }
-        return prev.some(job => job.id === retryJobId)
-          ? prev.map(job => job.id === retryJobId ? newJob : job)
-          : [...prev.slice(-9), newJob]; // Fall back to append if the row was dismissed.
+        return appendQueueJob(prev, newJob);
       });
     }; // Replace failed rows during retry, append for normal submissions.
-    const startImageJob = (inputs: GenerationInputs & { modelId: string; modelLabel: string }, description: string) => {
+    const startImageJob = (inputs: GenerationInputs & { modelId: string; modelLabel: string }, description: string, canvasJob?: Pick<FalQueueJob, 'providerJobId' | 'jimengCanvasAttemptId'>) => {
       const id = retryJobId ?? crypto.randomUUID();
       const now = Date.now();
       queueJob({
         id, prompt: description, modelId: inputs.modelId, modelLabel: inputs.modelLabel, provider: inputs.provider, retryInputs: inputs,
+        ...canvasJob,
+        ...(canvasJob ? { jimengCanvasDocumentName: canvasJobDocumentName } : {}),
         status: 'IN_QUEUE', phase: 'submitting', phaseMessage: 'Preparing request...', logs: [],
         phaseStartedAt: now, createdAt: now, updatedAt: now,
       });
@@ -715,7 +731,11 @@ export const useGeneration = (args: UseGenerationArgs) => {
       else setError(displayMessage);
     };
     const removeStaleImageJob = (job: ReturnType<typeof startImageJob> | undefined, isCurrent = isOriginatingDocumentOpen) => {
-      if (job && !workspaceSignal?.aborted && !isCurrent()) setFalJobs(jobs => jobs.filter(row => row.id !== job.id));
+      if (job && !workspaceSignal?.aborted && !isCurrent()) {
+        setFalJobs(jobs => jobs.flatMap(row => row.id !== job.id ? [row] : keepsJimengCanvasQueueRow(row)
+          ? [{ ...row, status: 'FAILED', phase: 'failed', phaseMessage: 'Open the target canvas and choose Resume here.' }]
+          : []));
+      }
     };
     const commitImagePlacement = ({ images: preparedImages, context, placeOn, isCurrent = isOriginatingDocumentOpen }: {
       images: CanvasImage[];
@@ -993,11 +1013,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const volcengineOptionsOverride = generationOverride?.volcengineOptions ?? {};
     const jimengOptionsOverride = generationOverride?.jimengOptions ?? {};
     const seedanceOptionsOverride = { ...falOptionsOverride, ...volcengineOptionsOverride, ...jimengOptionsOverride }; // Embedded bars store backend-specific Seedance settings in provider bags.
-    const jimengSessionIdForRun = typeof jimengOptionsOverride.sessionId === 'number' && Number.isInteger(jimengOptionsOverride.sessionId) && jimengOptionsOverride.sessionId >= 0
-      ? jimengOptionsOverride.sessionId
-      : generationOverride && (generationOverride.provider === 'jimeng' || generationOverride.jimengOptions)
-        ? 0
-        : jimengSessionId; // Legacy persisted Jimeng requests predate sessions and therefore used session zero.
     const rawSeedance2VariantForRun = isSeedance2Variant(seedanceOptionsOverride.seedance2Variant)
       ? seedanceOptionsOverride.seedance2Variant
       : seedance2Variant;
@@ -1048,12 +1063,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const seedance25GenerateAudioForRun = typeof seedanceOptionsOverride.seedance25GenerateAudio === 'boolean'
       ? seedanceOptionsOverride.seedance25GenerateAudio
       : seedance25GenerateAudio;
-    const jimengMultiframeDurationForRun = isJimengMultiframeDurationSelectionValue(seedanceOptionsOverride.multiframeDuration)
-      ? seedanceOptionsOverride.multiframeDuration
-      : jimengMultiframeDuration;
-    const jimengMultiframeResolutionForRun = isJimengMultiframeResolutionSelectionValue(seedanceOptionsOverride.multiframeResolution)
-      ? seedanceOptionsOverride.multiframeResolution
-      : jimengMultiframeResolution;
     const shouldMergeSeedanceReferenceIdsForRun = apiProviderForRun === 'fal'
       && falModelModeForRun === 'video'
       && (
@@ -1132,11 +1141,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
         : klingO3KeepAudio;
     const usingTokenHub = apiProviderForRun !== 'google' && tokenHubModelForRun !== undefined;
     const usingVolcengineImage = apiProviderForRun !== 'google' && falModelModeForRun === 'image' && falModelIdForRun === SEEDREAM_55_VOLCENGINE_MODEL_ID;
+    const usingJimengCanvasImage = apiProviderForRun !== 'google' && falModelModeForRun === 'image' && falModelIdForRun === SEEDREAM_55_JIMENG_CANVAS_MODEL_ID;
     const generationProviderForRun: GenerationProviderId = apiProviderForRun === 'google'
       ? 'google'
       : usingTokenHub
         ? 'tokenhub'
-        : falModelModeForRun === 'video' && (falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_MULTIFRAME_VIDEO_MODEL_ID)
+        : usingJimengCanvasImage || (falModelModeForRun === 'video' && (falVideoModelIdForRun === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || falVideoModelIdForRun === JIMENG_MULTIFRAME_VIDEO_MODEL_ID))
           ? 'jimeng'
           : usingVolcengineImage || (falModelModeForRun === 'video' && falVideoModelIdForRun === SEEDANCE_2_VIDEO_MODEL_ID)
             ? 'volcengine'
@@ -1147,7 +1157,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const usingJimeng = generationProviderForRun === 'jimeng';
     const usesGlobalLoadingLock = generationProviderForRun === 'google';
     const isVideoMode = generationProviderForRun !== 'google' && falModelModeForRun === 'video';
-    const isSeedream55ModelForRun = (usingFal || usingVolcengineImage) && !isVideoMode && Boolean(getSeedream55ModelProvider(falModelIdForRun));
+    const isSeedream55ModelForRun = (usingFal || usingVolcengineImage || usingJimengCanvasImage) && !isVideoMode && Boolean(getSeedream55ModelProvider(falModelIdForRun));
     const isSeedreamModel = !isVideoMode && isSeedreamModelId(falModelIdForRun);
     const normalizedFalImageSizeSelectionForRun = (isSeedreamV5LiteModelId(falModelIdForRun) || isSeedreamV5ProModelId(falModelIdForRun)) && falImageSizeSelectionForRun === 'default'
       ? 'auto_2K'
@@ -1373,8 +1383,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
-    if (rawOverrideModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID) {
-      setError('Jimeng Multi-frame is unavailable in the UI. Select a supported video model and create a new generation instead.');
+    if (rawOverrideModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID || isJimengMultiframeVideoModelForRun) {
+      setError('Jimeng Multi-frame is retired. Select a supported video model to start a new generation.');
       return; // Saved requests must not silently switch to a different paid model.
     }
 
@@ -1545,9 +1555,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const queueJobId = retryJobId ?? crypto.randomUUID();
         const localBackendProvider: Extract<GenerationProviderId, 'volcengine' | 'jimeng'> = usingJimeng ? 'jimeng' : 'volcengine';
         const isJimeng25 = usingJimeng && isJimengSeedance25VideoModelForRun;
-        const isJimengMulti = usingJimeng && isJimengMultiframeVideoModelForRun;
         const volcengineModel = getSeedance2VolcengineModelCapabilities(seedance2VolcengineModelForRun);
-        const resumeJobId = usingVolcengine && volcengineModel.provider === 'tokenhub' ? options.resumeSeedanceJobId : undefined;
+        const resumeJobId = usingJimeng ? options.resumeJimengCanvasJobId
+          : volcengineModel.provider === 'tokenhub' ? options.resumeSeedanceJobId : undefined;
+        const canvasRequestId = options.jimengCanvasAttemptId ?? (usingJimeng ? crypto.randomUUID() : queueJobId);
         const isVolcengineSeedance25 = usingVolcengine && volcengineModel.family === '2.5';
         const supportsOutputFormat = usingVolcengine && volcengineModel.supportsOutputFormat;
         if (usingVolcengine && volcengineModel.provider === 'tokenhub' && !tokenHubSeedanceEnabled) {
@@ -1563,9 +1574,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
         }, Boolean(activePrimary)); // Retry, embedded, and live first-frame requests share the same final provider clamps.
         const seedance2VolcengineDurationForRun = safeVolcengineSettings.seedance2Duration;
         const jimengSeedance25AspectRatioForRun = normalizeJimengSeedance25AspectRatio(seedance25AspectRatioForRun); // Persist provider-valid values for retries and snapshots.
-        const jimengSeedance25DurationForRun = normalizeJimengSeedance25Duration(seedance25DurationForRun); // Legacy metadata must resolve to an explicit CLI duration.
-        const localVariant = isJimengMulti ? 'smart' : isJimeng25 ? seedance25VariantForRun : usingJimeng ? seedance2VariantForRun : safeVolcengineSettings.seedance2Variant;
-        const localAspectRatio = isJimengMulti ? '16:9' : isJimeng25 ? jimengSeedance25AspectRatioForRun : usingJimeng ? seedance2AspectRatioForRun : safeVolcengineSettings.seedance2AspectRatio;
+        const jimengSeedance25DurationForRun = normalizeJimengSeedance25Duration(seedance25DurationForRun);
+        const localVariant = isJimeng25 ? seedance25VariantForRun : usingJimeng ? seedance2VariantForRun : safeVolcengineSettings.seedance2Variant;
+        const localAspectRatio = isJimeng25 ? jimengSeedance25AspectRatioForRun : usingJimeng ? seedance2AspectRatioForRun : safeVolcengineSettings.seedance2AspectRatio;
         const arkSettings = usingVolcengine
           ? getActiveVolcengineSettings(seedance2VolcengineModelForRun, localVariant, generationOverride
             ? volcengineOptionsOverride.seedanceArkSettings
@@ -1573,28 +1584,41 @@ export const useGeneration = (args: UseGenerationArgs) => {
           : {};
         const hasArkSettings = Object.keys(arkSettings).length > 0;
         const arkResolution = arkSettings.draft ? '480p' : safeVolcengineSettings.seedance2Resolution;
-        const localResolution = isJimengMulti ? jimengMultiframeResolutionForRun : isJimeng25 ? seedance25ResolutionForRun : usingJimeng ? seedance2ResolutionForRun : arkResolution;
-        const localDuration = isJimengMulti ? jimengMultiframeDurationForRun : isJimeng25 ? jimengSeedance25DurationForRun : seedance2DurationForRun;
+        const localResolution = isJimeng25 ? seedance25ResolutionForRun : usingJimeng ? seedance2ResolutionForRun : arkResolution;
+        const localDuration = isJimeng25 ? jimengSeedance25DurationForRun : seedance2DurationForRun;
         const localModelVersion = isJimeng25 ? 'seedance2.5' : seedance2JimengModelVersionForRun;
+        const savedJimengCanvasModel = getSavedJimengCanvasVideoModel(generationOverride);
+        if (usingJimeng && generationOverride?.jimengOptions?.canvasModel !== undefined && !savedJimengCanvasModel) {
+          setError('The saved Jimeng Canvas video model is invalid. Open Jimeng Canvas Setup to select an available model.');
+          return;
+        }
+        const jimengCanvasModel = usingJimeng
+          ? savedJimengCanvasModel ?? (resolveJimengCanvasVideoModel
+            ? resolveJimengCanvasVideoModel(localModelVersion)
+            : getJimengCanvasVideoModel(localModelVersion, undefined))
+          : undefined;
+        if (jimengCanvasModel === null) {
+          setError(JIMENG_CANVAS_VIDEO_CATALOG_PENDING);
+          return;
+        }
         const jobModelLabel = usingJimeng
-          ? isJimengMulti
-            ? baseModelLabel
-            : isJimeng25
+          ? isJimeng25
             ? buildSeedance2ModelLabel(baseModelLabel, seedance25VariantForRun)
             : buildJimengSeedance2ModelLabel(baseModelLabel, seedance2VariantForRun, seedance2JimengModelVersionForRun)
           : buildSeedance2ModelLabel(volcengineModel.provider === 'tokenhub' ? volcengineModel.label : `${volcengineModel.label} (VE)`, seedance2VariantForRun);
+        if (usingJimeng && !jimengCanvasModel) {
+          setError(`${jobModelLabel} is unavailable in Jimeng Canvas. Open Jimeng Canvas Setup to check model availability.`);
+          return;
+        }
         const primarySelection = primaryImageIdForRun ? images.find(img => img.id === primaryImageIdForRun) ?? null : null;
         const isSeedance2ReferenceMode = localVariant === 'reference';
         const isSeedance2EditMode = !usingJimeng && localVariant === 'edit';
         const isSeedance2ExtendMode = !usingJimeng && localVariant === 'extend';
         const isSeedance2MultimodalMode = isSeedance2ReferenceMode || isSeedance2EditMode || isSeedance2ExtendMode; // Edit/Extend submit through the reference media path.
-        const multiframeImageIds = isJimengMulti
-          ? (generationOverride ? referenceImageIdsForRun : selectedImageIds)
-          : [];
         const localReferenceImageIds = isSeedance2MultimodalMode ? referenceImageIdsForRun : [];
         const localReferenceVideoIds = isSeedance2MultimodalMode ? referenceVideoIdsForRun : [];
-        const localReferenceAudioIds = isSeedance2MultimodalMode ? referenceAudioIdsForRun : []; // Smart and Multi-frame must not inherit stale tagged references.
-        const usesSmartPrimaryImage = !isJimengMulti && localVariant === 'smart' && Boolean(activePrimary);
+        const localReferenceAudioIds = isSeedance2MultimodalMode ? referenceAudioIdsForRun : [];
+        const usesSmartPrimaryImage = localVariant === 'smart' && Boolean(activePrimary);
         const usesJimengReferencePrimaryImage = usingJimeng
           && localVariant === 'reference'
           && Boolean(activePrimary)
@@ -1605,38 +1629,21 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const localReferenceAudioCount = localReferenceAudioIds.length + arkAssetCounts.audio;
         const referenceAssetCount = localReferenceImageCount + localReferenceVideoCount + localReferenceAudioCount;
         const submittedPrimaryImageId = usesSmartPrimaryImage || usesJimengReferencePrimaryImage ? primaryImageIdForRun : null;
-        const submittedLastFrameImageId = !isJimengMulti && localVariant === 'smart' ? videoLastFrameImageIdForRun : null;
-        const multiframeCanvasItems = multiframeImageIds
-          .map(id => images.find(image => image.id === id))
-          .filter(isImageCanvasMedia);
-        const multiframeTransitionPrompts = isJimengMulti && multiframeCanvasItems.length > 2
-          ? parseJimengMultiframeTransitionPrompts(trimmedPrompt)
-          : [];
+        const submittedLastFrameImageId = localVariant === 'smart' ? videoLastFrameImageIdForRun : null;
         const seedancePromptForRun = isSeedance2MultimodalMode
           ? normalizeSeedanceReferencePromptMentions(trimmedPrompt)
           : trimmedPrompt;
 
-        if (isJimengMulti) {
-          if (multiframeCanvasItems.length !== multiframeImageIds.length || !isValidJimengMultiframeImageCount(multiframeCanvasItems.length)) {
-            setError(`Jimeng Multi-frame requires selecting between ${JIMENG_MULTIFRAME_MIN_IMAGES} and ${JIMENG_MULTIFRAME_MAX_IMAGES} still images.`);
-            return;
-          }
-          if (!hasValidJimengMultiframePrompt(trimmedPrompt, multiframeCanvasItems.length)) {
-            setError(`Jimeng Multi-frame needs ${multiframeCanvasItems.length - 1} transition prompts separated with ||.`);
-            return;
-          }
-        }
-
         if (usingJimeng && localAspectRatio === 'adaptive') {
-          setError('Seedance 2 (JM CLI) does not support adaptive aspect ratio yet.');
+          setError('Seedance 2 (Jimeng Canvas) does not support adaptive aspect ratio yet.');
           return;
         }
-        if (usingJimeng && !isJimeng25 && !isJimengMulti && localResolution === '480p') {
-          setError('Seedance 2 (JM CLI) supports 720p, plus 1080p and 4K on the VIP channel.');
+        if (usingJimeng && !isJimeng25 && localResolution === '480p') {
+          setError('Seedance 2 (Jimeng Canvas) supports 720p, plus 1080p and 4K on the VIP channel.');
           return;
         }
-        if (usingJimeng && !isJimeng25 && !isJimengMulti && (localResolution === '1080p' || localResolution === '4k') && seedance2JimengModelVersionForRun !== 'seedance2.0_vip') {
-          setError(`Seedance 2 (JM CLI) ${localResolution} requires the VIP channel.`);
+        if (usingJimeng && !isJimeng25 && (localResolution === '1080p' || localResolution === '4k') && seedance2JimengModelVersionForRun !== 'seedance2.0_vip') {
+          setError(`Seedance 2 (Jimeng Canvas) ${localResolution} requires the VIP channel.`);
           return;
         }
         const seedance25RequiresAdaptiveRatio = isSeedance2EditMode || isSeedance2ExtendMode || (localVariant === 'smart' && Boolean(activePrimary));
@@ -1648,11 +1655,15 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2.5 Edit requires the Auto duration.');
           return;
         }
-        if (!isJimengMulti && !isSeedance2MultimodalMode && primarySelection && primarySelection.mediaType !== 'image') {
+        if (!resumeJobId && usingJimeng && generationOverride?.primaryImageId && !activePrimary) {
+          setError('Jimeng Canvas could not find the saved primary image. Restore it on the canvas or select new inputs before generating.');
+          return;
+        }
+        if (!resumeJobId && !isSeedance2MultimodalMode && primarySelection && primarySelection.mediaType !== 'image') {
           setError('Seedance 2 Smart uses a still image as the first frame. Select an image or clear the selection.');
           return;
         }
-        if (!resumeJobId && !isJimengMulti && !isSeedance2MultimodalMode && videoLastFrameImageIdForRun && !activePrimary) {
+        if (!resumeJobId && !isSeedance2MultimodalMode && videoLastFrameImageIdForRun && !activePrimary) {
           setError('Seedance 2 first/last-frame mode requires a starting still image.');
           return;
         }
@@ -1672,7 +1683,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           setError('Seedance 2.0 audio references require an image or a video.');
           return;
         }
-        if (usingJimeng && !isJimeng25 && isSeedance2ReferenceMode && localReferenceAudioIds.length > 0 && localReferenceImageCount + localReferenceVideoIds.length === 0) {
+        if (!resumeJobId && usingJimeng && !isJimeng25 && isSeedance2ReferenceMode && localReferenceAudioIds.length > 0 && localReferenceImageCount + localReferenceVideoIds.length === 0) {
           setToastMessage(JIMENG_AUDIO_ONLY_REFERENCE_HINT);
           setTimeout(() => setToastMessage(null), 4000);
           return;
@@ -1693,32 +1704,28 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const localReferenceImageLimit = isJimeng25 ? SEEDANCE25_REFERENCE_IMAGE_LIMIT : volcengineReferenceLimits.images;
         const localReferenceVideoLimit = isJimeng25 ? SEEDANCE25_REFERENCE_VIDEO_LIMIT : volcengineReferenceLimits.videos;
         const localReferenceAudioLimit = isJimeng25 ? SEEDANCE25_REFERENCE_AUDIO_LIMIT : volcengineReferenceLimits.audios;
-        if (!isJimengMulti && (
+        if (
           localReferenceImageCount > localReferenceImageLimit
           || localReferenceVideoCount > localReferenceVideoLimit
           || localReferenceAudioCount > localReferenceAudioLimit
-        )) {
+        ) {
           setError(`${seedance25FamilyLabel} Reference supports up to ${localReferenceImageLimit} images, ${localReferenceVideoLimit} videos, and ${localReferenceAudioLimit} audio clips.`);
           return;
         }
         const localReferenceTotalLimit = isJimeng25 ? SEEDANCE25_REFERENCE_TOTAL_FILE_LIMIT : volcengineReferenceLimits.total;
-        if (!isJimengMulti && referenceAssetCount > localReferenceTotalLimit) {
+        if (referenceAssetCount > localReferenceTotalLimit) {
           setError(`${seedance25FamilyLabel} Reference supports up to ${localReferenceTotalLimit} total inputs.`);
           return;
         }
         const localSeedance2GenerateAudioForRun = usingJimeng ? false : seedance2GenerateAudioForRun; // Jimeng hides and ignores audio generation.
         const localSeedance2CameraFixedForRun = false;
-        const localProviderOptionsForRun: Pick<GenerationInputs, 'jimengOptions' | 'volcengineOptions'> = usingJimeng ? { jimengOptions: isJimengMulti ? {
-          multiframeDuration: jimengMultiframeDurationForRun,
-          multiframeResolution: jimengMultiframeResolutionForRun,
-          sessionId: jimengSessionIdForRun,
-        } : isJimeng25 ? {
+        const localProviderOptionsForRun: Pick<GenerationInputs, 'jimengOptions' | 'volcengineOptions'> = usingJimeng ? { jimengOptions: isJimeng25 ? {
           seedance25Variant: seedance25VariantForRun,
           seedance25AspectRatio: jimengSeedance25AspectRatioForRun,
           seedance25Resolution: seedance25ResolutionForRun,
           seedance25Duration: jimengSeedance25DurationForRun,
           seedance25GenerateAudio: false,
-          sessionId: jimengSessionIdForRun,
+          ...(jimengCanvasModel ? { canvasModel: jimengCanvasModel } : {}),
         } : {
           seedance2Variant: seedance2VariantForRun,
           seedance2JimengModelVersion: seedance2JimengModelVersionForRun,
@@ -1727,7 +1734,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           seedance2Duration: seedance2DurationForRun,
           seedance2GenerateAudio: localSeedance2GenerateAudioForRun,
           seedance2CameraFixed: localSeedance2CameraFixedForRun,
-          sessionId: jimengSessionIdForRun,
+          ...(jimengCanvasModel ? { canvasModel: jimengCanvasModel } : {}),
         } } : { volcengineOptions: {
           seedance2Variant: safeVolcengineSettings.seedance2Variant,
           seedance2VolcengineModel: seedance2VolcengineModelForRun,
@@ -1750,7 +1757,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           modelLabel: jobModelLabel,
           modelMode: falModelModeForRun,
           ...(submittedPrimaryImageId ? { primaryImageId: submittedPrimaryImageId } : {}),
-          ...((isJimengMulti ? multiframeImageIds : localReferenceImageIds).length ? { referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds } : {}),
+          ...(localReferenceImageIds.length ? { referenceImageIds: localReferenceImageIds } : {}),
           ...(localReferenceVideoIds.length ? { referenceVideoIds: localReferenceVideoIds } : {}),
           ...(localReferenceAudioIds.length ? { referenceAudioIds: localReferenceAudioIds } : {}),
           ...(submittedPrimaryImageId && activePrimary?.metadata?.generation?.originalSourceImageId
@@ -1760,7 +1767,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ...localProviderOptionsForRun,
         }; // Queue retry uses the same request metadata as saved videos.
 
-        if (tailFrame && !isImageCanvasMedia(tailFrame)) {
+        if (!resumeJobId && tailFrame && !isImageCanvasMedia(tailFrame)) {
           setError('Select a still image on the canvas to use as the ending frame.');
           return;
         }
@@ -1830,7 +1837,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
         const usedStillImages = [
           ...(firstFrameImage ? [firstFrameImage] : []),
           ...(tailFrameImage ? [tailFrameImage] : []),
-          ...referenceImageCanvasItems, ...multiframeCanvasItems,
+          ...referenceImageCanvasItems,
         ];
         if (!resumeJobId && !confirmRasterCopies(usedStillImages, 'Generate video')) return;
 
@@ -1839,8 +1846,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
           modelId: falModelIdForRun,
           prompt: seedancePromptForRun,
           variant: localVariant,
-          jimengModelVersion: isJimengMulti ? undefined : usingJimeng ? localModelVersion : seedance2VolcengineModelForRun, // Multi-frame has no channel; other sub-models remain distinct.
-          jimengSessionId: usingJimeng ? jimengSessionIdForRun : undefined,
+          jimengModelVersion: usingJimeng ? localModelVersion : seedance2VolcengineModelForRun,
           aspectRatio: localAspectRatio,
           resolution: localResolution,
           duration: usingJimeng ? localDuration : seedance2VolcengineDurationForRun,
@@ -1850,13 +1856,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
           ...(hasArkSettings ? { arkSettings } : {}),
           primaryImageId: submittedPrimaryImageId,
           videoLastFrameImageId: submittedLastFrameImageId,
-          referenceImageIds: isJimengMulti ? multiframeImageIds : localReferenceImageIds,
+          referenceImageIds: localReferenceImageIds,
           referenceVideoIds: localReferenceVideoIds,
           referenceAudioIds: localReferenceAudioIds,
           images,
         });
 
-        if (!resumeJobId && !confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
+        if (!resumeJobId && !options.jimengCanvasAttemptId && !confirmRepeatedSeedanceRequest(seedanceRequestKey)) {
           return;
         }
 
@@ -1872,6 +1878,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
             modelLabel: jobModelLabel,
             provider: localBackendProvider,
             ...(resumeJobId ? { providerJobId: resumeJobId } : {}),
+            ...(usingJimeng && !resumeJobId ? { jimengCanvasAttemptId: canvasRequestId } : {}),
+            ...(usingJimeng ? { jimengCanvasDocumentName: canvasJobDocumentName } : {}),
             retryInputs: localSeedanceRetryInputs,
             status: 'IN_QUEUE',
             logs: [],
@@ -1893,13 +1901,13 @@ export const useGeneration = (args: UseGenerationArgs) => {
           const firstFrameImageFile = !resumeJobId && firstFrameImage
             ? await awaitActive(async () => buildStillImageFile(firstFrameImage, `seedance2-first-frame-${Date.now()}`))
             : undefined;
-          const lastFrameImageFile = !resumeJobId && tailFrameImage && localVariant === 'smart' && !isJimengMulti
+          const lastFrameImageFile = !resumeJobId && tailFrameImage && localVariant === 'smart'
             ? await awaitActive(async () => buildStillImageFile(tailFrameImage, `seedance2-last-frame-${Date.now()}`))
             : undefined;
 
-          const referenceImageFiles = resumeJobId || isJimengMulti ? [] : await awaitActive(async () => Promise.all(
+          const referenceImageFiles = resumeJobId ? [] : await awaitActive(async () => Promise.all(
             referenceImageCanvasItems.map((img, index) => buildStillImageFile(img, `seedance2-reference-image-${index + 1}-${Date.now()}`)),
-          )); // Multi-frame images use their dedicated form field and must not be uploaded twice.
+          ));
           const referenceVideoFiles = resumeJobId ? [] : await awaitActive(async () => Promise.all(referenceVideoCanvasItems.map(async (img, index) => {
             const realFile = await awaitActive(async () => ensureRealSnapshotFile(img.file));
             return new File([realFile], img.file.name || `seedance2-reference-video-${index + 1}.mp4`, { type: img.file.type || 'video/mp4' });
@@ -1912,9 +1920,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
             }
             return new File([realFile], img.file.name || `seedance2-reference-audio-${index + 1}`, { type: img.file.type || 'audio/mpeg' });
           })));
-          const multiframeImageFiles = await awaitActive(async () => Promise.all(
-            multiframeCanvasItems.map((image, index) => buildStillImageFile(image, `jimeng-multiframe-${index + 1}-${Date.now()}`)),
-          ));
           if (isVolcengineSeedance25) {
             if (referenceImageFiles.some(file => file.size > SEEDANCE25_REFERENCE_IMAGE_MAX_BYTES)) {
               setError('Seedance 2.5 reference images must be 30 MB or smaller.');
@@ -1944,34 +1949,32 @@ export const useGeneration = (args: UseGenerationArgs) => {
             ? undefined
             : firstFrameImageFile; // Avoid sending the same Jimeng reference image twice.
 
-          const videoResult = usingJimeng
-            ? await awaitActive(async () => generateJimengSeedanceVideo(seedancePromptForRun, {
-              modelId: falVideoModelIdForRun,
-              variant: localVariant,
-              modelVersion: localModelVersion,
-              aspectRatio: localAspectRatio === 'adaptive' ? '16:9' : localAspectRatio,
-              duration: localDuration,
-              resolution: localResolution,
-              generateAudio: localSeedance2GenerateAudioForRun,
-              cameraFixed: localSeedance2CameraFixedForRun,
-              session: jimengSessionIdForRun,
-              ...(isJimengMulti ? {
-                mode: 'multiframe' as const,
-                multiframeImageFiles,
-                transitionPrompts: multiframeTransitionPrompts,
-                transitionDurations: multiframeTransitionPrompts.map(() => Number(jimengMultiframeDurationForRun)),
-              } : {}),
-              ...(jimengPrimaryImageFile ? { primaryImageFile: jimengPrimaryImageFile } : {}),
-              ...(lastFrameImageFile ? { lastFrameImageFile } : {}),
-              ...(referenceImageFiles.length ? { referenceImageFiles } : {}),
-              ...(referenceVideoFiles.length ? { referenceVideoFiles } : {}),
-              ...(referenceAudioFiles.length ? { referenceAudioFiles } : {}),
-              onQueueUpdate: (update: JimengQueueUpdate) => {
-                setFalJobs(prev => prev.map(job => (
-                  job.id === queueJobId ? applyVolcengineQueueUpdateToJob(job, update) : job
-                )));
-              },
-            }))
+          const videoResult = jimengCanvasModel
+            ? await awaitActive(async () => {
+              if (!requestJimengCanvasApproval) throw new Error('Open Jimeng Canvas Setup to enable quote approval.');
+              const mode = localVariant === 'reference' ? 'm2v' : jimengPrimaryImageFile ? 'first_last_frame' : 't2v';
+              const files = mode === 'm2v'
+                ? [jimengPrimaryImageFile, ...referenceImageFiles, ...referenceVideoFiles, ...referenceAudioFiles].filter((file): file is File => Boolean(file))
+                : [jimengPrimaryImageFile, lastFrameImageFile].filter((file): file is File => Boolean(file));
+              const result = await runJimengCanvasGeneration({
+                ...(options.resumeJimengCanvasJobId ? { resumeJobId: options.resumeJimengCanvasJobId } : {
+                  spec: {
+                    requestId: canvasRequestId, mediaType: 'video', mode, model: jimengCanvasModel,
+                    prompt: seedancePromptForRun, ratio: localAspectRatio, duration: Number(localDuration), resolution: localResolution, count: 1,
+                  },
+                  files,
+                }),
+                signal: workspaceSignal,
+                requestApproval: approveJimengCanvas,
+                onUpdate: update => {
+                  setFalJobs(prev => prev.map(job => job.id === queueJobId ? applyJimengCanvasProgress(job, update) : job));
+                  rememberJimengCanvasJob(update, localSeedanceRetryInputs, canvasJobDocumentName);
+                },
+              });
+              const [video] = result.results;
+              if (!video) throw new Error('Jimeng Canvas did not return a video.');
+              return { videoUrl: undefined, providerJobId: result.id, requestId: result.id, canvasVideo: video };
+            })
             : await awaitActive(async () => generateSeedanceVideo(seedancePromptForRun, {
               modelId: volcengineModel.id,
               ...(resumeJobId ? { resumeJobId } : {}),
@@ -1995,7 +1998,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
               },
             }));
 
-          setFalJobs(prev => prev.map(job => (
+          const canvasVideo = 'canvasVideo' in videoResult ? videoResult.canvasVideo : undefined;
+          const completeVideoJob = () => setFalJobs(prev => prev.map(job => (
             job.id === queueJobId
               ? {
                 ...job,
@@ -2003,14 +2007,24 @@ export const useGeneration = (args: UseGenerationArgs) => {
                 status: 'COMPLETED',
                 requestId: videoResult.requestId || job.requestId,
                 description: 'Video ready',
+                ...(jimengCanvasModel ? { phase: 'completed', phaseMessage: 'Video ready' } : {}),
                 outputUrl: videoResult.videoUrl,
                 updatedAt: Date.now(),
               }
               : job
           )));
+          if (!canvasVideo) completeVideoJob();
 
           try {
-            const videoBlob = await awaitActive(async () => fetchGeneratedVideoBlob(videoResult.videoUrl, 'Seedance 2 result', workspaceSignal));
+            if (canvasVideo && !isOriginatingDocumentOpen()) throw new Error('Open the target canvas and choose Resume here.');
+            if (canvasVideo && (getCanvasDocument?.().images ?? images).some(image => image.id === canvasVideo.id)) {
+              completeVideoJob();
+              return;
+            }
+            const videoBlob = canvasVideo?.blob ?? await awaitActive(async () => {
+              if (!videoResult.videoUrl) throw new Error('The generated video is unavailable.');
+              return fetchGeneratedVideoBlob(videoResult.videoUrl, 'Seedance 2 result', workspaceSignal);
+            });
             const debugContext: GeneratedMediaDebugContext = {
               source: localBackendProvider,
               modelLabel: jobModelLabel,
@@ -2051,7 +2065,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const displayWidth = naturalWidth || 1;
             const displayHeight = naturalHeight || 1;
             const anchorForPlacement = activePrimary
-              ?? multiframeCanvasItems[0]
               ?? referenceImageCanvasItems[0]
               ?? referenceVideoCanvasItems[0]
               ?? referenceAudioCanvasItems[0]
@@ -2074,7 +2087,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
             const hasAudio = hasDetectedAudio || localSeedance2GenerateAudioForRun;
 
             const newVideo: CanvasImage = {
-              id: crypto.randomUUID(),
+              id: canvasVideo?.id ?? crypto.randomUUID(),
               element: videoElement,
               mediaType: 'video',
               x: placement.x,
@@ -2099,12 +2112,20 @@ export const useGeneration = (args: UseGenerationArgs) => {
               },
             };
 
-            setState(prev => ({
-              ...prev,
-              images: [...prev.images, newVideo],
-            }));
+            if (canvasVideo && !isOriginatingDocumentOpen()) {
+              videoElement.pause();
+              revokeVideoObjectUrl(videoElement);
+              throw new Error('Open the target canvas and choose Resume here.');
+            }
+            setState(prev => {
+              if (!jimengCanvasModel) return { ...prev, images: [...prev.images, newVideo] };
+              if (!isOriginatingDocumentOpen() || prev.images.some(image => image.id === newVideo.id)) return prev;
+              const placement = findNonOverlappingPlacement(prev.images, displayWidth, displayHeight, newVideo.x, newVideo.y);
+              return { ...prev, images: [...prev.images, { ...newVideo, ...placement }] };
+            });
             logGeneratedMediaAppended(debugContext, 'video', [newVideo.id]);
             onGenerationPlaced?.({ mediaIds: [newVideo.id], mediaType: 'video', modelLabel: jobModelLabel });
+            if (canvasVideo) completeVideoJob();
             if (arkSettings.returnLastFrame && 'lastFrameUrl' in videoResult && videoResult.lastFrameUrl) {
               try {
                 const frame = await downloadVolcengineLastFrame(videoResult.lastFrameUrl, workspaceSignal);
@@ -2124,12 +2145,17 @@ export const useGeneration = (args: UseGenerationArgs) => {
             onGenerationComplete?.();
           } catch (loadErr) {
             if (workspaceSignal?.aborted) return;
+            if (jimengCanvasModel) throw loadErr;
             console.error('Failed to load generated Seedance 2 video into canvas', loadErr);
             setToastMessage('Video ready! Open from the queue panel.');
             setTimeout(() => setToastMessage(null), 2000);
           }
         } catch (err) {
           if (workspaceSignal?.aborted) return;
+          if (err instanceof JimengCanvasCancelled) {
+            setFalJobs(prev => prev.filter(job => job.id !== queueJobId));
+            return;
+          }
           const message = err instanceof Error ? err.message : 'An unknown error occurred.';
           if (jobQueued) {
             setFalJobs(prev => prev.map(job => (
@@ -2138,13 +2164,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
                   ...job,
                   status: 'FAILED',
                   error: message,
+                  ...(jimengCanvasModel ? { phase: 'failed', phaseMessage: 'Generation failed' } : {}),
                   ...(err instanceof TokenHubSeedanceJobUnavailable ? { providerJobId: undefined } : {}),
                   updatedAt: Date.now(),
                 }
                 : job
             )));
           }
-          setError(message);
+          if (!jimengCanvasModel || isOriginatingDocumentOpen()) setError(message);
         }
 
         return;
@@ -2331,7 +2358,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
               createdAt: Date.now(),
               updatedAt: Date.now(),
             };
-            return [...prev.slice(-9), newJob];
+            return appendQueueJob(prev, newJob);
           }
           return prev.map(job => (
             job.id === falJobId
@@ -3271,7 +3298,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       return;
     }
 
-    const tracksImageJob = usingFal || usingTokenHub || usingVolcengineImage;
+    const tracksImageJob = usingFal || usingTokenHub || usingVolcengineImage || usingJimengCanvasImage;
     const generationModelLabel = tracksImageJob ? getFalModelLabel(falModelIdForRun) : 'Google Gemini';
     const shouldValidateFalOptions = (usingFal || usingTokenHub)
       && (isSeedreamModel || isNanoBananaModel || isGrokImagineModel || isGptImage2ModelForRun || isGptImage25ModelForRun || usingTokenHub || isGptImage26ModelForRun || isIdeogram45ModelForRun || isSeedream55ModelForRun);
@@ -3290,7 +3317,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       ? getGoogleImageAspectRatio(falAspectRatioSelectionForRun)
       : undefined;
 
-    if (!isTextToImage) {
+    const resumeJimengImageJobId = usingJimengCanvasImage ? options.resumeJimengCanvasJobId : undefined;
+    if (!isTextToImage && !resumeJimengImageJobId) {
       if (!primaryImageIdForRun || !activePrimary) {
         setError('Please select an image to edit.');
         return;
@@ -3311,12 +3339,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
 
     const supportsEditReferenceImages = usingTokenHub || isKrea3ModelForRun || isNanoBananaModel || isSeedreamModel || isGptImage2ModelForRun || isGptImage25ModelForRun || isGptImage26ModelForRun || isSeedream55ModelForRun || isIdeogram45ModelForRun || isFlux3ImageModelForRun || isGrokImagineModel;
-    const referenceCanvasImages = tracksImageJob && !isTextToImage && !isUpscaleModel && supportsEditReferenceImages
+    const referenceCanvasImages = !resumeJimengImageJobId && tracksImageJob && !isTextToImage && !isUpscaleModel && supportsEditReferenceImages
       ? referenceImageIdsForRun.filter(id => id !== primaryImageIdForRun)
         .map(id => images.find(image => image.id === id)).filter(isImageCanvasMedia)
         .slice(0, getModelReferenceCapabilities(falModelIdForRun, editToolForRun).availableReferenceSlots)
       : [];
-    if (!isTextToImage && activePrimary && !confirmRasterCopies([activePrimary, ...referenceCanvasImages], isUpscaleModel ? 'Upscale image' : 'Edit image')) return;
+    if (!resumeJimengImageJobId && !isTextToImage && activePrimary && !confirmRasterCopies([activePrimary, ...referenceCanvasImages], isUpscaleModel ? 'Upscale image' : 'Edit image')) return;
 
     const jobModelLabel = getFalModelLabel(falModelIdForRun);
     const upscaleDetails = usingFal && isUpscaleModel
@@ -3329,8 +3357,10 @@ export const useGeneration = (args: UseGenerationArgs) => {
     const jobPromptDescription = usingFal && isUpscaleModel
       ? `${jobModelLabel} (${upscaleDetails})`
       : trimmedPrompt;
+    const selectedImageRatio = generationOverride ? falOptionsOverride.aspectRatioSelection : falAspectRatioSelectionForRun;
+    const jimengImageRatio = SEEDREAM_55_JIMENG_CANVAS_ASPECT_RATIOS.find(ratio => ratio === selectedImageRatio);
     const imageFalOptionsForRun: GenerationFalOptions = seedream55SettingsForRun
-      ? serializeSeedream55GenerationOptions(seedream55SettingsForRun)
+      ? { ...serializeSeedream55GenerationOptions(seedream55SettingsForRun), ...(usingJimengCanvasImage && jimengImageRatio ? { aspectRatioSelection: jimengImageRatio } : {}) }
       : {
         ...(falAspectRatioSelectionForRun ? { aspectRatioSelection: falAspectRatioSelectionForRun } : {}),
         ...(normalizedFalImageSizeSelectionForRun ? { imageSizeSelection: normalizedFalImageSizeSelectionForRun } : {}),
@@ -3350,6 +3380,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
         ...(isCrystalUpscaleModel ? { creativity: falCreativityForRun } : {}),
         ...(normalizedFalNumImages ? { numImages: normalizedFalNumImages } : {}),
       };
+    const imageRetryReferenceIds = usingJimengCanvasImage && !resumeJimengImageJobId
+      ? referenceCanvasImages.map(image => image.id) : referenceImageIdsForRun;
     const imageRetryInputs = {
       kind: generationKind,
       prompt: trimmedPrompt,
@@ -3358,7 +3390,7 @@ export const useGeneration = (args: UseGenerationArgs) => {
       modelLabel: generationModelLabel,
       modelMode: falModelModeForRun,
       ...(primaryImageIdForRun ? { primaryImageId: primaryImageIdForRun } : {}),
-      ...(referenceImageIdsForRun.length ? { referenceImageIds: referenceImageIdsForRun } : {}),
+      ...(imageRetryReferenceIds.length ? { referenceImageIds: imageRetryReferenceIds } : {}),
       ...(videoLastFrameImageIdForRun ? { videoLastFrameImageId: videoLastFrameImageIdForRun } : {}),
       ...(primaryImageIdForRun ? { originalSourceImageId: primaryImageIdForRun } : {}),
       ...(generationKind === 'image_edit' && isReplayableImageEditTool(editToolForRun) ? {
@@ -3368,8 +3400,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
       } : {}),
       falOptions: imageFalOptionsForRun,
     } satisfies GenerationInputs;
-    const imageJob = tracksImageJob ? startImageJob(imageRetryInputs, jobPromptDescription) : undefined;
-    const isCurrentImageRun = usingVolcengineImage ? isOriginatingDocumentOpen : () => true;
+    const canvasRequestId = usingJimengCanvasImage ? options.jimengCanvasAttemptId ?? crypto.randomUUID() : undefined;
+    const canvasImageJob = usingJimengCanvasImage ? (resumeJimengImageJobId
+      ? { providerJobId: resumeJimengImageJobId }
+      : { jimengCanvasAttemptId: canvasRequestId }) : undefined;
+    const imageJob = tracksImageJob ? startImageJob(imageRetryInputs, jobPromptDescription, canvasImageJob) : undefined;
+    const isCurrentImageRun = usingVolcengineImage || usingJimengCanvasImage ? isOriginatingDocumentOpen : () => true;
     const falJobId = imageJob?.id;
     const handleFalPhaseUpdate = imageJob?.onPhaseUpdate;
     const handleImageQueueUpdate = imageJob?.onQueueUpdate;
@@ -3385,11 +3421,12 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
 
     let referenceIdsUsed: string[] = [];
+    let jimengCanvasImageIds: string[] = [];
 
     try {
       let generationResult: FalImageGenerationResult;
 
-      const editSource = isTextToImage ? null : activePrimary;
+      const editSource = isTextToImage || resumeJimengImageJobId ? null : activePrimary;
       const editParams = editSource ? {
         prompt: trimmedPrompt,
         image: editSource.element,
@@ -3402,14 +3439,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
       } : undefined;
 
       let editReferenceImages: HTMLImageElement[] | undefined;
-      if (referenceCanvasImages.length > 0) {
+      if (referenceCanvasImages.length > 0 && !usingJimengCanvasImage) {
         editReferenceImages = await awaitActive(() => Promise.all(referenceCanvasImages.map(async img => {
           if ((img.rotation ?? 0) === 0) return img.element;
           const rasterized = await awaitActive(() => rasterizeImages([img]));
           return rasterized.element;
         })));
-        referenceIdsUsed = referenceCanvasImages.map(img => img.id);
       }
+      referenceIdsUsed = resumeJimengImageJobId ? referenceImageIdsForRun : referenceCanvasImages.map(img => img.id);
 
       if (tokenHubOperation) {
         if (!falJobId) {
@@ -3425,6 +3462,38 @@ export const useGeneration = (args: UseGenerationArgs) => {
             referenceImages: editReferenceImages,
           }, transport));
         }
+      } else if (canvasRequestId && seedream55SettingsForRun) {
+        if (!imageJob || !requestJimengCanvasApproval) throw new Error('Open Jimeng Canvas Setup to enable quote approval.');
+        const files: File[] = [];
+        if (isImageCanvasMedia(editSource)) {
+          files.push(await awaitActive(() => buildStillImageFile(editSource, 'seedream-source')));
+          if (editParams?.tool === Tool.ANNOTATE) {
+            const annotation = buildAnnotationCanvas(editParams.image, editParams.paths, editParams.imageDimensions);
+            files.push(new File([await awaitActive(() => canvasToBlob(annotation))], 'seedream-annotations.png', { type: 'image/png' }));
+          }
+          for (const [index, reference] of referenceCanvasImages.entries()) {
+            files.push(await awaitActive(() => buildStillImageFile(reference, `seedream-reference-${index + 1}`)));
+          }
+        }
+        const response = await awaitActive(() => runJimengCanvasGeneration({
+          ...(resumeJimengImageJobId ? { resumeJobId: resumeJimengImageJobId } : {
+            spec: {
+              requestId: canvasRequestId, mediaType: 'image', mode: isTextToImage ? 't2i' : 'i2i',
+              model: SEEDREAM_55_JIMENG_CANVAS_PROVIDER_MODEL, prompt: trimmedPrompt, ratio: jimengImageRatio,
+              resolution: seedream55SettingsForRun.imageSizeSelection === 'auto_1.5K' ? '1.5K' : '2K', count: seedream55SettingsForRun.numImages,
+            },
+            files,
+          }),
+          signal: workspaceSignal,
+          requestApproval: approveJimengCanvas,
+          onUpdate: update => {
+            imageJob.update(job => applyJimengCanvasProgress(job, update));
+            rememberJimengCanvasJob(update, imageRetryInputs, canvasJobDocumentName);
+          },
+        }));
+        jimengCanvasImageIds = response.results.map(asset => asset.id);
+        const imageDataUrls = await awaitActive(() => Promise.all(response.results.map(asset => readJimengCanvasImage(asset.blob, workspaceSignal))));
+        generationResult = { imageBase64: '', imagesBase64: [], imageDataUrls, text: '', requestId: response.id };
       } else if (usingVolcengineImage && seedream55SettingsForRun) {
         const settings = seedream55SettingsForRun;
         generationResult = await awaitActive(() => generateVolcengineSeedream55Image(editParams
@@ -3538,14 +3607,14 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const outputImageFormatPolicy = grokImageSettingsForRun || gptImage26SettingsForRun || seedream55SettingsForRun || preservesTokenHubJpeg ? 'preserve-original' : 'png';
       const prepareGeneratedImages = async () => {
         const newImages: CanvasImage[] = [];
-        for (const dataUrl of generatedImageSources) {
+        for (const [index, dataUrl] of generatedImageSources.entries()) {
           const { image: img, file } = await awaitActive(() => prepareGeneratedImage(dataUrl, outputImageFormatPolicy));
 
           const { naturalWidth, naturalHeight } = getNaturalSize(img);
           const displayWidth = naturalWidth || 512;
           const displayHeight = naturalHeight || 512;
           const newCanvasImage: CanvasImage = {
-            id: crypto.randomUUID(),
+            id: jimengCanvasImageIds[index] ?? crypto.randomUUID(),
             element: img,
             mediaType: 'image',
             x: 0,
@@ -3612,7 +3681,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       const preparedImages = await awaitActive(prepareGeneratedImages);
       if (!commitImagePlacement({
         images: preparedImages, isCurrent: isCurrentImageRun,
-        placeOn: canvasImages => placeImagesAfterCanvasTail(canvasImages, preparedImages),
+        placeOn: canvasImages => placeImagesAfterCanvasTail(canvasImages, usingJimengCanvasImage
+          ? preparedImages.filter(image => !canvasImages.some(existing => existing.id === image.id)) : preparedImages),
         context: { source: generationProviderForRun, modelLabel: generationModelLabel, jobId: falJobId, requestId: generationResult.requestId },
       })) return;
       if (imageJob && missingTokenHubImages > 0) {
@@ -3634,7 +3704,8 @@ export const useGeneration = (args: UseGenerationArgs) => {
       // Let autosave know a generation completed successfully.
       onGenerationComplete?.();
     } catch (err) {
-      reportImageFailure(err, usingFal, imageJob, isCurrentImageRun);
+      if (err instanceof JimengCanvasCancelled && imageJob) setFalJobs(prev => prev.filter(job => job.id !== imageJob.id));
+      else reportImageFailure(err, usingFal, imageJob, isCurrentImageRun);
     } finally {
       removeStaleImageJob(imageJob, isCurrentImageRun);
       if (usesGlobalLoadingLock) {
@@ -3643,6 +3714,9 @@ export const useGeneration = (args: UseGenerationArgs) => {
     }
   }, [
     workspaceSignal,
+    resolveJimengCanvasVideoModel,
+    requestJimengCanvasApproval,
+    jimengCanvasDocumentName,
     getCanvasDocument,
     appMode,
     tool,
@@ -3735,9 +3809,6 @@ export const useGeneration = (args: UseGenerationArgs) => {
     seedance25Resolution,
     seedance25Duration,
     seedance25GenerateAudio,
-    jimengMultiframeDuration,
-    jimengMultiframeResolution,
-    jimengSessionId,
     isSeedance15VideoModel,
     recraftImageSize,
     recraftBackgroundColor,

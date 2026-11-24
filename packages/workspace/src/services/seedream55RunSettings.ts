@@ -1,6 +1,6 @@
 import type { GenerationFalOptions } from '../types';
 import {
-  SEEDREAM_55_DEFAULTS, SEEDREAM_55_MAX_OUTPUT_IMAGES, SEEDREAM_55_VOLCENGINE_MODEL_ID,
+  SEEDREAM_55_DEFAULTS, SEEDREAM_55_MAX_OUTPUT_IMAGES, SEEDREAM_55_VOLCENGINE_MODEL_ID, SEEDREAM_55_JIMENG_CANVAS_MODEL_ID, SEEDREAM_55_JIMENG_CANVAS_OUTPUT_COUNTS,
   getSeedream55ImageSizeOptions, isSeedream55Background, isSeedream55OutputFormat,
   type Seedream55ImageSize, type Seedream55Background, type Seedream55OutputFormat,
 } from './seedream55Config';
@@ -35,7 +35,8 @@ export function resolveSeedream55RunSettings(
     ...appearance, kind,
     imageSizeSelection: size?.value ?? SEEDREAM_55_DEFAULTS.imageSizeSelection,
     numImages: modelId === SEEDREAM_55_VOLCENGINE_MODEL_ID ? 1
-      : resolveImageRunOutputCount(options.numImages, SEEDREAM_55_MAX_OUTPUT_IMAGES, validation) ?? SEEDREAM_55_DEFAULTS.numImages,
+      : resolveImageRunOutputCount(options.numImages, modelId === SEEDREAM_55_JIMENG_CANVAS_MODEL_ID
+        ? SEEDREAM_55_JIMENG_CANVAS_OUTPUT_COUNTS.length : SEEDREAM_55_MAX_OUTPUT_IMAGES, validation) ?? SEEDREAM_55_DEFAULTS.numImages,
   };
 }
 export const serializeSeedream55GenerationOptions = (settings: Seedream55RunSettings): GenerationFalOptions => ({

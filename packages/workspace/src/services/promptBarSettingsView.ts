@@ -670,8 +670,9 @@ const deriveFirstFrameFlags = (
     && (site === 'embedded' || getSeedance2VolcengineModelCapabilities(values.seedance2VolcengineModel).family === '2.5')
     && hasFirstFrameImage,
   seedance25UsesSourceAspectRatio: flags.isSeedance25VideoModel === true
+    && modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID
     && values.seedance25Variant === 'smart'
-    && hasFirstFrameImage, // Jimeng image2video omits --ratio, so first-frame Smart uses the source ratio.
+    && hasFirstFrameImage,
 });
 
 export type FooterPromptBarInputParams = {

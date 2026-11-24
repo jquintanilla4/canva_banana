@@ -9,7 +9,7 @@ export const FILE_MENU_COMMANDS = Object.freeze({
   OPEN_DEBUG_LOG: 'openDebugLog',
   OPEN_MANAGE_KEYS: 'openManageKeys',
   OPEN_CHANGE_ICON: 'openChangeIcon',
-  CLEAR_JIMENG_CACHE: 'clearJimengCache',
+  OPEN_JIMENG_CANVAS_SETUP: 'openJimengCanvasSetup',
 });
 
 export const APPLICATION_MENU_ITEM_IDS = Object.freeze({
@@ -17,7 +17,6 @@ export const APPLICATION_MENU_ITEM_IDS = Object.freeze({
   ZOOM_LEVEL_BADGE: 'canva-banana-file-zoom-level-badge',
   FILE_NAME: 'canva-banana-view-file-name',
   TRACKPAD_MODE: 'canva-banana-view-trackpad-mode',
-  CLEAR_JIMENG_CACHE: 'canva-banana-history-clear-jimeng-cache',
 });
 
 export const buildApplicationMenuTemplate = ({
@@ -56,6 +55,7 @@ export const buildApplicationMenuTemplate = ({
       },
       { type: 'separator' },
       { label: 'Debug Log', click: handlers.openDebugLog },
+      { label: 'Jimeng Canvas Setup...', click: handlers.openJimengCanvasSetup },
     ],
   },
   { role: 'editMenu' },
@@ -99,12 +99,6 @@ export const buildApplicationMenuTemplate = ({
     label: 'History',
     submenu: [
       { label: 'Clear Chat History...', click: handlers.clearChatHistory },
-      {
-        id: APPLICATION_MENU_ITEM_IDS.CLEAR_JIMENG_CACHE,
-        label: fileMenuState.isClearingJimengCache ? 'Clearing Jimeng Cache...' : 'Clear Jimeng Cache',
-        enabled: !fileMenuState.isClearingJimengCache,
-        click: handlers.clearJimengCache,
-      },
     ],
   },
   { role: 'windowMenu' },

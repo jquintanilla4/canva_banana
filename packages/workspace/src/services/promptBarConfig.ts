@@ -2,7 +2,7 @@ import type { VolcengineAssetMention, VolcengineSettings } from './volcengineSet
 import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { TOKENHUB_SEEDANCE_PICKER_OPTION } from './seedanceVideoPicker';
 import { buildSeedream55Controls } from './promptBar/seedream55Controls';
-import { getSeedream55ModelProvider, type Seedream55Background, type Seedream55OutputFormat } from './seedream55Config';
+import { getSeedream55ModelProvider, SEEDREAM_55_JIMENG_CANVAS_ASPECT_RATIOS, type Seedream55Background, type Seedream55OutputFormat } from './seedream55Config';
 import { buildGptImage26Controls } from './promptBar/gptImage26Controls';
 import { isGptImage26Model, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from './gptImage26Config';
 import { getNanoBananaAspectRatioOptionsForProvider } from './nanoBananaAspectRatioPolicy';
@@ -2087,6 +2087,7 @@ export const buildPromptBarModelControls = (
 
   const seedream55Provider = !isVideoMode ? getSeedream55ModelProvider(falModelId) : undefined;
   const isFalSeedream55 = seedream55Provider === 'fal';
+  const isJimengSeedream55 = seedream55Provider === 'jimeng';
   if (usingFal && seedream55Provider) {
     controls.push(...buildSeedream55Controls({
       modelId: falModelId,
@@ -2098,6 +2099,18 @@ export const buildPromptBarModelControls = (
       onBackgroundChange: onSeedream55BackgroundChange,
       onOutputFormatChange: onSeedream55OutputFormatChange,
     }));
+    if (isJimengSeedream55) {
+      const ratios = ['default', ...SEEDREAM_55_JIMENG_CANVAS_ASPECT_RATIOS];
+      controls.push({
+        id: 'jimeng-seedream-55-aspect-ratio-select',
+        prefixLabel: 'Aspect',
+        ariaLabel: 'Select Seedream 5.5 aspect ratio',
+        options: ratios.map(value => ({ value, label: value === 'default' ? 'Auto' : value })),
+        value: ratios.includes(falAspectRatioSelection) ? falAspectRatioSelection : 'default',
+        onChange: onFalAspectRatioChange,
+        disabled: isLoading,
+      });
+    }
   }
 
   const isGptImage26 = !isVideoMode && isGptImage26Model(falModelId);
@@ -2192,13 +2205,13 @@ export const buildPromptBarModelControls = (
 
   const shouldShowNumImagesControl = apiProvider === 'fal'
     && !isVideoMode
-    && (isSeedreamModel || isNanoBananaModel || showTokenHubNanoBananaControls || isGptImage2Model || isGptImage25 || isTokenHubGptImage25 || isGptImage26 || isIdeogram45 || isFalSeedream55);
+    && (isSeedreamModel || isNanoBananaModel || showTokenHubNanoBananaControls || isGptImage2Model || isGptImage25 || isTokenHubGptImage25 || isGptImage26 || isIdeogram45 || isFalSeedream55 || isJimengSeedream55);
   if (shouldShowNumImagesControl) {
     const falNumImageMax = getFalNumImageMaxForModel(falModelId); // Match validation text to model limits.
     const falNumImageOptions = getFalNumImageOptionsForModel(falModelId); // Match picker values to model limits.
     controls.push({
       id: 'fal-num-images-select',
-      prefixLabel: isSeedreamV5Lite || isSeedreamV5Pro || isFalSeedream55 ? 'Images' : (isGrokImagineModel ? 'Num' : undefined), // Seedream 5 uses prefixed controls.
+      prefixLabel: isSeedreamV5Lite || isSeedreamV5Pro || isFalSeedream55 || isJimengSeedream55 ? 'Images' : (isGrokImagineModel ? 'Num' : undefined), // Seedream 5 uses prefixed controls.
       ariaLabel: 'Select number of images to generate',
       options: falNumImageOptions.map(option => ({ value: `${option}`, label: `${option}` })),
       value: gptImage26SvgOutput ? '1' : falNumImages.toString(),

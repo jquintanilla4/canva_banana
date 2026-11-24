@@ -1,4 +1,4 @@
-import { SEEDREAM_55_DEFAULTS, SEEDREAM_55_VOLCENGINE_MODEL_ID, getSeedream55ModelProvider, isSeedream55LayerizeGeneration } from '../services/seedream55Config';
+import { SEEDREAM_55_DEFAULTS, SEEDREAM_55_VOLCENGINE_MODEL_ID, SEEDREAM_55_JIMENG_CANVAS_MODEL_ID, getSeedream55ModelProvider, isSeedream55LayerizeGeneration } from '../services/seedream55Config';
 import { resolveSeedream55RunSettings, serializeSeedream55GenerationOptions } from '../services/seedream55RunSettings';
 import { GPT_IMAGE_26_DEFAULTS, isGptImage26Model } from '../services/gptImage26Config';
 import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from '../services/gptImage26RunSettings';
@@ -243,7 +243,7 @@ export const resolveGenerationTransferOptions = (
   generation: GenerationInputs,
   normalizedModelId: FalModelId,
 ): GenerationTransferOptions => {
-  const savedOptions: GenerationTransferOptions = (generation.provider === 'jimeng'
+  const savedOptions: GenerationTransferOptions = (generation.provider === 'jimeng' && normalizedModelId !== SEEDREAM_55_JIMENG_CANVAS_MODEL_ID
     ? generation.jimengOptions
     : generation.provider === 'volcengine' && normalizedModelId !== SEEDREAM_55_VOLCENGINE_MODEL_ID
       ? generation.volcengineOptions
@@ -393,7 +393,7 @@ export const resolveGenerationTransferOptions = (
 /** Selector model id for providers whose metadata still records their own endpoint. */
 export const resolveGenerationTransferModelId = (generation: GenerationInputs): string | undefined =>
   generation.provider === 'jimeng'
-    ? generation.modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || generation.modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID
+    ? generation.modelId === JIMENG_SEEDANCE_25_VIDEO_MODEL_ID || generation.modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID || generation.modelId === SEEDREAM_55_JIMENG_CANVAS_MODEL_ID
       ? generation.modelId
       : JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
     : generation.provider === 'volcengine' && generation.modelId !== SEEDREAM_55_VOLCENGINE_MODEL_ID

@@ -222,7 +222,6 @@ describe('preload desktop bridge', () => {
       autosaveEnabled: false,
       showZoomLevelBadge: true,
       trackpadMode: true,
-      isClearingJimengCache: false,
     })).resolves.toBe(true);
     await expect(exposedApi.fileMenu.openSnapshotFile()).resolves.toBe(openSnapshotResult);
     await expect(exposedApi.fileMenu.beginSaveSnapshot({
@@ -273,7 +272,6 @@ describe('preload desktop bridge', () => {
       autosaveEnabled: false,
       showZoomLevelBadge: true,
       trackpadMode: true,
-      isClearingJimengCache: false,
     });
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-open-snapshot');
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('canva-banana:file-menu-begin-save-snapshot', {
