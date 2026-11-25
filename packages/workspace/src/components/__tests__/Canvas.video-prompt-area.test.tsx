@@ -1191,7 +1191,7 @@ describe('Canvas video prompt area tool', () => {
     expect(embeddedPromptShell.style.transform).toBe('translate(-50%, -100%)');
     expect(screen.getByLabelText('Select video model')).toBeTruthy();
     expect(embeddedPromptScaleShell.style.transform).toBe('scale(1)');
-    expect(embeddedPromptScaleShell.style.transformOrigin).toBe('bottom center');
+    expect(['bottom center', 'center bottom']).toContain(embeddedPromptScaleShell.style.transformOrigin);
     expect(parseFloat(embeddedPromptBar.style.width)).toBeGreaterThan(920);
 
     for (let iteration = 0; iteration < 7; iteration += 1) {
