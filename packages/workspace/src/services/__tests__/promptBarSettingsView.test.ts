@@ -7,6 +7,7 @@ import {
 import {
   FAL_SEEDANCE_25_VIDEO_MODEL_ID,
   JIMENG_MULTIFRAME_VIDEO_MODEL_ID,
+  JIMENG_SEEDANCE_25_VIDEO_MODEL_ID,
   KLING_O3_VIDEO_MODEL_ID,
   KLING_V3_VIDEO_MODEL_ID,
   MINIMAX_H3_VIDEO_MODEL_ID,
@@ -180,6 +181,8 @@ describe('buildFooterPromptBarControlsInput', () => {
     expect(seedance25.seedance25UsesSourceAspectRatio).toBe(true);
     const seedance25Ref = build({ falModelId: FAL_SEEDANCE_25_VIDEO_MODEL_ID, seedance25Variant: 'reference' }, true);
     expect(seedance25Ref.seedance25UsesSourceAspectRatio).toBe(false);
+    const jimengSeedance25 = build({ falModelId: JIMENG_SEEDANCE_25_VIDEO_MODEL_ID, seedance25Variant: 'smart' }, true);
+    expect(jimengSeedance25.seedance25UsesSourceAspectRatio).toBe(false);
   });
 });
 

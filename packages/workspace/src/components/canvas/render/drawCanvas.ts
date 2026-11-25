@@ -1,5 +1,8 @@
 import { isVideoPlaybackUnavailable } from '../../../services/mediaService';
 import { formatDuration } from '../../../services/audioService';
+import { getBlindTestModelLabel, type BlindTestMapping } from '../../../services/blindTestService';
+import { normalizeFalModelId } from '../../../services/modelConfig';
+import { getSeedream55ModelProvider } from '../../../services/seedream55Config';
 import { Tool, type CanvasImage, type CanvasImageMetadata, type CanvasNote, type Path, type Point } from '../../../types';
 import { CROP_HANDLE_SIZE, NOTE_PIN_BORDER, NOTE_PIN_FILL, NOTE_PIN_LABEL_FONT_SIZE, ROTATION_HANDLE_DISTANCE, TRANSFORM_HANDLE_SIZE } from '../constants';
 import { getImageBounds, getImageCenter, getImageRotation, getNotePinGeometry } from '../geometry';
@@ -24,7 +27,7 @@ type TextFitResult = { fontSize: number; lineHeight: number; lines: string[] };
 // overlay on while zoomed far out never pays the measureText-heavy fit for hundreds of
 // items. Fits are keyed per world-unit box size because duplicated items can share one
 // metadata object at different dimensions.
-type OverlayEntry = { overlayText: string; fits: Map<string, TextFitResult> };
+type OverlayEntry = { overlayText: string; modelAlias?: string; fits: Map<string, TextFitResult> };
 
 // Resizing an item mints new fit box sizes under the same metadata; cap the per-entry
 // variants so a long resize session cannot accumulate stale layouts.
@@ -339,10 +342,10 @@ export const drawDotGridLayer = (
   ctx.restore();
 };
 
-const buildOverlayText = (metadata: CanvasImageMetadata): string => {
+const buildOverlayText = (metadata: CanvasImageMetadata, modelAlias?: string): string => {
   const segments: string[] = [];
 
-  const modelLabel = metadata.modelLabel?.trim() ?? '';
+  const modelLabel = modelAlias ?? metadata.modelLabel?.trim() ?? '';
   if (modelLabel.length > 0) {
     segments.push(modelLabel);
   }
@@ -511,6 +514,7 @@ type DrawCanvasArgs = {
   isWanAnimateVideoInputMode: boolean;
   isWan27VideoMode: boolean;
   showMetadataOverlay: boolean;
+  blindTestMapping?: BlindTestMapping;
   cropMode: CropModeState | null;
   transformMode: TransformModeState | null;
   renderCache?: CanvasRenderCache;
@@ -551,6 +555,7 @@ export function drawCanvas({
   isWanAnimateVideoInputMode,
   isWan27VideoMode,
   showMetadataOverlay,
+  blindTestMapping,
   cropMode,
   transformMode,
   renderCache,
@@ -650,12 +655,13 @@ export function drawCanvas({
 
     const metadata = image.metadata;
     if (showItemTextOverlay && showMetadataOverlay && metadata && metadata.source !== 'imported') {
-      // Warm frames do a single WeakMap lookup: no string assembly, no key hashing of
-      // multi-KB prompts, both of which used to run per visible item per frame.
+      const modelId = metadata.generation?.modelId;
+      const modelAlias = blindTestMapping && modelId && metadata.generation && getSeedream55ModelProvider(modelId) === metadata.generation.provider
+        ? getBlindTestModelLabel(normalizeFalModelId(modelId) ?? modelId, blindTestMapping) : undefined;
       let entry = renderCache?.overlayFitCache.get(metadata);
-      if (entry === undefined) {
-        const overlayText = buildOverlayText(metadata);
-        entry = overlayText.length > 0 ? { overlayText, fits: new Map() } : null;
+      if (entry === undefined || entry?.modelAlias !== modelAlias) {
+        const overlayText = buildOverlayText(metadata, modelAlias);
+        entry = overlayText.length > 0 ? { overlayText, modelAlias, fits: new Map() } : null;
         renderCache?.overlayFitCache.set(metadata, entry);
       }
 

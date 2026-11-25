@@ -3,7 +3,9 @@ import type { FalQueueJob } from '../types';
 import { isSuppressedFalLogMessage } from '../services/falConstants';
 import { getBlindTestModelLabel, getOpenSourceAliasLabel, type BlindTestMapping } from '../services/blindTestService';
 import { getFalModelLabel, isFalModelId } from '../services/modelConfig';
+import { getSeedream55ModelProvider } from '../services/seedream55Config';
 import { getSeedance2VolcengineModelCapabilities } from '../services/volcengineModels';
+import { getJimengCanvasResumeId } from '../services/jimengCanvasRecovery';
 import { ChevronDownIcon, RerunIcon } from './Icons';
 
 interface FalQueuePanelProps {
@@ -146,10 +148,12 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
         </div>
         <ul className="max-h-[calc(100dvh-13rem)] space-y-2 overflow-y-auto pr-1">
           {sortedJobs.map(job => {
-            const lastLog = [...job.logs].reverse().find(log => !isSuppressedFalLogMessage(log));
             const isRetrying = retryingJobIds.has(job.id);
+            const blindSeedream = blindTestEnabled && Boolean(getSeedream55ModelProvider(job.modelId));
+            const lastLog = blindSeedream ? undefined : [...job.logs].reverse().find(log => !isSuppressedFalLogMessage(log));
+            const phaseMessage = blindSeedream && (job.phase === 'submitting' || job.phase === 'queued') ? undefined : job.phaseMessage;
             const displayModelLabel = (() => {
-              if (job.provider !== 'fal') {
+              if (job.provider !== 'fal' && !blindSeedream) {
                 return job.modelLabel;
               }
               if (!blindTestEnabled && !openSourceAliasEnabled) {
@@ -181,17 +185,19 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                         Generation ID: {job.requestId}
                       </p>
                     )}
-                    <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">
-                      {getProviderLabel(job)}
-                    </p>
+                    {!blindSeedream && (
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">
+                        {getProviderLabel(job)}
+                      </p>
+                    )}
                   </div>
                   <span className={`text-[11px] px-2 py-1 rounded-full whitespace-nowrap ${statusStyles[job.status]}`}>
                     {job.phase ? phaseLabels[job.phase] : statusLabels[job.status]}
                   </span>
                 </div>
-                {job.phaseMessage && (
+                {phaseMessage && (
                   <p className="text-[11px] text-gray-300 mt-2 leading-snug">
-                    {job.phaseMessage}
+                    {phaseMessage}
                   </p>
                 )}
                 {lastLog && (
@@ -199,7 +205,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                     {lastLog}
                   </p>
                 )}
-                {job.error && (
+                {job.error && !blindSeedream && (
                   <p className="text-[11px] text-red-300 mt-2 leading-snug">
                     {job.error}
                   </p>
@@ -221,7 +227,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                 )}
                 {(job.status === 'COMPLETED' || job.status === 'FAILED') && (
                   <div className="mt-2 flex items-center gap-3">
-                    {job.status === 'FAILED' && job.retryInputs && (
+                    {job.retryInputs && (job.status === 'FAILED' || getJimengCanvasResumeId(job)) && (
                       <button
                         type="button"
                         onClick={() => {
@@ -229,7 +235,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                           void (async () => {
                             try {
                               const retryStarted = await onRetry(job.id);
-                              if (!retryStarted || isFailedJob(job.id)) {
+                              if (!retryStarted || isFailedJob(job.id) || job.status === 'COMPLETED') {
                                 unlockRetry(job.id);
                               }
                             } catch (error) {
@@ -242,7 +248,7 @@ export const FalQueuePanel: React.FC<FalQueuePanelProps> = ({
                         className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-300 transition-colors hover:text-blue-200 disabled:cursor-not-allowed disabled:text-gray-500"
                       >
                         <RerunIcon className="h-3 w-3" aria-hidden="true" />
-                        Retry
+                        {getJimengCanvasResumeId(job) ? 'Resume here' : 'Retry'}
                       </button>
                     )}
                     <button

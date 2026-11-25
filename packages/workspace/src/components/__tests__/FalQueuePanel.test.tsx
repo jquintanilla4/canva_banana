@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FalQueuePanel } from '../FalQueuePanel';
 import type { FalQueueJob } from '../../types';
+import { SEEDREAM_55_MODEL_ID, SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../../services/seedream55Config';
 
 const buildJob = (overrides: Partial<FalQueueJob> = {}): FalQueueJob => ({
   id: 'job-1',
@@ -53,6 +54,26 @@ describe('FalQueuePanel', () => {
     expect(screen.getByText('TOKENHUB')).not.toBeNull();
   });
 
+  it('keeps both Seedream providers blind in the queue', () => {
+    const error = 'Seedream 5.5 could not reach the local Volcengine backend.';
+    const props = {
+      jobs: [
+        buildJob({ modelId: SEEDREAM_55_MODEL_ID, modelLabel: 'Seedream 5.5', phase: 'queued', phaseMessage: 'Waiting in Fal queue...', logs: ['Fal generation log'] }),
+        buildJob({ id: 've-job', modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID, modelLabel: 'Seedream 5.5 (VE)', provider: 'volcengine', status: 'FAILED', phase: 'failed', phaseMessage: 'Generation failed', error }),
+      ],
+      onDismiss: vi.fn(), onRetry: vi.fn(), openSourceAliasEnabled: false,
+      blindTestMapping: new Map([[SEEDREAM_55_MODEL_ID, 'Silver Owl'], [SEEDREAM_55_VOLCENGINE_MODEL_ID, 'Swift Wolf']]),
+    };
+    const { rerender } = render(<FalQueuePanel {...props} blindTestEnabled />);
+    expect(screen.getByText('Silver Owl')).not.toBeNull();
+    expect(screen.getByText('Swift Wolf')).not.toBeNull();
+    expect(screen.getByText('Generation failed')).not.toBeNull();
+    expect(screen.queryAllByText(/Seedream|Volcengine|\bFal\b/i)).toHaveLength(0);
+    rerender(<FalQueuePanel {...props} blindTestEnabled={false} />);
+    expect(screen.getByText(error)).not.toBeNull();
+    expect(screen.getByText('Fal generation log')).not.toBeNull();
+  });
+
   it('retries retryable failed jobs and dismisses terminal jobs', () => {
     const onDismiss = vi.fn();
     const onRetry = vi.fn(() => true);
@@ -84,6 +105,23 @@ describe('FalQueuePanel', () => {
 
     expect(onRetry).toHaveBeenCalledWith('job-1');
     expect(onDismiss).toHaveBeenCalledWith('job-1');
+  });
+
+  it('can recover a completed Canvas job without reloading', () => {
+    const onRetry = vi.fn(() => true);
+    render(<FalQueuePanel
+      jobs={[buildJob({
+        provider: 'jimeng', providerJobId: 'canvas-1', status: 'COMPLETED', phase: 'completed',
+        retryInputs: { kind: 'text_to_image', prompt: 'Saved edit', provider: 'jimeng' },
+      })]}
+      onDismiss={vi.fn()}
+      onRetry={onRetry}
+      blindTestEnabled={false}
+      openSourceAliasEnabled={false}
+      blindTestMapping={new Map()}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Resume here' }));
+    expect(onRetry).toHaveBeenCalledWith('job-1');
   });
 
   it('locks a failed job retry while the retry attempt is pending', () => {

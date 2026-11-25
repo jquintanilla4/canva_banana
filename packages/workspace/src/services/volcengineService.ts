@@ -95,12 +95,12 @@ const VOLCENGINE_BACKEND_UNREACHABLE_MESSAGE_SUFFIX = 'Run `npm -w @canva-banana
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms)); // Reuse browser timers for reconnect backoff.
 
-const getVolcengineApiBaseUrl = (): string => {
+export const getVolcengineApiBaseUrl = (): string => {
   const raw = getRuntimeConfig().volcengineApiBaseUrl?.trim() || DEFAULT_VOLCENGINE_API_BASE_URL;
   return raw.replace(/\/+$/, ''); // Avoid double slashes when building paths.
 };
 
-const getVolcengineActionHeaders = (baseUrl: string): Record<string, string> => {
+export const getVolcengineActionHeaders = (baseUrl: string): Record<string, string> => {
   return {
     [VOLCENGINE_LOCAL_ACTION_HEADER]: 'volcengine-submit',
     ...getPythonBackendAuthHeadersForUrl(baseUrl),

@@ -49,7 +49,7 @@ export type DesktopSettingsKey =
   | 'VOLCENGINE_SECRET_KEY'
   | 'TOS_BUCKET_NAME'
   | 'TOS_REGION'
-  | 'JIMENG_CLI_PATH';
+  | 'JIMENG_CANVAS_CLI_PATH';
 
 export type DesktopSettingsFieldStatus = {
   present: boolean;
@@ -78,7 +78,7 @@ export type DesktopFileMenuCommand =
   | 'openDebugLog'
   | 'openManageKeys'
   | 'openChangeIcon'
-  | 'clearJimengCache';
+  | 'openJimengCanvasSetup';
 
 export type DesktopAppIconOption = {
   id: string;
@@ -98,7 +98,6 @@ export type DesktopFileMenuState = {
   showZoomLevelBadge: boolean;
   showFileName: boolean;
   trackpadMode: boolean;
-  isClearingJimengCache: boolean;
 };
 
 export type DesktopOpenSnapshotResult =

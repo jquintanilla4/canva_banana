@@ -111,11 +111,14 @@ def _validate_reference_media_durations(
         )
 
 
+ARK_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+
+
 def get_client(settings: Settings) -> Ark:
     if not settings.ark_api_key:
         raise ValueError("ARK_API_KEY must be set")  # Ark calls should fail fast on missing auth.
     return Ark(
-        base_url="https://ark.cn-beijing.volces.com/api/v3",
+        base_url=ARK_BASE_URL,
         api_key=settings.ark_api_key,
     )
 
@@ -282,8 +285,6 @@ def _validate_tokenhub_options(payload: SeedanceJobPayload) -> None:
         raise ValueError("TokenHub supports MP4 output only")
     if payload.web_search or payload.return_last_frame or payload.watermark or payload.draft or payload.priority is not None or payload.camera_fixed:
         raise ValueError("TokenHub does not support Ark generation settings")
-    if payload.jimeng_model_version is not None or payload.session_id or payload.jimeng_mode != "auto" or payload.multiframe_images or payload.transition_prompts or payload.transition_durations:
-        raise ValueError("TokenHub does not support Jimeng generation settings")
     if any(isinstance(media, AssetInput) for media in (*payload.reference_images, *payload.reference_videos, *payload.reference_audios)):
         raise ValueError("TokenHub does not support Ark asset references")
     if not is_seedance25(payload.model_id) and payload.reference_audios and not payload.reference_images and not payload.reference_videos:

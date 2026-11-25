@@ -129,7 +129,7 @@ describe('buildSeedance2RequestKey', () => {
     expect(falKey).not.toBe(volcengineKey);
   });
 
-  it('changes when the Jimeng session changes', () => {
+  it('changes when the Jimeng tier changes', () => {
     const basePayload = {
       provider: 'jimeng',
       modelId: 'jimeng/seedance-2',
@@ -149,9 +149,9 @@ describe('buildSeedance2RequestKey', () => {
       images: [],
     };
 
-    const firstSessionKey = buildSeedance2RequestKey({ ...basePayload, jimengSessionId: 0 });
-    const secondSessionKey = buildSeedance2RequestKey({ ...basePayload, jimengSessionId: 1 });
+    const standardKey = buildSeedance2RequestKey(basePayload);
+    const fastKey = buildSeedance2RequestKey({ ...basePayload, jimengModelVersion: 'seedance2.0fast' });
 
-    expect(secondSessionKey).not.toBe(firstSessionKey);
+    expect(fastKey).not.toBe(standardKey);
   });
 });

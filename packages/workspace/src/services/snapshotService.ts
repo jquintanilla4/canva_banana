@@ -2,6 +2,8 @@ import { isArkIdentifier, normalizeVolcengineDraft, normalizeVolcengineSettings,
 import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { isGifImage } from './gifMedia';
 import { isSvgFile, isSvgImage, normalizeImageFile } from './svgMedia';
+import { isSeedream55Background, isSeedream55OutputFormat } from './seedream55Config';
+import { isJimengCanvasVideoModelId } from './jimengCanvasVideoModels';
 import { resolveGptImage26RunSettings, serializeGptImage26GenerationOptions } from './gptImage26RunSettings';
 import { isGptImage26Quality, isGptImage26Background, isGptImage26ReasoningEffort, isGptImage26OutputFormat } from './gptImage26Config';
 import { isTokenHubGptImage25Quality, isTokenHubGptImage25Background, isTokenHubGptImage25Variant } from './tokenHubGptImage25Config';
@@ -1796,6 +1798,8 @@ export const normalizeSnapshotImageMetadata = (
       }
       if (isFlux3ImageAspectRatio(typed.flux3ImageAspectRatio)) normalizedOptions.flux3ImageAspectRatio = typed.flux3ImageAspectRatio;
       if (isFlux3ImageResolution(typed.flux3ImageResolution)) normalizedOptions.flux3ImageResolution = typed.flux3ImageResolution;
+      if (isSeedream55Background(typed?.seedream55Background)) normalizedOptions.seedream55Background = typed.seedream55Background;
+      if (isSeedream55OutputFormat(typed?.seedream55OutputFormat)) normalizedOptions.seedream55OutputFormat = typed.seedream55OutputFormat;
       if (isGptImage26Quality(typed?.gptImage26Quality)) normalizedOptions.gptImage26Quality = typed.gptImage26Quality;
       if (isGptImage26Background(typed?.gptImage26Background)) normalizedOptions.gptImage26Background = typed.gptImage26Background;
       if (isGptImage26ReasoningEffort(typed?.gptImage26ReasoningEffort)) normalizedOptions.gptImage26ReasoningEffort = typed.gptImage26ReasoningEffort;
@@ -2289,6 +2293,9 @@ export const normalizeSnapshotImageMetadata = (
     if (jimengOptionsRaw && typeof jimengOptionsRaw === 'object') {
       const typed = jimengOptionsRaw as GenerationInputs['jimengOptions'];
       const normalizedOptions: GenerationInputs['jimengOptions'] = {};
+      if (isJimengCanvasVideoModelId(typed?.canvasModel)) {
+        normalizedOptions.canvasModel = typed.canvasModel;
+      }
       if (isSeedance2Variant((typed as { seedance2Variant?: unknown }).seedance2Variant)) {
         normalizedOptions.seedance2Variant = typed.seedance2Variant;
       }

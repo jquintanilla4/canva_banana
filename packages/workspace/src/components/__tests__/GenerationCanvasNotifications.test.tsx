@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenerationCanvasNotifications } from '../GenerationCanvasNotifications';
 import type { GenerationCanvasNotification } from '../../hooks/useGenerationCanvasNotifications';
+import { SEEDREAM_55_VOLCENGINE_MODEL_ID } from '../../services/seedream55Config';
 
 const buildNotification = (
   overrides: Partial<GenerationCanvasNotification> = {},
@@ -15,6 +16,20 @@ const buildNotification = (
 });
 
 describe('GenerationCanvasNotifications', () => {
+  afterEach(cleanup);
+
+  it('shows the current blind alias for a completed Seedream job', () => {
+    const notification = {
+      ...buildNotification({ modelLabel: 'Seedream 5.5 (VE)' }), modelId: SEEDREAM_55_VOLCENGINE_MODEL_ID,
+    };
+    const props = { notifications: [notification], onActivate: vi.fn(), onDismiss: vi.fn() };
+    const blindProps = { blindTestMapping: new Map([[SEEDREAM_55_VOLCENGINE_MODEL_ID, 'Swift Wolf']]) };
+    const { rerender } = render(<GenerationCanvasNotifications {...props} {...blindProps} />);
+    expect(screen.getByText('Swift Wolf')).not.toBeNull();
+    expect(screen.queryByText('Seedream 5.5 (VE)')).toBeNull();
+    rerender(<GenerationCanvasNotifications {...props} />);
+    expect(screen.getByText('Seedream 5.5 (VE)')).not.toBeNull();
+  });
   it('activates and dismisses the selected notification', () => {
     const imageNotification = buildNotification({
       id: 'notification-image',

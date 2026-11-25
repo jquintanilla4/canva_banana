@@ -120,7 +120,7 @@ export const useGenerationPromptBarTransfer = ({
     }
 
     const restoredSelection = resolveGenerationInputSelection(generation, displayedImages);
-    if (generation.kind === 'image_edit') resetEditContext(); // Saved edits start from a clean neutral canvas context.
+    if (generation.kind === 'image_edit' || generation.kind === 'layerize') resetEditContext(); // Saved edits start from a clean neutral canvas context.
     setApiProvider(requestedApiProvider);
     setSelectedImageIds(restoredSelection.selectedImageIds);
     setReferenceImageIds(restoredSelection.referenceImageIds);

@@ -7,7 +7,6 @@ type Seedance2RequestKeyArgs = {
   prompt: string;
   variant: Seedance2Variant;
   jimengModelVersion?: string; // Jimeng CLI channel changes backend behavior.
-  jimengSessionId?: number; // Jimeng sessions route requests through different accounts.
   aspectRatio: string;
   resolution: string;
   duration: string;
@@ -59,7 +58,6 @@ export const buildSeedance2RequestKey = ({
   prompt,
   variant,
   jimengModelVersion,
-  jimengSessionId,
   aspectRatio,
   resolution,
   duration,
@@ -79,7 +77,6 @@ export const buildSeedance2RequestKey = ({
   prompt: prompt.trim(),
   variant,
   jimengModelVersion: jimengModelVersion ?? null,
-  jimengSessionId: jimengSessionId ?? null,
   aspectRatio,
   resolution,
   duration,

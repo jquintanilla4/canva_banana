@@ -20,7 +20,7 @@ type DesktopMenuCommandHandlers = {
   toggleFileName: () => void;
   toggleTrackpadMode: () => void;
   openDebugLog: () => void;
-  clearJimengCache: () => Promise<void> | void;
+  openJimengCanvasSetup: () => void;
 };
 
 type DesktopFileMenuState = {
@@ -28,7 +28,6 @@ type DesktopFileMenuState = {
   showZoomLevelBadge: boolean;
   showFileName: boolean;
   trackpadMode: boolean;
-  isClearingJimengCache: boolean;
 };
 
 type UseDesktopIntegrationArgs = {
@@ -61,9 +60,9 @@ export function useDesktopIntegration({
     toggleFileName,
     toggleTrackpadMode,
     openDebugLog,
-    clearJimengCache,
+    openJimengCanvasSetup,
   } = menuCommands;
-  const { autosaveEnabled, showZoomLevelBadge, showFileName, trackpadMode, isClearingJimengCache } = fileMenuState;
+  const { autosaveEnabled, showZoomLevelBadge, showFileName, trackpadMode } = fileMenuState;
 
   const [desktopSettingsStatus, setDesktopSettingsStatus] = useState<DesktopSettingsStatus | null>(null);
   const hasDesktopSettingsBridge = typeof window !== 'undefined' && Boolean(getDesktopBridge()?.getSettingsStatus);
@@ -160,8 +159,8 @@ export function useDesktopIntegration({
         case 'openChangeIcon':
           openDesktopAppIcon();
           break;
-        case 'clearJimengCache':
-          void clearJimengCache();
+        case 'openJimengCanvasSetup':
+          openJimengCanvasSetup();
           break;
         default: {
           const exhaustiveCommand: never = command;
@@ -175,7 +174,7 @@ export function useDesktopIntegration({
     toggleAutosave,
     toggleZoomLevelBadge,
     hasNativeFileMenuBridge,
-    clearJimengCache,
+    openJimengCanvasSetup,
     openBackups,
     openDesktopAppIcon,
     openDebugLog,
@@ -193,9 +192,8 @@ export function useDesktopIntegration({
       showZoomLevelBadge,
       showFileName,
       trackpadMode,
-      isClearingJimengCache,
     });
-  }, [autosaveEnabled, hasNativeFileMenuBridge, isClearingJimengCache, showFileName, showZoomLevelBadge, trackpadMode]);
+  }, [autosaveEnabled, hasNativeFileMenuBridge, showFileName, showZoomLevelBadge, trackpadMode]);
 
   return {
     desktopSettingsStatus,

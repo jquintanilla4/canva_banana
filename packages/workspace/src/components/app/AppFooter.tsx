@@ -2,7 +2,7 @@ import React from 'react';
 import { PromptBar } from '../PromptBar';
 import { ProviderSwitcher } from '../ProviderSwitcher';
 import { Tooltip } from '../Tooltip';
-import { PlusIcon } from '../Icons';
+import { LayersIcon, PlusIcon } from '../Icons';
 import type { ApiProviderId } from '../../types';
 import type { UseFalSettingsResult } from '../../hooks/useFalSettings';
 import { resolveSeedanceVideoPickerSelection } from '../../services/seedanceVideoPicker';
@@ -20,11 +20,11 @@ type AppFooterProps = {
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: () => void;
+  onLayerize?: () => void;
   isEmbeddedPromptBarActive: boolean;
   disablePromptInput: boolean;
   submitDisabled: boolean;
   submitDisabledReason: string | null;
-  jimengBlocksSubmit: boolean;
   modelOptions: PromptBarProps['modelOptions'];
   selectedModel: PromptBarProps['selectedModel'];
   onModelModeChange: PromptBarProps['onModelModeChange'];
@@ -56,11 +56,11 @@ export function AppFooter({
   prompt,
   onPromptChange,
   onSubmit,
+  onLayerize,
   isEmbeddedPromptBarActive,
   disablePromptInput,
   submitDisabled,
   submitDisabledReason,
-  jimengBlocksSubmit,
   modelOptions,
   selectedModel,
   onModelModeChange,
@@ -102,9 +102,22 @@ export function AppFooter({
         prompt={prompt}
         onPromptChange={onPromptChange}
         onSubmit={onSubmit}
+        submitAccessory={onLayerize && !isEmbeddedPromptBarActive ? (
+          <Tooltip label="Layerize Image">
+            <button
+              type="button"
+              aria-label="Layerize Image"
+              onClick={onLayerize}
+              disabled={isLoading}
+              className="flex size-[2.64rem] shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <LayersIcon className="size-[1.1rem]" aria-hidden="true" />
+            </button>
+          </Tooltip>
+        ) : undefined}
         isLoading={isLoading}
         inputDisabled={disablePromptInput || isEmbeddedPromptBarActive}
-        submitDisabled={submitDisabled || isEmbeddedPromptBarActive || jimengBlocksSubmit}
+        submitDisabled={submitDisabled || isEmbeddedPromptBarActive}
         submitDisabledReason={isEmbeddedPromptBarActive ? null : submitDisabledReason}
         modelOptions={modelOptions}
         selectedModel={selectedModel}

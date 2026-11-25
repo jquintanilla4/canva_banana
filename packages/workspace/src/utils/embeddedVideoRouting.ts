@@ -96,7 +96,6 @@ export const getEmbeddedVideoProvider = (modelId: string): GenerationProviderId 
 export const buildEmbeddedVideoGenerationProviderInput = (
   bar: CanvasVideoPromptBar,
   modelId: string,
-  jimengSessionId: number,
   hasFirstFrame = false,
 ): EmbeddedVideoGenerationProviderInput => {
   const provider = getEmbeddedVideoProvider(modelId);
@@ -130,7 +129,6 @@ export const buildEmbeddedVideoGenerationProviderInput = (
         seedance2Duration: bar.seedance2Duration,
         seedance2GenerateAudio: bar.seedance2GenerateAudio,
         seedance2CameraFixed: bar.seedance2CameraFixed,
-        sessionId: jimengSessionId,
       },
     };
   }
@@ -143,17 +141,6 @@ export const buildEmbeddedVideoGenerationProviderInput = (
         seedance25Resolution: bar.falOptions?.seedance25Resolution ?? '720p',
         seedance25Duration: normalizeJimengSeedance25Duration(bar.falOptions?.seedance25Duration ?? '5'),
         seedance25GenerateAudio: false,
-        sessionId: jimengSessionId,
-      },
-    };
-  }
-  if (modelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID) {
-    return {
-      provider,
-      jimengOptions: {
-        multiframeDuration: bar.falOptions?.multiframeDuration ?? '3',
-        multiframeResolution: bar.falOptions?.multiframeResolution ?? '720p',
-        sessionId: jimengSessionId,
       },
     };
   }

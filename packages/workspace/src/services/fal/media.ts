@@ -20,7 +20,7 @@ export interface FalUploadOptions extends FalPhaseOptions {
   maxBytesError?: string; // User-facing message when the cap is exceeded.
 }
 
-const uploadBlobToFal = async (blob: Blob, options: FalUploadOptions = {}): Promise<string> => { // Upload one blob with phase logs.
+export const uploadBlobToFal = async (blob: Blob, options: FalUploadOptions = {}): Promise<string> => {
   options.abortSignal?.throwIfAborted();
   ensureFalClientConfigured();
   if (options.maxBytes !== undefined && blob.size > options.maxBytes) {
@@ -90,13 +90,15 @@ const canvasToBlob = (canvas: HTMLCanvasElement, mimeType: string = 'image/png',
   });
 };
 
-const canvasToBlobWithinMaxBytes = async (canvas: HTMLCanvasElement, maxBytes: number): Promise<Blob> => {
+export const canvasToBlobWithinMaxBytes = async (
+  canvas: HTMLCanvasElement, maxBytes: number, compressedFormats: readonly string[] = COMPRESSED_IMAGE_MIME_TYPES,
+): Promise<Blob> => {
   const pngBlob = await canvasToBlob(canvas);
   if (pngBlob.size <= maxBytes) {
     return pngBlob;
   }
 
-  for (const mimeType of COMPRESSED_IMAGE_MIME_TYPES) {
+  for (const mimeType of compressedFormats) {
     const highestQualityBlob = await canvasToBlob(canvas, mimeType, MAX_COMPRESSED_IMAGE_QUALITY);
     if (highestQualityBlob.type === mimeType && highestQualityBlob.size <= maxBytes) {
       return highestQualityBlob;

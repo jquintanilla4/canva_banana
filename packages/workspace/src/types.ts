@@ -1,3 +1,4 @@
+import type { Seedream55Background, Seedream55OutputFormat } from './services/seedream55Config';
 import type { GptImage26Quality, GptImage26Background, GptImage26ReasoningEffort, GptImage26OutputFormat } from './services/gptImage26Config';
 import type { GrokImageAspectRatio, GrokImageResolution, GrokImageQuality, GrokImageOutputFormat } from './services/grokImageConfig';
 
@@ -69,6 +70,7 @@ export type FalImageSizePreset =
   | '1344x576'
   | 'auto'
   | 'auto_1K'
+  | 'auto_1.5K'
   | 'auto_2K'
   | 'auto_3K'
   | 'auto_4K';
@@ -113,7 +115,7 @@ export type Flux3ImageResolution = '768sq' | '1k' | '1.5k' | '2k' | '4k';
 
 export type FalVideoDuration = '5' | '6' | '10';
 
-export type GenerationKind = 'text_to_image' | 'image_edit' | 'upscale' | 'video';
+export type GenerationKind = 'layerize' | 'text_to_image' | 'image_edit' | 'upscale' | 'video';
 export type KlingV4Variant = 'generate' | 'edit';
 export type KlingV4Resolution = '720p' | '1080p';
 export type KlingV4AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '21:9';
@@ -140,6 +142,8 @@ export type Wan27VideoVariant = 'smart' | 'reference' | 'edit';
 export type RecraftRgbColor = { r: number; g: number; b: number };
 
 export type GenerationFalOptions = Partial<{
+  seedream55Background: Seedream55Background;
+  seedream55OutputFormat: Seedream55OutputFormat;
   imageSizeSelection: FalImageSizeOption;
   aspectRatioSelection: FalAspectRatioOption;
   resolutionSelection: FalResolutionOption;
@@ -281,6 +285,7 @@ export type GenerationVolcengineOptions = Partial<{
 }>;
 
 export type GenerationJimengOptions = GenerationVolcengineOptions & Partial<{
+  canvasModel: string;
   seedance2JimengModelVersion: JimengSeedance2ModelVersion;
   seedance25Variant: Seedance25Variant;
   seedance25AspectRatio: Seedance25AspectRatio;
@@ -323,6 +328,7 @@ export interface GenerationPlacedPayload {
   mediaIds: string[];
   mediaType: 'image' | 'video';
   modelLabel?: string;
+  modelId?: string;
 }
 
 export type VideoPromptAreaMediaRole =
@@ -444,6 +450,8 @@ export type FalJobPhase = 'uploading' | 'submitting' | 'queued' | 'processing' |
 export interface FalQueueJob {
   id: string;
   providerJobId?: string; // Backend/provider identity can differ from the local queue row ID.
+  jimengCanvasAttemptId?: string;
+  jimengCanvasDocumentName?: string;
   prompt: string;
   modelId: string;
   modelLabel: string;

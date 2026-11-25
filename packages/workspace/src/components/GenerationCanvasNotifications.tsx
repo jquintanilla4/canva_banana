@@ -1,9 +1,11 @@
 import React from 'react';
 import type { GenerationCanvasNotification } from '../hooks/useGenerationCanvasNotifications';
+import { getBlindTestModelLabel, type BlindTestMapping } from '../services/blindTestService';
 import { CrosshairIcon } from './Icons';
 
 type GenerationCanvasNotificationsProps = {
   notifications: GenerationCanvasNotification[];
+  blindTestMapping?: BlindTestMapping;
   onActivate: (notification: GenerationCanvasNotification) => void;
   onDismiss: (notificationId: string) => void;
 };
@@ -18,6 +20,7 @@ const getNotificationTitle = (notification: GenerationCanvasNotification): strin
 
 export const GenerationCanvasNotifications: React.FC<GenerationCanvasNotificationsProps> = ({
   notifications,
+  blindTestMapping,
   onActivate,
   onDismiss,
 }) => {
@@ -50,7 +53,9 @@ export const GenerationCanvasNotifications: React.FC<GenerationCanvasNotificatio
                   {getNotificationTitle(notification)}
                 </span>
                 <span className="mt-1 block truncate text-xs text-gray-300">
-                  {notification.modelLabel ?? 'Generation ready'}
+                  {blindTestMapping && notification.modelId
+                    ? getBlindTestModelLabel(notification.modelId, blindTestMapping)
+                    : notification.modelLabel ?? 'Generation ready'}
                 </span>
                 <span className="mt-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-emerald-200/80">
                   Click to view

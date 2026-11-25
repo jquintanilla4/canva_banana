@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import sys
-import tempfile
 import unittest
 from email.message import Message
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -86,7 +84,6 @@ class FakePinnedConnection:
         pass  # The success path keeps ownership with the streaming response.
 
 
-
 class FakeUpload:
     def __init__(self, file_name: str, content: bytes) -> None:
         self.filename = file_name
@@ -158,45 +155,6 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.headers["content-type"], "video/mp4")
         self.assertEqual(response.headers["content-disposition"], 'attachment; filename="result.mp4"')
         self.assertTrue(upstream_response._closed)
-
-    def test_jimeng_output_proxy_preserves_local_video_mime_type(self) -> None:
-        client = TestClient(app)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            output_path = Path(tmp_dir) / "result.webm"
-            output_path.write_bytes(b"webm-bytes")
-            job = build_job_state(
-                model_id="jimeng-cli/seedance-2",
-                model_label="Seedance 2 (JM CLI)",
-                output_url=str(output_path),
-                last_frame_url=None,
-            )
-
-            with patch("uvpython_service.main.jimeng_job_store.get", return_value=job):
-                with patch("uvpython_service.main.get_settings", return_value=SimpleNamespace(jimeng_work_dir=Path(tmp_dir))):
-                    response = client.get("/api/jimeng/jobs/job-1/output")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b"webm-bytes")
-        self.assertEqual(response.headers["content-type"], "video/webm")
-
-    def test_jimeng_output_proxy_rejects_local_video_outside_work_dir(self) -> None:
-        client = TestClient(app)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with tempfile.TemporaryDirectory() as work_dir:
-                output_path = Path(tmp_dir) / "private.mp4"
-                output_path.write_bytes(b"private-video")
-                job = build_job_state(
-                    model_id="jimeng-cli/seedance-2",
-                    model_label="Seedance 2 (JM CLI)",
-                    output_url=str(output_path),
-                    last_frame_url=None,
-                )
-
-                with patch("uvpython_service.main.jimeng_job_store.get", return_value=job):
-                    with patch("uvpython_service.main.get_settings", return_value=SimpleNamespace(jimeng_work_dir=Path(work_dir))):
-                        response = client.get("/api/jimeng/jobs/job-1/output")
-
-        self.assertEqual(response.status_code, 403)
 
     def test_volcengine_job_submission_rejects_missing_local_action_header(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
@@ -421,45 +379,22 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.json()["provider"], "volcengine")
         create_seedance_job.assert_called_once()
 
-    def test_clear_jimeng_cache_endpoint_returns_cleanup_result(self) -> None:
-        client = TestClient(app, client=LOCAL_TEST_CLIENT)
-        cleanup_result = {
-            "status": "ok",
-            "deletedFiles": 1,
-            "bytesFreed": 1024,
-            "workDir": "/tmp/jimeng",
-            "errors": [],
-            "invalidatedJobIds": ["completed-job"],
-        }
-
-        with patch("uvpython_service.main.clear_jimeng_cache", return_value=cleanup_result):
-            response = client.delete(
-                "/api/jimeng/cache",
-                headers={
-                    "Origin": "http://localhost:5173",
-                    "X-Canva-Banana-Local-Action": "jimeng-setup",
-                },
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), cleanup_result)
-
-    def test_jimeng_setup_status_requires_local_action_header(self) -> None:
+    def test_canvas_setup_status_requires_local_action_header(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
 
-        with patch("uvpython_service.main.get_jimeng_setup_status") as get_status:
-            response = client.get("/api/jimeng/setup/status", headers={"Origin": "http://localhost:5173"})
+        with patch("uvpython_service.main.get_canvas_setup_status") as get_status:
+            response = client.get("/api/jimeng/canvas/setup/status", headers={"Origin": "http://localhost:5173"})
 
         self.assertEqual(response.status_code, 403)
         get_status.assert_not_called()
 
-    def test_jimeng_setup_status_allows_trusted_local_frontend(self) -> None:
+    def test_canvas_setup_status_allows_trusted_local_frontend(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
         setup_status = {"status": "ready", "ready": True}
 
-        with patch("uvpython_service.main.get_jimeng_setup_status", return_value=setup_status):
+        with patch("uvpython_service.main.get_canvas_setup_status", return_value=setup_status):
             response = client.get(
-                "/api/jimeng/setup/status",
+                "/api/jimeng/canvas/setup/status",
                 headers={
                     "Origin": "http://localhost:5173",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -469,77 +404,11 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), setup_status)
 
-    def test_jimeng_health_rejects_remote_client(self) -> None:
-        client = TestClient(app, client=REMOTE_TEST_CLIENT)
-
-        with patch("uvpython_service.main.check_jimeng_health") as check_health:
-            response = client.get(
-                "/api/jimeng/health",
-                headers={"X-Canva-Banana-Local-Action": "jimeng-setup"},
-            )
-
-        self.assertEqual(response.status_code, 403)
-        check_health.assert_not_called()
-
-    def test_jimeng_remote_output_proxy_rejects_private_hosts(self) -> None:
-        client = TestClient(app)
-        job = build_job_state(
-            model_id="jimeng-cli/seedance-2",
-            model_label="Seedance 2 (JM CLI)",
-            output_url="http://127.0.0.1/private.mp4",
-            last_frame_url=None,
-        )
-
-        with patch("uvpython_service.main.jimeng_job_store.get", return_value=job):
-            with patch("uvpython_service.main.urlopen") as open_url:
-                response = client.get("/api/jimeng/jobs/job-1/output")
-
-        self.assertEqual(response.status_code, 403)
-        open_url.assert_not_called()
-
-    def test_jimeng_remote_output_proxy_fetches_pinned_public_ip(self) -> None:
-        client = TestClient(app)
-        job = build_job_state(
-            model_id="jimeng-cli/seedance-2",
-            model_label="Seedance 2 (JM CLI)",
-            output_url="https://example.com/output.mp4",
-            last_frame_url=None,
-        )
-
-        with patch("uvpython_service.main.jimeng_job_store.get", return_value=job):
-            with patch("uvpython_service.main._resolve_public_remote_ip", return_value="93.184.216.34") as resolve_host:
-                with patch("uvpython_service.main._open_pinned_remote_asset", side_effect=HTTPException(status_code=403, detail="Jimeng remote output URL redirects are not allowed")) as open_pinned:
-                    with patch("uvpython_service.main.urlopen") as open_url:
-                        response = client.get("/api/jimeng/jobs/job-1/output")
-
-        self.assertEqual(response.status_code, 403)
-        resolve_host.assert_called_once_with("example.com")
-        open_pinned.assert_called_once_with("https://example.com/output.mp4", "93.184.216.34", provider="Jimeng")
-        open_url.assert_not_called()
-
-    def test_jimeng_remote_output_proxy_rejects_redirects(self) -> None:
-        client = TestClient(app)
-        job = build_job_state(
-            model_id="jimeng-cli/seedance-2",
-            model_label="Seedance 2 (JM CLI)",
-            output_url="https://example.com/output.mp4",
-            last_frame_url=None,
-        )
-
-        with patch("uvpython_service.main.jimeng_job_store.get", return_value=job):
-            with patch("uvpython_service.main._resolve_public_remote_ip", return_value="93.184.216.34"):
-                with patch("uvpython_service.main._open_pinned_remote_asset", side_effect=HTTPException(status_code=403, detail="Jimeng remote output URL redirects are not allowed")) as open_pinned:
-                    response = client.get("/api/jimeng/jobs/job-1/output")
-
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["detail"], "Jimeng remote output URL redirects are not allowed")
-        open_pinned.assert_called_once()
-
     def test_open_pinned_remote_asset_uses_explicit_url_port(self) -> None:
         FakePinnedConnection.instances = []
 
         with patch("uvpython_service.main._PinnedHTTPSConnection", FakePinnedConnection):
-            _open_pinned_remote_asset("https://example.com:8443/output.mp4?download=1", "93.184.216.34")
+            _open_pinned_remote_asset("https://example.com:8443/output.mp4?download=1", "93.184.216.34", provider="TokenHub")
 
         connection = FakePinnedConnection.instances[0]
         self.assertEqual(connection.host, "example.com")
@@ -548,36 +417,36 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(connection.requests[0][1], "/output.mp4?download=1")
         self.assertEqual(connection.requests[0][2]["Host"], "example.com:8443")
 
-    def test_clear_jimeng_cache_rejects_cross_site_origin(self) -> None:
+    def test_open_pinned_tokenhub_asset_maps_connection_errors_to_502(self) -> None:
+        for method in ("request", "getresponse"):
+            with self.subTest(method=method):
+                error = OSError("Connection failed")
+                with patch("uvpython_service.main._PinnedHTTPSConnection", FakePinnedConnection):
+                    with patch.object(FakePinnedConnection, method, side_effect=error):
+                        with patch.object(FakePinnedConnection, "close") as close:
+                            with self.assertRaises(HTTPException) as raised:
+                                _open_pinned_remote_asset("https://example.com/output.mp4", "93.184.216.34", provider="TokenHub")
+
+                self.assertEqual(raised.exception.status_code, 502)
+                self.assertEqual(raised.exception.detail, "TokenHub asset download failed")
+                self.assertIs(raised.exception.__cause__, error)
+                close.assert_called_once()
+
+    def test_canvas_setup_install_rejects_missing_local_action_header(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
 
-        with patch("uvpython_service.main.clear_jimeng_cache") as clear_cache:
-            response = client.delete(
-                "/api/jimeng/cache",
-                headers={
-                    "Origin": "https://example.com",
-                    "X-Canva-Banana-Local-Action": "jimeng-setup",
-                },
-            )
-
-        self.assertEqual(response.status_code, 403)
-        clear_cache.assert_not_called()
-
-    def test_jimeng_setup_install_rejects_missing_local_action_header(self) -> None:
-        client = TestClient(app, client=LOCAL_TEST_CLIENT)
-
-        with patch("uvpython_service.main.install_or_update_jimeng_cli") as install_cli:
-            response = client.post("/api/jimeng/setup/install", headers={"Origin": "http://localhost:5173"})
+        with patch("uvpython_service.main.install_canvas_cli") as install_cli:
+            response = client.post("/api/jimeng/canvas/setup/install", headers={"Origin": "http://localhost:5173"})
 
         self.assertEqual(response.status_code, 403)
         install_cli.assert_not_called()
 
-    def test_jimeng_setup_install_rejects_cross_site_origin(self) -> None:
+    def test_canvas_setup_install_rejects_cross_site_origin(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
 
-        with patch("uvpython_service.main.install_or_update_jimeng_cli") as install_cli:
+        with patch("uvpython_service.main.install_canvas_cli") as install_cli:
             response = client.post(
-                "/api/jimeng/setup/install",
+                "/api/jimeng/canvas/setup/install",
                 headers={
                     "Origin": "https://example.com",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -587,13 +456,13 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         install_cli.assert_not_called()
 
-    def test_jimeng_setup_install_allows_trusted_local_frontend(self) -> None:
+    def test_canvas_setup_install_allows_trusted_local_frontend(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
         install_result = {"status": "ok", "message": "installed"}
 
-        with patch("uvpython_service.main.install_or_update_jimeng_cli", return_value=install_result):
+        with patch("uvpython_service.main.install_canvas_cli", return_value=install_result):
             response = client.post(
-                "/api/jimeng/setup/install",
+                "/api/jimeng/canvas/setup/install",
                 headers={
                     "Origin": "http://localhost:5173",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -603,14 +472,14 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), install_result)
 
-    def test_jimeng_setup_install_allows_packaged_desktop_file_origin_with_token(self) -> None:
+    def test_canvas_setup_install_allows_packaged_desktop_file_origin_with_token(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
         install_result = {"status": "ok", "message": "installed"}
 
         with patch.dict("os.environ", {"CANVA_BANANA_DESKTOP_AUTH_TOKEN": DESKTOP_AUTH_TOKEN}):
-            with patch("uvpython_service.main.install_or_update_jimeng_cli", return_value=install_result) as install_cli:
+            with patch("uvpython_service.main.install_canvas_cli", return_value=install_result) as install_cli:
                 response = client.post(
-                    "/api/jimeng/setup/install",
+                    "/api/jimeng/canvas/setup/install",
                     headers={
                         "Origin": "file://",
                         "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -622,12 +491,12 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.json(), install_result)
         install_cli.assert_called_once()
 
-    def test_jimeng_setup_install_rejects_remote_client_with_packaged_origin(self) -> None:
+    def test_canvas_setup_install_rejects_remote_client_with_packaged_origin(self) -> None:
         client = TestClient(app, client=REMOTE_TEST_CLIENT)
 
-        with patch("uvpython_service.main.install_or_update_jimeng_cli") as install_cli:
+        with patch("uvpython_service.main.install_canvas_cli") as install_cli:
             response = client.post(
-                "/api/jimeng/setup/install",
+                "/api/jimeng/canvas/setup/install",
                 headers={
                     "Origin": "null",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -637,12 +506,12 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         install_cli.assert_not_called()
 
-    def test_jimeng_setup_install_rejects_file_origin_with_host(self) -> None:
+    def test_canvas_setup_install_rejects_file_origin_with_host(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
 
-        with patch("uvpython_service.main.install_or_update_jimeng_cli") as install_cli:
+        with patch("uvpython_service.main.install_canvas_cli") as install_cli:
             response = client.post(
-                "/api/jimeng/setup/install",
+                "/api/jimeng/canvas/setup/install",
                 headers={
                     "Origin": "file://example.com",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -652,24 +521,24 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         install_cli.assert_not_called()
 
-    def test_jimeng_setup_install_rejects_remote_client_without_origin(self) -> None:
+    def test_canvas_setup_install_rejects_remote_client_without_origin(self) -> None:
         client = TestClient(app, client=REMOTE_TEST_CLIENT)
 
-        with patch("uvpython_service.main.install_or_update_jimeng_cli") as install_cli:
+        with patch("uvpython_service.main.install_canvas_cli") as install_cli:
             response = client.post(
-                "/api/jimeng/setup/install",
+                "/api/jimeng/canvas/setup/install",
                 headers={"X-Canva-Banana-Local-Action": "jimeng-setup"},
             )
 
         self.assertEqual(response.status_code, 403)
         install_cli.assert_not_called()
 
-    def test_jimeng_setup_install_rejects_remote_client_with_spoofed_origin(self) -> None:
+    def test_canvas_setup_install_rejects_remote_client_with_spoofed_origin(self) -> None:
         client = TestClient(app, client=REMOTE_TEST_CLIENT)
 
-        with patch("uvpython_service.main.install_or_update_jimeng_cli") as install_cli:
+        with patch("uvpython_service.main.install_canvas_cli") as install_cli:
             response = client.post(
-                "/api/jimeng/setup/install",
+                "/api/jimeng/canvas/setup/install",
                 headers={
                     "Origin": "http://localhost:5173",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -679,12 +548,12 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         install_cli.assert_not_called()
 
-    def test_jimeng_setup_login_uses_same_local_request_guard(self) -> None:
+    def test_canvas_setup_login_uses_same_local_request_guard(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
 
-        with patch("uvpython_service.main.start_jimeng_login") as start_login:
+        with patch("uvpython_service.main.start_canvas_login") as start_login:
             response = client.post(
-                "/api/jimeng/setup/login",
+                "/api/jimeng/canvas/setup/login",
                 headers={
                     "Origin": "https://example.com",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -694,13 +563,13 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         start_login.assert_not_called()
 
-    def test_jimeng_setup_login_check_forwards_opaque_session(self) -> None:
+    def test_canvas_setup_login_check_forwards_opaque_session(self) -> None:
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
         result = {"status": "ready", "ready": True, "message": "Jimeng login completed"}
 
-        with patch("uvpython_service.main.check_jimeng_login", return_value=result) as check_login:
+        with patch("uvpython_service.main.check_canvas_login", return_value=result) as check_login:
             response = client.post(
-                "/api/jimeng/setup/login/check?login_session_id=opaque-session&poll=5",
+                "/api/jimeng/canvas/setup/login/check?login_session_id=opaque-session&poll=5",
                 headers={
                     "Origin": "http://localhost:5173",
                     "X-Canva-Banana-Local-Action": "jimeng-setup",
@@ -710,124 +579,6 @@ class MainApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), result)
         check_login.assert_called_once_with("opaque-session", poll_seconds=5)
-
-    def test_jimeng_job_submission_rejects_missing_local_action_header(self) -> None:
-        client = TestClient(app, client=LOCAL_TEST_CLIENT)
-
-        with patch("uvpython_service.main.create_jimeng_job") as create_job:
-            response = client.post(
-                "/api/jimeng/jobs",
-                data={"prompt": "make a video"},
-                headers={"Origin": "http://localhost:5173"},
-            )
-
-        self.assertEqual(response.status_code, 403)
-        create_job.assert_not_called()
-
-    def test_jimeng_job_submission_rejects_cross_site_origin(self) -> None:
-        client = TestClient(app, client=LOCAL_TEST_CLIENT)
-
-        with patch("uvpython_service.main.create_jimeng_job") as create_job:
-            response = client.post(
-                "/api/jimeng/jobs",
-                data={"prompt": "make a video"},
-                headers={
-                    "Origin": "https://example.com",
-                    "X-Canva-Banana-Local-Action": "jimeng-setup",
-                },
-            )
-
-        self.assertEqual(response.status_code, 403)
-        create_job.assert_not_called()
-
-    def test_jimeng_job_submission_allows_trusted_local_frontend(self) -> None:
-        client = TestClient(app, client=LOCAL_TEST_CLIENT)
-        job = build_job_state(
-            model_id="jimeng-cli/seedance-2",
-            model_label="Seedance 2 (JM CLI)",
-            status="IN_QUEUE",
-            output_url=None,
-            last_frame_url=None,
-        )
-
-        with patch("uvpython_service.main.create_jimeng_job", return_value=job) as create_job:
-            response = client.post(
-                "/api/jimeng/jobs",
-                data={
-                    "prompt": "make a video",
-                    "model_id": "jimeng-cli/seedance-2",
-                    "variant": "smart",
-                    "model_version": "seedance2.0fast",
-                    "ratio": "16:9",
-                    "duration": "5",
-                    "resolution": "720p",
-                    "generate_audio": "false",
-                    "camera_fixed": "false",
-                },
-                headers={
-                    "Origin": "http://localhost:5173",
-                    "X-Canva-Banana-Local-Action": "jimeng-setup",
-                },
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["provider"], "jimeng")
-        create_job.assert_called_once()
-
-    def test_jimeng_job_submission_rejects_unknown_model_version_instead_of_falling_back(self) -> None:
-        client = TestClient(app, client=LOCAL_TEST_CLIENT)
-
-        with patch("uvpython_service.main.create_jimeng_job") as create_job:
-            response = client.post(
-                "/api/jimeng/jobs",
-                data={
-                    "prompt": "make a video",
-                    "model_id": "jimeng-cli/seedance-2",
-                    "variant": "smart",
-                    "model_version": "legacy-model",
-                    "ratio": "16:9",
-                    "duration": "5",
-                    "resolution": "720p",
-                },
-                headers={
-                    "Origin": "http://localhost:5173",
-                    "X-Canva-Banana-Local-Action": "jimeng-setup",
-                },
-            )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Unsupported Jimeng model_version", response.json()["detail"])
-        create_job.assert_not_called()
-
-    def test_jimeng_job_submission_rejects_unprobeable_reference_video(self) -> None:
-        client = TestClient(app, client=LOCAL_TEST_CLIENT)
-
-        with patch("uvpython_service.main.get_ffprobe_status", return_value=SimpleNamespace(available=True)):
-            with patch("uvpython_service.main.probe_media_duration_seconds", return_value=None):
-                with patch("uvpython_service.main.create_jimeng_job") as create_job:
-                    response = client.post(
-                        "/api/jimeng/jobs",
-                        data={
-                            "prompt": "make a video",
-                            "model_id": "jimeng-cli/seedance-2",
-                            "variant": "reference",
-                            "model_version": "seedance2.0fast",
-                            "ratio": "16:9",
-                            "duration": "5",
-                            "resolution": "720p",
-                            "generate_audio": "false",
-                            "camera_fixed": "false",
-                        },
-                        files={"reference_videos": ("ref.mp4", b"not-a-video", "video/mp4")},
-                        headers={
-                            "Origin": "http://localhost:5173",
-                            "X-Canva-Banana-Local-Action": "jimeng-setup",
-                        },
-                    )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Could not read reference video duration", response.json()["detail"])
-        create_job.assert_not_called()
 
     def test_job_websocket_streams_initial_snapshot_and_terminal_update_before_close(self) -> None:
         client = TestClient(app)

@@ -18,7 +18,12 @@ import {
   type GenerationPlacedPayload,
 } from './types';
 import { FalQueuePanel } from './components/FalQueuePanel';
-import { JimengSetupPanel } from './components/JimengSetupPanel';
+import { JimengCanvasApproval } from './components/JimengCanvasApproval';
+import { JimengCanvasSetup } from './components/JimengCanvasSetup';
+import { useJimengCanvas } from './hooks/useJimengCanvas';
+import { JIMENG_CANVAS_VIDEO_CATALOG_PENDING } from './services/jimengCanvasVideoModels';
+import { getJimengCanvasResumeId } from './services/jimengCanvasRecovery';
+import { findJimengCanvasAttempt } from './services/jimengCanvasGeneration';
 import { PromptChatPanel } from './components/PromptChatPanel';
 import { NotesPanel } from './components/NotesPanel';
 import {
@@ -34,6 +39,7 @@ import {
 } from './services/promptBarConfig';
 import { getSeedanceVideoPickerModelId, withSelectedSeedanceVideoPickerOption } from './services/seedanceVideoPicker';
 import { getModelUiCapabilities } from './services/modelCapabilities';
+import { getSeedream55ModelProvider, SEEDREAM_55_JIMENG_CANVAS_MODEL_ID } from './services/seedream55Config';
 import { buildFooterPromptBarControlsInput } from './services/promptBarSettingsView';
 import { useBlindTestMode } from './hooks/useBlindTestMode';
 import { isOverlapping } from './utils/canvasGeometry';
@@ -61,7 +67,6 @@ import { useFlux3PromptState } from './hooks/useFlux3PromptState';
 import { useVideoNegativePrompt } from './hooks/useVideoNegativePrompt';
 import { useFalQueueJobs } from './hooks/useFalQueueJobs';
 import { useBlockingOverlays } from './hooks/useBlockingOverlays';
-import { useJimengSetup } from './hooks/useJimengSetup';
 import { useGenerationCanvasNotifications, type GenerationCanvasNotification } from './hooks/useGenerationCanvasNotifications';
 import { useGenerationPromptBarTransfer } from './hooks/useGenerationPromptBarTransfer';
 import { useFileNameVisibility } from './hooks/useFileNameVisibility';
@@ -212,7 +217,10 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const [isLoading, setIsLoading] = useState(false);
 
   // State for error message display (null if no error)
-  const [error, setError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<{ message: string; modelId?: string } | null>(null);
+  const setError = useCallback((message: string | null, modelId?: string) => {
+    setStatusError(message === null ? null : { message, modelId });
+  }, []);
 
   const { showFileName, toggleFileName } = useFileNameVisibility(); // The user's View-menu choice survives desktop relaunches.
   const { trackpadMode, toggleTrackpadMode } = useTrackpadMode(); // Trackpad zoom remains an explicit persisted opt-in.
@@ -232,22 +240,20 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   const [apiProvider, setApiProvider] = useState<ApiProvider>(DEFAULT_API_PROVIDER);
 
   // FAL job queue state + auto-dismiss handling.
-  const { falJobs, setFalJobs, dismissFalJob: handleDismissFalJob, invalidateJobOutputs } = useFalQueueJobs();
+  const { falJobs, setFalJobs, dismissFalJob: handleDismissFalJob } = useFalQueueJobs();
 
   // FAL model and option state/handlers (image/video mode, variants, sliders, etc.)
   const fal = useFalSettings({ apiProvider });
+  const jimengCanvas = useJimengCanvas();
   const isEmbeddedJimengSeedanceModelActive = displayedVideoPromptBars.some(bar => (
     isJimengEmbeddedVideoModel(getEmbeddedVideoPromptBarModelId(bar.modelId))
   )); // Embedded bars can use JM CLI even when the footer model does not.
   const isJimengSeedanceModelSelected = apiProvider === 'fal' && fal.isJimengSeedance2VideoModel;
-  const jimengSetup = useJimengSetup({
-    isSetupRequired: isJimengSeedanceModelSelected || isEmbeddedJimengSeedanceModelActive,
-    isSelectedModelActive: isJimengSeedanceModelSelected,
-    onBeforeClearCache: () => setIsFileMenuOpen(false),
-    onCacheCleared: invalidateJobOutputs,
-    setError,
-    setToastMessage,
-  });
+  const [isJimengCanvasSetupOpen, setIsJimengCanvasSetupOpen] = useState(false);
+  const isJimengCanvasImageSelected = apiProvider === 'fal' && fal.falModelId === SEEDREAM_55_JIMENG_CANVAS_MODEL_ID;
+  const isJimengCanvasVideoCatalogPending = isJimengSeedanceModelSelected
+    && fal.falVideoModelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
+    && jimengCanvas.resolveVideoModel(fal.seedance2JimengModelVersion) === null;
 
   // On-canvas video prompt areas/bars: selection, creation, memberships, and the
   // embedded control builder.
@@ -300,6 +306,8 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     mapModelOptions,
     blindTestMapping,
   } = useBlindTestMode();
+  const error = blindTestEnabled && getSeedream55ModelProvider(statusError?.modelId)
+    ? 'Image generation failed. You can retry from the queue.' : statusError?.message ?? null;
 
   // App-owned blocking overlays (file menu, backups, desktop settings, app icon, debug log).
   const {
@@ -786,6 +794,11 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     openAppOwnedBlockingOverlay('backups');
   }, [openAppOwnedBlockingOverlay]); // Backup listing/restore state lives inside AppModals.
 
+  const openJimengCanvasSetup = useCallback(() => {
+    closeFileMenu();
+    setIsJimengCanvasSetupOpen(true);
+  }, [closeFileMenu]);
+
   const handleImportSnapshot = useCallback(() => {
     closeFileMenu();
     importSnapshotWithPicker(() => {
@@ -821,14 +834,13 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
       toggleFileName,
       toggleTrackpadMode,
       openDebugLog: openDebugLogPanel,
-      clearJimengCache: jimengSetup.handleClearCache,
+      openJimengCanvasSetup,
     },
     fileMenuState: {
       autosaveEnabled,
       showZoomLevelBadge,
       showFileName,
       trackpadMode,
-      isClearingJimengCache: jimengSetup.isClearingCache,
     },
   });
 
@@ -886,6 +898,9 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     setTool,
     onGenerationComplete: handleGenerationComplete,
     onGenerationPlaced: handleGenerationPlaced,
+    resolveJimengCanvasVideoModel: jimengCanvas.resolveVideoModel,
+    requestJimengCanvasApproval: jimengCanvas.requestApproval,
+    jimengCanvasDocumentName: activeSnapshotFileName ?? undefined,
   });
 
   const { renderDraft: handleRenderVolcengineDraft, clearUnconfirmedRender, retryLastFrame, downloadingLastFrames } = useVolcengineDraftFinalization({
@@ -893,12 +908,27 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   });
 
   const isEmbeddedPromptBarActive = activeEmbeddedPromptBarId !== null;
-  const handlePromptSubmit = useCallback(async () => {
-    if (isJimengSeedanceModelSelected && !(await jimengSetup.ensureReady())) {
-      return;
-    }
+  const handlePromptSubmit = useCallback(() => {
+    if (isJimengCanvasVideoCatalogPending) return;
     void handleGenerate();
-  }, [handleGenerate, isJimengSeedanceModelSelected, jimengSetup]);
+  }, [handleGenerate, isJimengCanvasVideoCatalogPending]);
+
+  const seedreamProvider = getSeedream55ModelProvider(fal.falModelId);
+  const layerizeProvider = seedreamProvider === 'jimeng' ? undefined : seedreamProvider;
+  const layerizeSourceId = apiProvider === 'fal' && !fal.isVideoMode && layerizeProvider
+    && hasSingleImageSelected && referenceImageIds.length + referenceVideoIds.length + referenceAudioIds.length === 0
+    ? activePrimaryImage?.id : undefined;
+  const handleLayerize = useCallback(() => {
+    if (!layerizeSourceId || !layerizeProvider) return;
+    void handleGenerate({
+      kind: 'layerize',
+      prompt,
+      provider: layerizeProvider,
+      modelId: fal.falModelId,
+      modelMode: 'image',
+      primaryImageId: layerizeSourceId,
+    });
+  }, [fal.falModelId, handleGenerate, layerizeProvider, layerizeSourceId, prompt]);
 
   useEffect(() => {
     autosaveSnapshotRef.current = autosaveSnapshot;
@@ -945,7 +975,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   };
 
   // Re-run a past generation using the saved metadata on the selected image.
-  const handleRerunGeneration = useCallback(async (imageId: string) => {
+  const handleRerunGeneration = useCallback((imageId: string) => {
     const targetImage = images.find(img => img.id === imageId);
     const generation = targetImage?.metadata?.generation;
     if (!generation) {
@@ -953,39 +983,54 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
       setTimeout(() => setToastMessage(null), 2000);
       return;
     }
-    const isJimengRerun = generation.provider === 'jimeng'
-      || generation.modelId === JIMENG_SEEDANCE_2_VIDEO_MODEL_ID
-      || Boolean(generation.jimengOptions); // Saved snapshots may identify JM CLI by provider, model, or options.
-    if (isJimengRerun && !(await jimengSetup.ensureReady())) {
-      return;
-    }
     void handleGenerate(generation);
-  }, [handleGenerate, images, jimengSetup, setToastMessage]);
+  }, [handleGenerate, images, setToastMessage]);
 
   const handleRetryFalJob = useCallback(async (jobId: string) => {
     if (retryingFalJobIdsRef.current.has(jobId)) {
       return true;
     }
     const job = falJobs.find(candidate => candidate.id === jobId);
-    if (!job?.retryInputs || job.status !== 'FAILED') {
+    const resumeId = job && getJimengCanvasResumeId(job);
+    if (!job?.retryInputs || (job.status !== 'FAILED' && !(job.status === 'COMPLETED' && resumeId))) {
       setToastMessage('No queue retry data available.');
       setTimeout(() => setToastMessage(null), 2000);
       return false;
     }
-    if (job.retryInputs.provider === 'jimeng' && !(await jimengSetup.ensureReady())) {
+    let resumeJimengCanvasJobId = resumeId;
+    let jimengCanvasAttemptId = job.jimengCanvasAttemptId;
+    if ((resumeJimengCanvasJobId || jimengCanvasAttemptId) && !window.confirm(job.jimengCanvasDocumentName
+      ? `This job started on "${job.jimengCanvasDocumentName}". Continue in the current canvas?`
+      : 'Continue this Jimeng Canvas job in the current canvas?')) {
       return false;
     }
     retryingFalJobIdsRef.current.add(jobId); // Blocks duplicate retries while this attempt runs.
     try {
+      if (!resumeJimengCanvasJobId && jimengCanvasAttemptId) {
+        const retryDocument = getCanvasDocument().version;
+        try {
+          const attempt = await findJimengCanvasAttempt(jimengCanvasAttemptId);
+          if (getCanvasDocument().version !== retryDocument) return false;
+          if (attempt?.phase === 'failed' || attempt?.phase === 'cancelled') jimengCanvasAttemptId = undefined;
+          else resumeJimengCanvasJobId = attempt?.id;
+        } catch (error) {
+          setError(error instanceof Error ? error.message : 'Could not check the existing Jimeng Canvas job.');
+          return false;
+        }
+      }
       await handleGenerate(job.retryInputs, {
         retryJobId: job.id,
+        ...(resumeJimengCanvasJobId ? { resumeJimengCanvasJobId } : {}),
+        ...(jimengCanvasAttemptId ? { jimengCanvasAttemptId } : {}),
+        ...(resumeJimengCanvasJobId
+          ? { originalJimengCanvasDocumentName: job.jimengCanvasDocumentName ?? null } : {}),
         ...(job.provider === 'volcengine' && job.providerJobId ? { resumeSeedanceJobId: job.providerJobId } : {}),
       });
       return true;
     } finally {
       retryingFalJobIdsRef.current.delete(jobId);
     }
-  }, [falJobs, handleGenerate, jimengSetup, setToastMessage]);
+  }, [falJobs, getCanvasDocument, handleGenerate, setError, setToastMessage]);
 
 
   const selectedImageIndex = primaryImageId ? images.findIndex(img => img.id === primaryImageId) : -1;
@@ -1087,7 +1132,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
     const baseProviderInput = buildEmbeddedVideoGenerationProviderInput(
       targetBar,
       targetModelId,
-      fal.jimengSessionId,
       Boolean(generationOverrides.primaryImageId),
     );
     const providerInput = targetModelId === FLUX_3_VIDEO_MODEL_ID && baseProviderInput.falOptions
@@ -1099,9 +1143,6 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         },
       }
       : baseProviderInput;
-    if (isJimengEmbeddedVideoModel(targetModelId) && !(await jimengSetup.ensureReady())) {
-      return;
-    }
     void handleGenerate({
       kind: 'video',
       prompt: targetBar.prompt,
@@ -1110,7 +1151,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
       modelMode: 'video',
       ...generationOverrides,
     });
-  }, [displayedVideoPromptBars, fal.jimengSessionId, handleGenerate, jimengSetup, videoPromptAreaMemberships]);
+  }, [displayedVideoPromptBars, handleGenerate, videoPromptAreaMemberships]);
 
   const hasSourceVideoSelected = Boolean(sourceVideoId);
   const hasSourceAudioSelected = Boolean(sourceAudioId);
@@ -1185,15 +1226,18 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
   }), arkAssetMentions);
   const selectedPromptBarModel = getSeedanceVideoPickerModelId(fal.falModelId, fal.seedance2VolcengineModel);
   const promptBarModelOptions = mapModelOptions(withSelectedSeedanceVideoPickerOption(
-    getPromptBarModelOptions(fal.falModelMode, runtimeConfig.tokenHubSeedanceEnabled), selectedPromptBarModel,
+    getPromptBarModelOptions(fal.falModelMode, runtimeConfig.tokenHubSeedanceEnabled).filter(option => (
+      option.value !== SEEDREAM_55_JIMENG_CANVAS_MODEL_ID || jimengCanvas.hasSeedream55 || isJimengCanvasImageSelected
+    )), selectedPromptBarModel,
   ));
   const providerLabels = useMemo<Record<ApiProviderId, string>>(() => ({
     google: PROVIDER_LABELS.google,
-    fal: modelCapabilities.provider === 'jimeng'
+    fal: blindTestEnabled && !fal.isVideoMode ? 'IMAGE MODELS'
+      : modelCapabilities.provider === 'jimeng'
       ? 'JM CLI'
       : modelCapabilities.provider === 'volcengine' ? 'VOLCENGINE'
         : modelCapabilities.provider === 'tokenhub' ? 'TOKENHUB' : PROVIDER_LABELS.fal,
-  }), [modelCapabilities.provider]);
+  }), [blindTestEnabled, fal.isVideoMode, modelCapabilities.provider]);
   const shouldShowNegativePrompt = modelCapabilities.showNegativePrompt;
   const isCameraPromptAccentActive = isCameraSettingsEnabled && hasCameraSettings(cameraSettings);
   const promptOutlineColor = isCameraPromptAccentActive
@@ -1256,8 +1300,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
                 onToggleTrackpadMode={toggleTrackpadMode}
                 onOpenDebugLog={openDebugLogPanel}
                 onOpenDesktopSettings={hasDesktopSettingsBridge ? openDesktopSettings : undefined}
-                onClearJimengCache={jimengSetup.handleClearCache}
-                isClearingJimengCache={jimengSetup.isClearingCache}
+                onOpenJimengCanvasSetup={openJimengCanvasSetup}
               />
             )}
             {isMacDesktop && showFileName && activeSnapshotFileName && (
@@ -1396,6 +1439,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
           onRetryVolcengineLastFrame={retryLastFrame}
           downloadingLastFrames={downloadingLastFrames}
           showMetadataOverlay={showMetadataOverlay}
+          blindTestMapping={blindTestEnabled ? blindTestMapping : undefined}
           transformMode={transformMode}
           onStartTransform={handleStartTransform}
           onExitTransform={handleExitTransform}
@@ -1455,6 +1499,7 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
       )}
       <GenerationCanvasNotifications
         notifications={generationCanvasNotifications}
+        blindTestMapping={blindTestEnabled ? blindTestMapping : undefined}
         onActivate={handleGenerationNotificationActivate}
         onDismiss={dismissGenerationNotification}
       />
@@ -1503,31 +1548,29 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         blindTestMapping={blindTestMapping}
       />
 
-      {jimengSetup.shouldShowPanel && (
-        <JimengSetupPanel
-          status={jimengSetup.status}
-          isChecking={jimengSetup.isChecking}
-          isInstalling={jimengSetup.isInstalling}
-          isStartingLogin={jimengSetup.isStartingLogin}
-          sessionId={fal.jimengSessionId}
-          onInstall={jimengSetup.handleInstall}
-          onLogin={jimengSetup.handleLogin}
-          onCheckLogin={jimengSetup.handleCheckLogin}
-          onSessionIdChange={fal.setJimengSessionId}
-          onRefresh={jimengSetup.refreshStatus}
-          onDismiss={jimengSetup.dismiss}
+      {(isJimengSeedanceModelSelected || isEmbeddedJimengSeedanceModelActive || isJimengCanvasImageSelected) && !isJimengCanvasSetupOpen && (
+        <button
+          type="button"
+          onClick={openJimengCanvasSetup}
+          className={`fixed left-4 top-20 ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} rounded-md border border-cyan-300/25 bg-gray-950/92 px-3 py-2 text-xs font-semibold text-cyan-100 shadow-2xl shadow-black/40 transition-colors hover:bg-cyan-300/12`}
+        >
+          Jimeng Canvas Setup
+        </button>
+      )}
+
+      {isJimengCanvasSetupOpen && (
+        <JimengCanvasSetup
+          onReadyChange={jimengCanvas.onReadyChange}
+          onDismiss={() => setIsJimengCanvasSetupOpen(false)}
         />
       )}
 
-      {jimengSetup.shouldShowReopen && (
-        <button
-          type="button"
-          onClick={jimengSetup.reopen}
-          className={`fixed right-4 top-20 ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} rounded-md border border-cyan-300/25 bg-gray-950/92 px-3 py-2 text-xs font-semibold text-cyan-100 shadow-2xl shadow-black/40 backdrop-blur-md transition-colors hover:bg-cyan-300/12`}
-          aria-label="Reopen Jimeng setup"
-        >
-          Jimeng Setup
-        </button>
+      {jimengCanvas.approval && (
+        <JimengCanvasApproval
+          job={jimengCanvas.approval}
+          onApprove={() => jimengCanvas.decideApproval('approve')}
+          onCancel={() => jimengCanvas.decideApproval('cancel')}
+        />
       )}
 
       {/* Provider switcher + prompt bar (hidden while cropping/transforming) */}
@@ -1542,11 +1585,11 @@ export default function App({ editorRef, standalone = true, onStateChange }: { e
         prompt={prompt}
         onPromptChange={setPrompt}
         onSubmit={handlePromptSubmit}
+        onLayerize={layerizeSourceId ? handleLayerize : undefined}
         isEmbeddedPromptBarActive={isEmbeddedPromptBarActive}
         disablePromptInput={disablePromptInput}
-        submitDisabled={submitDisabled}
-        submitDisabledReason={submitDisabledReason}
-        jimengBlocksSubmit={jimengSetup.shouldBlockSelectedSubmit}
+        submitDisabled={submitDisabled || isJimengCanvasVideoCatalogPending}
+        submitDisabledReason={isJimengCanvasVideoCatalogPending ? JIMENG_CANVAS_VIDEO_CATALOG_PENDING : submitDisabledReason}
         modelOptions={promptBarModelOptions}
         selectedModel={selectedPromptBarModel}
         onModelModeChange={handleModelModeChange}

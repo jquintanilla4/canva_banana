@@ -1,4 +1,4 @@
-export type { FalImageGenerationResult, FalPhaseUpdate, FalQueueUpdate } from './fal/types'; // Re-export Fal service types.
+export type { FalImageGenerationResult, FalLayerizeResult, FalPhaseUpdate, FalQueueUpdate } from './fal/types'; // Re-export Fal service types.
 export { getFalErrorPhase, getFalErrorRequestId } from './fal/errors'; // Re-export phase error helpers.
 
 export {
@@ -32,3 +32,5 @@ export { generateImage } from './fal/imageGenerate'; // Re-export text-to-image 
 export { generateImageToVideo } from './fal/video'; // Re-export image-to-video API.
 export { upscaleCrystalImage, upscaleSeedvrImage } from './fal/upscale'; // Re-export upscalers.
 export { removeBackground } from './fal/background'; // Re-export background removal.
+
+export { layerizeSeedream55Image } from './fal/seedream55';

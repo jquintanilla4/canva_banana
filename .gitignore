@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 /.jimeng-work/
+.jimeng-canvas/
 backend/.venv
 backend/.jimeng-work/
 backend/.pytest_cache

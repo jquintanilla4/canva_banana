@@ -25,11 +25,22 @@ describe('settings-env', () => {
     expect(parseDotenvEntry('MOONSHOT_API_KEY=')).toEqual({ key: 'MOONSHOT_API_KEY', value: '' });
   });
 
-  it('manages OpenRouter and TokenHub as optional desktop settings', () => {
-    for (const key of ['OPENROUTER_API_KEY', 'TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL']) {
+  it('manages Canvas, OpenRouter, and TokenHub as optional desktop settings', () => {
+    for (const key of ['JIMENG_CANVAS_CLI_PATH', 'OPENROUTER_API_KEY', 'TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL']) {
       expect(DESKTOP_SETTING_KEYS).toContain(key);
       expect(REQUIRED_DESKTOP_SETTING_KEYS).not.toContain(key);
     }
+  });
+
+  it('keeps an old executable path inert while saving the Canvas override', () => {
+    const existing = 'JIMENG_CLI_PATH="/legacy/dreamina"\n';
+    const { content, values } = applyDesktopSettings(existing, {
+      updates: { JIMENG_CANVAS_CLI_PATH: '/modern/dreamina-canvas' },
+    });
+
+    expect(DESKTOP_SETTING_KEYS).not.toContain('JIMENG_CLI_PATH');
+    expect(values).toEqual({ JIMENG_CANVAS_CLI_PATH: '/modern/dreamina-canvas' });
+    expect(content).toContain('JIMENG_CANVAS_CLI_PATH="/modern/dreamina-canvas"');
   });
 
   it('writes development settings where the standalone backend reads them', () => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { FalQueueJob } from '../types';
+import { forgetJimengCanvasJob, getJimengCanvasResumeId, keepsJimengCanvasQueueRow, restoreJimengCanvasJobs } from '../services/jimengCanvasRecovery';
 
 export const FAL_QUEUE_COMPLETED_AUTO_DISMISS_MS = 10_000; // Leave completed queue rows visible long enough to notice.
 
@@ -8,41 +9,23 @@ type UseFalQueueJobsResult = {
   falJobs: FalQueueJob[];
   setFalJobs: Dispatch<SetStateAction<FalQueueJob[]>>;
   dismissFalJob: (jobId: string) => void;
-  invalidateJobOutputs: (providerJobIds: string[]) => void;
 };
 
 export function useFalQueueJobs(): UseFalQueueJobsResult {
-  const [falJobs, setFalJobs] = useState<FalQueueJob[]>([]);
+  const [falJobs, setFalJobs] = useState(restoreJimengCanvasJobs);
   const autoDismissTimeouts = useRef<Map<string, number>>(new Map());
 
   const dismissFalJob = useCallback((jobId: string) => {
+    const job = falJobs.find(candidate => candidate.id === jobId);
+    const resumeId = job && getJimengCanvasResumeId(job);
+    if (resumeId) forgetJimengCanvasJob(resumeId);
     const timeoutId = autoDismissTimeouts.current.get(jobId);
     if (timeoutId !== undefined) {
       window.clearTimeout(timeoutId);
       autoDismissTimeouts.current.delete(jobId);
     }
     setFalJobs(prev => prev.filter(job => job.id !== jobId));
-  }, []);
-
-  const invalidateJobOutputs = useCallback((providerJobIds: string[]) => {
-    if (providerJobIds.length === 0) {
-      return;
-    }
-    const invalidatedIds = new Set(providerJobIds);
-    setFalJobs(previous => {
-      let changed = false;
-      const next = previous.map(job => {
-        if (!job.providerJobId || !invalidatedIds.has(job.providerJobId) || !job.outputUrl) {
-          return job;
-        }
-        const nextJob = { ...job };
-        delete nextJob.outputUrl;
-        changed = true;
-        return nextJob;
-      });
-      return changed ? next : previous;
-    });
-  }, []);
+  }, [falJobs]);
 
   useEffect(() => {
     const timeoutMap = autoDismissTimeouts.current;
@@ -56,7 +39,7 @@ export function useFalQueueJobs(): UseFalQueueJobsResult {
     });
 
     falJobs.forEach(job => {
-      if (job.status !== 'COMPLETED') {
+      if (job.status !== 'COMPLETED' || keepsJimengCanvasQueueRow(job)) {
         return;
       }
       if (timeoutMap.has(job.id)) {
@@ -79,5 +62,5 @@ export function useFalQueueJobs(): UseFalQueueJobsResult {
     };
   }, []);
 
-  return { falJobs, setFalJobs, dismissFalJob, invalidateJobOutputs };
+  return { falJobs, setFalJobs, dismissFalJob };
 }

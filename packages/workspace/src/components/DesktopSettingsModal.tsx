@@ -34,7 +34,7 @@ const PRIMARY_SETTING_FIELDS: SettingField[] = [
 
 const ADVANCED_SETTING_FIELDS: SettingField[] = [
   { key: 'TOKENHUB_BASE_URL', label: 'TokenHub Base URL', secret: false, placeholder: 'https://tokenhub.ctclouds.com/v1' },
-  { key: 'JIMENG_CLI_PATH', label: 'Jimeng CLI Path', secret: false, placeholder: '/usr/local/bin/dreamina' },
+  { key: 'JIMENG_CANVAS_CLI_PATH', label: 'Jimeng Canvas CLI Path', secret: false, placeholder: '/usr/local/bin/dreamina-canvas' },
 ];
 
 const SETTING_FIELDS = [...PRIMARY_SETTING_FIELDS, ...ADVANCED_SETTING_FIELDS]; // Keep value state aware of every managed key.

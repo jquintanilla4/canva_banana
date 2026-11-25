@@ -22,6 +22,7 @@ import { buildPromptContextMenuTemplate, isTextEntryContextMenuTarget } from './
 import { createAppQuitBarrier } from './app-quit-barrier.mjs';
 import { createBoundedHttpServerShutdown } from './bounded-http-server-shutdown.mjs';
 import { createManagedServiceLifecycle } from './managed-service-lifecycle.mjs';
+import { buildPythonBackendEnv } from './python-backend-env.mjs';
 import {
   assertKnownAppIconId,
   buildAppIconState,
@@ -109,7 +110,6 @@ let fileMenuState = {
   showZoomLevelBadge: true,
   showFileName: true,
   trackpadMode: false,
-  isClearingJimengCache: false,
 };
 
 const normalizeBaseUrl = (value) => value.replace(/\/+$/, ''); // Renderer URL builders expect no trailing slash.
@@ -1087,14 +1087,13 @@ const startPythonBackend = async (signal) => {
   signal?.throwIfAborted();
   const url = normalizeBaseUrl(`http://${host === '127.0.0.1' ? 'localhost' : host}:${port}`);
   const userDataDir = app.getPath('userData');
-  const env = {
-    ...process.env,
-    CANVA_BANANA_ENV_DIR: userDataDir,
-    CANVA_BANANA_DESKTOP_AUTH_TOKEN: desktopAuthToken,
-    CANVA_BANANA_PYTHON_HOST: host,
-    CANVA_BANANA_PYTHON_PORT: String(port),
-    JIMENG_WORK_DIR: process.env.JIMENG_WORK_DIR || join(userDataDir, 'jimeng-work'),
-  };
+  const env = buildPythonBackendEnv({
+    env: process.env,
+    userDataDir,
+    desktopAuthToken,
+    host,
+    port,
+  });
   const command = app.isPackaged ? getPackagedPythonExecutablePath() : 'uv';
   const args = app.isPackaged
     ? []
@@ -1333,7 +1332,6 @@ const updateFileMenuItems = () => {
   const zoomItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.ZOOM_LEVEL_BADGE);
   const fileNameItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.FILE_NAME);
   const trackpadModeItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.TRACKPAD_MODE);
-  const clearCacheItem = menu?.getMenuItemById(APPLICATION_MENU_ITEM_IDS.CLEAR_JIMENG_CACHE);
   if (autosaveItem) {
     autosaveItem.checked = fileMenuState.autosaveEnabled;
   }
@@ -1345,10 +1343,6 @@ const updateFileMenuItems = () => {
   }
   if (trackpadModeItem) {
     trackpadModeItem.checked = fileMenuState.trackpadMode;
-  }
-  if (clearCacheItem) {
-    clearCacheItem.enabled = !fileMenuState.isClearingJimengCache;
-    clearCacheItem.label = fileMenuState.isClearingJimengCache ? 'Clearing Jimeng Cache...' : 'Clear Jimeng Cache';
   }
 };
 
@@ -1396,7 +1390,7 @@ const installApplicationMenu = () => {
       openDebugLog: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_DEBUG_LOG),
       openManageKeys: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_MANAGE_KEYS),
       openChangeIcon: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_CHANGE_ICON),
-      clearJimengCache: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.CLEAR_JIMENG_CACHE),
+      openJimengCanvasSetup: () => void sendFileMenuCommand(FILE_MENU_COMMANDS.OPEN_JIMENG_CANVAS_SETUP),
       clearChatHistory: () => void clearChatHistoryFromMenu(),
     },
   });
@@ -1563,7 +1557,6 @@ ipcMain.handle('canva-banana:file-menu-set-state', (event, nextState) => {
     showZoomLevelBadge: typeof nextState?.showZoomLevelBadge === 'boolean' ? nextState.showZoomLevelBadge : fileMenuState.showZoomLevelBadge,
     showFileName: typeof nextState?.showFileName === 'boolean' ? nextState.showFileName : fileMenuState.showFileName,
     trackpadMode: typeof nextState?.trackpadMode === 'boolean' ? nextState.trackpadMode : fileMenuState.trackpadMode,
-    isClearingJimengCache: typeof nextState?.isClearingJimengCache === 'boolean' ? nextState.isClearingJimengCache : fileMenuState.isClearingJimengCache,
   };
   updateFileMenuItems();
   return true;

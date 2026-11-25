@@ -139,6 +139,8 @@ const PROMPT_BAR_VALUE_KEYS = [
   'recraftImageSize', 'recraftBackgroundColor', 'recraftColors',
   'grokImageAspectRatio', 'grokImageResolution', 'grokImageQuality', 'grokImageOutputFormat',
   'grokImagePassthrough', 'grokImageEnableSafetyChecker',
+  'seedream55Background',
+  'seedream55OutputFormat',
   'gptImage26Quality',
   'gptImage26Background',
   'gptImage26ReasoningEffort',
@@ -269,6 +271,8 @@ const buildEmbeddedPromptBarValues = (
     nanoBananaWebSearch: fal.nanoBananaWebSearch,
     nanoBananaThinkingLevel: fal.nanoBananaThinkingLevel,
     gptImage2Quality: fal.gptImage2Quality,
+    seedream55Background: fal.seedream55Background,
+    seedream55OutputFormat: fal.seedream55OutputFormat,
     gptImage26Quality: fal.gptImage26Quality,
     gptImage26Background: fal.gptImage26Background,
     gptImage26ReasoningEffort: fal.gptImage26ReasoningEffort,
@@ -403,6 +407,8 @@ const createFooterPromptBarHandlers = (
   onNanoBananaWebSearchChange: fal.handleNanoBananaWebSearchChange,
   onNanoBananaThinkingLevelChange: fal.handleNanoBananaThinkingLevelChange,
   onGptImage2QualityChange: fal.handleGptImage2QualityChange,
+  onSeedream55BackgroundChange: fal.handleSeedream55BackgroundChange,
+  onSeedream55OutputFormatChange: fal.handleSeedream55OutputFormatChange,
   onGptImage26QualityChange: fal.handleGptImage26QualityChange,
   onGptImage26BackgroundChange: fal.handleGptImage26BackgroundChange,
   onGptImage26ReasoningEffortChange: fal.handleGptImage26ReasoningEffortChange,
@@ -664,8 +670,9 @@ const deriveFirstFrameFlags = (
     && (site === 'embedded' || getSeedance2VolcengineModelCapabilities(values.seedance2VolcengineModel).family === '2.5')
     && hasFirstFrameImage,
   seedance25UsesSourceAspectRatio: flags.isSeedance25VideoModel === true
+    && modelId === FAL_SEEDANCE_25_VIDEO_MODEL_ID
     && values.seedance25Variant === 'smart'
-    && hasFirstFrameImage, // Jimeng image2video omits --ratio, so first-frame Smart uses the source ratio.
+    && hasFirstFrameImage,
 });
 
 export type FooterPromptBarInputParams = {

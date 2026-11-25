@@ -15,10 +15,10 @@ const keys: DesktopSettingsKey[] = [
   'VOLCENGINE_SECRET_KEY',
   'TOS_BUCKET_NAME',
   'TOS_REGION',
-  'JIMENG_CLI_PATH',
+  'JIMENG_CANVAS_CLI_PATH',
 ];
 
-const optionalKeys: DesktopSettingsKey[] = ['JIMENG_CLI_PATH', 'OPENROUTER_API_KEY', 'TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL'];
+const optionalKeys: DesktopSettingsKey[] = ['JIMENG_CANVAS_CLI_PATH', 'OPENROUTER_API_KEY', 'TOKENHUB_API_KEY', 'TOKENHUB_BASE_URL'];
 
 const buildStatus = (presentKeys: DesktopSettingsKey[] = []): DesktopSettingsStatus => ({
   configPath: '/Users/qa/Library/Application Support/The Institute/.env.local',
@@ -83,7 +83,7 @@ describe('DesktopSettingsModal', () => {
     await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ FAL_API_KEY: 'fal-secret' }));
   });
 
-  it('shows the Jimeng CLI path only in manage mode', () => {
+  it('shows the Jimeng Canvas CLI path only in manage mode', () => {
     render(
       <DesktopSettingsModal
         isOpen
@@ -94,7 +94,7 @@ describe('DesktopSettingsModal', () => {
       />
     );
 
-    expect(screen.queryByLabelText('Jimeng CLI Path', { selector: 'input' })).toBeNull();
+    expect(screen.queryByLabelText('Jimeng Canvas CLI Path', { selector: 'input' })).toBeNull();
     cleanup();
 
     render(
@@ -108,11 +108,11 @@ describe('DesktopSettingsModal', () => {
     );
 
     expect(screen.getByRole('heading', { name: /advanced/i })).toBeTruthy();
-    expect(screen.getByLabelText('Jimeng CLI Path', { selector: 'input' })).toBeTruthy();
+    expect(screen.getByLabelText('Jimeng Canvas CLI Path', { selector: 'input' })).toBeTruthy();
   });
 
-  it('allows the advanced Jimeng CLI path to be saved manually', async () => {
-    const saveSettings = vi.fn().mockResolvedValue(buildStatus(['JIMENG_CLI_PATH']));
+  it('allows the advanced Jimeng Canvas CLI path to be saved manually', async () => {
+    const saveSettings = vi.fn().mockResolvedValue(buildStatus(['JIMENG_CANVAS_CLI_PATH']));
     window.canvaBananaDesktop = { saveSettings };
 
     render(
@@ -125,10 +125,10 @@ describe('DesktopSettingsModal', () => {
       />
     );
 
-    fireEvent.change(screen.getByLabelText('Jimeng CLI Path', { selector: 'input' }), { target: { value: ' /usr/local/bin/dreamina ' } });
+    fireEvent.change(screen.getByLabelText('Jimeng Canvas CLI Path', { selector: 'input' }), { target: { value: ' /usr/local/bin/dreamina-canvas ' } });
     fireEvent.click(screen.getByRole('button', { name: /apply settings/i }));
 
-    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ JIMENG_CLI_PATH: '/usr/local/bin/dreamina' }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledWith({ JIMENG_CANVAS_CLI_PATH: '/usr/local/bin/dreamina-canvas' }));
   });
 
   it('saves optional TokenHub credentials and advanced base URL settings', async () => {

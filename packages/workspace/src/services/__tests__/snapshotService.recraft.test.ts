@@ -1044,6 +1044,28 @@ describe('snapshotService (Sync v3 metadata)', () => {
 });
 
 describe('snapshotService (Jimeng metadata)', () => {
+  it('preserves the catalog model ID for a Canvas Standard Fast generation', () => {
+    const metadata = normalizeSnapshotImageMetadata({
+      source: 'generated',
+      generation: {
+        kind: 'video',
+        prompt: 'jimeng canvas prompt',
+        provider: 'jimeng',
+        modelId: 'jimeng-cli/seedance-2',
+        modelMode: 'video',
+        jimengOptions: {
+          canvasModel: 'fixture_seedance20_standard_fast',
+          seedance2JimengModelVersion: 'seedance2.0fast',
+        },
+      },
+    });
+
+    expect(metadata?.generation?.jimengOptions).toMatchObject({
+      canvasModel: 'fixture_seedance20_standard_fast',
+      seedance2JimengModelVersion: 'seedance2.0fast',
+    });
+  });
+
   it('preserves Jimeng Seedance options from snapshots', () => {
     const metadata = normalizeSnapshotImageMetadata({
       source: 'generated',

@@ -1,5 +1,6 @@
 import { getSeedance2VolcengineModelCapabilities } from './volcengineModels';
 import { isGptImage26Model } from './gptImage26Config';
+import { getSeedream55ModelProvider } from './seedream55Config';
 import { isTokenHubGptImage25Model } from './tokenHubGptImage25Config';
 import { isTokenHubNanoBananaModel } from './tokenHubNanoBananaConfig';
 import {
@@ -488,7 +489,7 @@ export const getModelUiCapabilities = (
     || selection.flux3KeyframesMode;
   const merged = {
     id: modelId,
-    provider: getEmbeddedVideoProvider(modelId),
+    provider: getSeedream55ModelProvider(modelId) ?? getEmbeddedVideoProvider(modelId),
     supportsTailFrame: false,
     maxReferenceImages: getMaxReferenceImages(modelId as FalModelId),
     referenceLimitToast: null,

@@ -10,9 +10,6 @@ VolcengineJobStatus = Literal["IN_QUEUE", "IN_PROGRESS", "COMPLETED", "FAILED"] 
 SeedanceRatio = Literal["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "adaptive"]  # Supported ratio values.
 SeedanceResolution = Literal["480p", "720p", "1080p", "4k"]
 SeedanceOutputFormat = Literal["mp4", "mov"]  # Seedance 2.5 output container options.
-JimengSeedanceResolution = Literal["480p", "720p", "1080p", "4k"]  # Dreamina has a VIP-only 4K output option.
-JimengSeedanceModelVersion = Literal["seedance2.0fast", "seedance2.0", "seedance2.0_vip", "seedance2.0fast_vip", "seedance2.0mini", "seedance2.5"]  # Dreamina CLI model_version values.
-JimengGenerationMode = Literal["auto", "multiframe"]  # Auto derives text/image/frames/reference commands from the attached media.
 
 DEFAULT_MODEL_ID = "doubao-seedance-2-0-260128"  # Seedance 2 production model.
 TOKENHUB_SEEDANCE20_MODEL_ID = "doubao-seedance-2-0-os-standard"
@@ -90,11 +87,8 @@ class SeedanceJobPayload:
     variant: SeedanceVariant
     ratio: SeedanceRatio
     duration: int  # May be -1 on Seedance 2.5 to let the model auto-select.
-    resolution: SeedanceResolution | JimengSeedanceResolution | None = None
+    resolution: SeedanceResolution | None = None
     output_format: SeedanceOutputFormat | None = None  # Seedance 2.5 only; mp4 is the provider default.
-    jimeng_model_version: JimengSeedanceModelVersion | None = None
-    jimeng_mode: JimengGenerationMode = "auto"
-    session_id: int = 0
     generate_audio: bool = False
     web_search: bool = False
     return_last_frame: bool = False
@@ -107,9 +101,6 @@ class SeedanceJobPayload:
     reference_images: list[MediaInput | AssetInput] = field(default_factory=list)
     reference_videos: list[MediaInput | AssetInput] = field(default_factory=list)
     reference_audios: list[MediaInput | AssetInput] = field(default_factory=list)
-    multiframe_images: list[MediaInput] = field(default_factory=list)
-    transition_prompts: list[str] = field(default_factory=list)
-    transition_durations: list[float] = field(default_factory=list)
 
     def iter_media_inputs(self) -> tuple[MediaInput, ...]:
         media_items = [
@@ -117,7 +108,6 @@ class SeedanceJobPayload:
             *self.reference_images,
             *self.reference_videos,
             *self.reference_audios,
-            *self.multiframe_images,
         ]
         return tuple(media for media in media_items if isinstance(media, MediaInput))
 

@@ -1,4 +1,5 @@
 import type { VolcengineSettings } from '../services/volcengineSettings';
+import { SEEDREAM_55_DEFAULTS, getSeedream55ImageSizeOptions, getSeedream55ModelProvider, isSeedream55Background, isSeedream55OutputFormat, type Seedream55Background, type Seedream55OutputFormat } from '../services/seedream55Config';
 import { GPT_IMAGE_26_DEFAULTS, GPT_IMAGE_26_IMAGE_SIZE_OPTIONS, isGptImage26Model, isGptImage26Quality, isGptImage26Background, isGptImage26ReasoningEffort, isGptImage26OutputFormat, type GptImage26Quality, type GptImage26Background, type GptImage26ReasoningEffort, type GptImage26OutputFormat } from '../services/gptImage26Config';
 import { getRuntimeConfig } from '../services/runtimeConfig';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
@@ -330,6 +331,8 @@ type FalHandlers = {
   handleNanoBananaWebSearchChange: (value: string) => void;
   handleNanoBananaThinkingLevelChange: (value: string) => void;
   handleGptImage2QualityChange: (value: string) => void;
+  handleSeedream55BackgroundChange: (value: string) => void;
+  handleSeedream55OutputFormatChange: (value: string) => void;
   handleGptImage26QualityChange: (value: string) => void;
   handleGptImage26BackgroundChange: (value: string) => void;
   handleGptImage26ReasoningEffortChange: (value: string) => void;
@@ -461,6 +464,8 @@ export type UseFalSettingsResult = FalDerivedState & FalHandlers & {
   nanoBananaWebSearch: boolean;
   nanoBananaThinkingLevel: NanoBananaThinkingLevel;
   gptImage2Quality: FalGptImage2QualitySelectionValue;
+  seedream55Background: Seedream55Background;
+  seedream55OutputFormat: Seedream55OutputFormat;
   gptImage26Quality: GptImage26Quality;
   gptImage26Background: GptImage26Background;
   gptImage26ReasoningEffort: GptImage26ReasoningEffort;
@@ -700,6 +705,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
   const [nanoBananaWebSearch, setNanoBananaWebSearch] = useState<boolean>(NANO_BANANA_DEFAULTS.nanoBananaWebSearch);
   const [nanoBananaThinkingLevel, setNanoBananaThinkingLevel] = useState<NanoBananaThinkingLevel>(NANO_BANANA_DEFAULTS.nanoBananaThinkingLevel);
   const [gptImage2Quality, setGptImage2Quality] = useState<FalGptImage2QualitySelectionValue>(GPT_IMAGE_2_DEFAULTS.gptImage2Quality);
+  const [seedream55Background, setSeedream55Background] = useState<Seedream55Background>(SEEDREAM_55_DEFAULTS.seedream55Background);
+  const [seedream55OutputFormat, setSeedream55OutputFormat] = useState<Seedream55OutputFormat>(SEEDREAM_55_DEFAULTS.seedream55OutputFormat);
   const [gptImage26Quality, setGptImage26Quality] = useState<GptImage26Quality>(GPT_IMAGE_26_DEFAULTS.gptImage26Quality);
   const [gptImage26Background, setGptImage26Background] = useState<GptImage26Background>(GPT_IMAGE_26_DEFAULTS.gptImage26Background);
   const [gptImage26ReasoningEffort, setGptImage26ReasoningEffort] = useState<GptImage26ReasoningEffort>(GPT_IMAGE_26_DEFAULTS.gptImage26ReasoningEffort);
@@ -946,6 +953,12 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
 
   useEffect(() => {
     if (falModelMode === 'video') {
+      return;
+    }
+    if (getSeedream55ModelProvider(falModelId)) {
+      if (!getSeedream55ImageSizeOptions(falModelId).some(option => option.value === falImageSizeSelection)) {
+        setFalImageSizeSelection(SEEDREAM_55_DEFAULTS.imageSizeSelection);
+      }
       return;
     }
     if (isKrea3Model(falModelId) || falModelId === GPT_IMAGE_2_EDIT_MODEL_ID || isGptImage25Model(falModelId) || isGptImage26Model(falModelId) || isTokenHubGptImage25Model(falModelId)) {
@@ -1468,6 +1481,14 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     setRecraftColors(prev => prev.slice(0, Math.max(0, prev.length - 1)));
   }, []);
 
+  const handleSeedream55BackgroundChange = useCallback((value: string) => {
+    if (isSeedream55Background(value)) setSeedream55Background(value);
+  }, []);
+
+  const handleSeedream55OutputFormatChange = useCallback((value: string) => {
+    if (isSeedream55OutputFormat(value)) setSeedream55OutputFormat(value);
+  }, []);
+
   const handleGptImage26QualityChange = useCallback((value: string) => {
     if (isGptImage26Quality(value)) setGptImage26Quality(value);
   }, []);
@@ -1651,6 +1672,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
       nanoBananaWebSearch: setNanoBananaWebSearch,
       nanoBananaThinkingLevel: setNanoBananaThinkingLevel,
       gptImage2Quality: setGptImage2Quality,
+      seedream55Background: setSeedream55Background,
+      seedream55OutputFormat: setSeedream55OutputFormat,
       gptImage26Quality: setGptImage26Quality,
       gptImage26Background: setGptImage26Background,
       gptImage26ReasoningEffort: setGptImage26ReasoningEffort,
@@ -1875,6 +1898,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     nanoBananaWebSearch,
     nanoBananaThinkingLevel,
     gptImage2Quality,
+    seedream55Background,
+    seedream55OutputFormat,
     gptImage26Quality,
     gptImage26Background,
     gptImage26ReasoningEffort,
@@ -2016,6 +2041,8 @@ export function useFalSettings({ apiProvider }: UseFalSettingsArgs): UseFalSetti
     handleNanoBananaWebSearchChange,
     handleNanoBananaThinkingLevelChange,
     handleGptImage2QualityChange,
+    handleSeedream55BackgroundChange,
+    handleSeedream55OutputFormatChange,
     handleGptImage26QualityChange,
     handleGptImage26BackgroundChange,
     handleGptImage26ReasoningEffortChange,

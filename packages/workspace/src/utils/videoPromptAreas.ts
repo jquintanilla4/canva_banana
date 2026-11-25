@@ -200,7 +200,7 @@ export const getVideoPromptAreaCapabilityProfile = (
     if (variant === 'smart') {
       return imageOnlyProfile(resolvedModelId, { shiftImageRole: 'tail', maxImages: 2, supportsTextOnly: true });
     }
-    return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId }; // CLI multimodal2video exposes all-around references.
+    return { ...SEEDANCE_2_VIDEO_PROMPT_PROFILE, id: resolvedModelId };
   }
 
   if (resolvedModelId === JIMENG_MULTIFRAME_VIDEO_MODEL_ID) {

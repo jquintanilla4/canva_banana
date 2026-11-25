@@ -10,31 +10,30 @@ from pathlib import Path
 from typing import Any, Iterator, Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from urllib.request import Request, urlopen
+from uuid import UUID
 
 from fastapi import FastAPI, File, Form, HTTPException, Request as FastAPIRequest, UploadFile, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import FormData, UploadFile as StarletteUploadFile
 from volcenginesdkarkruntime._exceptions import ArkAPIStatusError
 
 from uvpython_service.config import get_settings, get_tokenhub_settings
-from uvpython_service.jimeng_worker import JIMENG_MODEL_ID, check_jimeng_health, check_jimeng_login, clear_jimeng_cache, create_jimeng_job, get_jimeng_setup_status, install_or_update_jimeng_cli, jimeng_job_store, serialize_jimeng_job, start_jimeng_login
+from uvpython_service.jimeng_canvas_cli import CanvasCliError, check_canvas_login, get_canvas_catalog, get_canvas_setup_status, install_canvas_cli, start_canvas_login
+from uvpython_service.jimeng_canvas_jobs import CanvasJobError, CanvasJobRequest, approve_canvas_job, cancel_canvas_job, get_canvas_asset, get_canvas_job, prepare_canvas_job, resume_canvas_preparation
 from uvpython_service.media import get_ffprobe_status, probe_media_duration_seconds
 from uvpython_service.models import JobState, is_tokenhub
 from uvpython_service.tokenhub_seedance import validate_output_url, validate_configuration
 from uvpython_service.models import DEFAULT_MODEL_ID, DraftFinalizationPayload, MediaInput, SeedanceJobPayload
 from uvpython_service.ark_references import resolve_reference_sources
 from uvpython_service.store import job_store
+from uvpython_service.seedream_images import ImageGenerationUpstreamError, generate_images, read_image_form, read_image_uploads, validate_image_options
 from uvpython_service.worker import DraftFinalizationNotSubmitted, DraftFinalizationUnavailable, create_draft_finalization, create_job, resume_draft_finalization, resume_tokenhub_job, serialize_job
 
 app = FastAPI(title="Canva Banana UV Python Service")  # Local dev API surface.
-JIMENG_VIDEO_MEDIA_TYPES = {
-    ".mp4": "video/mp4",
-    ".m4v": "video/mp4",
-    ".mov": "video/quicktime",
-    ".webm": "video/webm",
-}  # Preserve local CLI output MIME types so the frontend video loader accepts them.
 LOCAL_ACTION_HEADER_NAME = "x-canva-banana-local-action"  # Browser setup calls must opt in with a non-simple header.
 DESKTOP_AUTH_TOKEN_HEADER_NAME = "x-canva-banana-desktop-token"  # Desktop requests carry the per-launch nonce here.
 DESKTOP_AUTH_TOKEN_ENV_NAME = "CANVA_BANANA_DESKTOP_AUTH_TOKEN"  # Electron injects this into managed local services.
@@ -49,11 +48,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-class _NoRedirectHandler(HTTPRedirectHandler):
-    def redirect_request(self, req: Request, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
-        return None  # Keep urllib from following provider redirects before the target URL is validated.
 
 
 class _PinnedHTTPConnection(http.client.HTTPConnection):
@@ -161,20 +155,6 @@ def _resolve_public_remote_ip(hostname: str) -> str | None:
     return public_ips[0] if public_ips else None  # Pin the fetch to a public address from this validation pass.
 
 
-def _require_safe_jimeng_remote_url(remote_url: str) -> str:
-    parsed_url = urlparse(remote_url)
-    if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
-        raise HTTPException(status_code=403, detail="Jimeng remote output URL is not allowed")
-    if parsed_url.username or parsed_url.password:
-        raise HTTPException(status_code=403, detail="Jimeng remote output URL must not include credentials")
-    if Path(parsed_url.path).suffix.lower() not in JIMENG_VIDEO_MEDIA_TYPES:
-        raise HTTPException(status_code=403, detail="Jimeng remote output URL must point to a video asset")
-    resolved_ip = _resolve_public_remote_ip(parsed_url.hostname)
-    if not resolved_ip:
-        raise HTTPException(status_code=403, detail="Jimeng remote output URL must resolve to a public host")
-    return resolved_ip  # Callers must use the pinned address instead of resolving again.
-
-
 async def _read_upload(
     upload: UploadFile | None,
     *,
@@ -278,26 +258,7 @@ def _build_job_response_from_url(base_url: str, job: JobState) -> dict[str, obje
     )  # Keep WebSocket payloads aligned with the REST serializer.
 
 
-def _build_jimeng_job_response(request: FastAPIRequest, job: JobState) -> dict[str, object]:
-    output_proxy_url = (
-        str(request.url_for("download_jimeng_job_output", job_id=job.id))
-        if job.output_url
-        else None
-    )  # Always hand the browser a backend URL for local files and remote provider assets.
-    return serialize_jimeng_job(job, output_url=output_proxy_url)
-
-
-def _build_jimeng_job_response_from_url(base_url: str, job: JobState) -> dict[str, object]:
-    http_base_url = base_url.replace("ws://", "http://", 1).replace("wss://", "https://", 1)  # WebSocket callers still need HTTP asset URLs.
-    output_proxy_url = (
-        f"{http_base_url.rstrip('/')}/api/jimeng/jobs/{job.id}/output"
-        if job.output_url
-        else None
-    )  # Keep Jimeng asset URLs aligned with the REST path layout.
-    return serialize_jimeng_job(job, output_url=output_proxy_url)
-
-
-def _stream_remote_asset(remote_url: str, *, allow_redirects: bool = True) -> StreamingResponse:
+def _stream_remote_asset(remote_url: str) -> StreamingResponse:
     try:
         request = Request(
             remote_url,
@@ -305,15 +266,9 @@ def _stream_remote_asset(remote_url: str, *, allow_redirects: bool = True) -> St
                 "Accept": "*/*",
                 "User-Agent": "Canva Banana UV Python Service/0.1",
             },
-        )  # Share the same request headers whether redirects are allowed or rejected.
-        upstream_response = (
-            urlopen(request, timeout=60)
-            if allow_redirects
-            else build_opener(_NoRedirectHandler).open(request, timeout=60)
-        )  # Server-side downloads bypass the provider bucket's missing browser CORS headers.
+        )
+        upstream_response = urlopen(request, timeout=60)
     except HTTPError as exc:
-        if not allow_redirects and 300 <= exc.code < 400:
-            raise HTTPException(status_code=403, detail="Jimeng remote output URL redirects are not allowed") from exc
         raise HTTPException(status_code=502, detail=f"Volcengine asset download failed with HTTP {exc.code}") from exc
     except URLError as exc:
         raise HTTPException(status_code=502, detail=f"Volcengine asset download failed: {exc.reason}") from exc
@@ -338,9 +293,9 @@ def _stream_remote_asset(remote_url: str, *, allow_redirects: bool = True) -> St
     return StreamingResponse(iter_content(), media_type=media_type, headers=response_headers)
 
 
-def _open_pinned_remote_asset(remote_url: str, pinned_ip: str, *, provider: str = "Jimeng") -> http.client.HTTPResponse:
+def _open_pinned_remote_asset(remote_url: str, pinned_ip: str, *, provider: str) -> http.client.HTTPResponse:
     parsed_url = urlparse(remote_url)
-    assert parsed_url.hostname is not None  # _require_safe_jimeng_remote_url validates host before this call.
+    assert parsed_url.hostname is not None
     connection_class = _PinnedHTTPSConnection if parsed_url.scheme == "https" else _PinnedHTTPConnection
     connection = connection_class(parsed_url.hostname, pinned_ip, port=parsed_url.port, timeout=60)
     path = parsed_url.path or "/"
@@ -359,7 +314,7 @@ def _open_pinned_remote_asset(remote_url: str, pinned_ip: str, *, provider: str 
         response = connection.getresponse()
     except OSError as exc:
         connection.close()
-        raise HTTPException(status_code=502, detail=f"Jimeng asset download failed: {exc}" if provider == "Jimeng" else f"{provider} asset download failed") from exc
+        raise HTTPException(status_code=502, detail=f"{provider} asset download failed") from exc
     if 300 <= response.status < 400:
         response.close()
         connection.close()
@@ -401,23 +356,6 @@ def _stream_pinned_remote_asset(remote_url: str, pinned_ip: str, *, provider: st
     return StreamingResponse(iter_content(), media_type=media_type, headers=response_headers)
 
 
-def _stream_jimeng_asset(output_url: str) -> StreamingResponse | FileResponse:
-    if output_url.startswith(("http://", "https://")):
-        pinned_ip = _require_safe_jimeng_remote_url(output_url)
-        return _stream_pinned_remote_asset(output_url, pinned_ip, provider="Jimeng")
-    output_path = Path(output_url).expanduser()
-    if not output_path.exists() or not output_path.is_file():
-        raise HTTPException(status_code=404, detail="Jimeng output file is not available")
-    resolved_output_path = output_path.resolve()
-    resolved_work_dir = get_settings().jimeng_work_dir.resolve()
-    try:
-        resolved_output_path.relative_to(resolved_work_dir)
-    except ValueError as exc:
-        raise HTTPException(status_code=403, detail="Jimeng output file is outside the configured work directory") from exc
-    media_type = JIMENG_VIDEO_MEDIA_TYPES.get(output_path.suffix.lower(), "application/octet-stream")
-    return FileResponse(resolved_output_path, media_type=media_type, filename=resolved_output_path.name)  # Local downloads stream from the backend work dir.
-
-
 @app.get("/health")
 def healthcheck() -> dict[str, object]:
     ffprobe_status = get_ffprobe_status()
@@ -430,57 +368,115 @@ def healthcheck() -> dict[str, object]:
     }  # Surface backend media-probe readiness without failing the whole health check.
 
 
-@app.get("/api/jimeng/health")
-def jimeng_healthcheck(request: FastAPIRequest) -> dict[str, object]:
+@app.exception_handler(CanvasCliError)
+async def handle_canvas_cli_error(request: FastAPIRequest, exc: CanvasCliError):
+    return JSONResponse(status_code={11: 401, 12: 403, 13: 409, 20: 504}.get(exc.exit_code, 502), content={"detail": str(exc)})
+
+
+@app.exception_handler(CanvasJobError)
+async def handle_canvas_job_error(request: FastAPIRequest, exc: CanvasJobError):
+    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+
+@app.get("/api/jimeng/canvas/setup/status")
+def jimeng_canvas_setup_status(request: FastAPIRequest) -> dict[str, object]:
     _require_trusted_setup_request(request)
-    try:
-        return check_jimeng_health()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return get_canvas_setup_status()
 
 
-@app.get("/api/jimeng/setup/status")
-def jimeng_setup_status(request: FastAPIRequest) -> dict[str, object]:
+@app.post("/api/jimeng/canvas/setup/install")
+def jimeng_canvas_install(request: FastAPIRequest) -> dict[str, object]:
     _require_trusted_setup_request(request)
-    return get_jimeng_setup_status()
+    return install_canvas_cli()
 
 
-@app.post("/api/jimeng/setup/install")
-def install_jimeng_cli_endpoint(request: FastAPIRequest) -> dict[str, object]:
+@app.post("/api/jimeng/canvas/setup/login")
+def jimeng_canvas_login(request: FastAPIRequest) -> dict[str, object]:
     _require_trusted_setup_request(request)
-    try:
-        return install_or_update_jimeng_cli()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return start_canvas_login()
 
 
-@app.post("/api/jimeng/setup/login")
-def start_jimeng_login_endpoint(request: FastAPIRequest) -> dict[str, object]:
+@app.post("/api/jimeng/canvas/setup/login/check")
+def jimeng_canvas_login_check(request: FastAPIRequest, login_session_id: str, poll: int = 30) -> dict[str, object]:
     _require_trusted_setup_request(request)
-    try:
-        return start_jimeng_login()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return check_canvas_login(login_session_id, poll_seconds=min(30, max(0, poll)))
 
 
-@app.post("/api/jimeng/setup/login/check")
-def check_jimeng_login_endpoint(request: FastAPIRequest, login_session_id: str, poll: int = 30) -> dict[str, object]:
+@app.get("/api/jimeng/canvas/catalog")
+def jimeng_canvas_catalog(request: FastAPIRequest, kind: Literal["video", "image"]) -> dict[str, object]:
     _require_trusted_setup_request(request)
-    try:
-        return check_jimeng_login(login_session_id, poll_seconds=poll)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return get_canvas_catalog(kind)
 
 
-@app.delete("/api/jimeng/cache")
-def clear_jimeng_cache_endpoint(request: FastAPIRequest) -> dict[str, object]:
+@app.post("/api/jimeng/canvas/jobs")
+async def jimeng_canvas_prepare(request: FastAPIRequest) -> dict[str, object]:
     _require_trusted_setup_request(request)
-    try:
-        return clear_jimeng_cache()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    staged: list[MediaInput] = []
+    async with request.form(max_files=50, max_fields=1) as form:
+        raw_spec = form.get("spec")
+        files = form.getlist("files")
+        if not isinstance(raw_spec, str) or any(not isinstance(file, StarletteUploadFile) for file in files):
+            raise HTTPException(status_code=422, detail="A Canvas generation specification and uploaded file references are required")
+        try:
+            spec = CanvasJobRequest.model_validate_json(raw_spec)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid Canvas generation specification") from exc
+        try:
+            for file in files:
+                if isinstance(file, StarletteUploadFile):
+                    media = await _read_upload(file)
+                    if media is None:
+                        raise HTTPException(status_code=422, detail="A Canvas reference upload is empty")
+                    staged.append(media)
+            task = asyncio.create_task(run_in_threadpool(prepare_canvas_job, spec, staged))
+            try:
+                return await asyncio.shield(task)
+            except asyncio.CancelledError:
+                completion = asyncio.gather(task, return_exceptions=True)
+                while not completion.done():
+                    try:
+                        await asyncio.shield(completion)
+                    except asyncio.CancelledError:
+                        continue
+                raise
+        finally:
+            _cleanup_media_items(staged)
+
+
+@app.get("/api/jimeng/canvas/jobs/{job_id}")
+def jimeng_canvas_observe(request: FastAPIRequest, job_id: UUID) -> dict[str, object]:
+    _require_trusted_setup_request(request)
+    return get_canvas_job(job_id)
+
+
+class CanvasJobApproval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: str = Field(min_length=1, max_length=128)
+
+
+@app.post("/api/jimeng/canvas/jobs/{job_id}/resume-preparation")
+def jimeng_canvas_resume_preparation(request: FastAPIRequest, job_id: UUID) -> dict[str, object]:
+    _require_trusted_setup_request(request)
+    return resume_canvas_preparation(job_id)
+
+
+@app.post("/api/jimeng/canvas/jobs/{job_id}/approve")
+def jimeng_canvas_approve(request: FastAPIRequest, job_id: UUID, approval: CanvasJobApproval) -> dict[str, object]:
+    _require_trusted_setup_request(request)
+    return approve_canvas_job(job_id, approval.revision)
+
+
+@app.post("/api/jimeng/canvas/jobs/{job_id}/cancel")
+def jimeng_canvas_cancel(request: FastAPIRequest, job_id: UUID) -> dict[str, object]:
+    _require_trusted_setup_request(request)
+    return cancel_canvas_job(job_id)
+
+
+@app.get("/api/jimeng/canvas/jobs/{job_id}/assets/{asset_id}")
+def jimeng_canvas_asset(request: FastAPIRequest, job_id: UUID, asset_id: UUID) -> FileResponse:
+    _require_trusted_setup_request(request)
+    path, content_type = get_canvas_asset(job_id, asset_id)
+    return FileResponse(path, media_type=content_type)
 
 
 class DraftFinalizationRequest(BaseModel):
@@ -539,6 +535,62 @@ def resume_seedance_draft_finalization(request: FastAPIRequest, body: DraftResum
         }) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+_seedream_submit_slot = asyncio.Semaphore(1)
+
+
+@app.post("/api/volcengine/images/generations")
+async def submit_seedream_images(request: FastAPIRequest) -> dict[str, object]:
+    _require_trusted_volcengine_submit_request(request)
+    async with _seedream_submit_slot:
+        form = FormData()
+        try:
+            try:
+                form = await read_image_form(request)
+            except TimeoutError as exc:
+                raise HTTPException(status_code=408, detail="Image upload timed out") from exc
+            values: dict[str, str] = {}
+            for name in ("operation", "prompt", "size", "output_format", "background"):
+                value = form.get(name)
+                if value is not None:
+                    if not isinstance(value, str):
+                        raise ValueError(f"{name} must be text")
+                    values[name] = value
+            if "operation" not in values:
+                raise HTTPException(status_code=422, detail="operation is required")
+            uploads: list[StarletteUploadFile] = []
+            for upload in form.getlist("images"):
+                if not isinstance(upload, StarletteUploadFile):
+                    raise ValueError("images must be uploaded files")
+                uploads.append(upload)
+            options = validate_image_options(
+                values["operation"], values.get("prompt", ""), values.get("size"),
+                values.get("output_format", "png"), values.get("background", "auto"), len(uploads),
+            )
+            staged_images = await read_image_uploads(uploads, layerize=options.operation == "layerize")
+            generation = asyncio.create_task(run_in_threadpool(generate_images, options, staged_images))
+            try:
+                return await asyncio.shield(generation)
+            except asyncio.CancelledError:
+                completion = asyncio.gather(generation, return_exceptions=True)
+                while not completion.done():
+                    try:
+                        await asyncio.shield(completion)
+                    except asyncio.CancelledError:
+                        continue
+                raise
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ImageGenerationUpstreamError as exc:
+            status_code = exc.status_code if exc.status_code in {400, 401, 403, 404, 422, 429} else 502
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        finally:
+            await form.close()
 
 
 @app.post("/api/volcengine/jobs")
@@ -639,102 +691,6 @@ async def submit_seedance_job(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.post("/api/jimeng/jobs")
-async def submit_jimeng_job(
-    request: FastAPIRequest,
-    prompt: str = Form(""),
-    model_id: str = Form(JIMENG_MODEL_ID),
-    variant: str = Form("smart"),
-    model_version: str = Form("seedance2.0fast"),
-    mode: str = Form("auto"),
-    session: int = Form(0),
-    ratio: str = Form("16:9"),
-    duration: int = Form(5),
-    resolution: str = Form("720p"),
-    generate_audio: bool = Form(False),
-    camera_fixed: bool = Form(False),
-    primary_image: UploadFile | None = File(None),
-    last_frame_image: UploadFile | None = File(None),
-    reference_images: list[UploadFile] | None = File(None),
-    reference_videos: list[UploadFile] | None = File(None),
-    reference_audios: list[UploadFile] | None = File(None),
-    multiframe_images: list[UploadFile] | None = File(None),
-    transition_prompts: list[str] | None = Form(None),
-    transition_durations: list[float] | None = Form(None),
-) -> dict[str, object]:
-    _require_trusted_setup_request(request)
-    payload: SeedanceJobPayload | None = None
-    staged_media: list[MediaInput] = []
-    try:
-        primary_image_media = await _read_upload(primary_image)
-        if primary_image_media is not None:
-            staged_media.append(primary_image_media)
-
-        last_frame_image_media = await _read_upload(last_frame_image)
-        if last_frame_image_media is not None:
-            staged_media.append(last_frame_image_media)
-
-        reference_image_media = await _read_uploads(reference_images)
-        staged_media.extend(reference_image_media)
-
-        reference_video_media = await _read_uploads(reference_videos, should_probe_duration=True, media_label="reference video")
-        staged_media.extend(reference_video_media)
-
-        reference_audio_media = await _read_uploads(reference_audios, should_probe_duration=True, media_label="reference audio")
-        staged_media.extend(reference_audio_media)
-
-        multiframe_image_media = await _read_uploads(multiframe_images)
-        staged_media.extend(multiframe_image_media)
-
-        if variant not in {"smart", "reference"}:
-            raise ValueError(f"Unsupported Jimeng variant: {variant}")
-        if mode not in {"auto", "multiframe"}:
-            raise ValueError(f"Unsupported Jimeng mode: {mode}")
-        if ratio not in {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16"}:
-            raise ValueError(f"Unsupported Jimeng ratio: {ratio}")
-        if resolution not in {"480p", "720p", "1080p", "4k"}:
-            raise ValueError(f"Unsupported Jimeng video_resolution: {resolution}")
-        if model_version not in {"seedance2.0fast", "seedance2.0", "seedance2.0_vip", "seedance2.0fast_vip", "seedance2.0mini", "seedance2.5"}:
-            raise ValueError(f"Unsupported Jimeng model_version: {model_version}")
-
-        payload = SeedanceJobPayload(
-            prompt=prompt,
-            model_id=model_id,
-            variant=variant,
-            ratio=ratio,
-            duration=duration,
-            resolution=resolution,
-            jimeng_model_version=model_version,
-            jimeng_mode=mode,
-            session_id=session,
-            generate_audio=generate_audio,
-            camera_fixed=camera_fixed,
-            primary_image=primary_image_media,
-            last_frame_image=last_frame_image_media,
-            reference_images=reference_image_media,
-            reference_videos=reference_video_media,
-            reference_audios=reference_audio_media,
-            multiframe_images=multiframe_image_media,
-            transition_prompts=list(transition_prompts or []),
-            transition_durations=list(transition_durations or []),
-        )
-        job = create_jimeng_job(payload)
-        payload = None  # The Jimeng worker now owns the staged upload lifecycle.
-        return _build_jimeng_job_response(request, job)
-    except ValueError as exc:
-        if payload is not None:
-            payload.cleanup()  # Discard staged files for rejected jobs.
-        else:
-            _cleanup_media_items(staged_media)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        if payload is not None:
-            payload.cleanup()  # Clean up staged files on unexpected submission failures.
-        else:
-            _cleanup_media_items(staged_media)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
 @app.get("/api/volcengine/jobs/{job_id}")
 def get_seedance_job(job_id: str, request: FastAPIRequest) -> dict[str, object]:
     job = job_store.get(job_id)
@@ -753,14 +709,6 @@ def resume_seedance_job(job_id: str, request: FastAPIRequest) -> dict[str, objec
     if not job:
         raise HTTPException(status_code=404, detail="TokenHub job is no longer available to resume")
     return _build_job_response(request, job)
-
-
-@app.get("/api/jimeng/jobs/{job_id}")
-def get_jimeng_job(job_id: str, request: FastAPIRequest) -> dict[str, object]:
-    job = jimeng_job_store.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return _build_jimeng_job_response(request, job)
 
 
 @app.websocket("/api/volcengine/jobs/{job_id}/ws")
@@ -805,48 +753,6 @@ async def stream_seedance_job(job_id: str, websocket: WebSocket) -> None:
         unsubscribe()  # Remove the per-job listener when the client disconnects.
 
 
-@app.websocket("/api/jimeng/jobs/{job_id}/ws")
-async def stream_jimeng_job(job_id: str, websocket: WebSocket) -> None:
-    await websocket.accept()  # Accept first so missing jobs close with a clear policy code.
-    job_queue: asyncio.Queue[JobState] = asyncio.Queue()  # Queue job snapshots as the worker mutates them.
-    event_loop = asyncio.get_running_loop()
-    websocket_base_url = str(websocket.base_url).rstrip("/")  # Build proxy asset URLs from the active request host.
-    closed = False
-
-    def handle_job_update(job: JobState) -> None:
-        if closed:
-            return
-        try:
-            event_loop.call_soon_threadsafe(job_queue.put_nowait, job)
-        except RuntimeError:
-            return  # Ignore late worker notifications after the request loop is gone.
-
-    subscription = jimeng_job_store.subscribe(job_id, handle_job_update)
-    if subscription is None:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Job not found")
-        return
-
-    current_job, unsubscribe = subscription
-
-    try:
-        await websocket.send_json(_build_jimeng_job_response_from_url(websocket_base_url, current_job))
-        if current_job.status in jimeng_job_store.TERMINAL_STATUSES:
-            await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)  # Deliver the terminal snapshot before closing.
-            return
-
-        while True:
-            next_job = await job_queue.get()
-            await websocket.send_json(_build_jimeng_job_response_from_url(websocket_base_url, next_job))
-            if next_job.status in jimeng_job_store.TERMINAL_STATUSES:
-                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)  # Deliver the final state before shutdown.
-                return
-    except WebSocketDisconnect:
-        return
-    finally:
-        closed = True
-        unsubscribe()  # Remove the per-job listener when the client disconnects.
-
-
 @app.get("/api/volcengine/jobs/{job_id}/output", name="download_seedance_job_output")
 def download_seedance_job_output(job_id: str) -> StreamingResponse:
     job = job_store.get(job_id)
@@ -865,16 +771,6 @@ def download_seedance_job_output(job_id: str) -> StreamingResponse:
             raise HTTPException(status_code=403, detail="TokenHub output must resolve to a public host")
         return _stream_pinned_remote_asset(job.output_url, pinned_ip, provider="TokenHub")
     return _stream_remote_asset(job.output_url)  # Proxy the generated video through the local backend for browser compatibility.
-
-
-@app.get("/api/jimeng/jobs/{job_id}/output", name="download_jimeng_job_output")
-def download_jimeng_job_output(job_id: str):
-    job = jimeng_job_store.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if not job.output_url:
-        raise HTTPException(status_code=404, detail="Job output is not available")
-    return _stream_jimeng_asset(job.output_url)  # Jimeng may produce either a downloaded local file or a remote URL.
 
 
 @app.get("/api/volcengine/jobs/{job_id}/last-frame", name="download_seedance_job_last_frame")
