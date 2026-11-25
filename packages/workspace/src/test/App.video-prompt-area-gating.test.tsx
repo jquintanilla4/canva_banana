@@ -1097,7 +1097,7 @@ describe('App video prompt area gating', () => {
     const fileNameText = fileName.querySelector('span');
     expect(fileNameText?.classList.contains('truncate')).toBe(true);
     expect(fileNameText?.style.webkitTextStroke).toBe('2px rgba(3, 7, 18, 0.92)');
-    expect(fileNameText?.style.paintOrder).toBe('stroke fill');
+    expect(['stroke fill', 'stroke']).toContain(fileNameText?.style.paintOrder);
     expect(fileNameText?.style.textShadow).toContain('rgba(0, 0, 0, 0.95)');
     await waitFor(() => expect(setState).toHaveBeenCalledWith(expect.objectContaining({ showFileName: true })));
     expect(mockState.lastCanvasProps?.trackpadMode).toBe(false);

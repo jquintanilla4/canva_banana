@@ -15,7 +15,7 @@ const ensureClient = () => {
   }
   if (!cachedClient || cachedApiKey !== apiKey) {
     cachedApiKey = apiKey;
-    cachedClient = new GoogleGenAI({ apiKey });
+    cachedClient = new GoogleGenAI({ apiKey, apiVersion: 'v1beta' });
   }
   return cachedClient;
 };

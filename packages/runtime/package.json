@@ -27,6 +27,6 @@
     "test": "node --test node/*.node-test.mjs"
   },
   "dependencies": {
-    "openai": "^7.59.0"
+    "openai": "^7.62.0"
   }
 }
