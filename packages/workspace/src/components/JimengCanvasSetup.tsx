@@ -3,12 +3,15 @@ import {
   checkJimengCanvasLogin,
   getJimengCanvasSetupStatus,
   installJimengCanvasCli,
+  removeJimengLegacyCli,
   startJimengCanvasLogin,
   type JimengCanvasSetupAction,
   type JimengCanvasSetupStatus,
+  type JimengLegacyCliLocation,
 } from '../services/jimengCanvasService';
 import { workspaceDelay } from '../services/workspaceSession';
 import { OVERLAY_LAYER_CLASS_NAMES } from '../utils/overlayLayers';
+import { JimengLegacyCliRemoval } from './JimengLegacyCliRemoval';
 
 export interface JimengCanvasSetupProps {
   onDismiss: () => void;
@@ -31,12 +34,15 @@ const loginExpired = (expiresAt: JimengCanvasSetupAction['expiresAt']): boolean 
   return Number.isFinite(time) && Date.now() >= time;
 };
 
+type SetupAction = 'check' | 'install' | 'login' | { removeLegacy: JimengLegacyCliLocation };
+
 export const JimengCanvasSetup: React.FC<JimengCanvasSetupProps> = ({ onDismiss, onReadyChange }) => {
   const [status, setStatus] = useState<JimengCanvasSetupStatus | null>(null);
-  const [action, setAction] = useState<'check' | 'install' | 'login' | null>('check');
+  const [action, setAction] = useState<SetupAction | null>('check');
   const [login, setLogin] = useState<JimengCanvasSetupAction | null>(null);
   const [notice, setNotice] = useState<{ kind: 'error' | 'info'; message: string } | null>(null);
   const activeRequest = useRef<AbortController | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
   const refresh = async (signal: AbortSignal): Promise<JimengCanvasSetupStatus> => {
     const next = await getJimengCanvasSetupStatus({ signal });
     signal.throwIfAborted();
@@ -44,7 +50,7 @@ export const JimengCanvasSetup: React.FC<JimengCanvasSetupProps> = ({ onDismiss,
     return next;
   };
 
-  const perform = async (nextAction: 'check' | 'install' | 'login'): Promise<void> => {
+  const perform = async (nextAction: SetupAction): Promise<void> => {
     activeRequest.current?.abort();
     const controller = new AbortController();
     activeRequest.current = controller;
@@ -56,6 +62,17 @@ export const JimengCanvasSetup: React.FC<JimengCanvasSetupProps> = ({ onDismiss,
         const result = await installJimengCanvasCli({ signal });
         signal.throwIfAborted();
         if (result.message) setNotice({ kind: 'info', message: result.message });
+      }
+      if (typeof nextAction === 'object') {
+        const location = nextAction.removeLegacy;
+        const result = await removeJimengLegacyCli({ location, signal });
+        signal.throwIfAborted();
+        setStatus(current => current && {
+          ...current,
+          legacyCliInstallations: current.legacyCliInstallations.filter(installation => installation.location !== location),
+        });
+        if (result.message) setNotice({ kind: 'info', message: result.message });
+        return;
       }
       if (nextAction === 'login') {
         const result = await startJimengCanvasLogin({ signal });
@@ -84,8 +101,10 @@ export const JimengCanvasSetup: React.FC<JimengCanvasSetupProps> = ({ onDismiss,
       onReadyChange?.(next.cliAvailable && next.authenticated);
     } catch (error) {
       if (!signal.aborted) {
-        setStatus(null);
-        onReadyChange?.(false);
+        if (typeof nextAction !== 'object') {
+          setStatus(null);
+          onReadyChange?.(false);
+        }
         setNotice({ kind: 'error', message: error instanceof Error ? error.message : String(error) });
       }
     } finally {
@@ -98,11 +117,16 @@ export const JimengCanvasSetup: React.FC<JimengCanvasSetupProps> = ({ onDismiss,
     return () => activeRequest.current?.abort();
   }, []);
 
+  useEffect(() => {
+    if (notice?.kind === 'error') noticeRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [notice]);
+
   const verificationUri = authorizationUrl(login?.verificationUri);
+  const legacyCliInstallations = status?.legacyCliInstallations ?? [];
   const buttonClass = 'rounded-md border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-gray-100 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45';
 
   return (
-    <section aria-label="Jimeng Canvas setup" className={`fixed right-4 top-20 ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} w-[23rem] max-w-[calc(100vw-2rem)] rounded-lg border border-cyan-300/25 bg-gray-950/95 p-4 text-gray-100 shadow-2xl`}>
+    <section aria-label="Jimeng Canvas setup" className={`fixed right-4 top-20 ${OVERLAY_LAYER_CLASS_NAMES.floatingPanel} max-h-[calc(100%-6rem)] w-[23rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-cyan-300/25 bg-gray-950/95 p-4 text-gray-100 shadow-2xl`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-white">Jimeng Canvas CLI</h2>
@@ -114,7 +138,7 @@ export const JimengCanvasSetup: React.FC<JimengCanvasSetupProps> = ({ onDismiss,
         <div className="flex justify-between"><dt className="text-gray-400">Installation</dt><dd>{status ? status.cliAvailable ? `Installed${status.version ? ` · ${status.version}` : ''}` : 'Not installed' : action === 'check' ? 'Checking…' : 'Unavailable'}</dd></div>
         <div className="flex justify-between"><dt className="text-gray-400">Account</dt><dd>{status ? status.authenticated ? 'Signed in' : 'Sign-in required' : 'Unknown'}</dd></div>
       </dl>
-      {(notice?.message || status?.message) && <p role={notice?.kind === 'error' ? 'alert' : 'status'} className="mt-3 whitespace-pre-wrap rounded-md border border-white/10 bg-white/5 p-3 text-xs text-gray-200">{notice?.message || status?.message}</p>}
+      {(notice?.message || status?.message) && <p ref={noticeRef} role={notice?.kind === 'error' ? 'alert' : 'status'} className="mt-3 whitespace-pre-wrap rounded-md border border-white/10 bg-white/5 p-3 text-xs text-gray-200">{notice?.message || status?.message}</p>}
       {login && verificationUri && (
         <div className="mt-3 rounded-md border border-emerald-300/25 bg-emerald-300/10 p-3 text-xs text-emerald-100">
           {login.userCode && <p>Authorization code <code className="select-all font-semibold">{login.userCode}</code></p>}
@@ -127,6 +151,14 @@ export const JimengCanvasSetup: React.FC<JimengCanvasSetupProps> = ({ onDismiss,
         <button type="button" disabled={action !== null || !status?.cliAvailable} onClick={() => void perform('login')} className={buttonClass}>{action === 'login' ? 'Signing in…' : 'Sign in'}</button>
         <button type="button" disabled={action !== null} onClick={() => void perform('check')} className={buttonClass}>Refresh</button>
       </div>
+      {legacyCliInstallations.length > 0 && (
+        <JimengLegacyCliRemoval
+          installations={legacyCliInstallations}
+          buttonClass={buttonClass}
+          busy={action !== null}
+          onRemove={location => void perform({ removeLegacy: location })}
+        />
+      )}
     </section>
   );
 };

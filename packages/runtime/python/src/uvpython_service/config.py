@@ -63,10 +63,13 @@ class Settings:
     tokenhub_timeout_seconds: int = 900
 
 
+def get_legacy_jimeng_work_dir() -> Path:
+    configured = os.environ.get("JIMENG_WORK_DIR")
+    return Path(configured).expanduser() if configured is not None else _find_backend_dir() / ".jimeng-work"
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    backend_dir = _find_backend_dir()
-    legacy_work_dir = Path(os.environ.get("JIMENG_WORK_DIR", str(backend_dir / ".jimeng-work"))).expanduser()
     canvas_root_dir = os.environ.get("JIMENG_CANVAS_ROOT_DIR", "").strip()
     return Settings(
         tokenhub_api_key=os.environ.get("TOKENHUB_API_KEY", "").strip(),
@@ -82,7 +85,7 @@ def get_settings() -> Settings:
         job_ttl_seconds=max(300, int(os.environ.get("VOLCENGINE_JOB_TTL_SECONDS", "14400"))),  # Drop old finished jobs after 4 hours by default.
         max_terminal_jobs=max(10, int(os.environ.get("VOLCENGINE_MAX_TERMINAL_JOBS", "400"))),  # Keep extra completed jobs around without growing forever.
         max_logs_per_job=max(10, int(os.environ.get("VOLCENGINE_MAX_LOGS_PER_JOB", "100"))),  # Preserve more queue history while still capping memory growth.
-        jimeng_canvas_root_dir=Path(canvas_root_dir).expanduser() if canvas_root_dir else legacy_work_dir.parent / ".jimeng-canvas",
+        jimeng_canvas_root_dir=Path(canvas_root_dir).expanduser() if canvas_root_dir else get_legacy_jimeng_work_dir().parent / ".jimeng-canvas",
     )
 
 

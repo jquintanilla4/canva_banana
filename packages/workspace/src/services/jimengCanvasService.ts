@@ -38,9 +38,17 @@ export interface JimengCanvasModel {
   modes: JimengCanvasCatalogMode[];
 }
 
+export type JimengLegacyCliLocation = 'home' | 'app';
+
+export interface JimengLegacyCliInstallation {
+  location: JimengLegacyCliLocation;
+  path: string;
+}
+
 export interface JimengCanvasSetupStatus {
   cliAvailable: boolean;
   authenticated: boolean;
+  legacyCliInstallations: JimengLegacyCliInstallation[];
   version?: string;
   message?: string;
 }
@@ -158,11 +166,18 @@ const parseReferences = (value: unknown): JimengCanvasReferences => {
   };
 };
 
+const parseLegacyCliInstallation = (value: unknown): JimengLegacyCliInstallation => {
+  const { location, path } = objectValue(value);
+  if (location !== 'home' && location !== 'app') return invalidResponse();
+  return { location, path: stringValue(path) };
+};
+
 const parseSetupStatus = (value: unknown): JimengCanvasSetupStatus => {
   const data = objectValue(value);
   return {
     cliAvailable: booleanValue(data.cliAvailable),
     authenticated: booleanValue(data.authenticated),
+    legacyCliInstallations: data.legacyCliInstallations === undefined ? [] : arrayValue(data.legacyCliInstallations).map(parseLegacyCliInstallation),
     version: optionalString(data.version),
     message: optionalString(data.message),
   };
@@ -295,6 +310,9 @@ export const getJimengCanvasSetupStatus = (options: JimengCanvasRequestOptions =
 
 export const installJimengCanvasCli = (options: JimengCanvasRequestOptions = {}): Promise<JimengCanvasSetupAction> =>
   requestJson('/setup/install', parseSetupAction, { method: 'POST', signal: options.signal });
+
+export const removeJimengLegacyCli = (options: JimengCanvasRequestOptions & { location: JimengLegacyCliLocation }): Promise<JimengCanvasSetupAction> =>
+  requestJson(`/setup/legacy-cli/${options.location}/remove`, parseSetupAction, { method: 'POST', signal: options.signal });
 
 export const startJimengCanvasLogin = (options: JimengCanvasRequestOptions = {}): Promise<JimengCanvasSetupAction> =>
   requestJson('/setup/login', parseSetupAction, { method: 'POST', signal: options.signal });

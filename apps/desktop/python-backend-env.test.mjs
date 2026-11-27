@@ -21,6 +21,7 @@ describe('managed Python backend environment', () => {
       CANVA_BANANA_DESKTOP_AUTH_TOKEN: 'launch-nonce',
       CANVA_BANANA_PYTHON_HOST: '127.0.0.1',
       CANVA_BANANA_PYTHON_PORT: '8123',
+      JIMENG_WORK_DIR: '/app-support/jimeng-work',
     });
   });
 
@@ -38,6 +39,7 @@ describe('managed Python backend environment', () => {
       DREAMINA_CANVAS_STATE_DIR: '/canvas/login',
       JIMENG_CANVAS_CLI_PATH: '/custom/dreamina-canvas',
       CANVA_BANANA_DESKTOP_AUTH_TOKEN: 'launch-nonce',
+      JIMENG_WORK_DIR: '/old/work',
     });
   });
 

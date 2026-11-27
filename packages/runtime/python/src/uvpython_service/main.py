@@ -24,6 +24,7 @@ from volcenginesdkarkruntime._exceptions import ArkAPIStatusError
 from uvpython_service.config import get_settings, get_tokenhub_settings
 from uvpython_service.jimeng_canvas_cli import CanvasCliError, check_canvas_login, get_canvas_catalog, get_canvas_setup_status, install_canvas_cli, start_canvas_login
 from uvpython_service.jimeng_canvas_jobs import CanvasJobError, CanvasJobRequest, approve_canvas_job, cancel_canvas_job, get_canvas_asset, get_canvas_job, prepare_canvas_job, resume_canvas_preparation
+from uvpython_service.jimeng_legacy_cli import LegacyCliLocation, list_legacy_cli_installations, remove_legacy_cli
 from uvpython_service.media import get_ffprobe_status, probe_media_duration_seconds
 from uvpython_service.models import JobState, is_tokenhub
 from uvpython_service.tokenhub_seedance import validate_output_url, validate_configuration
@@ -381,13 +382,21 @@ async def handle_canvas_job_error(request: FastAPIRequest, exc: CanvasJobError):
 @app.get("/api/jimeng/canvas/setup/status")
 def jimeng_canvas_setup_status(request: FastAPIRequest) -> dict[str, object]:
     _require_trusted_setup_request(request)
-    return get_canvas_setup_status()
+    return {**get_canvas_setup_status(), "legacyCliInstallations": list_legacy_cli_installations()}
 
 
 @app.post("/api/jimeng/canvas/setup/install")
 def jimeng_canvas_install(request: FastAPIRequest) -> dict[str, object]:
     _require_trusted_setup_request(request)
     return install_canvas_cli()
+
+
+@app.post("/api/jimeng/canvas/setup/legacy-cli/{location}/remove")
+def jimeng_remove_legacy_cli(request: FastAPIRequest, location: LegacyCliLocation) -> dict[str, str]:
+    _require_trusted_setup_request(request)
+    if os.environ.get(DESKTOP_AUTH_TOKEN_ENV_NAME, "").strip() and not _has_valid_desktop_auth_token(request):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Local action requires desktop authorization")
+    return remove_legacy_cli(location)
 
 
 @app.post("/api/jimeng/canvas/setup/login")

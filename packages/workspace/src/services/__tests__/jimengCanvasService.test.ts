@@ -8,6 +8,7 @@ import {
   getJimengCanvasJob,
   getJimengCanvasSetupStatus,
   prepareJimengCanvasJob,
+  removeJimengLegacyCli,
   waitForJimengCanvasJob,
   type JimengCanvasJobSpec,
 } from '../jimengCanvasService';
@@ -35,7 +36,7 @@ describe('Jimeng Canvas transport and approval', () => {
 
   it('uses authenticated local actions for setup and protected asset downloads', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ cliAvailable: true, authenticated: true, version: '1.4.1' }));
-    await expect(getJimengCanvasSetupStatus()).resolves.toEqual({ cliAvailable: true, authenticated: true, version: '1.4.1' });
+    await expect(getJimengCanvasSetupStatus()).resolves.toEqual({ cliAvailable: true, authenticated: true, version: '1.4.1', legacyCliInstallations: [] });
     fetchMock.mockResolvedValueOnce(new Response('image-bytes', { headers: { 'Content-Type': 'image/png' } }));
     const asset = await fetchJimengCanvasAsset({ jobId: 'job/1', assetId: 'asset/1' });
     expect(asset.type).toBe('image/png');
@@ -44,6 +45,22 @@ describe('Jimeng Canvas transport and approval', () => {
     for (const [, init] of fetchMock.mock.calls) {
       expect(init?.headers).toMatchObject({ 'X-Canva-Banana-Local-Action': 'jimeng-setup', 'X-Canva-Banana-Desktop-Nonce': 'fixture-nonce' });
     }
+  });
+
+  it('parses legacy installations and sends only the selected location in a protected POST', async () => {
+    const legacyCliInstallations = [{ location: 'home', path: '/user/.local/bin/dreamina' }];
+    fetchMock.mockResolvedValueOnce(jsonResponse({ cliAvailable: false, authenticated: false, legacyCliInstallations }));
+    await expect(getJimengCanvasSetupStatus()).resolves.toMatchObject({ legacyCliInstallations });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'ok', message: 'Legacy Dreamina CLI removed.' }));
+    await expect(removeJimengLegacyCli({ location: 'home' })).resolves.toMatchObject({ status: 'ok' });
+    expect(fetchMock.mock.calls[1]).toEqual([
+      'http://localhost:8000/api/jimeng/canvas/setup/legacy-cli/home/remove',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'X-Canva-Banana-Local-Action': 'jimeng-setup', 'X-Canva-Banana-Desktop-Nonce': 'fixture-nonce' },
+      }),
+    ]);
+    expect(fetchMock.mock.calls[1][1]?.body).toBeUndefined();
   });
 
   it('prepares a request with stable identity and ordered references without approval', async () => {

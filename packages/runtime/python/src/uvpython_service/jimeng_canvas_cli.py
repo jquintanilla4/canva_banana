@@ -79,9 +79,13 @@ def _environment() -> dict[str, str]:
     return env
 
 
-def _resolve_executable() -> str:
+def find_canvas_executable() -> str | None:
     override = os.environ.get("JIMENG_CANVAS_CLI_PATH", "").strip()
-    found = shutil.which(override or "dreamina-canvas", path=_environment()["PATH"])
+    return shutil.which(override or "dreamina-canvas", path=_environment()["PATH"])
+
+
+def _resolve_executable() -> str:
+    found = find_canvas_executable()
     if not found:
         raise CanvasCliError("Jimeng Canvas CLI is unavailable. Install it in setup or configure JIMENG_CANVAS_CLI_PATH.")
     return found

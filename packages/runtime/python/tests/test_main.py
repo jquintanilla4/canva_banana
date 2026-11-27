@@ -392,7 +392,7 @@ class MainApiTests(unittest.TestCase):
         client = TestClient(app, client=LOCAL_TEST_CLIENT)
         setup_status = {"status": "ready", "ready": True}
 
-        with patch("uvpython_service.main.get_canvas_setup_status", return_value=setup_status):
+        with patch("uvpython_service.main.get_canvas_setup_status", return_value=setup_status), patch("uvpython_service.main.list_legacy_cli_installations", return_value=[]):
             response = client.get(
                 "/api/jimeng/canvas/setup/status",
                 headers={
@@ -402,7 +402,7 @@ class MainApiTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), setup_status)
+        self.assertEqual(response.json(), {**setup_status, "legacyCliInstallations": []})
 
     def test_open_pinned_remote_asset_uses_explicit_url_port(self) -> None:
         FakePinnedConnection.instances = []

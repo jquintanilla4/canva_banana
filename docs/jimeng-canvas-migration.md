@@ -2,6 +2,8 @@
 
 Canva Banana uses `dreamina-canvas` for Jimeng setup, catalog discovery, generation, and downloads. Open **File → Jimeng Canvas Setup** to install the CLI and sign in to a Jimeng account. The selected account and workspace determine the models and settings available to the app.
 
+If setup finds a legacy `dreamina` executable in `~/.local/bin` or the app's old managed tools directory, it shows the path and a **Remove legacy CLI** button. Removing it is optional and leaves `dreamina-canvas`, saved jobs, and login data alone. For a custom or package-manager installation, remove the old CLI the same way you installed it.
+
 | App workflow | Canvas support |
 | --- | --- |
 | Seedance 2 (JM CLI) | Smart uses text-to-video or first/last frames. Reference uses multimodal video. Standard and Standard Fast resolve to their own entries in the authenticated catalog. |

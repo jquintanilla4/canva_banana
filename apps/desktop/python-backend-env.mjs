@@ -15,6 +15,7 @@ export const buildPythonBackendEnv = ({ env, userDataDir, desktopAuthToken, host
     CANVA_BANANA_DESKTOP_AUTH_TOKEN: desktopAuthToken,
     CANVA_BANANA_PYTHON_HOST: host,
     CANVA_BANANA_PYTHON_PORT: String(port),
+    JIMENG_WORK_DIR: legacyWorkDir || join(userDataDir, 'jimeng-work'),
     JIMENG_CANVAS_ROOT_DIR: canvasRootDir,
     JIMENG_CANVAS_WORK_DIR: configuredPath(env.JIMENG_CANVAS_WORK_DIR) || canvasRootDir,
     DREAMINA_CANVAS_STATE_DIR: configuredPath(env.DREAMINA_CANVAS_STATE_DIR) || join(expandHomePath(canvasRootDir), 'state'),
