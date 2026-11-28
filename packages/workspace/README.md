@@ -4,7 +4,14 @@
 
 ## Build and install
 
-From the Canva Banana repository, run `npm ci`, `npm run pack:workspace`, and `npm run pack:runtime`. The commands put versioned `.tgz` files in `/tmp`; nothing is published. Copy those release artifacts into the consuming project's artifact storage and install them with `npm install --save-exact /path/to/canva-banana-workspace-0.2.8.tgz`. Install the matching runtime tarball in the host's trusted Node/Electron package when using its services. Keep the lockfile and both artifacts available for reproducible installation and rollback.
+From the Canva Banana repository, run `npm ci`, `npm run pack:workspace`, and `npm run pack:runtime`. The commands put versioned `.tgz` files in `/tmp`; nothing is published. Copy both `0.3.0` artifacts into the consuming project's artifact storage, then install them where they are used:
+
+- Renderer: `npm install --save-exact /path/to/canva-banana-workspace-0.3.0.tgz`
+- Trusted Node/Electron host: `npm install --save-exact /path/to/canva-banana-runtime-0.3.0.tgz` if the host runs the provider services
+
+Upgrade the two packages together when using the bundled services. Keep the lockfile and both artifacts for reproducible installs and rollback. If the host bundles the Python service as a native executable, rebuild it from the new runtime package before rebuilding the host app.
+
+Version `0.3.0` adds SVG and animated GIF support, updates the model lineup (including GPT Image 2.6, Kling v4, TokenHub image and Seedance models, and Seedream 5.5), and retires some legacy model choices. Jimeng now requires `dreamina-canvas`; see the [Canvas CLI migration guide](https://github.com/jquintanilla4/canva_banana/blob/dev/docs/jimeng-canvas-migration.md). The tarballs update the shared editor and runtime, not the standalone Mac app's menus, preload, or service launcher.
 
 The browser package contains compiled ESM, TypeScript declarations and CSS; React/ReactDOM are peers, and all SDK/icon/ZIP code is bundled. It needs no host Tailwind configuration or source aliases. React 19 is the currently declared/tested peer. A React 18 host must verify compatibility or upgrade in its own migration task; this extraction does not change Storyboard's React version.
 

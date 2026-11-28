@@ -1,13 +1,13 @@
 {
   "name": "@canva-banana/secure-backend",
   "private": true,
-  "version": "0.2.8",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "node src/server.mjs",
     "test": "npm -w @canva-banana/runtime test"
   },
   "dependencies": {
-    "@canva-banana/runtime": "0.2.8"
+    "@canva-banana/runtime": "0.3.0"
   }
 }
