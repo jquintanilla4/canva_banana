@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@fal-ai/client', () => ({
   fal: {
@@ -18,12 +18,15 @@ import {
   SYNC_LIPSYNC_MODEL_ID,
 } from '../modelConfig';
 import { generateImageToVideo } from '../falService';
+import { extractHeygenClipIntent } from '../moonshotIntentService';
 
 describe('falService (Sync v3)', () => {
   beforeEach(() => {
     process.env.FAL_API_KEY = 'test'; // Legacy env value; the browser SDK now uses the Node proxy.
     vi.clearAllMocks(); // Keep call assertions isolated per test.
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it('exposes Sync v3 in the video model selector', () => {
     const option = FAL_VIDEO_MODEL_OPTIONS.find(model => model.value === SYNC_LIPSYNC_MODEL_ID);
@@ -107,5 +110,35 @@ describe('falService (Sync v3)', () => {
       videoUrl: 'https://example.com/heygen-v3-output.mp4',
       requestId: 'req-heygen-v3',
     });
+  });
+
+  it.each([
+    { prompt: 'Sync from the beginning', startTime: 0 },
+    { prompt: 'Match the lip movements to the voice', startTime: null },
+  ])('preserves timing intent in the HeyGen request for "$prompt"', async ({ prompt, startTime }) => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ start_time: startTime, end_time: null })));
+    vi.mocked(fal.subscribe).mockResolvedValue({
+      data: { video: { url: 'https://example.com/heygen-v3-output.mp4' } },
+      requestId: 'req-heygen-v3',
+    });
+
+    const intent = await extractHeygenClipIntent(prompt);
+    await generateImageToVideo(prompt, null, {
+      modelId: HEYGEN_V3_LIPSYNC_MODEL_ID,
+      sourceVideoUrl: 'https://example.com/input.mp4',
+      sourceAudioUrl: 'https://example.com/input.wav',
+      heygenStartTime: intent.startTime,
+      heygenEndTime: intent.endTime,
+    });
+
+    const request = vi.mocked(fal.subscribe).mock.lastCall;
+    expect(request?.[0]).toBe(HEYGEN_V3_LIPSYNC_MODEL_ID);
+    const input = request?.[1].input;
+    if (startTime === null) {
+      expect(input).not.toHaveProperty('start_time');
+    } else {
+      expect(input).toHaveProperty('start_time', 0);
+    }
+    expect(input).not.toHaveProperty('end_time');
   });
 });

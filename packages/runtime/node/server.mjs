@@ -25,7 +25,7 @@ const DEV_SERVICE_HEALTH_TOKEN_ENV = 'CANVA_BANANA_DEV_SERVICE_HEALTH_TOKEN'; //
 export const DEV_SERVICE_HEALTH_PROTOCOL_VERSION = 3; // Bump when probe payload shape changes.
 const MOONSHOT_CHAT_COMPLETIONS_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const MOONSHOT_INTENT_PATH = '/api/moonshot/intent';
-const MOONSHOT_INTENT_MODEL = 'kimi-k2.6';
+const MOONSHOT_INTENT_MODEL = 'kimi-k3.1-pro';
 const OPENROUTER_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_CHAT_PATH = '/api/openrouter/chat';
 const OPENROUTER_CHAT_MODELS = new Set([
@@ -469,7 +469,8 @@ const buildMoonshotIntentPayload = (prompt, videoDurationSeconds) => {
         content: `Video duration: ${durationContext}\nPrompt: ${prompt}`,
       },
     ],
-    temperature: 0,
+    reasoning_effort: 'low',
+    response_format: { type: 'json_object' },
   };
 };
 

@@ -21,6 +21,9 @@ const MOONSHOT_BACKEND_UNREACHABLE_MESSAGE_SUFFIX = 'Run `npm run secure-backend
 const MOONSHOT_INTENT_ENDPOINT = '/api/moonshot/intent'; // General Moonshot intent route.
 
 const normalizeSeconds = (value: unknown): number | undefined => {
+  if (value === null) {
+    return undefined;
+  }
   const parsed = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
     return undefined;

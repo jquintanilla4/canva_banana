@@ -67,32 +67,57 @@ const listenOnRandomPort = async (server) => {
   return `http://127.0.0.1:${address.port}`;
 };
 
-test('Moonshot intent endpoint sends the prompt to Kimi with the server key', async () => {
-  const calls = [];
-  const server = createSecureBackendServer({
-    env: { MOONSHOT_API_KEY: 'moonshot-secret', FAL_API_KEY: 'fal-secret' },
-    fetchImpl: async (url, options) => {
-      calls.push({ url, options });
-      return new Response(JSON.stringify({
-        choices: [{ message: { content: '{"start_time": 3.5, "end_time": 9.25}' } }],
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+test('Moonshot intent endpoint sends prompts to Kimi K3.1 Pro and preserves timing', async (t) => {
+  const cases = [
+    {
+      prompt: 'Sync from 3.5s to 9.25s',
+      content: '{"start_time": 3.5, "end_time": 9.25}',
+      expected: { start_time: 3.5, end_time: 9.25 },
     },
-  });
-  const baseUrl = await listenOnRandomPort(server);
-  try {
-    const response = await fetch(`${baseUrl}/api/moonshot/intent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: TRUSTED_ORIGIN },
-      body: JSON.stringify({ prompt: 'sync from 3.5s to 9.25s', video_duration_seconds: 12 }),
+    {
+      prompt: 'Sync from the beginning',
+      content: '{"start_time": 0, "end_time": null}',
+      expected: { start_time: 0, end_time: null },
+    },
+    {
+      prompt: 'Match the lip movements to the voice',
+      content: '{"start_time": null, "end_time": null}',
+      expected: { start_time: null, end_time: null },
+    },
+  ];
+  for (const { prompt, content, expected } of cases) {
+    await t.test(prompt, async (caseTest) => {
+      const calls = [];
+      const server = createSecureBackendServer({
+        env: { MOONSHOT_API_KEY: 'moonshot-secret', FAL_API_KEY: 'fal-secret' },
+        fetchImpl: async (url, options) => {
+          calls.push({ url, options });
+          return Response.json({ choices: [{ message: { content } }] });
+        },
+      });
+      caseTest.after(() => server.close());
+      const baseUrl = await listenOnRandomPort(server);
+      const response = await fetch(`${baseUrl}/api/moonshot/intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: TRUSTED_ORIGIN },
+        body: JSON.stringify({ prompt, video_duration_seconds: 12 }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('access-control-allow-origin'), TRUSTED_ORIGIN);
+      assert.deepEqual(await response.json(), expected);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].url, 'https://api.moonshot.ai/v1/chat/completions');
+      assert.equal(calls[0].options.headers.Authorization, 'Bearer moonshot-secret');
+      const upstreamPayload = JSON.parse(calls[0].options.body);
+      assert.equal(upstreamPayload.model, 'kimi-k3.1-pro');
+      assert.equal(upstreamPayload.reasoning_effort, 'low');
+      assert.equal('temperature' in upstreamPayload, false);
+      assert.deepEqual(upstreamPayload.response_format, { type: 'json_object' });
+      assert.deepEqual(upstreamPayload.messages.at(-1), {
+        role: 'user',
+        content: `Video duration: 12 seconds\nPrompt: ${prompt}`,
+      });
     });
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get('access-control-allow-origin'), TRUSTED_ORIGIN);
-    assert.deepEqual(await response.json(), { start_time: 3.5, end_time: 9.25 });
-    assert.equal(calls[0].url, 'https://api.moonshot.ai/v1/chat/completions');
-    assert.equal(calls[0].options.headers.Authorization, 'Bearer moonshot-secret');
-    assert.equal(JSON.parse(calls[0].options.body).model, 'kimi-k2.6');
-  } finally {
-    server.close();
   }
 });
 
